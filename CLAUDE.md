@@ -44,6 +44,10 @@ and change configuration — that is what lets it help set things up.
 
 ## Tenancy
 
+Everyone is in an org; a person alone is an org of one. Enterprise is the same
+org with more people in it and the owner paying for all of them. Self-hosted
+has exactly one. The org is the same object in every case.
+
 One database, one set of tables. Every row belongs to an org and the database
 enforces it — row-level security, not a `where` clause someone can forget.
 
@@ -86,25 +90,26 @@ development stays visible on screen for as long as it is active.
 **In production there is no fallback.** A missing credential stops the app
 from starting. Nothing degrades quietly, and no error is swallowed.
 
-Export and import are a matched pair of product features. "Download my data"
-gives a person what is theirs — not the org's, not a colleague's — with stored
-tokens stripped. "Import my data" loads such a file, additively, so an org can
-be rebuilt one member at a time. That pair is also how a customer moves from
-managed to self-hosted.
+Two exports, kept apart. **"Download my data"** is a product feature: a person
+gets what they can see — an owner the whole org, a member their slice — with
+stored tokens stripped. Its inverse, "import my data", is how a customer moves
+to self-hosted. **The org snapshot** is ours: the Maslow org, complete —
+users, every row, the files on every volume — taken on the server by an
+operator, producing a file. No other customer's org is ever in it, and no
+production credential ever leaves production; only the file travels.
 
-A local checkout or a preview seeds synthetic, then a human imports real data
-through the product if they choose to. Agents get synthetic unless a human
-hands them a file. No production credential ever reaches a dev machine.
+Local runs the managed profile with test-mode keys — Stripe test, dev model
+keys, mail to the founders only — seeded from the org snapshot. So local is
+production, as us, with fake money. One config value runs the self-hosted
+profile instead. Agents get the synthetic seed unless a human hands them a
+file.
 
-Outside production there is a dev sign-in: pick a seeded person, no email. It
-is the auth fake — visibly flagged like every fake, and impossible in
-production. The synthetic seed includes the founders, so a human on a preview
-signs in as themselves and imports. Vendors run in their own test modes there:
-Stripe test keys, mail to the founders' addresses only.
-
-A preview's database is a Neon branch off an empty parent — never off
-production — migrated and seeded fresh. It sends mail only to the founders' own
-addresses and dies with the pull request.
+A preview is the same: a Neon branch off an empty parent — never off
+production — migrated, loaded with the snapshot, on preview keys. Its machines
+are real, on a dev Fly account with a spend cap, made when first used and
+destroyed with the pull request. Outside production a dev sign-in exists —
+pick a seeded person, no email — visibly flagged like every fake and impossible
+in production.
 
 ## The machine
 
@@ -117,7 +122,9 @@ layers:
 - **The volume** is the computer. It holds the whole operating system, copied
   there on first boot and switched to on every boot after. Installs, config,
   files: all of it persists, because it is a real machine. The daemon updates
-  itself here, and security updates run here on a schedule.
+  itself here, and security updates run here on a schedule. A volume lives on
+  one physical host, so durability is not automatic: it is snapshotted to
+  object storage on a schedule, and that snapshot is the backup.
 - **The memory snapshot** is what they were doing. Usually survives a suspend.
 
 Nobody chooses a size. One is chosen at wake from what they have needed before.
