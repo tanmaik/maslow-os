@@ -1,0 +1,42 @@
+name: preview-db
+
+# pull_request_target runs main's copy of this file and script with main's
+# secrets. The pull request's own code is never checked out here.
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: preview-db-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  preview-db:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    environment: preview-db
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          NEON_PROJECT_ID: quiet-wave-64485699
+          NEON_PARENT_BRANCH: preview-parent
+          VERCEL_TEAM_ID: team_7NQXOFvUYkNy7L2ztTSnohQ8
+          VERCEL_PROJECT_ID: prj_E5ppOrhc3HY2TMdsNVWUIdSByjwa
+          PR: ${{ github.event.pull_request.number }}
+          REF: ${{ github.event.pull_request.head.ref }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event.action }}" = "closed" ]; then
+            node scripts/preview-db.mjs down --pr "$PR" --branch "$REF"
+          else
+            node scripts/preview-db.mjs up --pr "$PR" --branch "$REF" --sha "$SHA"
+          fi
