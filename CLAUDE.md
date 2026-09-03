@@ -90,22 +90,21 @@ development stays visible on screen for as long as it is active.
 **In production there is no fallback.** A missing credential stops the app
 from starting. Nothing degrades quietly, and no error is swallowed.
 
-Two exports, kept apart. **"Download my data"** is a product feature: a person
-gets what they can see — an owner the whole org, a member their slice — with
-stored tokens stripped. Its inverse, "import my data", is how a customer moves
-to self-hosted. **The org snapshot** is ours: the Maslow org, complete —
-users, every row, the files on every volume — taken on the server by an
-operator, producing a file. No other customer's org is ever in it, and no
-production credential ever leaves production; only the file travels.
+**"Download my data"** gives a person what is theirs — their rows, their
+machine's files — with stored tokens stripped. Nobody's export holds anyone
+else's slice, the org owner included. Importing is additive: each member's
+file adds theirs, so an org is rebuilt one person at a time. The same pair is
+how a customer moves to self-hosted. No production credential ever leaves
+production; only files travel.
 
 Local runs the managed profile with test-mode keys — Stripe test, dev model
-keys, mail to the founders only — seeded from the org snapshot. So local is
-production, as us, with fake money. One config value runs the self-hosted
-profile instead. Agents get the synthetic seed unless a human hands them a
-file.
+keys, mail to the founders only — seeded from the founders' own exports. So
+local is production, as us, with fake money. One config value runs the
+self-hosted profile instead. Agents get the synthetic seed unless a human
+hands them a file.
 
 A preview is the same: a Neon branch off an empty parent — never off
-production — migrated, loaded with the snapshot, on preview keys. Its machines
+production — migrated, loaded from exports, on preview keys. Its machines
 are real, on a dev Fly account with a spend cap, made when first used and
 destroyed with the pull request. Outside production a dev sign-in exists —
 pick a seeded person, no email — visibly flagged like every fake and impossible
@@ -124,7 +123,12 @@ layers:
   files: all of it persists, because it is a real machine. The daemon updates
   itself here, and security updates run here on a schedule. A volume lives on
   one physical host, so durability is not automatic: it is snapshotted to
-  object storage on a schedule, and that snapshot is the backup.
+  object storage on a schedule, and that snapshot is the backup. Volumes
+  auto-extend at a threshold and cap at 500GB.
+
+Every machine and volume on Fly is recorded in our database with the org and
+person it belongs to, at creation, before it is used. A sweep reconciles Fly's
+inventory against ours; anything Fly has that we do not is an incident.
 - **The memory snapshot** is what they were doing. Usually survives a suspend.
 
 Nobody chooses a size. One is chosen at wake from what they have needed before.
