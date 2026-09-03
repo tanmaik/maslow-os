@@ -12,8 +12,9 @@ Industries serves its stakeholders; the code is how.
 
 ## Stack
 
-Node 24 (floor 22.18, what cloud agent boxes ship), pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for
-hosting. Neon for the managed database. Fly for managed machines.
+Node 24 to develop on, 22.18 as the floor since that is what a fresh cloud
+agent box ships. pnpm. Monorepo under Turborepo. Next.js for the app. Vercel
+for hosting. Neon for the managed database. Fly for managed machines.
 
 ## Local
 
@@ -129,11 +130,11 @@ layers:
   one physical host, so durability is not automatic: it is snapshotted to
   object storage on a schedule, and that snapshot is the backup. Volumes
   auto-extend at a threshold and cap at 500GB.
+- **The memory snapshot** is what they were doing. Usually survives a suspend.
 
 Every machine and volume on Fly is recorded in our database with the org and
 person it belongs to, at creation, before it is used. A sweep reconciles Fly's
 inventory against ours; anything Fly has that we do not is an incident.
-- **The memory snapshot** is what they were doing. Usually survives a suspend.
 
 Nobody chooses a size. One is chosen at wake from what they have needed before.
 Outgrowing it is a cold boot at a new size — a memory image is exact to the
