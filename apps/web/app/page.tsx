@@ -35,10 +35,7 @@ export default async function Page({
         ))}
       </nav>
       <h1>{orgName ?? "No org set"}</h1>
-      <p>
-        {users.length} of {orgs.reduce((n, o) => n + o.users.length, 0)} users
-        visible
-      </p>
+      <p>{users.length} users visible</p>
       <ul>
         {users.map((u) => (
           <li key={u.email}>

@@ -12,7 +12,6 @@ const stack = await startStack({ stdio: "ignore" });
 let failed = false;
 try {
   await waitFor(stack.url);
-  const total = orgs.reduce((n, o) => n + o.users.length, 0);
   const cases = [
     ["", 0],
     ...orgs.map((o) => [`?org=${o.slug}`, o.users.length]),
@@ -21,9 +20,8 @@ try {
     const html = (
       await (await fetch(`${stack.url}/${query}`)).text()
     ).replaceAll("<!-- -->", "");
-    const got = html.match(/(\d+) of (\d+) users visible/);
-    const ok =
-      got !== null && Number(got[1]) === want && Number(got[2]) === total;
+    const got = html.match(/(\d+) users visible/);
+    const ok = got !== null && Number(got[1]) === want;
     console.log(
       `${ok ? "ok  " : "FAIL"}  /${query.padEnd(28)} ${got?.[0] ?? "no match"}`,
     );
