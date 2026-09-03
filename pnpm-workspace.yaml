@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+
+# Install scripts are off unless listed. These recreate the symlinks npm
+# strips from the Postgres library directory, and nothing else.
+onlyBuiltDependencies:
+  - "@embedded-postgres/darwin-arm64"
+  - "@embedded-postgres/darwin-x64"
+  - "@embedded-postgres/linux-arm64"
+  - "@embedded-postgres/linux-x64"

@@ -1,0 +1,9 @@
+node_modules/
+.next/
+next-env.d.ts
+dist/
+.turbo/
+.local/
+.env*
+!.env.example
+.DS_Store

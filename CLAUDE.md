@@ -12,8 +12,8 @@ Industries serves its stakeholders; the code is how.
 
 ## Stack
 
-Monorepo under Turborepo. Next.js for the app. Vercel for hosting. Neon for
-the managed database. Fly for managed machines.
+Node 24, pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for
+hosting. Neon for the managed database. Fly for managed machines.
 
 ## Local
 
@@ -24,6 +24,10 @@ agent's box and a CI runner all behave the same.
 **Everything the repo needs arrives from the npm registry.** Cloud agent
 sandboxes allow package registries and deny most other hosts, so a dependency
 that downloads from anywhere else fails exactly where it is least visible.
+
+Install scripts are off. A package earns a place in `pnpm-workspace.yaml`'s
+allow-list only after its script has been read and found to do one small
+thing.
 
 Machines in development are plain processes in a scratch directory. No Docker:
 nesting containers is unreliable inside cloud agents, and a machine that starts
