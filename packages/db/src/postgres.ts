@@ -35,7 +35,11 @@ function native(): { root: string; bin: string; lib: string } {
         `Add ${name} to packages/db/package.json optionalDependencies.`,
     );
   }
-  return { root, bin: path.join(root, "native", "bin"), lib: path.join(root, "native", "lib") };
+  return {
+    root,
+    bin: path.join(root, "native", "bin"),
+    lib: path.join(root, "native", "lib"),
+  };
 }
 
 const ROOT_BOX_USER = "placeholder-pg";
@@ -53,16 +57,24 @@ function layout(dataDir: string): Layout {
     "-c",
     `id -u ${ROOT_BOX_USER} >/dev/null 2>&1 || useradd -r -M -s /usr/sbin/nologin ${ROOT_BOX_USER}`,
   ]);
-  const uid = Number(execFileSync("id", ["-u", ROOT_BOX_USER], { encoding: "utf8" }));
+  const uid = Number(
+    execFileSync("id", ["-u", ROOT_BOX_USER], { encoding: "utf8" }),
+  );
 
-  const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+  const version = JSON.parse(
+    fs.readFileSync(path.join(root, "package.json"), "utf8"),
+  ).version;
   const base = path.join("/var/tmp", "placeholder-pg");
   const binaries = path.join(base, "native", version);
   if (!fs.existsSync(binaries)) {
     fs.cpSync(path.join(root, "native"), binaries, { recursive: true });
     execFileSync("chmod", ["-R", "a+rX", binaries]);
   }
-  const data = path.join(base, "data", createHash("sha256").update(dataDir).digest("hex").slice(0, 12));
+  const data = path.join(
+    base,
+    "data",
+    createHash("sha256").update(dataDir).digest("hex").slice(0, 12),
+  );
   fs.mkdirSync(data, { recursive: true });
   fs.chownSync(data, uid, uid);
 
@@ -73,7 +85,15 @@ function layout(dataDir: string): Layout {
     dataDir: data,
     as: (cmd, args) => ({
       cmd: "runuser",
-      args: ["-u", ROOT_BOX_USER, "--", "env", `LD_LIBRARY_PATH=${copiedLib}`, cmd, ...args],
+      args: [
+        "-u",
+        ROOT_BOX_USER,
+        "--",
+        "env",
+        `LD_LIBRARY_PATH=${copiedLib}`,
+        cmd,
+        ...args,
+      ],
     }),
   };
 }
@@ -81,23 +101,48 @@ function layout(dataDir: string): Layout {
 // Starts a Postgres cluster for this checkout on the given port, creating it
 // first if it is new. Trust auth on loopback only; the socket lives inside the
 // data directory so two checkouts never share one.
-export async function startPostgres(dataDir: string, port: number): Promise<Cluster> {
+export async function startPostgres(
+  dataDir: string,
+  port: number,
+): Promise<Cluster> {
   const l = layout(dataDir);
   // Set directly on the child, never via /usr/bin/env: macOS strips DYLD_* there.
-  const env = { ...process.env, LD_LIBRARY_PATH: l.lib, DYLD_LIBRARY_PATH: l.lib };
+  const env = {
+    ...process.env,
+    LD_LIBRARY_PATH: l.lib,
+    DYLD_LIBRARY_PATH: l.lib,
+  };
 
   if (!fs.existsSync(path.join(l.dataDir, "PG_VERSION"))) {
     fs.mkdirSync(l.dataDir, { recursive: true });
     const init = l.as(path.join(l.bin, "initdb"), [
-      "-D", l.dataDir, "-U", "postgres", "-A", "trust", "--no-sync", "-E", "UTF8",
+      "-D",
+      l.dataDir,
+      "-U",
+      "postgres",
+      "-A",
+      "trust",
+      "--no-sync",
+      "-E",
+      "UTF8",
     ]);
     await run(init.cmd, init.args, { env });
   }
 
   const server = l.as(path.join(l.bin, "postgres"), [
-    "-D", l.dataDir, "-p", String(port), "-k", l.dataDir, "-c", "listen_addresses=127.0.0.1",
+    "-D",
+    l.dataDir,
+    "-p",
+    String(port),
+    "-k",
+    l.dataDir,
+    "-c",
+    "listen_addresses=127.0.0.1",
   ]);
-  const child = spawn(server.cmd, server.args, { env, stdio: ["ignore", "ignore", "pipe"] });
+  const child = spawn(server.cmd, server.args, {
+    env,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
   let stderr = "";
   child.stderr.on("data", (d) => (stderr += d));
 
@@ -137,8 +182,12 @@ export async function ensureRole(url: string, name: string): Promise<void> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
-    const exists = await client.query("select 1 from pg_roles where rolname = $1", [name]);
-    if (exists.rowCount === 0) await client.query(`create role "${name}" login`);
+    const exists = await client.query(
+      "select 1 from pg_roles where rolname = $1",
+      [name],
+    );
+    if (exists.rowCount === 0)
+      await client.query(`create role "${name}" login`);
   } finally {
     await client.end();
   }

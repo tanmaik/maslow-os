@@ -6,7 +6,9 @@ function connection(): pg.Pool {
   if (!pool) {
     const url = process.env.DATABASE_URL;
     if (!url) {
-      throw new Error("DATABASE_URL is not set. `pnpm dev` sets it; in production it is required.");
+      throw new Error(
+        "DATABASE_URL is not set. `pnpm dev` sets it; in production it is required.",
+      );
     }
     pool = new pg.Pool({ connectionString: url });
   }
@@ -23,7 +25,8 @@ export async function asOrg<T>(
   const client = await connection().connect();
   try {
     await client.query("begin");
-    if (orgId) await client.query("select set_config('app.org_id', $1, true)", [orgId]);
+    if (orgId)
+      await client.query("select set_config('app.org_id', $1, true)", [orgId]);
     const result = await fn(client);
     await client.query("commit");
     return result;

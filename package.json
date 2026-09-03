@@ -8,11 +8,15 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "turbo run build",
+    "check": "pnpm typecheck && pnpm format:check && pnpm smoke",
+    "smoke": "node scripts/smoke.mjs",
     "typecheck": "turbo run typecheck",
-    "lint": "turbo run lint"
+    "build": "turbo run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "prettier": "^3.9.6",
     "turbo": "^2.10.12",
     "typescript": "^5.9.3"
   }

@@ -226,5 +226,5 @@ If the comment is longer than the function, one of them is wrong.
 
 ```ts
 // Rejects paths that escape the user's root.
-function confine(rel: string): string
+function confine(rel: string): string;
 ```

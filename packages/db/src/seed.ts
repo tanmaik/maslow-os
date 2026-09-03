@@ -8,8 +8,16 @@ export const orgs = [
     slug: "acme-rockets",
     name: "Acme Rockets",
     users: [
-      { id: "10000000-0000-4000-8000-000000000001", name: "Wile Coyote", email: "wile@acme-rockets.test" },
-      { id: "10000000-0000-4000-8000-000000000002", name: "Road Runner", email: "beep@acme-rockets.test" },
+      {
+        id: "10000000-0000-4000-8000-000000000001",
+        name: "Wile Coyote",
+        email: "wile@acme-rockets.test",
+      },
+      {
+        id: "10000000-0000-4000-8000-000000000002",
+        name: "Road Runner",
+        email: "beep@acme-rockets.test",
+      },
     ],
   },
   {
@@ -17,9 +25,21 @@ export const orgs = [
     slug: "blue-whale-bakery",
     name: "Blue Whale Bakery",
     users: [
-      { id: "20000000-0000-4000-8000-000000000001", name: "Marge Crumb", email: "marge@bluewhale.test" },
-      { id: "20000000-0000-4000-8000-000000000002", name: "Otto Loaf", email: "otto@bluewhale.test" },
-      { id: "20000000-0000-4000-8000-000000000003", name: "Pim Sourdough", email: "pim@bluewhale.test" },
+      {
+        id: "20000000-0000-4000-8000-000000000001",
+        name: "Marge Crumb",
+        email: "marge@bluewhale.test",
+      },
+      {
+        id: "20000000-0000-4000-8000-000000000002",
+        name: "Otto Loaf",
+        email: "otto@bluewhale.test",
+      },
+      {
+        id: "20000000-0000-4000-8000-000000000003",
+        name: "Pim Sourdough",
+        email: "pim@bluewhale.test",
+      },
     ],
   },
   {
@@ -27,7 +47,11 @@ export const orgs = [
     slug: "chartreuse-observatory",
     name: "Chartreuse Observatory",
     users: [
-      { id: "30000000-0000-4000-8000-000000000001", name: "Vera Nebula", email: "vera@chartreuse.test" },
+      {
+        id: "30000000-0000-4000-8000-000000000001",
+        name: "Vera Nebula",
+        email: "vera@chartreuse.test",
+      },
     ],
   },
 ] as const;

@@ -16,14 +16,16 @@ export async function migrate(url: string, dir: string): Promise<string[]> {
         applied_at timestamptz not null default now()
       )`);
     const applied = new Map<string, string>(
-      (await client.query("select name, checksum from schema_migrations")).rows.map((r) => [
-        r.name,
-        r.checksum,
-      ]),
+      (
+        await client.query("select name, checksum from schema_migrations")
+      ).rows.map((r) => [r.name, r.checksum]),
     );
 
     const done: string[] = [];
-    const files = fs.readdirSync(dir).filter((f) => f.endsWith(".sql")).sort();
+    const files = fs
+      .readdirSync(dir)
+      .filter((f) => f.endsWith(".sql"))
+      .sort();
     for (const name of files) {
       const sql = fs.readFileSync(path.join(dir, name), "utf8");
       const checksum = createHash("sha256").update(sql).digest("hex");
@@ -38,10 +40,10 @@ export async function migrate(url: string, dir: string): Promise<string[]> {
       await client.query("begin");
       try {
         await client.query(sql);
-        await client.query("insert into schema_migrations (name, checksum) values ($1, $2)", [
-          name,
-          checksum,
-        ]);
+        await client.query(
+          "insert into schema_migrations (name, checksum) values ($1, $2)",
+          [name, checksum],
+        );
         await client.query("commit");
       } catch (err) {
         await client.query("rollback");
