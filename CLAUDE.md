@@ -96,6 +96,12 @@ A local checkout or a preview seeds synthetic, then a human imports real data
 through the product if they choose to. Agents get synthetic unless a human
 hands them a file. No production credential ever reaches a dev machine.
 
+Outside production there is a dev sign-in: pick a seeded person, no email. It
+is the auth fake — visibly flagged like every fake, and impossible in
+production. The synthetic seed includes the founders, so a human on a preview
+signs in as themselves and imports. Vendors run in their own test modes there:
+Stripe test keys, mail to the founders' addresses only.
+
 A preview's database is a Neon branch off an empty parent — never off
 production — migrated and seeded fresh. It sends mail only to the founders' own
 addresses and dies with the pull request.
