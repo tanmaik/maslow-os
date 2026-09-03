@@ -47,6 +47,10 @@ Sensitive: values stay readable so they can be pulled, diffed and audited.
 Local boots with no credentials at all. The agent working on the repo can read
 and change configuration — that is what lets it help set things up.
 
+CI holds exactly two credentials — a Neon key and a Vercel token — on a GitHub
+environment only `main` can use. The per-PR database workflow runs main's code
+with them; a pull request's code never sees them.
+
 ## Tenancy
 
 Everyone is in an org; a person alone is an org of one. Enterprise is the same
