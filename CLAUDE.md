@@ -63,6 +63,10 @@ connection hides every isolation bug until production finds it.
 The seed holds several orgs with obviously distinguishable data, so a leak looks
 wrong on sight.
 
+Database roles are created with SQL, never through Neon's API: an API-made role
+is a `neon_superuser` with `BYPASSRLS`, and every policy silently stops
+applying to it.
+
 ## Self-hosting
 
 The same app with one org in it. Multi-tenancy is not switched off — that org
