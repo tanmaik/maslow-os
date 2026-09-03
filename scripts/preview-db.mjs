@@ -3,6 +3,7 @@
 // first build raced ahead of them.
 //   up   --pr N --branch REF --sha SHA
 //   down --pr N --branch REF
+//   reap                       delete branches whose pull request is closed
 import { randomBytes } from "node:crypto";
 
 const [command, ...rest] = process.argv.slice(2);
@@ -13,10 +14,11 @@ const opt = Object.fromEntries(
 );
 const pr = Number(opt.pr);
 const ref = opt.branch;
-if (!Number.isInteger(pr) || !ref)
+if (command !== "reap" && (!Number.isInteger(pr) || !ref)) {
   throw new Error(
-    "usage: preview-db.mjs up|down --pr N --branch REF [--sha SHA]",
+    "usage: preview-db.mjs up|down --pr N --branch REF [--sha SHA] | reap",
   );
+}
 
 const need = (k) =>
   process.env[k] ||
@@ -69,13 +71,15 @@ async function sql(uri, query) {
     throw new Error(`sql → ${r.status}: ${(await r.text()).slice(0, 300)}`);
 }
 
-const name = `preview/pr-${pr}`;
 const keys = ["DATABASE_URL", "DATABASE_OWNER_URL"];
+const branchNameFor = (n) => `preview/pr-${n}`;
 
 async function up() {
+  const name = branchNameFor(pr);
   const { branches } = await neon("GET", `/projects/${neonProject}/branches`);
   let branch = branches.find((b) => b.name === name);
-  if (!branch) {
+  const created = !branch;
+  if (created) {
     const parent = branches.find((b) => b.name === parentName);
     if (!parent) throw new Error(`Neon branch ${parentName} does not exist`);
     ({ branch } = await neon("POST", `/projects/${neonProject}/branches`, {
@@ -87,32 +91,41 @@ async function up() {
     console.log(`neon: ${name} exists (${branch.id})`);
   }
 
-  const owner = (
-    await neon(
-      "GET",
-      `/projects/${neonProject}/connection_uri?branch_id=${branch.id}&database_name=neondb&role_name=neondb_owner&pooled=false`,
-    )
-  ).uri;
-  const password = randomBytes(24).toString("base64url");
-  await sql(owner, `alter role app password '${password}'`);
-  const app = new URL(owner);
-  app.username = "app";
-  app.password = password;
-  app.host = app.host.replace(/^(ep-[a-z0-9-]+?)\./, "$1-pooler.");
-
-  for (const [key, value] of [
-    ["DATABASE_URL", app.toString()],
-    ["DATABASE_OWNER_URL", owner],
-  ]) {
-    await vercel("POST", `/v10/projects/${project}/env?upsert=true`, {
-      key,
-      value,
-      type: "encrypted",
-      target: ["preview"],
-      gitBranch: ref,
-    });
+  // The password is set once, when the branch is born. A deployment captures
+  // its environment at build start, so rotating later would strand it.
+  const { envs } = await vercel("GET", `/v9/projects/${project}/env`);
+  const present = envs.filter(
+    (e) => e.gitBranch === ref && keys.includes(e.key),
+  ).length;
+  if (created || present < keys.length) {
+    const owner = (
+      await neon(
+        "GET",
+        `/projects/${neonProject}/connection_uri?branch_id=${branch.id}&database_name=neondb&role_name=neondb_owner&pooled=false`,
+      )
+    ).uri;
+    const password = randomBytes(24).toString("base64url");
+    await sql(owner, `alter role app password '${password}'`);
+    const app = new URL(owner);
+    app.username = "app";
+    app.password = password;
+    app.host = app.host.replace(/^(ep-[a-z0-9-]+?)\./, "$1-pooler.");
+    for (const [key, value] of [
+      ["DATABASE_URL", app.toString()],
+      ["DATABASE_OWNER_URL", owner],
+    ]) {
+      await vercel("POST", `/v10/projects/${project}/env?upsert=true`, {
+        key,
+        value,
+        type: "encrypted",
+        target: ["preview"],
+        gitBranch: ref,
+      });
+    }
+    console.log(`vercel: ${keys.join(", ")} set for branch ${ref}`);
+  } else {
+    console.log(`vercel: ${keys.join(", ")} already set for branch ${ref}`);
   }
-  console.log(`vercel: ${keys.join(", ")} set for branch ${ref}`);
 
   if (!opt.sha) return;
   const { deployments } = await vercel(
@@ -137,7 +150,8 @@ async function up() {
   console.log(`vercel: redeployed ${opt.sha.slice(0, 7)} → https://${d.url}`);
 }
 
-async function down() {
+async function down(prNumber = pr, gitRef = ref) {
+  const name = branchNameFor(prNumber);
   const { branches } = await neon("GET", `/projects/${neonProject}/branches`);
   const branch = branches.find((b) => b.name === name);
   if (branch) {
@@ -146,15 +160,39 @@ async function down() {
   }
   const { envs } = await vercel("GET", `/v9/projects/${project}/env`);
   for (const e of envs.filter(
-    (e) => e.gitBranch === ref && keys.includes(e.key),
+    (e) => e.gitBranch === gitRef && keys.includes(e.key),
   )) {
     await vercel("DELETE", `/v9/projects/${project}/env/${e.id}`);
-    console.log(`vercel: removed ${e.key} for branch ${ref}`);
+    console.log(`vercel: removed ${e.key} for branch ${gitRef}`);
   }
 }
 
+// Anything a failed `down` left behind: every preview branch whose pull
+// request is no longer open. A pull request that does not exist counts as
+// closed.
+async function reap() {
+  const repo = need("GITHUB_REPOSITORY");
+  const gh = (p) =>
+    call("https://api.github.com", need("GITHUB_TOKEN"), "GET", p);
+  const { branches } = await neon("GET", `/projects/${neonProject}/branches`);
+  let swept = 0;
+  for (const b of branches) {
+    const m = /^preview\/pr-(\d+)$/.exec(b.name);
+    if (!m) continue;
+    const p = await gh(`/repos/${repo}/pulls/${m[1]}`).catch((e) =>
+      String(e).includes("→ 404") ? null : Promise.reject(e),
+    );
+    if (p?.state === "open") continue;
+    await down(Number(m[1]), p?.head?.ref ?? "");
+    swept++;
+  }
+  console.log(
+    `reap: ${swept} stale preview database${swept === 1 ? "" : "s"} removed`,
+  );
+}
+
 await (
-  { up, down }[command] ??
+  { up, down, reap }[command] ??
   (() => {
     throw new Error(`unknown command ${command}`);
   })

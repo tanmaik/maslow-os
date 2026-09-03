@@ -207,7 +207,7 @@ Built to be read by agents as much as by people, and measured with
 
 Nothing is cleaned up; things fail to outlive their owner. A test's database
 dies with the test, a checkout's data with the checkout, a preview's resources
-with the pull request.
+with the pull request. A nightly sweep catches what a failed close missed.
 
 ## Documentation
 

@@ -1,0 +1,31 @@
+name: preview-db-reap
+
+# Nightly sweep for anything a failed close left behind.
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  reap:
+    runs-on: ubuntu-latest
+    environment: preview-db
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+      - env:
+          NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          NEON_PROJECT_ID: quiet-wave-64485699
+          NEON_PARENT_BRANCH: preview-parent
+          VERCEL_TEAM_ID: team_7NQXOFvUYkNy7L2ztTSnohQ8
+          VERCEL_PROJECT_ID: prj_E5ppOrhc3HY2TMdsNVWUIdSByjwa
+        run: node scripts/preview-db.mjs reap
