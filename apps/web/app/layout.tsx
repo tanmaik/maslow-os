@@ -9,7 +9,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         style={{
           fontFamily: "system-ui, sans-serif",
           margin: "3rem auto",
-          maxWidth: 40 + "rem",
+          maxWidth: "40rem",
         }}
       >
         {children}

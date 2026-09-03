@@ -10,6 +10,10 @@ permissions:
   contents: read
   pull-requests: read
 
+concurrency:
+  group: preview-db
+  cancel-in-progress: false
+
 jobs:
   reap:
     runs-on: ubuntu-latest

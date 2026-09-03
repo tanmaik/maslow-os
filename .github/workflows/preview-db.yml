@@ -9,8 +9,10 @@ on:
 permissions:
   contents: read
 
+# One lifecycle job at a time across the repository: rows are scoped by
+# branch name, so two pull requests can touch the same ones.
 concurrency:
-  group: preview-db-${{ github.event.pull_request.number }}
+  group: preview-db
   cancel-in-progress: false
 
 jobs:
@@ -36,7 +38,7 @@ jobs:
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "${{ github.event.action }}" = "closed" ]; then
-            node scripts/preview-db.mjs down --pr "$PR" --branch "$REF"
+            node scripts/preview-db.mjs down --pr "$PR"
           else
             node scripts/preview-db.mjs up --pr "$PR" --branch "$REF" --sha "$SHA"
           fi

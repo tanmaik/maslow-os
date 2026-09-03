@@ -4,11 +4,15 @@ import path from "node:path";
 import pg from "pg";
 
 // Applies every migrations/*.sql not yet applied, in filename order. Applied
-// files are checksummed; a changed one is refused, never re-run.
+// files are checksummed; a changed one is refused, never re-run. One runner at
+// a time per database.
 export async function migrate(url: string, dir: string): Promise<string[]> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
+    await client.query(
+      "select pg_advisory_lock(hashtext('schema_migrations'))",
+    );
     await client.query(`
       create table if not exists schema_migrations (
         name text primary key,

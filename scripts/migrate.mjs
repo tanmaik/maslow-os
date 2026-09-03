@@ -10,7 +10,10 @@ const url = process.env.DATABASE_OWNER_URL;
 
 if (!url) {
   if (process.env.VERCEL) {
-    throw new Error("DATABASE_OWNER_URL is not set for this deployment.");
+    throw new Error(
+      "DATABASE_OWNER_URL is not set for this deployment. Production: set it in Vercel. " +
+        "Preview: the preview-db workflow sets it; check its run for this pull request.",
+    );
   }
   console.log("migrate: not a deploy, skipping");
   process.exit(0);

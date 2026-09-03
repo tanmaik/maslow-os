@@ -44,12 +44,12 @@ function native(): { root: string; bin: string; lib: string } {
 
 const ROOT_BOX_USER = "placeholder-pg";
 
-// Postgres will not run as root, and a cloud agent's box usually is root.
-// There it runs as a dedicated user from /var/tmp, because the checkout is
-// often mode 0700 and unreachable by anyone else.
-function layout(dataDir: string): Layout {
+// Where the cluster lives and who runs it. On a root box Postgres runs as a
+// dedicated user from /var/tmp, because the checkout is usually mode 0700.
+function layout(dataDir: string, fresh: boolean): Layout {
   const { root, bin, lib } = native();
   if (process.getuid?.() !== 0) {
+    if (fresh) fs.rmSync(dataDir, { recursive: true, force: true });
     return { bin, lib, dataDir, as: (cmd, args) => ({ cmd, args }) };
   }
 
@@ -75,6 +75,7 @@ function layout(dataDir: string): Layout {
     "data",
     createHash("sha256").update(dataDir).digest("hex").slice(0, 12),
   );
+  if (fresh) fs.rmSync(data, { recursive: true, force: true });
   fs.mkdirSync(data, { recursive: true });
   fs.chownSync(data, uid, uid);
 
@@ -98,15 +99,21 @@ function layout(dataDir: string): Layout {
   };
 }
 
+const exited = (child: {
+  exitCode: number | null;
+  signalCode: string | null;
+}) => child.exitCode !== null || child.signalCode !== null;
+
 // Starts a Postgres cluster for this checkout on the given port, creating it
-// first if it is new. Trust auth on loopback only; the socket lives inside the
-// data directory so two checkouts never share one.
+// first if it is new or `fresh` was asked for. Trust auth on loopback only;
+// the socket lives inside the data directory so two checkouts never share one.
 export async function startPostgres(
   dataDir: string,
   port: number,
+  { fresh = false } = {},
 ): Promise<Cluster> {
-  const l = layout(dataDir);
-  // Set directly on the child, never via /usr/bin/env: macOS strips DYLD_* there.
+  const l = layout(path.resolve(dataDir), fresh);
+  // Set on the child directly, never through /usr/bin/env: macOS strips DYLD_* there.
   const env = {
     ...process.env,
     LD_LIBRARY_PATH: l.lib,
@@ -149,7 +156,7 @@ export async function startPostgres(
   const url = `postgres://postgres@127.0.0.1:${port}/postgres`;
   const deadline = Date.now() + 15_000;
   while (true) {
-    if (child.exitCode !== null) {
+    if (exited(child)) {
       throw new Error(`Postgres exited before it was ready:\n${stderr}`);
     }
     const probe = new pg.Client({ connectionString: url });
@@ -168,26 +175,26 @@ export async function startPostgres(
 
   return {
     url,
-    stop: () =>
-      new Promise((resolve) => {
+    stop: async () => {
+      if (exited(child)) return;
+      await new Promise<void>((resolve) => {
         child.once("exit", () => resolve());
         child.kill("SIGINT");
-      }),
+      });
+    },
   };
 }
 
-// Creates a login role if it does not exist. Roles are cluster-level, so
-// they are set up here rather than in a migration.
-export async function ensureRole(url: string, name: string): Promise<void> {
+// The restricted role the app connects as. Cluster-level, so it is made here
+// rather than in a migration.
+export async function ensureAppRole(url: string): Promise<void> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
     const exists = await client.query(
-      "select 1 from pg_roles where rolname = $1",
-      [name],
+      "select 1 from pg_roles where rolname = 'app'",
     );
-    if (exists.rowCount === 0)
-      await client.query(`create role "${name}" login`);
+    if (exists.rowCount === 0) await client.query("create role app login");
   } finally {
     await client.end();
   }

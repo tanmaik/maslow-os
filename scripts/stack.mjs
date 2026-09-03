@@ -6,7 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { migrate } from "../packages/db/src/migrate.ts";
-import { ensureRole, startPostgres } from "../packages/db/src/postgres.ts";
+import { ensureAppRole, startPostgres } from "../packages/db/src/postgres.ts";
 import { seed } from "../packages/db/src/seed.ts";
 
 export const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -22,26 +22,43 @@ export function freePort() {
   });
 }
 
-export async function startStack({ webPort, stdio = "inherit" } = {}) {
+const exited = (child) => child.exitCode !== null || child.signalCode !== null;
+
+export async function startStack({
+  webPort,
+  stdio = "inherit",
+  dataDir = path.join(root, ".local", "pg"),
+  fresh = false,
+} = {}) {
   const pgPort = await freePort();
   webPort ??= await freePort();
 
-  const cluster = await startPostgres(path.join(root, ".local", "pg"), pgPort);
-  await ensureRole(cluster.url, "app");
-  const applied = await migrate(
-    cluster.url,
-    path.join(root, "packages", "db", "migrations"),
-  );
-  await seed(cluster.url);
+  const cluster = await startPostgres(dataDir, pgPort, { fresh });
+  let applied;
+  try {
+    await ensureAppRole(cluster.url);
+    applied = await migrate(
+      cluster.url,
+      path.join(root, "packages", "db", "migrations"),
+    );
+    await seed(cluster.url);
+  } catch (err) {
+    await cluster.stop();
+    throw err;
+  }
 
-  const web = spawn("pnpm", ["exec", "next", "dev", "-p", String(webPort)], {
-    cwd: path.join(root, "apps", "web"),
-    stdio,
-    env: {
-      ...process.env,
-      DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
+  const web = spawn(
+    path.join(root, "apps", "web", "node_modules", ".bin", "next"),
+    ["dev", "-p", String(webPort)],
+    {
+      cwd: path.join(root, "apps", "web"),
+      stdio,
+      env: {
+        ...process.env,
+        DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
+      },
     },
-  });
+  );
 
   return {
     pgPort,
@@ -49,11 +66,15 @@ export async function startStack({ webPort, stdio = "inherit" } = {}) {
     url: `http://127.0.0.1:${webPort}`,
     applied,
     web,
-    stop: () =>
-      new Promise((resolve) => {
-        web.once("exit", () => cluster.stop().then(resolve));
-        web.kill("SIGTERM");
-      }),
+    stop: async () => {
+      if (!exited(web)) {
+        await new Promise((resolve) => {
+          web.once("exit", resolve);
+          web.kill("SIGTERM");
+        });
+      }
+      await cluster.stop();
+    },
   };
 }
 
