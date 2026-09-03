@@ -12,7 +12,7 @@ Industries serves its stakeholders; the code is how.
 
 ## Stack
 
-Node 24, pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for
+Node 24 (floor 22.18, what cloud agent boxes ship), pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for
 hosting. Neon for the managed database. Fly for managed machines.
 
 ## Local
