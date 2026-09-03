@@ -117,7 +117,8 @@ self-hosted profile instead. Agents get the synthetic seed unless a human
 hands them a file.
 
 A preview is the same: a Neon branch off an empty parent — never off
-production — migrated, loaded from exports, on preview keys. Its machines
+production — migrated, loaded from exports, on preview keys. The per-PR
+workflow is the only thing that builds a preview: database first, then deploy. Its machines
 are real, on a dev Fly account with a spend cap, made when first used and
 destroyed with the pull request. Outside production a dev sign-in exists —
 pick a seeded person, no email — visibly flagged like every fake and impossible
