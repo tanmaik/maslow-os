@@ -1128,6 +1128,78 @@ try {
       (await previewed.text()) === "served /hello/there",
     `port ${servedPort}, preview ${previewed.status}`,
   );
+  // Backups: the sweep asks the machine to back itself up, the archive
+  // lands in the store with a size, and an emptied disk gets it back.
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  const backedUp = await (async () => {
+    for (let i = 0; i < 40; i++) {
+      const page = await computerPage(ottoNow);
+      const m = page.match(/data-backups="(\d+)"/);
+      if (m && Number(m[1]) > 0) return page;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return await computerPage(ottoNow);
+  })();
+  const backupRow = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) => {
+      await q.query("select set_config('app.meter', 'sweep', true)");
+      return (
+        await q.query(
+          "select size::int as size, finished_at is not null as finished from backups where user_id = '20000000-0000-4000-8000-000000000002' order by started_at desc limit 1",
+        )
+      ).rows[0];
+    },
+  );
+  check(
+    "the sweep has the machine back its disk up into the store",
+    backedUp.includes('data-backups="1"') &&
+      backedUp.includes("backed up 0 min ago, 1 kept") &&
+      backupRow?.finished === true &&
+      backupRow.size > 0,
+    `backup ${JSON.stringify(backupRow)}`,
+  );
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  check(
+    "a second sweep the same day makes no second backup",
+    (await computerPage(ottoNow)).includes('data-backups="1"'),
+    "still one",
+  );
+  await form("/files/delete", { path: "/", target: "/photos" }, ottoNow);
+  await form("/files/delete", { path: "/", target: "/dusk.txt" }, ottoNow);
+  const emptied = await computerPage(ottoNow);
+  const restoreId = emptied.match(/data-restore="([^"]+)"/)?.[1];
+  const putBack = await form(
+    "/computer/restore",
+    { path: "/", backup: restoreId ?? "" },
+    ottoNow,
+  );
+  const back = await computerPage(ottoNow);
+  check(
+    "an emptied disk offers its backup, and gets it back",
+    Boolean(restoreId) &&
+      putBack.headers.get("location")?.includes("restored=yes") &&
+      back.includes('data-file="/dusk.txt"') &&
+      back.includes('data-folder="/photos"') &&
+      (await download(ottoNow, "/dusk.txt")).body === "hello",
+    "photos and dusk.txt back",
+  );
+  const notEmpty = await form(
+    "/computer/restore",
+    { path: "/", backup: restoreId ?? "" },
+    ottoNow,
+  );
+  check(
+    "a restore onto a disk that is not empty is refused",
+    /error=the%20disk%20is%20not%20empty/.test(
+      notEmpty.headers.get("location") ?? "",
+    ),
+    notEmpty.headers.get("location")?.split("?")[1] ?? "",
+  );
   const folderGone = await form(
     "/files/delete",
     { path: "/", target: "/photos" },
@@ -1187,7 +1259,7 @@ try {
       (by.bucket === undefined || by.bucket.unit === "byte_second") &&
       margeBrain?.unit === "byte_second" &&
       margeBrain.q > 0 &&
-      [...ottoMetered, ...margeMetered].every((r) => r.n === 2 && r.cost >= 0),
+      [...ottoMetered, ...margeMetered].every((r) => r.n >= 2 && r.cost >= 0),
     [...ottoMetered, margeBrain]
       .filter(Boolean)
       .map(

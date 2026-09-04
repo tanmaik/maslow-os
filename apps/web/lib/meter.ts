@@ -7,6 +7,7 @@ import {
 } from "@placeholder/db/computers";
 
 import { deployment } from "./deployment.ts";
+import { sweepBackups } from "./backups.ts";
 import { expireUploads, landStaged } from "./files.ts";
 import { settle } from "./orphans.ts";
 import { fly } from "./fly.ts";
@@ -167,6 +168,14 @@ export async function measure(
       [userId],
     )
   ).rows;
+  // Backups are the same kind of bytes in the same bucket.
+  const backups = (
+    await q.query<{ size: string; created_at: Date; deleted_at: Date | null }>(
+      "select size, finished_at as created_at, deleted_at from backups where user_id = $1 and finished_at is not null",
+      [userId],
+    )
+  ).rows;
+  files.push(...backups);
   if (files.length) {
     let byteSeconds = 0;
     let liveBytes = 0;
@@ -229,6 +238,10 @@ async function membersOf(q: Query): Promise<string[]> {
     await q.query<{ user_id: string }>("select distinct user_id from files")
   ).rows)
     ids.add(r.user_id);
+  for (const r of (
+    await q.query<{ user_id: string }>("select distinct user_id from backups")
+  ).rows)
+    ids.add(r.user_id);
   return [...ids];
 }
 
@@ -267,6 +280,7 @@ export async function sweep(now = new Date()): Promise<number> {
         }
       await expireUploads(orgId, now);
       await landStaged(orgId, now);
+      await sweepBackups(orgId, now);
       await settle(orgId);
       if (!orgs.includes(orgId)) continue;
       appended += await asOrg(orgId, async (q) => {

@@ -87,7 +87,13 @@ async function call<T>(
       body: body === undefined ? undefined : JSON.stringify(body),
       // A machine waking from cold takes a few seconds; a pull takes what
       // the file takes.
-      signal: AbortSignal.timeout(path === "/fs/pull" ? 3600_000 : 90_000),
+      signal: AbortSignal.timeout(
+        path === "/fs/restore"
+          ? 6 * 3600_000
+          : path === "/fs/pull"
+            ? 3600_000
+            : 90_000,
+      ),
     });
   } catch (err) {
     throw new DiskError(
@@ -158,6 +164,24 @@ export const disk = {
     call<{ disk: Space }>(p, "POST", "/fs/pull", { path, url, size }),
 
   ports: (p: Principal) => call<{ ports: number[] }>(p, "GET", "/fs/ports"),
+  // The disk back from an archive; only onto an empty one.
+  restore: (p: Principal, url: string) =>
+    call(p, "POST", "/fs/restore", { url }),
+  // Asks a machine to back itself up; it carries on alone. For the sweep,
+  // which has no person.
+  async backupIn(c: Computer): Promise<void> {
+    if (!c.machineId) return;
+    const res = await fetch(`${host()}/fs/backup`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${c.secret}`,
+        "fly-force-instance-id": c.machineId,
+      },
+      signal: AbortSignal.timeout(90_000),
+    });
+    if (!res.ok && res.status !== 202)
+      throw new DiskError(res.status, `backup answered ${res.status}`);
+  },
 
   // A link the browser follows to the machine itself for the bytes, good
   // for ten minutes, signed with the machine's own secret.

@@ -338,7 +338,14 @@ export async function purgeMember(
            from files where user_id = $1 and deleted_at is null`,
       [id],
     );
+    await q.query(
+      `insert into orphans (org_id, kind, ref, extra)
+         select org_id, case when upload_id is not null then 'upload' else 'object' end, key, upload_id
+           from backups where user_id = $1 and deleted_at is null`,
+      [id],
+    );
     await q.query("delete from files where user_id = $1", [id]);
+    await q.query("delete from backups where user_id = $1", [id]);
     await q.query(
       "delete from computer_events where computer_id in (select id from computers where user_id = $1)",
       [id],

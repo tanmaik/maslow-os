@@ -30,6 +30,9 @@ import {
 } from "@/components/ui/table";
 import { Terminal } from "@/components/terminal";
 import { Uploader } from "@/components/uploader";
+import { backupsOf } from "@placeholder/db/backups";
+
+import { Button } from "@/components/ui/button";
 import { ensureFilesystem, status } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
@@ -114,6 +117,16 @@ export default async function Computer({
     s.state === "no-compute" || s.state === "created" || s.state === "stopped"
       ? "started"
       : s.state;
+  const backups = await backupsOf(p);
+  const latest = backups[0];
+  const ago = (d: Date) => {
+    const m = Math.round((Date.now() - d.getTime()) / 60000);
+    return m < 60
+      ? `${m} min ago`
+      : m < 1440
+        ? `${Math.round(m / 60)} h ago`
+        : `${Math.round(m / 1440)} d ago`;
+  };
   const crumbs = at.split("/").filter(Boolean);
   const monthStart = new Date();
   monthStart.setUTCDate(1);
@@ -269,6 +282,27 @@ export default async function Computer({
                   <TableRow>
                     <TableCell colSpan={4} className="text-muted-foreground">
                       This folder is empty.
+                      {at === "/" && latest && (
+                        <form
+                          action="/computer/restore"
+                          method="post"
+                          className="mt-3 flex items-center gap-3"
+                          data-restore={latest.id}
+                        >
+                          <input type="hidden" name="path" value="/" />
+                          <input
+                            type="hidden"
+                            name="backup"
+                            value={latest.id}
+                          />
+                          <span>
+                            {`A backup from ${latest.finishedAt!.toISOString().slice(0, 16).replace("T", " ")} (${gb(latest.size ?? 0)}) can be put back.`}
+                          </span>
+                          <Button type="submit" size="sm" variant="outline">
+                            Restore it
+                          </Button>
+                        </form>
+                      )}{" "}
                     </TableCell>
                   </TableRow>
                 )}
@@ -316,6 +350,11 @@ export default async function Computer({
         <span>{s.computer.size}</span>
         <span>{`${gb(space.used)} of ${gb(space.total)} used`}</span>
         <span>{s.computer.region}</span>
+        <span data-backups={backups.length}>
+          {latest
+            ? `backed up ${ago(latest.finishedAt!)}, ${backups.length} kept`
+            : "not backed up yet"}
+        </span>
         <span className="ml-auto">{dollars(total)} this month</span>
       </footer>
     </main>

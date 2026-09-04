@@ -182,8 +182,9 @@ layers:
   there on first boot and switched to on every boot after. Installs, config,
   files: all of it persists, because it is a real machine. The daemon updates
   itself here, and security updates run here on a schedule. A volume lives on
-  one physical host, so durability is not automatic: it is snapshotted to
-  object storage on a schedule, and that snapshot is the backup. Volumes
+  one physical host, so durability is not automatic: the machine archives
+  it into the bucket once a day, seven are kept, and an empty disk can be
+  put back from one. Volumes
   auto-extend at a threshold and cap at 500GB.
 - **The memory snapshot** is what they were doing. Usually survives a suspend.
 

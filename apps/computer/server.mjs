@@ -6,7 +6,7 @@
 // routes to us; a request that reached the wrong machine is replayed to
 // the right one. It also reports on itself to us on boot and every five
 // minutes: how full the disk is.
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
@@ -30,6 +30,9 @@ if (!COMPUTER_SECRET || !REPORT_URL || !FLY_MACHINE_ID) {
 const ROOT = path.resolve(process.env.DATA_DIR ?? "/data");
 const PORT = Number(process.env.PORT) || 8080;
 const SHELL = process.env.SHELL_PATH ?? "/bin/bash";
+// Where a backup asks us for somewhere to put each part: beside the report.
+const BACKUP_URL = REPORT_URL.replace(/\/report$/, "/backup");
+const PART = 64 * 1024 * 1024;
 
 async function disk() {
   const s = await fs.statfs(ROOT).catch(() => null);
@@ -155,6 +158,127 @@ function previewCookie(req) {
   if (Number(expires) < Date.now() || !same(sign(`${expires}|${port}`), sig))
     return null;
   return { port: Number(port) };
+}
+
+// Asks the app, as this machine, for the next step of a backup.
+async function backupCall(step, body) {
+  const res = await fetch(`${BACKUP_URL}/${step}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${COMPUTER_SECRET}`,
+      "fly-machine-id": FLY_MACHINE_ID,
+      "content-type": "application/json",
+      ...(REPORT_BYPASS ? { "x-vercel-protection-bypass": REPORT_BYPASS } : {}),
+    },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!res.ok) throw new Error(`backup ${step} answered ${res.status}`);
+  return res.status === 204 ? {} : res.json();
+}
+
+// The whole disk as one compressed archive, streamed to the bucket in
+// parts; each part goes where the app says. A machine suspended midway
+// carries on when it wakes, since each part is signed afresh.
+let backingUp = null;
+async function backup() {
+  const { id } = await backupCall("begin", {});
+  const parts = [];
+  const tar = spawn("tar", ["-C", ROOT, "-czf", "-", "."], {
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  let n = 0;
+  let buffer = [];
+  let held = 0;
+  const send = async (chunks) => {
+    const body = Buffer.concat(chunks);
+    const { url } = await backupCall("part", { id, partNumber: ++n });
+    // A part that stalls is a failed backup, not a stuck one.
+    const put = await fetch(url, {
+      method: "PUT",
+      body,
+      signal: AbortSignal.timeout(600_000),
+    });
+    if (!put.ok) throw new Error(`part ${n} answered ${put.status}`);
+    parts.push({ partNumber: n, etag: put.headers.get("etag") ?? "" });
+  };
+  try {
+    for await (let chunk of tar.stdout) {
+      // Parts are cut at exactly PART bytes; the store takes no more.
+      while (held + chunk.length >= PART) {
+        const take = chunk.subarray(0, PART - held);
+        buffer.push(take);
+        await send(buffer);
+        buffer = [];
+        held = 0;
+        chunk = chunk.subarray(take.length);
+      }
+      if (chunk.length) {
+        buffer.push(chunk);
+        held += chunk.length;
+      }
+    }
+    if (held > 0 || n === 0) await send(buffer);
+    // An archive is whole only if tar said so.
+    await new Promise((resolve, reject) => {
+      if (tar.exitCode !== null)
+        return tar.exitCode === 0
+          ? resolve()
+          : reject(new Error(`tar exited ${tar.exitCode}`));
+      tar.on("exit", (code) =>
+        code === 0 ? resolve() : reject(new Error(`tar exited ${code}`)),
+      );
+    });
+    await backupCall("complete", { id, parts });
+    return { id, parts: n };
+  } catch (err) {
+    tar.kill();
+    await backupCall("abort", { id }).catch(() => {});
+    throw err;
+  }
+}
+
+// The disk from an archive, onto an empty disk only: nothing is written
+// over what is there. A shell's own dotfiles do not make a disk full, and
+// one the archive also has stays as it is. The archive unpacks into a folder of
+// its own first and moves into place in one step under the tree's lock,
+// with the disk checked again at that moment; an archive that will not
+// unpack leaves nothing behind.
+const visible = (names) =>
+  names.filter((x) => !x.startsWith(".") && x !== "lost+found");
+async function restore(url) {
+  if (visible(await fs.readdir(ROOT)).length)
+    throw new Refused(409, "the disk is not empty");
+  const stage = `.restoring-${randomBytes(6).toString("hex")}`;
+  const dir = path.join(ROOT, stage);
+  await fs.mkdir(dir);
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(6 * 3600_000) });
+    if (!res.ok || !res.body)
+      throw new Refused(502, `the archive answered ${res.status}`);
+    const tar = spawn("tar", ["-C", dir, "-xzf", "-"], {
+      stdio: ["pipe", "ignore", "inherit"],
+    });
+    const done = new Promise((resolve, reject) =>
+      tar.on("exit", (code) =>
+        code === 0 ? resolve() : reject(new Error(`tar exited ${code}`)),
+      ),
+    );
+    await pipeline(Readable.fromWeb(res.body), tar.stdin);
+    await done;
+    await exclusive(async () => {
+      const have = new Set(await fs.readdir(ROOT));
+      if (visible([...have]).length)
+        throw new Refused(409, "the disk is not empty");
+      // A dotfile the disk already has is kept; the archive's copy is not
+      // written over it.
+      for (const name of await fs.readdir(dir))
+        if (!have.has(name))
+          await fs.rename(path.join(dir, name), path.join(ROOT, name));
+    });
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 }
 
 function forward(req, res, port) {
@@ -326,6 +450,28 @@ async function handle(req, res) {
 
   if (url.pathname === "/fs/ports" && req.method === "GET")
     return json(200, { ports: await listening() });
+  // A backup runs on its own once asked for; asking again while one runs
+  // is answered with the one running.
+  if (url.pathname === "/fs/backup" && req.method === "POST") {
+    if (!backingUp) {
+      backingUp = backup().finally(() => {
+        backingUp = null;
+      });
+      backingUp.catch((err) => console.error(`backup failed: ${err.message}`));
+    }
+    const wait = url.searchParams.has("wait");
+    if (wait) {
+      const done = await backingUp.catch((err) => ({ error: err.message }));
+      return json(done.error ? 500 : 200, done);
+    }
+    return json(202, { started: true });
+  }
+  if (url.pathname === "/fs/restore" && req.method === "POST") {
+    const b = await readJson(req);
+    if (typeof b.url !== "string") return json(400, { error: "a url" });
+    await restore(b.url);
+    return json(200, { ok: true, disk: await disk() });
+  }
 
   if (url.pathname === "/fs" && req.method === "GET") {
     const abs = under(url.searchParams.get("path"));
