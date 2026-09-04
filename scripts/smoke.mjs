@@ -7,12 +7,27 @@ import path from "node:path";
 import { orgs } from "../packages/db/src/seed.ts";
 import { root, startStack } from "./stack.mjs";
 
+// The smoke carries no credentials: a checkout's pulled config must not reach
+// it. Next leaves a variable alone once it is set, even to nothing.
+const noCredentials = Object.fromEntries(
+  [
+    "WORKOS_API_KEY",
+    "WORKOS_CLIENT_ID",
+    "AUTH_ISSUER",
+    "AUTH_CLIENT_ID",
+    "AUTH_CLIENT_SECRET",
+    "RESEND_API_KEY",
+    "MAIL_FROM",
+  ].map((k) => [k, ""]),
+);
+
 const stack = await startStack({
   stdio: "ignore",
   dataDir: path.join(root, ".local", "smoke"),
   distDir: ".next-smoke",
   fresh: true,
   secrets: false,
+  env: noCredentials,
 });
 
 // Signs in as a seeded person and returns the session cookie.
@@ -57,6 +72,37 @@ try {
       got?.[0] ?? "no match",
     );
   }
+
+  // A signed-in browser stays signed in: every visit renews the cookie for the
+  // longest life a browser grants. Signing out deletes the session, and the
+  // old cookie is worthless afterwards.
+  const marge = await signIn(orgs[1].users[0].id);
+  const visit = await fetch(stack.url, {
+    headers: { cookie: marge },
+    redirect: "manual",
+  });
+  const renewed = visit.headers.get("set-cookie") ?? "";
+  check(
+    "session renewed on visit",
+    renewed.includes(marge) && /max-age=34560000/i.test(renewed),
+    renewed.match(/max-age=\d+/i)?.[0] ?? "no set-cookie",
+  );
+  const bye = await fetch(`${stack.url}/auth/sign-out`, {
+    method: "POST",
+    headers: { cookie: marge },
+    redirect: "manual",
+  });
+  check(
+    "sign out",
+    bye.status === 303 &&
+      /^session=;/.test(bye.headers.get("set-cookie") ?? ""),
+    `answered ${bye.status}, ${bye.headers.get("set-cookie")?.split(";")[0]}`,
+  );
+  check(
+    "old cookie worthless after sign-out",
+    (await page(marge)).includes("Development sign-in"),
+    "sign-in page",
+  );
 
   // Acme invites an email; when the identity provider vouches for it, the
   // person lands in Acme. Admission is the same function the callback calls,
@@ -104,6 +150,66 @@ try {
     "uninvited person gets an org of one",
     !orgs.some((o) => o.id === stranger.orgId),
     stranger.orgId,
+  );
+
+  // Inviting an address that already belongs to someone, or one already
+  // invited, says so instead of pretending.
+  const twice = await fetch(`${stack.url}/invite`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ email: "hire@acme-rockets.test" }),
+    redirect: "manual",
+  });
+  check(
+    "inviting a member says so",
+    twice.headers.get("location")?.endsWith("/?invite=member") === true,
+    twice.headers.get("location") ?? "no redirect",
+  );
+  await fetch(`${stack.url}/invite`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ email: "later@acme-rockets.test" }),
+    redirect: "manual",
+  });
+  const again = await fetch(`${stack.url}/invite`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ email: "later@acme-rockets.test" }),
+    redirect: "manual",
+  });
+  check(
+    "inviting twice says pending",
+    again.headers.get("location")?.endsWith("/?invite=pending") === true,
+    again.headers.get("location") ?? "no redirect",
+  );
+
+  // A real session id under the wrong org is nobody.
+  const [, wileSession] = wile.replace("session=", "").split(".");
+  check(
+    "session under another org",
+    (await page(`session=${orgs[1].id}.${wileSession}`)).includes(
+      "Development sign-in",
+    ),
+    "sign-in page",
+  );
+
+  // Abuse limits: a key gets its limit of hits per window and no more, and
+  // two first sign-ins racing for one email both land on one row.
+  const { allow } = await import("../packages/db/src/throttle.ts");
+  const hits = [];
+  for (let i = 0; i < 4; i++) hits.push(await allow("email:x@y.test", 3, 600));
+  check(
+    "throttle",
+    hits.join() === "true,true,true,false",
+    hits.map((h) => (h ? "ok" : "no")).join(" "),
+  );
+  const raced = await Promise.all(
+    [1, 2, 3].map(() => admit({ email: "race@example.test", name: "Race" })),
+  );
+  check(
+    "racing first sign-ins share one row",
+    new Set(raced.map((r) => r.userId)).size === 1,
+    `${new Set(raced.map((r) => r.userId)).size} rows`,
   );
   await globalThis.__pool?.end();
 

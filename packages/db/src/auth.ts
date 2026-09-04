@@ -8,11 +8,19 @@ export type Identity = { email: string; name: string };
 // Who a request acts as.
 export type Principal = { orgId: string; userId: string };
 
-const SESSION_DAYS = 30;
-
 // Admits a person the identity provider vouched for: the one already known by
 // that email, else the one an org invited, else a new person in an org of one.
+// Two first sign-ins racing for one email both land on the row the winner made.
 export async function signIn(identity: Identity): Promise<Principal> {
+  try {
+    return await admit(identity);
+  } catch (err) {
+    if ((err as { code?: string }).code !== "23505") throw err;
+    return admit(identity);
+  }
+}
+
+async function admit(identity: Identity): Promise<Principal> {
   const found = await asEmail(identity.email, async (q) => {
     const user = await q.query<{ id: string; org_id: string }>(
       "select id, org_id from users where email = $1",
@@ -59,22 +67,23 @@ export async function signIn(identity: Identity): Promise<Principal> {
   return { orgId, userId };
 }
 
-// Opens a session and returns the token the browser will hold.
+// Opens a session and returns the token the browser will hold. It lasts until
+// deleteSession: signing out is the only way a session ends.
 export async function createSession(p: Principal): Promise<string> {
   const id = randomUUID();
   await asOrg(p.orgId, (q) =>
-    q.query(
-      "insert into sessions (id, org_id, user_id, expires_at) values ($1, $2, $3, now() + $4 * interval '1 day')",
-      [id, p.orgId, p.userId, SESSION_DAYS],
-    ),
+    q.query("insert into sessions (id, org_id, user_id) values ($1, $2, $3)", [
+      id,
+      p.orgId,
+      p.userId,
+    ]),
   );
   return `${p.orgId}.${id}`;
 }
 
 const TOKEN = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/;
 
-// Finds who a session token belongs to, or null if it is malformed, gone or
-// expired.
+// Finds who a session token belongs to, or null if it is malformed or gone.
 export async function resolveSession(
   token: string | undefined,
 ): Promise<Principal | null> {
@@ -84,7 +93,7 @@ export async function resolveSession(
   const row = await asOrg(orgId!, async (q) =>
     (
       await q.query<{ user_id: string }>(
-        "select user_id from sessions where id = $1 and expires_at > now()",
+        "select user_id from sessions where id = $1",
         [id],
       )
     ).rows.at(0),
@@ -101,13 +110,27 @@ export async function deleteSession(token: string | undefined): Promise<void> {
   );
 }
 
+export type Invited = "sent" | "pending" | "member";
+
 // Reserves a place in the org for whoever the identity provider says holds
-// this email. Inviting the same email twice is a no-op.
-export async function invite(orgId: string, email: string): Promise<void> {
-  await asOrg(orgId, (q) =>
-    q.query(
-      "insert into invitations (id, org_id, email) values ($1, $2, $3) on conflict (org_id, email) do nothing",
-      [randomUUID(), orgId, email],
-    ),
+// this email. Says whether that is new, already pending, or pointless because
+// the email already belongs to someone.
+export async function invite(orgId: string, email: string): Promise<Invited> {
+  const taken = await asEmail(
+    email,
+    async (q) =>
+      (await q.query("select 1 from users where email = $1", [email])).rowCount,
   );
+  if (taken) return "member";
+  const inserted = await asOrg(
+    orgId,
+    async (q) =>
+      (
+        await q.query(
+          "insert into invitations (id, org_id, email) values ($1, $2, $3) on conflict (org_id, email) do nothing",
+          [randomUUID(), orgId, email],
+        )
+      ).rowCount,
+  );
+  return inserted ? "sent" : "pending";
 }

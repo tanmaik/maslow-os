@@ -19,21 +19,13 @@ function configuration(): Promise<client.Configuration> {
   return shared.__oidc;
 }
 
-// The public origin of a request, as the browser saw it through any proxy.
-export function origin(request: Request): string {
-  const url = new URL(request.url);
-  const proto =
-    request.headers.get("x-forwarded-proto") ?? url.protocol.replace(":", "");
-  const host = request.headers.get("x-forwarded-host") ?? url.host;
-  return `${proto}://${host}`;
-}
-
-export type Flow = { state: string; verifier: string };
+// What the browser must bring back from the provider for the code to count.
+export type OidcFlow = { state: string; verifier: string };
 
 // Where to send the browser to sign in, and what to remember until it returns.
 export async function beginSignIn(
   redirectUri: string,
-): Promise<{ url: URL; flow: Flow }> {
+): Promise<{ url: URL; flow: OidcFlow }> {
   const config = await configuration();
   const verifier = client.randomPKCECodeVerifier();
   const state = client.randomState();
@@ -50,7 +42,7 @@ export async function beginSignIn(
 // Turns the provider's callback into the identity it vouches for.
 export async function finishSignIn(
   callbackUrl: URL,
-  flow: Flow,
+  flow: OidcFlow,
 ): Promise<Identity> {
   const config = await configuration();
   const tokens = await client.authorizationCodeGrant(config, callbackUrl, {

@@ -8,15 +8,43 @@ import { pendingFlow, principal } from "@/lib/session";
 
 type Member = { id: string; name: string; email: string };
 
+// What the last action left to say, by the query it redirected with.
+type Notice = {
+  email?: "slow" | "rejected";
+  code?: "wrong" | "locked";
+  signin?: "cancelled";
+  invite?: "sent" | "pending" | "member";
+};
+
+const NOTICES = {
+  "email=slow": "Too many codes asked for. Wait ten minutes and try again.",
+  "email=rejected": "That address was refused. Check it and try again.",
+  "code=wrong": "That code didn't work. Try again or start over.",
+  "code=locked": "Too many wrong codes. Ask for a new one.",
+  "signin=cancelled": "Sign-in was cancelled.",
+  "invite=pending":
+    "Already invited. They sign in with that address and they're in.",
+  "invite=member": "That address already belongs to someone.",
+} as const;
+
+// The one line the last action left behind, if any.
+function notice(n: Notice): string | null {
+  for (const [k, v] of Object.entries(n))
+    if (`${k}=${v}` in NOTICES)
+      return NOTICES[`${k}=${v}` as keyof typeof NOTICES];
+  return null;
+}
+
 // The signed-in person's org: who is in it, who is invited, and a way to
 // invite more. Signed out, a way in.
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string }>;
+  searchParams: Promise<Notice>;
 }) {
+  const said = notice(await searchParams);
   const p = await principal();
-  if (!p) return <SignIn wrongCode={(await searchParams).code === "wrong"} />;
+  if (!p) return <SignIn said={said} />;
 
   const { orgName, members, invited } = await asOrg(p.orgId, async (q) => ({
     orgName: (await q.query<{ name: string }>("select name from orgs")).rows[0]
@@ -66,6 +94,7 @@ export default async function Page({
       )}
 
       <form action="/invite" method="post" className="space-y-2">
+        {said && <p className="text-muted-foreground text-sm">{said}</p>}
         <div className="flex gap-2">
           <Input
             name="email"
@@ -86,7 +115,7 @@ export default async function Page({
   );
 }
 
-async function SignIn({ wrongCode }: { wrongCode: boolean }) {
+async function SignIn({ said }: { said: string | null }) {
   const { identity } = deployment;
 
   if (identity.kind === "workos") {
@@ -121,11 +150,7 @@ async function SignIn({ wrongCode }: { wrongCode: boolean }) {
               />
               <Button type="submit">Continue</Button>
             </form>
-            {wrongCode && (
-              <p className="text-destructive text-sm">
-                That code didn&apos;t work. Try again or start over.
-              </p>
-            )}
+            {said && <p className="text-destructive text-sm">{said}</p>}
             <form action="/auth/restart" method="post">
               <Button variant="link" size="sm" type="submit" className="px-0">
                 Use a different email
@@ -138,6 +163,7 @@ async function SignIn({ wrongCode }: { wrongCode: boolean }) {
               We&apos;ll email you a six-digit code. No password, no account to
               make.
             </p>
+            {said && <p className="text-destructive text-sm">{said}</p>}
             <form action="/auth/email" method="post" className="flex gap-2">
               <Input
                 name="email"
@@ -158,6 +184,7 @@ async function SignIn({ wrongCode }: { wrongCode: boolean }) {
     return (
       <main className="space-y-4">
         <h1 className="text-2xl font-semibold">Sign in</h1>
+        {said && <p className="text-destructive text-sm">{said}</p>}
         <Button render={<a href="/auth/sign-in" />}>
           Continue with {new URL(identity.issuer).host}
         </Button>

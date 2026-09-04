@@ -32,8 +32,13 @@ being vouched for.
 
 The identity provider vouches for an email and a name, and that is its whole
 part. A session is a row in `sessions`, belonging to the org like every other
-row. The cookie carries `org.session`; a forged org sees no row. Thirty days,
-deleted on sign-out.
+row. The cookie carries `org.session`; a forged org sees no row.
+
+A session lasts until the person signs out; nothing about it ages. Browsers
+cap a cookie at about 400 days, so `proxy.ts` renews the cookie on every
+visit, and a person who keeps coming back is never signed out by time. Only
+sign-out deletes the row, and a deleted row makes the cookie worthless on the
+next request.
 
 ## Membership is ours; a WorkOS organization is a later mirror
 
@@ -60,9 +65,11 @@ the part before the `@` stands in until they set one.
 
 ## Mail is Resend, and the code mail is ours
 
-WorkOS's API mints the code and hands it back; only its hosted page mails it.
-So the code mail is ours, through Resend, with `RESEND_API_KEY` and
-`MAIL_FROM`. Without them, outside production, the code is printed to the
+WorkOS's API mints the code and hands it back, and by default also mails it
+itself from its own address. Two mails per sign-in with the same code looked
+like spam and were treated as spam, so WorkOS's Magic Auth mail is switched
+off in both environments (Emails → Configuration) and the code mail is ours,
+through Resend, with `RESEND_API_KEY` and `MAIL_FROM`. Without them, outside production, the code is printed to the
 server's terminal and the page says so, which is the visible fallback the
 field guide asks for. In production a WorkOS deployment with no mail refuses
 to start: nobody could enter it. Invitations use the same sender when it
@@ -76,7 +83,25 @@ already belongs to. Splitting `users` into people and memberships is the change
 if the product wants Figma-style workspaces. Assumed, not settled: the founder
 was asked and had not answered when this was built.
 
+## Abuse limits on the anonymous surface
+
+Asking for a code and guessing a code are the two things a stranger can do,
+and both spend money or attempts. A `throttles` table, visible one key at a
+time through `app.throttle`, counts hits per window: three codes per email and
+twenty per network address in ten minutes, five guesses per code, and a fresh
+code lifts the guess lock. Over the limit, the page says so. The network
+address is what the nearest proxy reports, which Vercel sets itself; with no
+proxy there is none to count against and only the per-email limit applies.
+Throttle rows are never pruned; they are one small row per key and the
+nightly sweep is where that goes when it matters.
+
 ## Not built yet
+
+A stolen session cookie is valid until that session signs out; there is no
+"sign out everywhere" and no record of when a session was last seen. The
+session id is stored as is, so reading the table is holding the sessions.
+Inviting tells a signed-in person whether an address already belongs to
+someone, which is a small oracle accepted for now.
 
 The self-hosted signup rule, first arrival owns and everyone after is invited,
 needs a way to ask whether the instance is empty, which no org-scoped

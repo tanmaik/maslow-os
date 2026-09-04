@@ -2,24 +2,24 @@ import { asOrg } from "@placeholder/db";
 import { invite } from "@placeholder/db/auth";
 import { NextResponse } from "next/server";
 
-import { deployment } from "../../lib/deployment.ts";
-import { send } from "../../lib/mail.ts";
-import { origin } from "../../lib/oidc.ts";
-import { principal } from "../../lib/session.ts";
+import { deployment } from "@/lib/deployment";
+import { send } from "@/lib/mail";
+import { origin } from "@/lib/origin";
+import { principal } from "@/lib/session";
 
 // Invites an email into the signed-in person's org, and tells them by mail
-// when this deployment can send any.
+// when this deployment can send any and the invitation is new.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const email = (await request.formData()).get("email");
-  if (typeof email !== "string" || !email.includes("@"))
+  if (typeof email !== "string" || !email.includes("@") || email.length > 254)
     return new Response("An email address is required.", { status: 400 });
   const address = email.trim().toLowerCase();
-  await invite(p.orgId, address);
+  const home = origin(request);
 
-  if (deployment.mail.kind !== "none") {
-    const home = origin(request);
+  const outcome = await invite(p.orgId, address);
+  if (outcome === "sent" && deployment.mail.kind !== "none") {
     const org = await asOrg(
       p.orgId,
       async (q) =>
@@ -32,5 +32,5 @@ export async function POST(request: Request) {
       text: `Sign in at ${home} with this email address and you'll be in ${org}.`,
     });
   }
-  return NextResponse.redirect(origin(request), 303);
+  return NextResponse.redirect(`${home}/?invite=${outcome}`, 303);
 }

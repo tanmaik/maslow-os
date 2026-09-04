@@ -1,8 +1,8 @@
 import { orgs } from "@placeholder/db/seed";
 
-import { deployment } from "../../../lib/deployment.ts";
-import { origin } from "../../../lib/oidc.ts";
-import { signedIn } from "../../../lib/session.ts";
+import { deployment } from "@/lib/deployment";
+import { origin } from "@/lib/origin";
+import { signedIn } from "@/lib/session";
 
 // Signs in as a seeded person. Exists only while no identity provider is
 // configured, which production never allows.

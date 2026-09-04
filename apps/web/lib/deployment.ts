@@ -15,6 +15,9 @@ const production = process.env.VERCEL
   ? process.env.VERCEL_ENV === "production"
   : process.env.NODE_ENV === "production";
 
+// Every Vercel deployment is served over HTTPS; elsewhere only production is.
+const https = Boolean(process.env.VERCEL) || production;
+
 function identityProvider(): IdentityProvider {
   const { WORKOS_API_KEY, WORKOS_CLIENT_ID, AUTH_ISSUER, AUTH_CLIENT_ID } =
     process.env;
@@ -49,6 +52,7 @@ function mail(): Mail {
 
 export const deployment = {
   production,
+  https,
   identity: identityProvider(),
   mail: mail(),
 };

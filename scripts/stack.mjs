@@ -60,6 +60,7 @@ export async function startStack({
   distDir = ".next",
   fresh = false,
   secrets = true,
+  env: extraEnv = {},
 } = {}) {
   const values = secrets ? devSecrets() : null;
   const pgPort = await freePort();
@@ -91,6 +92,7 @@ export async function startStack({
         DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
         NEXT_DIST_DIR: distDir,
         NEXT_TELEMETRY_DISABLED: "1",
+        ...extraEnv,
       },
     },
   );

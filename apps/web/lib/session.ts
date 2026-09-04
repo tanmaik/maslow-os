@@ -7,22 +7,12 @@ import {
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-import { deployment } from "./deployment.ts";
-
-const SESSION = "session";
-const FLOW = "auth_flow";
+import { cookie, FLOW, SESSION, SESSION_LIFETIME } from "./cookie.ts";
+import type { OidcFlow } from "./oidc.ts";
 
 // What a sign-in remembers between its two legs: the OIDC state and verifier,
 // or the email a code was sent to.
-export type Flow = { state: string; verifier: string } | { email: string };
-
-const cookie = (maxAge: number) => ({
-  httpOnly: true,
-  sameSite: "lax" as const,
-  secure: deployment.production,
-  path: "/",
-  maxAge,
-});
+export type Flow = OidcFlow | { email: string };
 
 // Who the current request acts as, or null when nobody is signed in.
 export async function principal(): Promise<Principal | null> {
@@ -33,7 +23,7 @@ export async function principal(): Promise<Principal | null> {
 export async function signedIn(p: Principal, to: string): Promise<Response> {
   const token = await createSession(p);
   const response = NextResponse.redirect(to, 303);
-  response.cookies.set(SESSION, token, cookie(30 * 24 * 3600));
+  response.cookies.set(SESSION, token, cookie(SESSION_LIFETIME));
   response.cookies.delete(FLOW);
   return response;
 }
@@ -60,7 +50,16 @@ export function abandoned(to: string): Response {
   return response;
 }
 
+// The sign-in in progress, or null when there is none or the cookie is not
+// one of ours.
 export async function pendingFlow(): Promise<Flow | null> {
   const raw = (await cookies()).get(FLOW)?.value;
-  return raw ? (JSON.parse(raw) as Flow) : null;
+  if (!raw) return null;
+  try {
+    const flow = JSON.parse(raw) as Partial<OidcFlow & { email: string }>;
+    if (typeof flow.email === "string") return { email: flow.email };
+    if (typeof flow.state === "string" && typeof flow.verifier === "string")
+      return { state: flow.state, verifier: flow.verifier };
+  } catch {}
+  return null;
 }

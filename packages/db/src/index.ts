@@ -1,7 +1,6 @@
 import pg from "pg";
 
-// One pool per process. Kept on globalThis so a dev-server reload reuses it
-// instead of opening another.
+// One pool per process, reused across dev-server reloads.
 const shared = globalThis as { __pool?: pg.Pool };
 
 function connection(): pg.Pool {
@@ -44,12 +43,12 @@ async function scoped<T>(
   }
 }
 
-// Runs fn as one org. With orgId null nothing is visible until an org is named.
+// Runs fn as one org.
 export function asOrg<T>(
-  orgId: string | null,
+  orgId: string,
   fn: (q: Query) => Promise<T>,
 ): Promise<T> {
-  return scoped(orgId ? { "app.org_id": orgId } : {}, fn);
+  return scoped({ "app.org_id": orgId }, fn);
 }
 
 // Runs fn seeing only the person and invitations that carry one email: the
@@ -59,4 +58,12 @@ export function asEmail<T>(
   fn: (q: Query) => Promise<T>,
 ): Promise<T> {
   return scoped({ "app.email": email }, fn);
+}
+
+// Runs fn seeing one throttle key.
+export function asThrottle<T>(
+  key: string,
+  fn: (q: Query) => Promise<T>,
+): Promise<T> {
+  return scoped({ "app.throttle": key }, fn);
 }
