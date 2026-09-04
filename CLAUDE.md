@@ -89,10 +89,13 @@ applying to it.
 ## The brain
 
 What a person knows lives in records, the links between them, and a log of
-every change. A record is either what a source returned, written by code and
-keyed by the source's own id, or what the agent concluded, written by the
-model with a confidence and an edge back to the records it rests on. Derived
-records can be thrown away and made again; source records cannot.
+every change. The brain is a graph of a mind, not a copy of its sources:
+nothing mirrors a mailbox or a calendar into it. The agent reads an app
+through a tool and writes what it concluded, with a confidence and an edge
+back to what it rests on. What it rests on is a stub: the app, the app's own
+id, and enough to find and cite the original, never the whole thing. A
+question the brain cannot answer is answered through a tool, and the answer
+and its stub are written so the next time is a read.
 
 Kinds and verbs are the org's own vocabulary, open to the person and the
 agent, each with a description and an author. A brain starts with none:
