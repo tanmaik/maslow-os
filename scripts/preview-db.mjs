@@ -415,10 +415,6 @@ async function removeDeployments(branches) {
 // Removes the pull request's rows, objects, computers and deployments, then
 // its branch if it still exists.
 async function down(prNumber = pr, branch = undefined) {
-  for (const d of await deploymentsOf(prNumber)) {
-    await vercel("DELETE", `/v13/deployments/${d.uid}`);
-    console.log(`vercel: deleted deployment ${d.url}`);
-  }
   const rows = (await envs()).filter(stampedFor(prNumber));
   await removeRows(rows);
   await emptyPrefix(prefixFor(prNumber));
