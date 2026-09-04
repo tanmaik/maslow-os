@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 
 import { sweep } from "@/lib/meter";
 
+// Vercel gives this request this long.
+export const maxDuration = 300;
+
 // The hourly sweep, called by Vercel's cron with the secret it was given:
 // the backstop for hours nobody looks at their computer. Without a secret
 // there is no sweep; it never runs for a stranger.

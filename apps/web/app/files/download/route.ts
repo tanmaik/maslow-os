@@ -1,4 +1,4 @@
-import { disk } from "@/lib/disk";
+import { answer, disk } from "@/lib/disk";
 import { cleanPath } from "@/lib/files";
 import { principal } from "@/lib/session";
 
@@ -8,5 +8,9 @@ export async function GET(request: Request) {
   if (!p) return new Response(null, { status: 401 });
   const path = cleanPath(new URL(request.url).searchParams.get("path"));
   if (!path || path === "/") return new Response(null, { status: 404 });
-  return Response.redirect(await disk.downloadUrl(p, path), 302);
+  try {
+    return Response.redirect(await disk.downloadUrl(p, path), 302);
+  } catch (err) {
+    return answer(err);
+  }
 }

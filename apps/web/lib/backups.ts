@@ -26,7 +26,12 @@ import { presign, s3 } from "./s3.ts";
 // A backup is the machine's own doing: it asks us, as itself, to open
 // one, for somewhere to put each part, and to close it. The bytes go from
 // the machine to the bucket and never through us. Seven are kept.
-export type Machine = { id: string; orgId: string; userId: string };
+export type Machine = {
+  id: string;
+  orgId: string;
+  userId: string;
+  diskGb: number;
+};
 
 export async function machineFrom(request: Request): Promise<Machine | null> {
   const secret = request.headers.get("authorization")?.replace(/^Bearer /, "");
@@ -75,7 +80,10 @@ export async function partUrl(
   partNumber: number,
 ): Promise<string | null> {
   const b = await backupInProgress(m, id);
-  if (!b || !(partNumber >= 1 && partNumber <= 10000)) return null;
+  // No more parts than the disk could fill, at the machine's part size.
+  const most = Math.ceil((m.diskGb * 1e9 * 2) / (16 * 1024 * 1024));
+  if (!b || !(partNumber >= 1 && partNumber <= Math.min(10000, most)))
+    return null;
   if (deployment.storage.kind === "s3")
     return presign(deployment.storage, "PUT", b.key, {
       partNumber: String(partNumber),
@@ -132,6 +140,12 @@ export async function complete(
     await out.close();
     for (const x of parts)
       await fs.rm(localPartPath(b.key, x.partNumber), { force: true });
+  }
+  // An archive larger than twice the disk is not an archive of it.
+  if (size > m.diskGb * 1e9 * 2) {
+    await dropObject(b.key);
+    await abort(m, id);
+    return false;
   }
   if (!(await finishBackup(m, id, size))) {
     // Dropped while it was being closed: the whole object goes now.
@@ -194,7 +208,7 @@ export async function sweepBackups(orgId: string, now: Date): Promise<void> {
     const last = lastFinished.get(c.userId);
     if (last && now.getTime() - last.getTime() < 86400_000) continue;
     try {
-      await disk.backupIn(c);
+      await disk.backupIn(orgId, c);
     } catch (err) {
       console.error(`backup ${c.machineId}: ${(err as Error).message}`);
     }

@@ -37,7 +37,9 @@ export function FileActions({
   at: string;
   upload?: string;
 }) {
-  const [asking, setAsking] = useState<"rename" | "move" | null>(null);
+  const [asking, setAsking] = useState<"rename" | "move" | "delete" | null>(
+    null,
+  );
   const id = upload ?? target;
   const hidden = (
     <>
@@ -80,12 +82,21 @@ export function FileActions({
               <DropdownMenuSeparator />
             </>
           )}
-          <DropdownMenuItem
-            variant="destructive"
-            render={<button type="submit" form={`delete-${id}`} />}
-          >
-            {upload ? "Abandon" : "Delete"}
-          </DropdownMenuItem>
+          {upload || kind === "file" ? (
+            <DropdownMenuItem
+              variant="destructive"
+              render={<button type="submit" form={`delete-${id}`} />}
+            >
+              {upload ? "Abandon" : "Delete"}
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              variant="destructive"
+              onClick={() => setAsking("delete")}
+            >
+              Delete…
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
       <form
@@ -96,6 +107,29 @@ export function FileActions({
       >
         {hidden}
       </form>
+
+      <Dialog
+        open={asking === "delete"}
+        onOpenChange={(o) => !o && setAsking(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {name} and everything in it?</DialogTitle>
+            <DialogDescription>
+              The folder and every file and folder inside it go from the disk.
+              Yesterday&apos;s backup still holds them.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAsking(null)}>
+              Keep it
+            </Button>
+            <Button variant="destructive" type="submit" form={`delete-${id}`}>
+              Delete it
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={asking === "rename"}
@@ -131,7 +165,9 @@ export function FileActions({
             {hidden}
             <Input
               name="to"
-              defaultValue={at}
+              defaultValue={
+                at === "/" ? "/" : at.slice(0, at.lastIndexOf("/")) || "/"
+              }
               placeholder="/photos/2026"
               autoFocus
               required

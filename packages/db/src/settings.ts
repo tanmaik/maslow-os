@@ -247,6 +247,25 @@ export async function deleteOrg(
   name: string,
 ): Promise<"deleted" | "mismatch"> {
   return asPrincipal(p, async (q) => {
+    const named = await q.query("select 1 from orgs where name = $1", [name]);
+    if (!named.rowCount) return "mismatch";
+    // Everything the vendors hold for the org is owed before its rows go,
+    // in the same transaction: nothing that costs money is left unrecorded.
+    await q.query(
+      `insert into orphans (org_id, kind, ref)
+         select org_id, 'machine', machine_id from computers where machine_id is not null
+       union all
+         select org_id, 'volume', volume_id from computers where volume_id is not null`,
+    );
+    await q.query("select set_config('app.meter', 'sweep', true)");
+    await q.query(
+      `insert into orphans (org_id, kind, ref, extra)
+         select org_id, case when upload_id is not null then 'upload' else 'object' end, key, upload_id
+           from files where deleted_at is null
+       union all
+         select org_id, case when upload_id is not null then 'upload' else 'object' end, key, upload_id
+           from backups where deleted_at is null`,
+    );
     const gone = await q.query("delete from orgs where name = $1", [name]);
     return gone.rowCount ? "deleted" : "mismatch";
   });

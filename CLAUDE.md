@@ -172,7 +172,8 @@ Resend to founders only, the preview Fly app and the bucket — and the
 synthetic seed: three orgs with obviously distinguishable data. Whatever is
 not there is faked, and `pnpm dev` and the pill say which. A laptop's
 computers live in the preview Fly app and its objects under a `dev/` prefix
-in the bucket, named for the checkout, and the nightly reap purges them:
+in the dev bucket — a bucket of its own, with keys of its own, so nothing
+outside production holds production's — named for the checkout, and the nightly reap purges them:
 tomorrow makes new ones. A machine cannot reach a laptop, so its reports and
 backups fail there and say so. A preview is the same: a Neon branch off an
 empty parent — never off production — migrated and seeded on deploy, on
@@ -209,7 +210,9 @@ from the machine. Opening the page wakes the machine, and
 Fly's proxy suspends it once nothing has asked for it. An upload is staged
 in the bucket only until the machine has pulled it onto the disk. The page
 has a shell on the disk, and every port the machine listens on is a
-preview a browser can open; both come from the machine itself.
+preview a browser can open; both come from the machine itself, by links
+signed with a key the whole deployment holds, so nothing unsigned wakes
+a machine. A machine's secret is its owner's, never the org's.
 
 Every machine and volume on Fly is recorded in our database with the org and
 person it belongs to, at creation, before it is used. A sweep reconciles Fly's

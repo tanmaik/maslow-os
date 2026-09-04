@@ -19,11 +19,14 @@ import { promisify } from "node:util";
 
 import { WebSocketServer } from "ws";
 
-const { COMPUTER_SECRET, REPORT_URL, FLY_MACHINE_ID, REPORT_BYPASS } =
+// COMPUTER_SECRET is this machine's own, for the app's calls; LINK_SECRET
+// is the deployment's, so any machine can tell a real link from a forged
+// one before it wakes the machine the link names.
+const { COMPUTER_SECRET, LINK_SECRET, REPORT_URL, FLY_MACHINE_ID } =
   process.env;
-if (!COMPUTER_SECRET || !REPORT_URL || !FLY_MACHINE_ID) {
+if (!COMPUTER_SECRET || !LINK_SECRET || !REPORT_URL || !FLY_MACHINE_ID) {
   console.error(
-    "A computer needs COMPUTER_SECRET, REPORT_URL and FLY_MACHINE_ID.",
+    "A computer needs COMPUTER_SECRET, LINK_SECRET, REPORT_URL and FLY_MACHINE_ID.",
   );
   process.exit(1);
 }
@@ -43,7 +46,7 @@ const SHELL = process.env.SHELL_PATH ?? "/bin/bash";
 let ready = !OS_ROOT;
 // Where a backup asks us for somewhere to put each part: beside the report.
 const BACKUP_URL = REPORT_URL.replace(/\/report$/, "/backup");
-const PART = 64 * 1024 * 1024;
+const PART = 16 * 1024 * 1024;
 
 // The disk's fullness. A laptop's directory stands in for a volume of
 // DISK_GB, measured as what it holds.
@@ -77,10 +80,6 @@ async function report() {
         authorization: `Bearer ${COMPUTER_SECRET}`,
         "fly-machine-id": FLY_MACHINE_ID,
         "content-type": "application/json",
-        // A preview sits behind Vercel's protection; this lets a report in.
-        ...(REPORT_BYPASS
-          ? { "x-vercel-protection-bypass": REPORT_BYPASS }
-          : {}),
       },
       body: JSON.stringify({ disk: await disk() }),
       signal: AbortSignal.timeout(10000),
@@ -116,32 +115,47 @@ function under(raw) {
   return abs;
 }
 
+// The same, with symlinks followed: what the path really is must still be
+// under the root, or a link made in the shell would reach outside.
+async function real(raw) {
+  const abs = under(raw);
+  const there = await fs.realpath(abs).catch((err) => {
+    if (err.code === "ENOENT") return null;
+    throw err;
+  });
+  if (there && there !== ROOT && !there.startsWith(ROOT + path.sep))
+    throw new Refused(400, "not a path");
+  return abs;
+}
+
 const same = (a, b) =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 const sign = (s) =>
-  createHmac("sha256", COMPUTER_SECRET).update(s).digest("base64url");
+  createHmac("sha256", LINK_SECRET).update(s).digest("base64url");
 
-// A signed link names the machine, when it expires, and what it is for.
-// One for another machine is replayed there; only the right machine holds
-// the secret that checks it.
+// A signed link names the machine, when it expires, and what it is for,
+// all under the deployment's key, so any machine checks it before a word
+// is said to the machine it names; only then is a link for another
+// machine replayed there. A stale or forged link wakes nobody.
 function signed(url, kind) {
   const m = url.pathname.match(
     /^\/(dl|term|p)\/([^/]+)\/(\d+)\/([^/]+)(?:\/(\d+))?$/,
   );
   if (!m || m[1] !== kind) return null;
   const [, , machine, expires, sig, port] = m;
-  // A link past its time wakes nobody.
-  if (Number(expires) < Date.now()) return { refused: true };
-  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   const what =
     kind === "dl"
       ? (url.searchParams.get("path") ?? "")
       : kind === "p"
         ? port
         : "term";
-  if (Number(expires) < Date.now() || !same(sign(`${expires}|${what}`), sig))
+  if (
+    Number(expires) < Date.now() ||
+    !same(sign(`${kind}|${machine}|${expires}|${what}`), sig)
+  )
     return { refused: true };
+  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   // Ourselves and Fly's own way in are not previews.
   if (kind === "p" && (Number(port) === PORT || Number(port) === 22))
     return { refused: true };
@@ -177,14 +191,19 @@ async function listening() {
 
 // A previewed app on one of those ports, as the cookie a signed preview
 // link set names it: the browser then lives at the root for that port.
+// The cookie is a signed link of its own, good for a day, checked before
+// anything is done for it.
 function previewCookie(req) {
   const m = /(?:^|;\s*)mp=([^;]+)/.exec(req.headers.cookie ?? "");
   if (!m) return null;
   const [machine, expires, port, sig] = m[1].split(".");
   if (!machine || !expires || !port || !sig) return null;
-  if (machine !== FLY_MACHINE_ID) return { replay: machine };
-  if (Number(expires) < Date.now() || !same(sign(`${expires}|${port}`), sig))
+  if (
+    Number(expires) < Date.now() ||
+    !same(sign(`cookie|${machine}|${expires}|${port}`), sig)
+  )
     return null;
+  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   return { port: Number(port) };
 }
 
@@ -196,7 +215,6 @@ async function backupCall(step, body) {
       authorization: `Bearer ${COMPUTER_SECRET}`,
       "fly-machine-id": FLY_MACHINE_ID,
       "content-type": "application/json",
-      ...(REPORT_BYPASS ? { "x-vercel-protection-bypass": REPORT_BYPASS } : {}),
     },
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
@@ -274,6 +292,15 @@ async function backup() {
 // unpack leaves nothing behind.
 const visible = (names) =>
   names.filter((x) => !x.startsWith(".") && x !== "lost+found");
+const run = (cmd, args) =>
+  new Promise((resolve, reject) => {
+    const c = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
+    c.on("exit", (code) =>
+      code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)),
+    );
+  });
+let restoring = null;
+let lastRestore = null;
 async function restore(url) {
   if (visible(await fs.readdir(ROOT)).length)
     throw new Refused(409, "the disk is not empty");
@@ -284,7 +311,7 @@ async function restore(url) {
     const res = await fetch(url, { signal: AbortSignal.timeout(6 * 3600_000) });
     if (!res.ok || !res.body)
       throw new Refused(502, `the archive answered ${res.status}`);
-    const tar = spawn("tar", ["-C", dir, "-xzf", "-"], {
+    const tar = spawn("tar", ["-C", dir, "-xzf", "-", "--no-same-owner"], {
       stdio: ["pipe", "ignore", "inherit"],
     });
     const done = new Promise((resolve, reject) =>
@@ -294,6 +321,8 @@ async function restore(url) {
     );
     await pipeline(Readable.fromWeb(res.body), tar.stdin);
     await done;
+    // A link in an archive could point anywhere; none is put back.
+    await run("find", [dir, "-type", "l", "-delete"]);
     await exclusive(async () => {
       const have = new Set(await fs.readdir(ROOT));
       if (visible([...have]).length)
@@ -321,7 +350,12 @@ function forward(req, res, port) {
       headers: { ...req.headers, host: `localhost:${port}` },
     },
     (answer) => {
-      res.writeHead(answer.statusCode, answer.headers);
+      // The previewed app cannot speak for the hostname: its cookies and
+      // replays stay on its side.
+      const headers = { ...answer.headers };
+      delete headers["set-cookie"];
+      delete headers["fly-replay"];
+      res.writeHead(answer.statusCode, headers);
       answer.pipe(res);
     },
   );
@@ -366,7 +400,7 @@ async function list(dir) {
   });
   const entries = [];
   for (const d of names) {
-    if (d.name.startsWith(".") || d.name === "lost+found") continue;
+    if (d.name === "lost+found" || d.name.startsWith(".restoring-")) continue;
     const s = await fs.stat(path.join(dir, d.name)).catch(() => null);
     if (!s) continue;
     entries.push({
@@ -443,22 +477,46 @@ async function handle(req, res) {
   }
   if (url.pathname === "/health") return json(200, { ok: true });
 
-  // A browser's download, by a signed link.
+  // What a browser is told, in words.
+  const say = (status, text) => {
+    res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+    res.end(text);
+  };
+  const STALE =
+    "This link has expired or is not one of ours. Open it again from your computer.";
+
+  // A browser's download, by a signed link; a range of it, for a download
+  // that picks up where it stopped.
   const dl = signed(url, "dl");
   if (dl) {
     if (dl.replay) return replay(dl.replay);
-    if (dl.refused) return json(403, { error: "no" });
-    const abs = under(dl.what);
+    if (dl.refused) return say(403, STALE);
+    const abs = await real(dl.what);
     const s = await fs.stat(abs).catch(() => null);
-    if (!s?.isFile()) return json(404, { error: "no such file" });
+    if (!s?.isFile()) return say(404, "There is no such file on your disk.");
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
+    let start = 0;
+    let end = s.size - 1;
+    if (range && (range[1] || range[2])) {
+      start = range[1]
+        ? Number(range[1])
+        : Math.max(0, s.size - Number(range[2]));
+      end = range[1] && range[2] ? Math.min(Number(range[2]), s.size - 1) : end;
+      if (!(start <= end && start < s.size)) {
+        res.writeHead(416, { "content-range": `bytes */${s.size}` });
+        return res.end();
+      }
+    }
     const fh = await fs.open(abs, "r");
-    res.writeHead(200, {
+    res.writeHead(range ? 206 : 200, {
       "content-type": "application/octet-stream",
-      "content-length": s.size,
+      "content-length": end - start + 1,
+      "accept-ranges": "bytes",
+      ...(range ? { "content-range": `bytes ${start}-${end}/${s.size}` } : {}),
       "content-disposition": disposition(path.basename(abs)),
       "x-content-type-options": "nosniff",
     });
-    return pipeline(fh.createReadStream(), res).catch(() => {});
+    return pipeline(fh.createReadStream({ start, end }), res).catch(() => {});
   }
 
   // A browser's preview of a port: the signed link sets the cookie and
@@ -467,15 +525,18 @@ async function handle(req, res) {
   const pv = signed(url, "p");
   if (pv) {
     if (pv.replay) return replay(pv.replay);
-    if (pv.refused) return json(403, { error: "no" });
-    const [, , , expires, sig] = url.pathname.split("/");
+    if (pv.refused) return say(403, STALE);
+    const day = Date.now() + 86400_000;
+    const cookieSig = sign(`cookie|${FLY_MACHINE_ID}|${day}|${pv.port}`);
+    const secure =
+      req.headers["x-forwarded-proto"] === "https" ? "; Secure" : "";
     res.writeHead(302, {
-      "set-cookie": `mp=${FLY_MACHINE_ID}.${expires}.${pv.port}.${sig}; Path=/; SameSite=Lax; HttpOnly`,
+      "set-cookie": `mp=${FLY_MACHINE_ID}.${day}.${pv.port}.${cookieSig}; Path=/; SameSite=Lax; HttpOnly${secure}`,
       location: "/",
     });
     return res.end();
   }
-  if (req.headers.authorization !== `Bearer ${COMPUTER_SECRET}`)
+  if (!same(req.headers.authorization ?? "", `Bearer ${COMPUTER_SECRET}`))
     return json(401, { error: "no" });
   if (!ready)
     return json(503, { error: "Your computer is being set up; a minute." });
@@ -498,15 +559,32 @@ async function handle(req, res) {
     }
     return json(202, { started: true });
   }
+  // A restore runs on its own once asked for; the page asks how it is
+  // going. Asking again while one runs is answered with the one running.
   if (url.pathname === "/fs/restore" && req.method === "POST") {
     const b = await readJson(req);
     if (typeof b.url !== "string") return json(400, { error: "a url" });
-    await restore(b.url);
-    return json(200, { ok: true, disk: await disk() });
+    if (!restoring) {
+      if (visible(await fs.readdir(ROOT)).length)
+        return json(409, { error: "the disk is not empty" });
+      restoring = restore(b.url)
+        .then(() => {
+          lastRestore = { ok: true, at: Date.now() };
+        })
+        .catch((err) => {
+          lastRestore = { ok: false, error: err.message, at: Date.now() };
+        })
+        .finally(() => {
+          restoring = null;
+        });
+    }
+    return json(202, { started: true });
   }
+  if (url.pathname === "/fs/restore" && req.method === "GET")
+    return json(200, { running: Boolean(restoring), last: lastRestore });
 
   if (url.pathname === "/fs" && req.method === "GET") {
-    const abs = under(url.searchParams.get("path"));
+    const abs = await real(url.searchParams.get("path"));
     const s = await fs.stat(abs).catch(() => null);
     if (!s?.isDirectory()) return json(404, { error: "no such folder" });
     return json(200, { entries: await list(abs), disk: await disk() });
@@ -531,7 +609,7 @@ async function handle(req, res) {
     return json(200, { tree: await walk(ROOT, "/", 4) });
   }
   if (url.pathname === "/fs/stat" && req.method === "GET") {
-    const abs = under(url.searchParams.get("path"));
+    const abs = await real(url.searchParams.get("path"));
     const s = await fs.stat(abs).catch(() => null);
     if (!s) return json(404, { error: "nothing there" });
     return json(200, {
@@ -540,18 +618,22 @@ async function handle(req, res) {
     });
   }
   if (url.pathname === "/fs/folder" && req.method === "POST") {
-    const abs = under((await readJson(req)).path);
+    const abs = await real((await readJson(req)).path);
     return exclusive(async () => {
       const s = await fs.stat(abs).catch(() => null);
       if (s && !s.isDirectory()) return json(409, { error: "a file is there" });
-      await fs.mkdir(abs, { recursive: true });
+      if (!(await fs.stat(path.dirname(abs)).catch(() => null))?.isDirectory())
+        return json(404, { error: "no such folder" });
+      await fs.mkdir(abs).catch((err) => {
+        if (err.code !== "EEXIST") throw err;
+      });
       return json(200, { ok: true });
     });
   }
   if (url.pathname === "/fs/move" && req.method === "POST") {
     const b = await readJson(req);
-    const from = under(b.from);
-    const to = under(b.to);
+    const from = await real(b.from);
+    const to = await real(b.to);
     if (from === ROOT || to === ROOT || to.startsWith(from + path.sep))
       return json(400, { error: "not there" });
     return exclusive(async () => {
@@ -565,7 +647,7 @@ async function handle(req, res) {
     });
   }
   if (url.pathname === "/fs" && req.method === "DELETE") {
-    const abs = under(url.searchParams.get("path"));
+    const abs = await real(url.searchParams.get("path"));
     if (abs === ROOT) return json(400, { error: "not the root" });
     return exclusive(async () => {
       if (!(await fs.stat(abs).catch(() => null)))
@@ -576,7 +658,7 @@ async function handle(req, res) {
   }
   if (url.pathname === "/fs/pull" && req.method === "POST") {
     const b = await readJson(req);
-    const abs = under(b.path);
+    const abs = await real(b.path);
     if (typeof b.url !== "string" || !(b.size >= 0))
       return json(400, { error: "a url and a size" });
     if (!(await fs.stat(path.dirname(abs)).catch(() => null))?.isDirectory())
@@ -617,48 +699,91 @@ try {
 } catch {
   console.error("no pty on this machine: the terminal is off");
 }
-shells.on("connection", (ws) => {
-  let shell;
-  try {
-    // Inside the operating system on the volume, at home, as root.
-    shell = OS_ROOT
-      ? pty.spawn(
-          "/usr/sbin/chroot",
-          [OS_ROOT, "/usr/bin/env", "-C", "/root", "HOME=/root", SHELL, "-l"],
-          {
-            name: "xterm-256color",
-            cols: 100,
-            rows: 30,
-            cwd: "/",
-            env: {
-              PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-              TERM: "xterm-256color",
-              LANG: "C.UTF-8",
-            },
-          },
-        )
-      : pty.spawn(SHELL, ["-l"], {
+// A shell is a session: it lives on when its socket drops, keeps the last
+// of its screen, and a socket for the same session picks it up. One left
+// alone for half an hour is closed. The local shell gets a small
+// environment of its own, not the daemon's.
+const sessions = new Map();
+const SCROLLBACK = 200_000;
+function spawnShell() {
+  // Inside the operating system on the volume, at home, as root.
+  return OS_ROOT
+    ? pty.spawn(
+        "/usr/sbin/chroot",
+        [OS_ROOT, "/usr/bin/env", "-C", "/root", "HOME=/root", SHELL, "-l"],
+        {
           name: "xterm-256color",
           cols: 100,
           rows: 30,
-          cwd: ROOT,
-          env: { ...process.env, HOME: ROOT, TERM: "xterm-256color" },
-        });
-  } catch (err) {
-    console.error(`no shell: ${err.message}`);
-    return ws.close(1011, "The shell could not start.");
+          cwd: "/",
+          env: {
+            PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            TERM: "xterm-256color",
+            LANG: "C.UTF-8",
+          },
+        },
+      )
+    : pty.spawn(SHELL, ["-l"], {
+        name: "xterm-256color",
+        cols: 100,
+        rows: 30,
+        cwd: ROOT,
+        env: {
+          PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+          HOME: ROOT,
+          TERM: "xterm-256color",
+          LANG: process.env.LANG ?? "C.UTF-8",
+        },
+      });
+}
+function attach(ws, id) {
+  let session = sessions.get(id);
+  if (!session) {
+    let shell;
+    try {
+      shell = spawnShell();
+    } catch (err) {
+      console.error(`no shell: ${err.message}`);
+      return ws.close(1011, "The shell could not start.");
+    }
+    session = { shell, ws: null, screen: "", idle: null };
+    sessions.set(id, session);
+    shell.onData((data) => {
+      session.screen = (session.screen + data).slice(-SCROLLBACK);
+      if (session.ws?.readyState === session.ws?.OPEN) session.ws.send(data);
+    });
+    shell.onExit(() => {
+      sessions.delete(id);
+      session.ws?.close(1000, "The shell exited.");
+    });
   }
-  shell.onData((data) => ws.readyState === ws.OPEN && ws.send(data));
-  shell.onExit(() => ws.close());
+  if (session.idle) clearTimeout(session.idle);
+  session.idle = null;
+  session.ws?.close(1000, "Picked up elsewhere.");
+  session.ws = ws;
+  if (session.screen) ws.send(session.screen);
   ws.on("message", (data, isBinary) => {
-    if (isBinary) return shell.write(data.toString());
+    if (isBinary) return session.shell.write(data.toString());
     try {
       const { resize } = JSON.parse(data.toString());
-      if (resize) shell.resize(resize[0], resize[1]);
+      if (resize) session.shell.resize(resize[0], resize[1]);
     } catch {}
   });
-  ws.on("close", () => shell.kill());
-});
+  ws.on("close", () => {
+    if (session.ws !== ws) return;
+    session.ws = null;
+    session.idle = setTimeout(() => {
+      if (!session.ws) session.shell.kill();
+    }, 30 * 60_000);
+  });
+}
+shells.on("connection", (ws, req) =>
+  attach(
+    ws,
+    new URL(req.url, "http://computer").searchParams.get("session") ||
+      "default",
+  ),
+);
 
 server.on("upgrade", (req, socket, head) => {
   try {
@@ -711,17 +836,12 @@ function upgrade(req, socket, head) {
 // what runs in there is a whole machine.
 async function settle() {
   if (!OS_ROOT) return;
-  const run = (cmd, args) =>
-    new Promise((resolve, reject) => {
-      const c = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
-      c.on("exit", (code) =>
-        code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)),
-      );
-    });
-  const done = path.join(OS_ROOT, ".os-ready");
+  // The marker sits beside the operating system, out of the shell's own
+  // root, and a copy that was cut off is finished, never wiped: nothing a
+  // person put there is deleted by a boot.
+  const done = path.join(path.dirname(OS_ROOT), ".os-ready");
   if (!(await fs.stat(done).catch(() => null))) {
     console.log("first boot: copying the operating system onto the volume");
-    await fs.rm(OS_ROOT, { recursive: true, force: true });
     await fs.mkdir(OS_ROOT, { recursive: true });
     // One copy, straight: the image's root minus the kernel's views, the
     // volume itself and the daemon.
@@ -730,6 +850,7 @@ async function settle() {
         ["proc", "sys", "dev", "run", "tmp", "data", "computer"].includes(name)
       )
         continue;
+      if (await fs.stat(`${OS_ROOT}/${name}`).catch(() => null)) continue;
       await run("cp", ["-a", `/${name}`, `${OS_ROOT}/${name}`]);
     }
     for (const d of ["proc", "sys", "dev", "run", "tmp"])
@@ -750,9 +871,21 @@ await fs.mkdir(ROOT, { recursive: true });
 server.listen(PORT, "0.0.0.0", () =>
   console.log(`serving ${ROOT} on ${PORT} as ${FLY_MACHINE_ID}`),
 );
-settle().catch((err) => {
-  console.error(`the operating system could not be set up: ${err.message}`);
-  process.exit(1);
-});
+// Tried until it works: a boot that cannot set the operating system up
+// says so and tries again in a minute, rather than dying and being
+// restarted into the same failure.
+(async () => {
+  for (;;) {
+    try {
+      await settle();
+      return;
+    } catch (err) {
+      console.error(
+        `the operating system could not be set up: ${err.message}; again in a minute`,
+      );
+      await new Promise((r) => setTimeout(r, 60_000));
+    }
+  }
+})();
 await report();
 setInterval(report, 5 * 60 * 1000).unref();

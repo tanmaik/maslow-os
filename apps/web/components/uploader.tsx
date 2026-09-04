@@ -7,6 +7,10 @@ import { Input } from "@/components/ui/input";
 
 type Progress = { name: string; done: number; parts: number; error?: string };
 
+// What the server said, or what it answered.
+const said = async (res: Response, doing: string) =>
+  (await res.text().catch(() => "")) || `${doing} answered ${res.status}`;
+
 // Sends files to the store in parts, each part straight to where the
 // server says, so a file never passes through the server and can be as
 // large as the filesystem allows.
@@ -45,11 +49,12 @@ export function Uploader({ path }: { path: string }) {
               headers: { "content-type": "application/json" },
               body: JSON.stringify({ id, partNumber: n }),
             });
-            if (!where.ok) throw new Error(`part ${n}: ${where.status}`);
+            if (!where.ok) throw new Error(await said(where, `part ${n}`));
             const { url } = await where.json();
             const chunk = file.slice((n - 1) * partSize, n * partSize);
             const put = await fetch(url, { method: "PUT", body: chunk });
-            if (!put.ok) throw new Error(`part ${n}: ${put.status}`);
+            if (!put.ok)
+              throw new Error(`part ${n} was refused (${put.status})`);
             etags.push({
               partNumber: n,
               etag: put.headers.get("etag") ?? "",
@@ -61,7 +66,7 @@ export function Uploader({ path }: { path: string }) {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ id, parts: etags }),
           });
-          if (!closed.ok) throw new Error(`complete: ${closed.status}`);
+          if (!closed.ok) throw new Error(await said(closed, "finishing"));
         } catch (err) {
           note({ error: (err as Error).message });
         }

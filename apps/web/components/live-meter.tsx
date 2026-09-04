@@ -70,7 +70,9 @@ export function LiveMeter() {
         {dollars(shown)} this month · {dollars(live.ratePerHour)}/h
       </HoverCardTrigger>
       <HoverCardContent align="end" className="w-80 text-sm">
-        <p className="mb-2 font-medium">Ticking right now</p>
+        <p className="mb-2 font-medium">
+          What your computer costs us right now
+        </p>
         {live.active.length === 0 && (
           <p className="text-muted-foreground">Nothing.</p>
         )}
@@ -85,7 +87,8 @@ export function LiveMeter() {
           ))}
         </ul>
         <p className="text-muted-foreground mt-2 text-xs">
-          Rate from the last sixty seconds, at the vendors&apos; list prices.
+          What Fly, Tigris and Neon charge us for it at their list prices, from
+          the last sixty seconds. Nobody is billed yet.
         </p>
       </HoverCardContent>
     </HoverCard>

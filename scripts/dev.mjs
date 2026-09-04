@@ -31,6 +31,7 @@ const stack = await startStack({
         FLY_COMPUTERS_APP: "fake",
         FLY_API_HOST: fake.url,
         FLY_MACHINES_HOST: fake.url,
+        LINK_SECRET: "fake-link",
         FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
       }
     : {

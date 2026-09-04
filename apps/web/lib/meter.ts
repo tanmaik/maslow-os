@@ -1,6 +1,8 @@
 import { asMeter, asOrg, type Query } from "@placeholder/db";
 import {
   clearMachineIn,
+  clearVolumeIn,
+  knownComputers,
   computersIn,
   noteEventsIn,
   noteStateIn,
@@ -10,7 +12,7 @@ import { deployment } from "./deployment.ts";
 import { sweepBackups } from "./backups.ts";
 import { expireUploads, landStaged } from "./files.ts";
 import { settle } from "./orphans.ts";
-import { fly } from "./fly.ts";
+import { fly, IMAGE } from "./fly.ts";
 import { PRICES } from "./prices.ts";
 
 // The meter. One measuring function reads what a member's things did
@@ -249,20 +251,27 @@ async function membersOf(q: Query): Promise<string[]> {
 // environment sweeps, cron or not. Production's cron is the backstop for
 // hours nobody looks.
 let sweeping: Promise<void> | null = null;
-export function sweepIfDue(now = new Date()): Promise<void> {
-  // One at a time in this process: the check is inside the claim.
+export function sweepIfDue(): Promise<void> {
+  // One at a time in this process, and one at a time across every
+  // instance: the database holds the lock while a sweep runs, and its
+  // clock says whether an hour has passed.
   if (!sweeping)
     sweeping = (async () => {
-      const last = await asMeter(async (q) => {
+      await asMeter(async (q) => {
         await q.query("select set_config('app.meter', 'sweep', true)");
-        return (
-          await q.query<{ last: Date | null }>(
-            "select max(to_at) as last from usage",
+        const { locked } = (
+          await q.query<{ locked: boolean }>(
+            "select pg_try_advisory_xact_lock(hashtext('sweep')) as locked",
           )
-        ).rows[0]!.last;
+        ).rows[0]!;
+        if (!locked) return;
+        const { due, now } = (
+          await q.query<{ due: boolean; now: Date }>(
+            "select coalesce(max(to_at) < now() - interval '1 hour', true) as due, now() as now from usage",
+          )
+        ).rows[0]!;
+        if (due) await sweep(now);
       });
-      if (last && now.getTime() - last.getTime() < 3600_000) return;
-      await sweep(now);
     })()
       .catch((err) => console.error(`sweep: ${(err as Error).message}`))
       .finally(() => {
@@ -271,10 +280,57 @@ export function sweepIfDue(now = new Date()): Promise<void> {
   return sweeping;
 }
 
+// Fly's inventory against ours: a machine or volume in our app that no row
+// knows is an incident, said loudly; a volume a row names that Fly no
+// longer has is forgotten, so the next look makes a new one. Previews and
+// laptops share the app under their own prefixes and are not ours to judge.
+async function reconcile(): Promise<void> {
+  if (deployment.computers.kind !== "fly") return;
+  const prefix = deployment.computers.namePrefix;
+  const [machines, volumes] = await Promise.all([
+    fly.machines(),
+    fly.volumes(),
+  ]);
+  const known = await knownComputers();
+  for (const m of machines)
+    if ((m.name ?? "").startsWith(`${prefix}c-`) && !known.machines.has(m.id))
+      console.error(`incident: Fly machine ${m.id} (${m.name}) is unrecorded`);
+  for (const v of volumes)
+    if (
+      v.name.startsWith(`${prefix.replaceAll("-", "_")}c_`) &&
+      !known.volumes.has(v.id)
+    )
+      console.error(`incident: Fly volume ${v.id} (${v.name}) is unrecorded`);
+  // A machine on an image that is not the image is let go of while it is
+  // off; the next look makes one on the same volume, which holds
+  // everything. That is how machines are updated.
+  for (const m of machines)
+    if (
+      known.machines.has(m.id) &&
+      m.config?.image &&
+      m.config.image !== IMAGE &&
+      (m.state === "stopped" || m.state === "suspended")
+    ) {
+      const row = known.byMachine.get(m.id)!;
+      console.log(`machine ${m.id} is on ${m.config.image}; replaced`);
+      await fly.destroyMachine(m.id).catch(() => {});
+      await clearMachineIn(row.orgId, row.id, m.id);
+    }
+  const have = new Set(volumes.map((v) => v.id));
+  for (const [volumeId, { orgId, id }] of known.volumes)
+    if (!have.has(volumeId)) {
+      console.error(`Fly no longer has volume ${volumeId}; forgotten`);
+      await clearVolumeIn(orgId, id, volumeId);
+    }
+}
+
 // The hourly sweep: every org, every member, since their last row. First
 // it asks Fly what each machine is doing, so a state nobody looked at is
 // still an event, and lets go of uploads nobody finished.
 export async function sweep(now = new Date()): Promise<number> {
+  await reconcile().catch((err) =>
+    console.error(`reconcile: ${(err as Error).message}`),
+  );
   const orgs = await asMeter(async (q) =>
     (await q.query<{ id: string }>("select id from orgs")).rows.map(
       (r) => r.id,
@@ -334,6 +390,11 @@ async function append(q: Query, orgId: string, userId: string, now: Date) {
       )
     ).rows.map((r) => [r.resource, r.last.getTime()]),
   );
+  // From the database's clock, so a lambda's skew cannot make a window
+  // that ends before it began.
+  const dbNow = (await q.query<{ now: Date }>("select now() as now")).rows[0]!
+    .now;
+  now = dbNow;
   const fresh = now.getTime() - 3600_000;
   let n = 0;
   for (const t of new Set([fresh, ...lasts.values()])) {

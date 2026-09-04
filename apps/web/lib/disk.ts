@@ -2,6 +2,8 @@ import type { Principal } from "@placeholder/db/auth";
 import {
   computerOf,
   computersAllowed,
+  secretIn,
+  secretOf,
   type Computer,
 } from "@placeholder/db/computers";
 import { createHmac } from "node:crypto";
@@ -30,11 +32,27 @@ export class DiskError extends Error {
   }
 }
 
-function host() {
+// What a route answers when the disk or a file refused: the sentence,
+// with the status it came with, never a bare 500.
+export function answer(err: unknown): Response {
+  if (err instanceof DiskError)
+    return new Response(err.message, { status: err.status });
+  throw err;
+}
+
+function config() {
   const c = deployment.computers;
   if (c.kind !== "fly") throw new DiskError(503, "Computers are not set up.");
-  return c.host;
+  return c;
 }
+// The key links are signed with, demanded the moment one is made.
+function linkKey(): string {
+  const key = process.env.LINK_SECRET ?? config().linkSecret;
+  if (!key)
+    throw new DiskError(503, "LINK_SECRET is not set; no link can be signed.");
+  return key;
+}
+const host = () => config().host;
 
 // The machine the disk is served by, made on the first touch.
 async function machineOf(p: Principal): Promise<Computer> {
@@ -75,12 +93,13 @@ async function call<T>(
   body?: unknown,
 ): Promise<T> {
   const c = await machineOf(p);
+  const secret = await secretOf(p, c.id);
   let res: Response;
   try {
     res = await fetch(`${host()}${path}`, {
       method,
       headers: {
-        authorization: `Bearer ${c.secret}`,
+        authorization: `Bearer ${secret}`,
         "fly-force-instance-id": c.machineId!,
         "content-type": "application/json",
       },
@@ -115,6 +134,7 @@ const q = (path: string) => `?path=${encodeURIComponent(path)}`;
 
 // For the sweep, which has no person: a call to a machine by its row.
 export async function callIn<T>(
+  orgId: string,
   c: Computer,
   method: string,
   path: string,
@@ -124,7 +144,7 @@ export async function callIn<T>(
   const res = await fetch(`${host()}${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${c.secret}`,
+      authorization: `Bearer ${await secretIn(orgId, c.id)}`,
       "fly-force-instance-id": c.machineId,
       "content-type": "application/json",
     },
@@ -164,17 +184,23 @@ export const disk = {
     call<{ disk: Space }>(p, "POST", "/fs/pull", { path, url, size }),
 
   ports: (p: Principal) => call<{ ports: number[] }>(p, "GET", "/fs/ports"),
-  // The disk back from an archive; only onto an empty one.
+  // The disk back from an archive, onto an empty one; the machine carries
+  // on alone and says how it is going.
   restore: (p: Principal, url: string) =>
-    call(p, "POST", "/fs/restore", { url }),
+    call<{ started: boolean }>(p, "POST", "/fs/restore", { url }),
+  restoring: (p: Principal) =>
+    call<{
+      running: boolean;
+      last: { ok: boolean; error?: string; at: number } | null;
+    }>(p, "GET", "/fs/restore"),
   // Asks a machine to back itself up; it carries on alone. For the sweep,
   // which has no person.
-  async backupIn(c: Computer): Promise<void> {
+  async backupIn(orgId: string, c: Computer): Promise<void> {
     if (!c.machineId) return;
     const res = await fetch(`${host()}/fs/backup`, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${c.secret}`,
+        authorization: `Bearer ${await secretIn(orgId, c.id)}`,
         "fly-force-instance-id": c.machineId,
       },
       signal: AbortSignal.timeout(90_000),
@@ -184,7 +210,8 @@ export const disk = {
   },
 
   // A link the browser follows to the machine itself for the bytes, good
-  // for ten minutes, signed with the machine's own secret.
+  // for ten minutes, signed with the deployment's key and bound to what it
+  // is for and which machine.
   downloadUrl: (p: Principal, path: string) =>
     link(p, "dl", path, `${q(path)}`),
   // A shell on the disk, over a WebSocket to the machine.
@@ -203,8 +230,8 @@ async function link(
 ): Promise<string> {
   const c = await machineOf(p);
   const expires = Date.now() + 600_000;
-  const sig = createHmac("sha256", c.secret)
-    .update(`${expires}|${what}`)
+  const sig = createHmac("sha256", linkKey())
+    .update(`${kind}|${c.machineId}|${expires}|${what}`)
     .digest("base64url");
   return `${host()}/${kind}/${c.machineId}/${expires}/${sig}${tail}`;
 }

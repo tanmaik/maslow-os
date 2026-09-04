@@ -1,5 +1,4 @@
 import { computersAllowed } from "@placeholder/db/computers";
-import { usageOfMember } from "@placeholder/db/usage";
 import {
   ChevronDown,
   ChevronRight,
@@ -33,12 +32,13 @@ import { Terminal } from "@/components/terminal";
 import { Uploader } from "@/components/uploader";
 import { backupsOf } from "@placeholder/db/backups";
 
+import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
 import { ensureFilesystem, status } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
 import { cleanPath, filesOf } from "@/lib/files";
-import { dollars, sweepIfDue } from "@/lib/meter";
+import { dollars, live, sweepIfDue } from "@/lib/meter";
 import { principal } from "@/lib/session";
 
 const gb = (n: number) =>
@@ -66,6 +66,9 @@ const STATES: Record<string, string> = {
 
 const href = (path: string) => `/computer?path=${encodeURIComponent(path)}`;
 
+// Vercel gives this request this long.
+export const maxDuration = 60;
+
 // The person's computer, laid out as an editor lays out a project: every
 // folder down the left, the one being looked at in the middle, a shell on
 // the disk and the ports the machine serves below it, and what the
@@ -73,7 +76,7 @@ const href = (path: string) => `/computer?path=${encodeURIComponent(path)}`;
 export default async function Computer({
   searchParams,
 }: {
-  searchParams: Promise<{ path?: string; error?: string }>;
+  searchParams: Promise<Record<string, string | undefined>>;
 }) {
   const p = await principal();
   if (!p) redirect("/");
@@ -123,6 +126,8 @@ export default async function Computer({
       : s.state;
   const backups = await backupsOf(p);
   const latest = backups[0];
+  const restoring = entries.length === 0 ? await disk.restoring(p) : null;
+  const notice = said(params);
   const ago = (d: Date) => {
     const m = Math.round((Date.now() - d.getTime()) / 60000);
     return m < 60
@@ -132,13 +137,6 @@ export default async function Computer({
         : `${Math.round(m / 1440)} d ago`;
   };
   const crumbs = at.split("/").filter(Boolean);
-  const monthStart = new Date();
-  monthStart.setUTCDate(1);
-  monthStart.setUTCHours(0, 0, 0, 0);
-  const total = (await usageOfMember(p, monthStart)).reduce(
-    (n, l) => n + l.cost,
-    0,
-  );
 
   return (
     <main className="bg-background fixed inset-x-0 top-8 bottom-0 flex flex-col">
@@ -193,9 +191,12 @@ export default async function Computer({
               <NewFolder at={at} />
             </div>
 
-            {params.error && (
-              <p className="text-destructive mt-3 text-sm" data-error>
-                {params.error}
+            {notice && (
+              <p
+                className={`mt-3 text-sm ${params.error ? "text-destructive" : "text-muted-foreground"}`}
+                data-notice
+              >
+                {notice}
               </p>
             )}
 
@@ -286,27 +287,48 @@ export default async function Computer({
                   <TableRow>
                     <TableCell colSpan={4} className="text-muted-foreground">
                       This folder is empty.
-                      {at === "/" && latest && (
-                        <form
-                          action="/computer/restore"
-                          method="post"
-                          className="mt-3 flex items-center gap-3"
-                          data-restore={latest.id}
-                        >
-                          <input type="hidden" name="path" value="/" />
-                          <input
-                            type="hidden"
-                            name="backup"
-                            value={latest.id}
-                          />
-                          <span>
-                            {`A backup from ${latest.finishedAt!.toISOString().slice(0, 16).replace("T", " ")} (${gb(latest.size ?? 0)}) can be put back.`}
-                          </span>
-                          <Button type="submit" size="sm" variant="outline">
-                            Restore it
-                          </Button>
-                        </form>
-                      )}{" "}
+                      {at === "/" && restoring?.running && (
+                        <p className="mt-3" data-restoring>
+                          A backup is being put back. This page will show it
+                          when it is done.
+                        </p>
+                      )}
+                      {at === "/" &&
+                        !restoring?.running &&
+                        backups.length > 0 && (
+                          <div className="mt-3 space-y-2">
+                            <p>
+                              A backup can be put back onto this empty disk.
+                            </p>
+                            {backups.map((b) => (
+                              <form
+                                key={b.id}
+                                action="/computer/restore"
+                                method="post"
+                                className="flex items-center gap-3"
+                                data-restore={b.id}
+                              >
+                                <input type="hidden" name="path" value="/" />
+                                <input
+                                  type="hidden"
+                                  name="backup"
+                                  value={b.id}
+                                />
+                                <span>
+                                  <LocalTime at={b.finishedAt!} /> (
+                                  {gb(b.size ?? 0)})
+                                </span>
+                                <Button
+                                  type="submit"
+                                  size="sm"
+                                  variant="outline"
+                                >
+                                  Restore this one
+                                </Button>
+                              </form>
+                            ))}
+                          </div>
+                        )}{" "}
                     </TableCell>
                   </TableRow>
                 )}
@@ -348,18 +370,20 @@ export default async function Computer({
         className="bg-muted/50 text-muted-foreground flex items-center gap-6 border-t py-1.5 pr-4 pl-20 text-xs"
         data-state={state}
         data-disk-used={space.used}
-        data-month-total={total}
+        data-month-total={(await live(p)).month}
       >
         <span>{STATES[state] ?? state}</span>
-        <span>{s.computer.size}</span>
+        <span>{plain(s.computer.size)}</span>
         <span>{`${gb(space.used)} of ${gb(space.total)} used`}</span>
-        <span>{s.computer.region}</span>
+        <span>{place(s.computer.region)}</span>
         <span data-backups={backups.length}>
           {latest
             ? `backed up ${ago(latest.finishedAt!)}, ${backups.length} kept`
             : "not backed up yet"}
         </span>
-        <span className="ml-auto">{dollars(total)} this month</span>
+        <span className="ml-auto">
+          {dollars((await live(p)).month)} this month so far
+        </span>
       </footer>
     </main>
   );
@@ -416,3 +440,48 @@ function Note({ children }: { children: React.ReactNode }) {
     </main>
   );
 }
+
+// What the address says happened, in words.
+function said(params: Record<string, string | undefined>): string | null {
+  if (params.error) return params.error;
+  const table: Record<string, string> = {
+    "folder=name": "That is not a name a folder can have.",
+    "renamed=name": "That is not a name a file can have.",
+    "moved=where": "Say which folder to move it to.",
+    "moved=inside": "A folder cannot be moved into itself.",
+    "deleted=where": "Say what to delete.",
+    "deleted=gone": "That was already gone.",
+    "restored=gone": "That backup is gone.",
+    "restored=started": "The backup is being put back.",
+  };
+  for (const [k, v] of Object.entries(params))
+    if (v && table[`${k}=${v}`]) return table[`${k}=${v}`]!;
+  return null;
+}
+
+// A machine size and a region as a person would say them.
+const plain = (size: string) => {
+  const m = /^(shared|performance)-cpu-(\d+)x:(\d+)$/.exec(size);
+  if (!m) return size;
+  return `${m[2]} ${m[1]} CPU${m[2] === "1" ? "" : "s"}, ${Number(m[3]) / 1024} GB memory`;
+};
+const place = (region: string) =>
+  ({
+    sjc: "San Jose",
+    iad: "Virginia",
+    lhr: "London",
+    ams: "Amsterdam",
+    fra: "Frankfurt",
+    sin: "Singapore",
+    syd: "Sydney",
+    nrt: "Tokyo",
+    gru: "São Paulo",
+    ord: "Chicago",
+    lax: "Los Angeles",
+    sea: "Seattle",
+    dfw: "Dallas",
+    ewr: "New Jersey",
+    cdg: "Paris",
+    yyz: "Toronto",
+    bom: "Mumbai",
+  })[region] ?? region;

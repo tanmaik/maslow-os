@@ -36,11 +36,12 @@ export type Computers =
       api: string;
       report: string;
       host: string;
+      // Signs the links a browser follows to a machine; every machine of
+      // the deployment holds it too, to check a link before waking anyone.
+      linkSecret: string | null;
       // Every machine and volume name starts with this; a preview's names
       // carry its pull request, so the reap can find them.
       namePrefix: string;
-      // Lets a machine's report through Vercel's protection on previews.
-      reportBypass: string | null;
     }
   | { kind: "none" };
 
@@ -108,11 +109,22 @@ function storage(): Storage {
 // carry the pull request. Half a configuration refuses to start rather than
 // quietly having none.
 function computers(): Computers {
-  const { FLY_API_TOKEN: token, FLY_COMPUTERS_APP: app } = process.env;
+  const {
+    FLY_API_TOKEN: token,
+    FLY_COMPUTERS_APP: app,
+    LINK_SECRET: linkSecret,
+  } = process.env;
   if (!token && !app) return { kind: "none" };
   if (!token || !app)
     throw new Error(
       "Computers need both FLY_API_TOKEN and FLY_COMPUTERS_APP, or neither.",
+    );
+  // Production refuses to start without the key its links are signed with;
+  // elsewhere the key is read when a link is made, since a preview's build
+  // is not given the deployment's shared values.
+  if (production && !linkSecret)
+    throw new Error(
+      "Computers need LINK_SECRET, the key their links are signed with.",
     );
   const site = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   const report =
@@ -130,6 +142,7 @@ function computers(): Computers {
     api: process.env.FLY_API_HOST ?? "https://api.machines.dev",
     report,
     host: process.env.FLY_MACHINES_HOST ?? `https://${app}.fly.dev`,
+    linkSecret: linkSecret ?? null,
     // A preview must name its machines for the pull request, or they land
     // among production's and nothing can tell them apart.
     namePrefix:
@@ -138,9 +151,13 @@ function computers(): Computers {
             throw new Error("Preview computers need FLY_NAME_PREFIX.");
           })()
         : (process.env.FLY_NAME_PREFIX ?? ""),
-    reportBypass: process.env.VERCEL_AUTOMATION_BYPASS_SECRET ?? null,
   };
 }
+
+// The sweep is what meters, backs up and cleans; production without its
+// cron's secret would run none of it and say nothing.
+if (production && !process.env.CRON_SECRET)
+  throw new Error("Production needs CRON_SECRET for the hourly sweep.");
 
 export const deployment = {
   production,

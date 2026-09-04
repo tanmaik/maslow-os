@@ -3,6 +3,8 @@ import { disk } from "@/lib/disk";
 import { abandon, cleanPath } from "@/lib/files";
 import { principal } from "@/lib/session";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
 // Deletes a file or a folder with everything in it, or abandons an upload
 // still on its way.
 export async function POST(request: Request) {
@@ -10,6 +12,7 @@ export async function POST(request: Request) {
   if (!p) return new Response(null, { status: 401 });
   return act(request, async (form) => {
     const upload = form.get("upload");
+    if (typeof upload === "string" && !UUID.test(upload)) return "deleted=gone";
     if (typeof upload === "string")
       return `deleted=${(await abandon(p, upload)) ? "yes" : "gone"}`;
     const target = cleanPath(form.get("target"));

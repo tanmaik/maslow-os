@@ -21,14 +21,16 @@ export type MachineEvent = {
 };
 export type Machine = {
   id: string;
+  name?: string;
   state: MachineState;
   region: string;
   events?: MachineEvent[];
+  config?: { image?: string };
 };
 
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, copied onto the volume on first boot.
-export const IMAGE = "registry.fly.io/placeholder-computers:v5";
+export const IMAGE = "registry.fly.io/placeholder-computers:v7";
 export const SIZE = "shared-cpu-1x:1024";
 export const DISK_GB = 10;
 // Fly's limit for one volume.
@@ -101,12 +103,17 @@ export const fly = {
         image: IMAGE,
         env: {
           COMPUTER_SECRET: secret,
+          LINK_SECRET:
+            process.env.LINK_SECRET ??
+            config().linkSecret ??
+            (() => {
+              throw new Error(
+                "LINK_SECRET is not set; no machine can be made.",
+              );
+            })(),
           REPORT_URL: config().report,
           // The operating system lives here on the volume.
           OS_ROOT: "/data/os",
-          ...(config().reportBypass
-            ? { REPORT_BYPASS: config().reportBypass }
-            : {}),
         },
         guest: {
           cpu_kind: cpuKind,
@@ -121,16 +128,21 @@ export const fly = {
             autostart: true,
             autostop: "suspend",
             min_machines_running: 0,
-            ports: [
-              { port: 443, handlers: ["tls", "http"] },
-              { port: 80, handlers: ["http"] },
-            ],
+            ports: [{ port: 443, handlers: ["tls", "http"] }],
           },
         ],
         restart: { policy: "always" },
         auto_destroy: false,
       },
     });
+  },
+
+  // Everything the app holds, for the sweep to reconcile against ours.
+  machines(): Promise<Machine[]> {
+    return call("GET", "/machines");
+  },
+  volumes(): Promise<{ id: string; name: string }[]> {
+    return call("GET", "/volumes");
   },
 
   // Null once Fly no longer has it.

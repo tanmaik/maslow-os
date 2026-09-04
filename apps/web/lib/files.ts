@@ -28,7 +28,7 @@ import fs from "node:fs/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
 
-import { growFor } from "./computer.ts";
+import { growFor, growIn } from "./computer.ts";
 import { deployment } from "./deployment.ts";
 import { callIn, disk, DiskError } from "./disk.ts";
 import { MAX_DISK_GB } from "./fly.ts";
@@ -109,7 +109,11 @@ export async function begin(
   if (!(f.size >= 0) || f.size > MAX_FILE)
     throw new FileRejected("A file is limited to 500 GB.");
   if (cleanName(f.name) !== f.name)
-    throw new FileRejected("That is not a name a file can have.");
+    throw new FileRejected(
+      f.name.length > 255
+        ? "A name is at most 255 characters."
+        : "That is not a name a file can have.",
+    );
   const there = await disk.stat(p, f.path);
   if (there?.kind !== "folder")
     throw new FileRejected("That folder does not exist.");
@@ -141,7 +145,15 @@ export async function begin(
       await s3(deployment.storage, "DELETE", key, undefined, undefined, {
         uploadId,
       });
-    throw new FileRejected("Your disk is full at 500 GB.");
+    // What is declared counts against the cap; uploads still arriving are
+    // named, since abandoning one is the way out.
+    const { declared, files } = await filesOf(p);
+    const arriving = files.filter((x) => x.state !== "ready").length;
+    throw new FileRejected(
+      arriving
+        ? `Your disk would pass 500 GB: ${arriving} upload${arriving === 1 ? " is" : "s are"} still arriving (${(declared / 1e9).toFixed(1)} GB declared). Abandon one from its folder to make room.`
+        : "Your disk is full at 500 GB.",
+    );
   }
   return {
     id,
@@ -272,17 +284,26 @@ export async function complete(
       );
     return null;
   }
-  // Onto the disk, grown first if it would not fit.
+  // Onto the disk; a disk that is full is grown one step and tried once
+  // more.
   try {
-    const { disk: space } = await disk.list(p, f.path);
-    if (space.used + size > 0.9 * space.total)
-      await growFor(p, space.used + size);
-    await disk.pull(
-      p,
-      joined(f.path, f.name),
-      stagedUrl(p, { ...f, size }),
-      size,
-    );
+    try {
+      await disk.pull(
+        p,
+        joined(f.path, f.name),
+        stagedUrl(p, { ...f, size }),
+        size,
+      );
+    } catch (err) {
+      if (!(err instanceof DiskError && err.status === 507)) throw err;
+      if (!(await growFor(p))) throw err;
+      await disk.pull(
+        p,
+        joined(f.path, f.name),
+        stagedUrl(p, { ...f, size }),
+        size,
+      );
+    }
   } catch (err) {
     await dropBytes(staged);
     await rejectFile(p, id);
@@ -329,14 +350,10 @@ export async function landStaged(orgId: string, now: Date): Promise<void> {
     if (!c?.machineId) continue;
     const p = { orgId, userId: f.userId } as Principal;
     try {
-      const { disk: space } = await callIn<{
-        disk: { used: number; total: number };
-      }>(c, "GET", `/fs?path=${encodeURIComponent(f.path)}`);
-      if (space.used + f.size > 0.9 * space.total)
-        await growFor(p, space.used + f.size);
       let name = f.name;
       for (let n = 2; n < 12; n++) {
         const there = await callIn<{ kind: string; size: number }>(
+          orgId,
           c,
           "GET",
           `/fs/stat?path=${encodeURIComponent(joined(f.path, name))}`,
@@ -345,11 +362,19 @@ export async function landStaged(orgId: string, now: Date): Promise<void> {
           throw err;
         });
         if (!there) {
-          await callIn(c, "POST", "/fs/pull", {
-            path: joined(f.path, name),
-            url: stagedUrl(p, f),
-            size: f.size,
-          });
+          const pull = () =>
+            callIn(orgId, c, "POST", "/fs/pull", {
+              path: joined(f.path, name),
+              url: stagedUrl(p, f),
+              size: f.size,
+            });
+          try {
+            await pull();
+          } catch (err) {
+            if (!(err instanceof DiskError && err.status === 507)) throw err;
+            if (!(await growIn(orgId, c))) throw err;
+            await pull();
+          }
           break;
         }
         if (there.kind === "file" && there.size === f.size) break;
@@ -436,12 +461,12 @@ export async function abandon(p: Principal, id: string): Promise<boolean> {
   return true;
 }
 
-// Uploads nobody finished within a day are let go of, per org, by the
-// sweep: their parts cost until then.
+// Uploads nobody finished within two hours are let go of, per org, by the
+// sweep: their parts cost until then, and their declared size holds room.
 export async function expireUploads(orgId: string, now: Date): Promise<void> {
   const stale = await staleUploads(
     orgId,
-    new Date(now.getTime() - 24 * 3600_000),
+    new Date(now.getTime() - 2 * 3600_000),
   );
   for (const f of stale)
     if (await claimStale(orgId, f.userId, f.id)) {

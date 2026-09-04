@@ -44,6 +44,7 @@ const stack = await startStack({
     FLY_COMPUTERS_APP: "fake",
     FLY_API_HOST: fake.url,
     FLY_MACHINES_HOST: fake.url,
+    LINK_SECRET: "smoke-link",
     FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
     FLY_NAME_PREFIX: "pr0-",
     CRON_SECRET: "smoke",
@@ -914,7 +915,7 @@ try {
   );
   check(
     "a name already on the disk is refused",
-    taken.status === 413 && (await taken.text()).includes("already there"),
+    taken.status === 400 && (await taken.text()).includes("already there"),
     `answered ${taken.status}`,
   );
   // The filesystem grows for bytes that arrived, never for a declared
@@ -1178,11 +1179,17 @@ try {
     { path: "/", backup: restoreId ?? "" },
     ottoNow,
   );
-  const back = await computerPage(ottoNow);
+  // The machine carries on alone; the page catches up.
+  let back = "";
+  for (let i = 0; i < 40; i++) {
+    back = await computerPage(ottoNow);
+    if (back.includes('data-file="/dusk.txt"')) break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
   check(
     "an emptied disk offers its backup, and gets it back",
     Boolean(restoreId) &&
-      putBack.headers.get("location")?.includes("restored=yes") &&
+      putBack.headers.get("location")?.includes("restored=started") &&
       back.includes('data-file="/dusk.txt"') &&
       back.includes('data-folder="/photos"') &&
       (await download(ottoNow, "/dusk.txt")).body === "hello",
@@ -1453,12 +1460,45 @@ try {
       (await settingsPage(ottoNow)).includes("Blue Whale Bakery"),
     `owner ${ottoDeletes.status}, wrong name ${wrongName.headers.get("location")?.split("?")[1]}`,
   );
+  // A forged link wakes nobody: the proxy is asked for another machine by
+  // a link that is not ours, and answers without waking it.
+  const [someMachine] = [...fake.machines.values()];
+  const wasState = someMachine.state;
+  const forgedLink = await fetch(
+    `${fake.url}/dl/${someMachine.id}/9999999999999/forged?path=%2Fx`,
+    {
+      headers: {
+        "fly-force-instance-id": [...fake.machines.keys()][1] ?? someMachine.id,
+      },
+    },
+  );
+  check(
+    "a forged link is refused where it lands and wakes nobody",
+    forgedLink.status === 403 &&
+      (await forgedLink.text()).includes("not one of ours") &&
+      someMachine.state === wasState,
+    `${forgedLink.status}, ${someMachine.id} ${wasState} → ${someMachine.state}`,
+  );
+  // Late's org may have computers; Late opens theirs, so the org has a
+  // volume and a machine on Fly when it is deleted.
+  await asOrg(late.orgId, (q) => q.query("update orgs set computers = true"));
+  await fetch(`${stack.url}/computer`, { headers: { cookie: lateCookie } });
+  const lateThings = {
+    volumes: fake.volumes.size,
+    machines: fake.machines.size,
+  };
   const deleted = await fetch(`${stack.url}/auth/delete-org`, {
     method: "POST",
     headers: { cookie: lateCookie },
     body: new URLSearchParams({ name: "Late" }),
     redirect: "manual",
   });
+  check(
+    "an org's machine and volume go with it, owed first and paid at once",
+    fake.volumes.size === lateThings.volumes - 1 &&
+      fake.machines.size === lateThings.machines - 1,
+    `${lateThings.volumes} → ${fake.volumes.size} volumes, ${lateThings.machines} → ${fake.machines.size} machines`,
+  );
   const leftOfLate = await asOrg(late.orgId, async (q) => {
     await q.query("select set_config('app.past_members', 'on', true)");
     await q.query("select set_config('app.member_id', $1, true)", [

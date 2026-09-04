@@ -18,14 +18,24 @@ const COLUMNS =
 export async function computerByMachine(
   machineId: string,
   secret: string,
-): Promise<{ id: string; orgId: string; userId: string } | null> {
+): Promise<{
+  id: string;
+  orgId: string;
+  userId: string;
+  diskGb: number;
+} | null> {
   return asMachine(
     machineId,
     secret,
     async (q) =>
       (
-        await q.query<{ id: string; orgId: string; userId: string }>(
-          'select id, org_id as "orgId", user_id as "userId" from computers where machine_id = $1',
+        await q.query<{
+          id: string;
+          orgId: string;
+          userId: string;
+          diskGb: number;
+        }>(
+          'select id, org_id as "orgId", user_id as "userId", disk_gb as "diskGb" from computers where machine_id = $1 and id in (select computer_id from computer_secrets)',
           [machineId],
         )
       ).rows[0] ?? null,
@@ -43,8 +53,9 @@ export async function beginBackup(
     await q.query("select set_config('app.member_id', $1, true)", [c.userId]);
     // One at a time per person: the check and the insert are one.
     await q.query("select pg_advisory_xact_lock(hashtext($1))", [c.userId]);
+    // One a day per person: one on its way, or one finished today, is it.
     const running = await q.query(
-      "select 1 from backups where user_id = $1 and finished_at is null and deleted_at is null and started_at > now() - interval '1 day'",
+      "select 1 from backups where user_id = $1 and deleted_at is null and (finished_at is null or finished_at > now() - interval '23 hours') and started_at > now() - interval '1 day'",
       [c.userId],
     );
     if (running.rowCount) return null;

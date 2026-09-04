@@ -25,7 +25,13 @@ export function Terminal({ url }: { url: string }) {
     term.loadAddon(fit);
     term.open(box.current!);
     fit.fit();
-    const ws = new WebSocket(url);
+    // One session per browser tab, picked up again after every page load.
+    let session = sessionStorage.getItem("terminal-session");
+    if (!session) {
+      session = crypto.randomUUID();
+      sessionStorage.setItem("terminal-session", session);
+    }
+    const ws = new WebSocket(`${url}?session=${session}`);
     ws.binaryType = "arraybuffer";
     const encoder = new TextEncoder();
     const resize = () => {

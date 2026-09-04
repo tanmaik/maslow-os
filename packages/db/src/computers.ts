@@ -7,7 +7,6 @@ export type Computer = {
   region: string;
   size: string;
   diskGb: number;
-  secret: string;
   volumeId: string | null;
   machineId: string | null;
   state: string;
@@ -18,7 +17,7 @@ export type Computer = {
 };
 
 const COLUMNS =
-  'id, user_id as "userId", region, size, disk_gb as "diskGb", secret, volume_id as "volumeId", machine_id as "machineId", state, seen_at as "seenAt", disk_used::float8 as "diskUsed", disk_total::float8 as "diskTotal", created_at as "createdAt"';
+  'id, user_id as "userId", region, size, disk_gb as "diskGb", volume_id as "volumeId", machine_id as "machineId", state, seen_at as "seenAt", disk_used::float8 as "diskUsed", disk_total::float8 as "diskTotal", created_at as "createdAt"';
 
 // Whether this org may have computers at all.
 export async function computersAllowed(p: Principal): Promise<boolean> {
@@ -45,35 +44,25 @@ export async function computerOf(p: Principal): Promise<Computer | null> {
   );
 }
 
-// Any membership's computer in the org, for the owner removing them.
-export async function computerOfMember(
-  p: Principal,
-  userId: string,
-): Promise<Computer | null> {
-  return asOrg(
-    p.orgId,
-    async (q) =>
-      (
-        await q.query<Computer>(
-          `select ${COLUMNS} from computers where user_id = $1`,
-          [userId],
-        )
-      ).rows[0] ?? null,
-  );
-}
-
 // Claims the membership's one computer before anything is made. False when
 // another request already holds it, whether built or still building.
 export async function reserveComputer(
   p: Principal,
-  c: Pick<Computer, "id" | "region" | "size" | "diskGb" | "secret">,
+  c: Pick<Computer, "id" | "region" | "size" | "diskGb"> & { secret: string },
 ): Promise<boolean> {
   return asOrg(p.orgId, async (q) => {
     const won = await q.query(
-      "insert into computers (id, org_id, user_id, region, size, disk_gb, secret) select $1, $2, id, $3, $4, $5, $6 from users where id = $7 on conflict (org_id, user_id) do nothing",
-      [c.id, p.orgId, c.region, c.size, c.diskGb, c.secret, p.userId],
+      "insert into computers (id, org_id, user_id, region, size, disk_gb) select $1, $2, id, $3, $4, $5 from users where id = $6 on conflict (org_id, user_id) do nothing",
+      [c.id, p.orgId, c.region, c.size, c.diskGb, p.userId],
     );
     if (!won.rowCount) return false;
+    // The secret is the person's own, kept apart from the row the org sees;
+    // written as them.
+    await q.query("select set_config('app.member_id', $1, true)", [p.userId]);
+    await q.query(
+      "insert into computer_secrets (computer_id, org_id, user_id, secret) values ($1, $2, $3, $4)",
+      [c.id, p.orgId, p.userId, c.secret],
+    );
     await q.query(
       "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, 'created', $2, $3)",
       [c.id, c.size, c.diskGb],
@@ -209,6 +198,36 @@ export async function release(
   );
 }
 
+// The same for the sweep, which has no person.
+export async function leaseIn(
+  orgId: string,
+  id: string,
+): Promise<string | null> {
+  return asOrg(
+    orgId,
+    async (q) =>
+      (
+        await q.query<{ held: string }>(
+          "update computers set busy_until = clock_timestamp() + interval '5 minutes' where id = $1 and (busy_until is null or busy_until < now()) returning busy_until::text as held",
+          [id],
+        )
+      ).rows[0]?.held ?? null,
+  );
+}
+
+export async function releaseIn(
+  orgId: string,
+  id: string,
+  held: string,
+): Promise<void> {
+  await asOrg(orgId, (q) =>
+    q.query(
+      "update computers set busy_until = null where id = $1 and busy_until::text = $2",
+      [id, held],
+    ),
+  );
+}
+
 // The filesystem grew: the new size is what the meter charges from now.
 export async function setDiskGb(
   p: Principal,
@@ -295,6 +314,76 @@ export async function clearVolume(
   );
 }
 
+// One computer of the org, by id, for the sweep.
+export async function computerOfIn(
+  orgId: string,
+  id: string,
+): Promise<Computer | null> {
+  return asOrg(
+    orgId,
+    async (q) =>
+      (
+        await q.query<Computer>(
+          `select ${COLUMNS} from computers where id = $1`,
+          [id],
+        )
+      ).rows[0] ?? null,
+  );
+}
+
+// Every machine and volume any org's rows name, for the sweep.
+export async function knownComputers(): Promise<{
+  machines: Set<string>;
+  byMachine: Map<string, { orgId: string; id: string }>;
+  volumes: Map<string, { orgId: string; id: string }>;
+}> {
+  const { asMeter } = await import("./index.ts");
+  return asMeter(async (q) => {
+    await q.query("select set_config('app.meter', 'sweep', true)");
+    const rows = (
+      await q.query<{
+        id: string;
+        org_id: string;
+        machine_id: string | null;
+        volume_id: string | null;
+      }>("select id, org_id, machine_id, volume_id from computers")
+    ).rows;
+    return {
+      machines: new Set(
+        rows.flatMap((r) => (r.machine_id ? [r.machine_id] : [])),
+      ),
+      byMachine: new Map(
+        rows.flatMap((r) =>
+          r.machine_id
+            ? [[r.machine_id, { orgId: r.org_id, id: r.id }] as const]
+            : [],
+        ),
+      ),
+      volumes: new Map(
+        rows.flatMap((r) =>
+          r.volume_id
+            ? [[r.volume_id, { orgId: r.org_id, id: r.id }] as const]
+            : [],
+        ),
+      ),
+    };
+  });
+}
+
+// Forgets a volume Fly no longer has, for the sweep.
+export async function clearVolumeIn(
+  orgId: string,
+  id: string,
+  volumeId: string,
+): Promise<void> {
+  await asOrg(orgId, (q) =>
+    q.query(
+      "update computers set volume_id = null, machine_id = null, state = 'building' where id = $1 and volume_id = $2",
+      [id, volumeId],
+    ),
+  );
+}
+
 export async function computersIn(orgId: string): Promise<Computer[]> {
   return asOrg(
     orgId,
@@ -315,4 +404,33 @@ export async function clearMachineIn(
       [id, machineId],
     ),
   );
+}
+
+// The machine's secret, for the person it belongs to.
+export async function secretOf(p: Principal, id: string): Promise<string> {
+  return asPerson(p, async (q) => {
+    const row = (
+      await q.query<{ secret: string }>(
+        "select secret from computer_secrets where computer_id = $1",
+        [id],
+      )
+    ).rows[0];
+    if (!row) throw new Error("This computer has no secret.");
+    return row.secret;
+  });
+}
+
+// The machine's secret, for the sweep, which has no person.
+export async function secretIn(orgId: string, id: string): Promise<string> {
+  return asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.meter', 'sweep', true)");
+    const row = (
+      await q.query<{ secret: string }>(
+        "select secret from computer_secrets where computer_id = $1",
+        [id],
+      )
+    ).rows[0];
+    if (!row) throw new Error("This computer has no secret.");
+    return row.secret;
+  });
 }

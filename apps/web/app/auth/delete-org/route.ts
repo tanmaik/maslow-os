@@ -1,4 +1,6 @@
 import { deleteOrg, Forbidden } from "@placeholder/db/settings";
+
+import { settle } from "@/lib/orphans";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";
@@ -13,6 +15,11 @@ export async function POST(request: Request) {
   const home = origin(request);
   try {
     const outcome = await deleteOrg(p, typeof name === "string" ? name : "");
+    // What the org owed the vendors is paid now; the sweep is the backstop.
+    if (outcome === "deleted")
+      await settle(p.orgId).catch((err) =>
+        console.error(`settle ${p.orgId}: ${(err as Error).message}`),
+      );
     return outcome === "deleted"
       ? signedOut(home)
       : NextResponse.redirect(`${home}/settings?delete=${outcome}`, 303);

@@ -3,12 +3,17 @@ import {
   clearMachine,
   clearVolume,
   computerOf,
+  computerOfIn,
   computersAllowed,
   lease,
+  leaseIn,
   noteRequest,
   noteState,
   release,
+  releaseIn,
   reserveComputer,
+  secretIn,
+  secretOf,
   setDiskGb,
   setMachine,
   setVolume,
@@ -100,7 +105,7 @@ export async function build(p: Principal): Promise<Built> {
         machine = await fly.createMachine(
           machineName(c.id),
           c.volumeId!,
-          c.secret,
+          await secretOf(p, c.id),
         );
       } catch (err) {
         // A volume Fly no longer has: the row forgets it, and the next
@@ -147,24 +152,36 @@ export function sizeFor(bytes: number, diskGb: number): number {
   );
 }
 
-// Grows the filesystem to fit `bytes`, under the lease so two uploads at
-// once extend it once. A filesystem not yet made grows when it is.
-export async function growFor(p: Principal, bytes: number): Promise<void> {
+// Grows the disk one step when it is full, under the lease so two uploads
+// at once extend it once. Growth answers a disk that is full, never a
+// number the machine reported: what the machine says of itself cannot
+// buy it room.
+export async function growFor(p: Principal): Promise<boolean> {
   const c = await computerOf(p);
-  if (!c?.volumeId) return;
-  const target = sizeFor(bytes, c.diskGb);
-  if (target === c.diskGb) return;
+  if (!c?.volumeId) return false;
+  return growStep(p, c);
+}
+
+// The same for the sweep, which has no person.
+export async function growIn(orgId: string, c: Computer): Promise<boolean> {
+  if (!c.volumeId) return false;
+  return growStep({ orgId, userId: c.userId } as Principal, c);
+}
+
+async function growStep(p: Principal, c: Computer): Promise<boolean> {
+  const target = sizeFor(c.diskGb * 1e9 + 1, c.diskGb);
+  if (target === c.diskGb) return false;
   // Another request may hold the row for a moment; the growth is not lost.
-  let held = await lease(p, c.id);
+  let held = await leaseIn(p.orgId, c.id);
   for (let i = 0; i < 5 && !held; i++) {
     await new Promise((r) => setTimeout(r, 2000));
-    held = await lease(p, c.id);
+    held = await leaseIn(p.orgId, c.id);
   }
-  if (!held) return;
+  if (!held) return false;
   try {
-    const fresh = (await computerOf(p))!;
-    const size = sizeFor(bytes, fresh.diskGb);
-    if (size === fresh.diskGb) return;
+    const fresh = (await computerOfIn(p.orgId, c.id))!;
+    const size = sizeFor(fresh.diskGb * 1e9 + 1, fresh.diskGb);
+    if (size === fresh.diskGb) return false;
     const { needs_restart } = await fly.extendVolume(fresh.volumeId!, size);
     // The room shows at the next boot, so a running machine boots now; the
     // size is written last, so a restart that failed is tried again.
@@ -176,8 +193,9 @@ export async function growFor(p: Principal, bytes: number): Promise<void> {
       }
     }
     await setDiskGb(p, fresh, size);
+    return true;
   } finally {
-    await release(p, c.id, held);
+    await releaseIn(p.orgId, c.id, held);
   }
 }
 
