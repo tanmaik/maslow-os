@@ -3,17 +3,18 @@
 import path from "node:path";
 
 import { orgs } from "../packages/db/src/seed.ts";
-import { root, startStack, waitFor } from "./stack.mjs";
+import { root, startStack } from "./stack.mjs";
 
 const stack = await startStack({
   stdio: "ignore",
   dataDir: path.join(root, ".local", "smoke"),
+  distDir: ".next-smoke",
   fresh: true,
 });
 
 let failed = false;
 try {
-  await waitFor(stack.url);
+  await stack.ready();
   // No-org runs first on a never-used connection and again on a reused one,
   // where the setting exists as '' rather than missing.
   const cases = [

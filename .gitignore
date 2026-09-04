@@ -1,5 +1,6 @@
 node_modules/
 .next/
+.next-smoke/
 next-env.d.ts
 .turbo/
 .local/

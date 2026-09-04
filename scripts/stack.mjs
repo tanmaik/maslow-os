@@ -28,6 +28,7 @@ export async function startStack({
   webPort,
   stdio = "inherit",
   dataDir = path.join(root, ".local", "pg"),
+  distDir = ".next",
   fresh = false,
 } = {}) {
   const pgPort = await freePort();
@@ -52,20 +53,39 @@ export async function startStack({
     ["dev", "-p", String(webPort)],
     {
       cwd: path.join(root, "apps", "web"),
-      stdio,
+      stdio: stdio === "ignore" ? ["ignore", "ignore", "pipe"] : stdio,
       env: {
         ...process.env,
         DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
+        NEXT_DIST_DIR: distDir,
+        NEXT_TELEMETRY_DISABLED: "1",
       },
     },
   );
+  // Recent stderr, for startup errors.
+  let stderr = "";
+  web.stderr?.on("data", (d) => (stderr = (stderr + d).slice(-2000)));
 
+  const url = `http://127.0.0.1:${webPort}`;
   return {
     pgPort,
     webPort,
-    url: `http://127.0.0.1:${webPort}`,
+    url,
     applied,
     web,
+    // Resolves once Next answers; fails at once if Next has died.
+    ready: async (ms = 60_000) => {
+      const deadline = Date.now() + ms;
+      while (Date.now() < deadline) {
+        if (exited(web))
+          throw new Error(`next dev exited before answering:\n${stderr}`);
+        try {
+          if ((await fetch(url)).ok) return;
+        } catch {}
+        await new Promise((r) => setTimeout(r, 250));
+      }
+      throw new Error(`${url} did not answer within ${ms}ms:\n${stderr}`);
+    },
     stop: async () => {
       if (!exited(web)) {
         await new Promise((resolve) => {
@@ -76,15 +96,4 @@ export async function startStack({
       await cluster.stop();
     },
   };
-}
-
-export async function waitFor(url, ms = 60_000) {
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    try {
-      if ((await fetch(url)).ok) return;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 250));
-  }
-  throw new Error(`${url} did not answer within ${ms}ms`);
 }

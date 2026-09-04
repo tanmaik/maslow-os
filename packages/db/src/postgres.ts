@@ -57,9 +57,10 @@ function layout(dataDir: string, fresh: boolean): Layout {
     "-c",
     `id -u ${ROOT_BOX_USER} >/dev/null 2>&1 || useradd -r -M -s /usr/sbin/nologin ${ROOT_BOX_USER}`,
   ]);
-  const uid = Number(
-    execFileSync("id", ["-u", ROOT_BOX_USER], { encoding: "utf8" }),
-  );
+  const idOf = (flag: string) =>
+    Number(execFileSync("id", [flag, ROOT_BOX_USER], { encoding: "utf8" }));
+  const uid = idOf("-u");
+  const gid = idOf("-g");
 
   const version = JSON.parse(
     fs.readFileSync(path.join(root, "package.json"), "utf8"),
@@ -77,7 +78,7 @@ function layout(dataDir: string, fresh: boolean): Layout {
   );
   if (fresh) fs.rmSync(data, { recursive: true, force: true });
   fs.mkdirSync(data, { recursive: true });
-  fs.chownSync(data, uid, uid);
+  fs.chownSync(data, uid, gid);
 
   const copiedLib = path.join(binaries, "lib");
   return {
@@ -85,10 +86,11 @@ function layout(dataDir: string, fresh: boolean): Layout {
     lib: copiedLib,
     dataDir: data,
     as: (cmd, args) => ({
-      cmd: "runuser",
+      cmd: "setpriv",
       args: [
-        "-u",
-        ROOT_BOX_USER,
+        `--reuid=${uid}`,
+        `--regid=${gid}`,
+        "--clear-groups",
         "--",
         "env",
         `LD_LIBRARY_PATH=${copiedLib}`,
