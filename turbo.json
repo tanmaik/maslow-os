@@ -26,7 +26,8 @@
         "VERCEL_PROJECT_PRODUCTION_URL",
         "CRON_SECRET",
         "FLY_NAME_PREFIX",
-        "VERCEL_AUTOMATION_BYPASS_SECRET"
+        "VERCEL_AUTOMATION_BYPASS_SECRET",
+        "LINK_SECRET"
       ]
     },
     "typecheck": {
