@@ -5,6 +5,8 @@
 import path from "node:path";
 
 import { orgs } from "../packages/db/src/seed.ts";
+import { createServer } from "node:http";
+
 import { startFakeFly } from "./fake-fly.mjs";
 import { smokeBrain } from "./smoke-brain.mjs";
 import { root, startStack } from "./stack.mjs";
@@ -1050,6 +1052,81 @@ try {
     escaped.headers.get("location")?.includes("moved=where") &&
       (await computerPage(ottoNow)).includes('data-file="/dusk.txt"'),
     "a path with .. is not a path",
+  );
+  // The terminal: a shell on the disk over a WebSocket by a signed link;
+  // it sees the files, and a stranger's link is refused. The ports the
+  // machine listens on are previews: a link sets the cookie, and the
+  // browser then lives at the port through the machine.
+  const shellLink = rootAfter.match(/data-terminal-url="([^"]+)"/)?.[1];
+  const typed = await new Promise((resolve) => {
+    const ws = new WebSocket(shellLink);
+    let seen = "";
+    const done = setTimeout(() => {
+      ws.close();
+      resolve(seen);
+    }, 8000);
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ resize: [80, 24] }));
+      ws.send(new TextEncoder().encode("ls; echo DONE_$((1+1))\n"));
+    };
+    ws.onmessage = async (e) => {
+      seen += typeof e.data === "string" ? e.data : await e.data.text();
+      if (seen.includes("DONE_2")) {
+        clearTimeout(done);
+        ws.close();
+        resolve(seen);
+      }
+    };
+    ws.onerror = () => resolve(seen);
+  });
+  check(
+    "a shell on the disk answers over the socket and sees the files",
+    typed.includes("DONE_2") && typed.includes("dusk.txt"),
+    typed
+      .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, "")
+      .trim()
+      .slice(-80),
+  );
+  const forgedShell = await new Promise((resolve) => {
+    const ws = new WebSocket(shellLink.replace(/\/[^/]+$/, "/forged"));
+    ws.onopen = () => resolve("opened");
+    ws.onerror = () => resolve("refused");
+    ws.onclose = () => resolve("refused");
+  });
+  check(
+    "a forged terminal link is refused",
+    forgedShell === "refused",
+    forgedShell,
+  );
+  const listener = createServer((req, res) => {
+    res.writeHead(200, { "content-type": "text/plain" });
+    res.end(`served ${req.url}`);
+  });
+  await new Promise((r) => listener.listen(0, "127.0.0.1", r));
+  const servedPort = listener.address().port;
+  const withPort = await computerPage(ottoNow);
+  const previewLink = await fetch(
+    `${stack.url}/computer/preview?port=${servedPort}`,
+    { headers: { cookie: ottoNow }, redirect: "manual" },
+  );
+  const entered = await fetch(previewLink.headers.get("location"), {
+    redirect: "manual",
+  });
+  const previewCookie = entered.headers.get("set-cookie")?.split(";")[0];
+  const previewed = await fetch(`${fake.url}/hello/there`, {
+    headers: { cookie: previewCookie },
+  });
+  listener.close();
+  check(
+    "a port the machine listens on is listed and previewed through it",
+    withPort
+      .match(/data-ports="([^"]*)"/)?.[1]
+      .split(",")
+      .includes(String(servedPort)) &&
+      entered.status === 302 &&
+      previewed.status === 200 &&
+      (await previewed.text()) === "served /hello/there",
+    `port ${servedPort}, preview ${previewed.status}`,
   );
   const folderGone = await form(
     "/files/delete",

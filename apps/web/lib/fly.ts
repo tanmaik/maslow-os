@@ -27,7 +27,7 @@ export type Machine = {
 };
 
 // The bootstrap image: enough to mount the volume and answer for it.
-export const IMAGE = "registry.fly.io/placeholder-computers:v2";
+export const IMAGE = "registry.fly.io/placeholder-computers:v3";
 export const SIZE = "shared-cpu-1x:1024";
 export const DISK_GB = 10;
 // Fly's limit for one volume.

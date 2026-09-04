@@ -190,7 +190,9 @@ layers:
 A person's files are on the volume and nowhere else; the Computer page is
 that disk, read from the machine. Opening the page wakes the machine, and
 Fly's proxy suspends it once nothing has asked for it. An upload is staged
-in the bucket only until the machine has pulled it onto the disk.
+in the bucket only until the machine has pulled it onto the disk. The page
+has a shell on the disk, and every port the machine listens on is a
+preview a browser can open; both come from the machine itself.
 
 Every machine and volume on Fly is recorded in our database with the org and
 person it belongs to, at creation, before it is used. A sweep reconciles Fly's
@@ -231,7 +233,9 @@ the Beautiful UI harness, not reinvented.
 
 Every component is shadcn, and every shadcn component is installed under
 `apps/web/components/ui`. Nothing is hand-rolled beside them: no bespoke
-button, input, dialog or table, and no other component library. Styling is
+button, input, dialog or table, and no other component library. The one
+thing beside them is the terminal, xterm.js, because a terminal emulator is
+not a component. Styling is
 Tailwind on shadcn's theme tokens. The typeface is the system one; no font is
 fetched from anywhere.
 

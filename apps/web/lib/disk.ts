@@ -157,14 +157,30 @@ export const disk = {
   pull: (p: Principal, path: string, url: string, size: number) =>
     call<{ disk: Space }>(p, "POST", "/fs/pull", { path, url, size }),
 
+  ports: (p: Principal) => call<{ ports: number[] }>(p, "GET", "/fs/ports"),
+
   // A link the browser follows to the machine itself for the bytes, good
   // for ten minutes, signed with the machine's own secret.
-  async downloadUrl(p: Principal, path: string): Promise<string> {
-    const c = await machineOf(p);
-    const expires = Date.now() + 600_000;
-    const sig = createHmac("sha256", c.secret)
-      .update(`${expires}|${path}`)
-      .digest("base64url");
-    return `${host()}/dl/${c.machineId}/${expires}/${sig}${q(path)}`;
-  },
+  downloadUrl: (p: Principal, path: string) =>
+    link(p, "dl", path, `${q(path)}`),
+  // A shell on the disk, over a WebSocket to the machine.
+  terminalUrl: async (p: Principal) =>
+    (await link(p, "term", "term")).replace(/^http/, "ws"),
+  // A browser's view of an app the machine serves on a port.
+  previewUrl: (p: Principal, port: number) =>
+    link(p, "p", String(port), `/${port}`),
 };
+
+async function link(
+  p: Principal,
+  kind: "dl" | "term" | "p",
+  what: string,
+  tail = "",
+): Promise<string> {
+  const c = await machineOf(p);
+  const expires = Date.now() + 600_000;
+  const sig = createHmac("sha256", c.secret)
+    .update(`${expires}|${what}`)
+    .digest("base64url");
+  return `${host()}/${kind}/${c.machineId}/${expires}/${sig}${tail}`;
+}

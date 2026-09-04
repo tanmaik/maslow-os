@@ -6,6 +6,7 @@ import {
   File as FileIcon,
   Folder as FolderIcon,
   HardDrive,
+  SquareArrowOutUpRight,
 } from "lucide-react";
 import { redirect } from "next/navigation";
 
@@ -27,6 +28,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Terminal } from "@/components/terminal";
 import { Uploader } from "@/components/uploader";
 import { ensureFilesystem, status } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
@@ -60,10 +62,10 @@ const STATES: Record<string, string> = {
 
 const href = (path: string) => `/computer?path=${encodeURIComponent(path)}`;
 
-// The person's computer: its disk, laid out as an editor lays out a
-// project. Every folder down the left, the one being looked at in the
-// middle, and what the machine is doing along the bottom. Opening the
-// page wakes the machine.
+// The person's computer, laid out as an editor lays out a project: every
+// folder down the left, the one being looked at in the middle, a shell on
+// the disk and the ports the machine serves below it, and what the
+// machine is doing along the bottom. Opening the page wakes the machine.
 export default async function Computer({
   searchParams,
 }: {
@@ -86,8 +88,15 @@ export default async function Computer({
     return <Note>Your filesystem could not be made. Try again shortly.</Note>;
   let listing: Awaited<ReturnType<typeof disk.list>>;
   let tree: Tree;
+  let ports: number[];
+  let shell: string;
   try {
-    [listing, { tree }] = await Promise.all([disk.list(p, at), disk.tree(p)]);
+    [listing, { tree }, { ports }, shell] = await Promise.all([
+      disk.list(p, at),
+      disk.tree(p),
+      disk.ports(p),
+      disk.terminalUrl(p),
+    ]);
   } catch (err) {
     if (!(err instanceof DiskError)) throw err;
     if (err.status === 404 && at !== "/") redirect("/computer");
@@ -130,138 +139,171 @@ export default async function Computer({
           <Branch node={tree} at={at} depth={0} />
         </nav>
 
-        <section className="flex min-w-0 flex-1 flex-col overflow-y-auto px-6 py-4">
-          <div className="flex items-center justify-between gap-4">
-            <Breadcrumb>
-              <BreadcrumbList>
-                <BreadcrumbItem>
-                  {at === "/" ? (
-                    <BreadcrumbPage>Your computer</BreadcrumbPage>
-                  ) : (
-                    <BreadcrumbLink href={href("/")}>
-                      Your computer
-                    </BreadcrumbLink>
-                  )}
-                </BreadcrumbItem>
-                {crumbs.map((c, i) => {
-                  const path = "/" + crumbs.slice(0, i + 1).join("/");
-                  const last = i === crumbs.length - 1;
+        <div className="flex min-w-0 flex-1 flex-col">
+          <section className="flex min-h-0 flex-1 flex-col overflow-y-auto px-6 py-4">
+            <div className="flex items-center justify-between gap-4">
+              <Breadcrumb>
+                <BreadcrumbList>
+                  <BreadcrumbItem>
+                    {at === "/" ? (
+                      <BreadcrumbPage>Your computer</BreadcrumbPage>
+                    ) : (
+                      <BreadcrumbLink href={href("/")}>
+                        Your computer
+                      </BreadcrumbLink>
+                    )}
+                  </BreadcrumbItem>
+                  {crumbs.map((c, i) => {
+                    const path = "/" + crumbs.slice(0, i + 1).join("/");
+                    const last = i === crumbs.length - 1;
+                    return (
+                      <span key={path} className="contents">
+                        <BreadcrumbSeparator />
+                        <BreadcrumbItem>
+                          {last ? (
+                            <BreadcrumbPage>{c}</BreadcrumbPage>
+                          ) : (
+                            <BreadcrumbLink href={href(path)}>
+                              {c}
+                            </BreadcrumbLink>
+                          )}
+                        </BreadcrumbItem>
+                      </span>
+                    );
+                  })}
+                </BreadcrumbList>
+              </Breadcrumb>
+              <NewFolder at={at} />
+            </div>
+
+            {params.error && (
+              <p className="text-destructive mt-3 text-sm" data-error>
+                {params.error}
+              </p>
+            )}
+
+            <div className="mt-4" data-path={at}>
+              <Uploader path={at} />
+            </div>
+
+            <Table className="mt-4">
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead className="w-28">Size</TableHead>
+                  <TableHead className="w-32">Modified</TableHead>
+                  <TableHead className="w-12"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {entries.map((e) => {
+                  const path = at === "/" ? `/${e.name}` : `${at}/${e.name}`;
                   return (
-                    <span key={path} className="contents">
-                      <BreadcrumbSeparator />
-                      <BreadcrumbItem>
-                        {last ? (
-                          <BreadcrumbPage>{c}</BreadcrumbPage>
-                        ) : (
-                          <BreadcrumbLink href={href(path)}>{c}</BreadcrumbLink>
-                        )}
-                      </BreadcrumbItem>
-                    </span>
+                    <TableRow
+                      key={path}
+                      {...(e.kind === "folder"
+                        ? { "data-folder": path }
+                        : { "data-file": path })}
+                    >
+                      <TableCell>
+                        <a
+                          href={
+                            e.kind === "folder"
+                              ? href(path)
+                              : `/files/download?path=${encodeURIComponent(path)}`
+                          }
+                          className="flex items-center gap-2"
+                        >
+                          {e.kind === "folder" ? (
+                            <FolderIcon className="text-muted-foreground size-4" />
+                          ) : (
+                            <FileIcon className="text-muted-foreground size-4" />
+                          )}
+                          {e.name}
+                        </a>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {e.kind === "folder" ? "—" : gb(e.size)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {e.modified.slice(0, 10)}
+                      </TableCell>
+                      <TableCell>
+                        <FileActions
+                          target={path}
+                          kind={e.kind}
+                          name={e.name}
+                          at={at}
+                        />
+                      </TableCell>
+                    </TableRow>
                   );
                 })}
-              </BreadcrumbList>
-            </Breadcrumb>
-            <NewFolder at={at} />
-          </div>
-
-          {params.error && (
-            <p className="text-destructive mt-3 text-sm" data-error>
-              {params.error}
-            </p>
-          )}
-
-          <div className="mt-4" data-path={at}>
-            <Uploader path={at} />
-          </div>
-
-          <Table className="mt-4">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead className="w-28">Size</TableHead>
-                <TableHead className="w-32">Modified</TableHead>
-                <TableHead className="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((e) => {
-                const path = at === "/" ? `/${e.name}` : `${at}/${e.name}`;
-                return (
-                  <TableRow
-                    key={path}
-                    {...(e.kind === "folder"
-                      ? { "data-folder": path }
-                      : { "data-file": path })}
-                  >
+                {arriving.map((f) => (
+                  <TableRow key={f.id} data-upload={f.id}>
                     <TableCell>
-                      <a
-                        href={
-                          e.kind === "folder"
-                            ? href(path)
-                            : `/files/download?path=${encodeURIComponent(path)}`
-                        }
-                        className="flex items-center gap-2"
-                      >
-                        {e.kind === "folder" ? (
-                          <FolderIcon className="text-muted-foreground size-4" />
-                        ) : (
-                          <FileIcon className="text-muted-foreground size-4" />
-                        )}
-                        {e.name}
-                      </a>
+                      <span className="text-muted-foreground flex items-center gap-2">
+                        <FileIcon className="size-4" />
+                        {f.name} ({f.state === "ready" ? "landing" : "arriving"}
+                        )
+                      </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {e.kind === "folder" ? "—" : gb(e.size)}
+                      {gb(f.size)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {e.modified.slice(0, 10)}
+                      {f.createdAt.toISOString().slice(0, 10)}
                     </TableCell>
                     <TableCell>
                       <FileActions
-                        target={path}
-                        kind={e.kind}
-                        name={e.name}
+                        upload={f.id}
+                        target={f.path}
+                        kind="file"
+                        name={f.name}
                         at={at}
                       />
                     </TableCell>
                   </TableRow>
-                );
-              })}
-              {arriving.map((f) => (
-                <TableRow key={f.id} data-upload={f.id}>
-                  <TableCell>
-                    <span className="text-muted-foreground flex items-center gap-2">
-                      <FileIcon className="size-4" />
-                      {f.name} ({f.state === "ready" ? "landing" : "arriving"})
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {gb(f.size)}
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {f.createdAt.toISOString().slice(0, 10)}
-                  </TableCell>
-                  <TableCell>
-                    <FileActions
-                      upload={f.id}
-                      target={f.path}
-                      kind="file"
-                      name={f.name}
-                      at={at}
-                    />
-                  </TableCell>
-                </TableRow>
-              ))}
-              {entries.length === 0 && arriving.length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    This folder is empty.
-                  </TableCell>
-                </TableRow>
+                ))}
+                {entries.length === 0 && arriving.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-muted-foreground">
+                      This folder is empty.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </section>
+
+          <div className="flex h-72 shrink-0 flex-col border-t">
+            <div
+              className="bg-muted/50 text-muted-foreground flex items-center gap-4 overflow-x-auto border-b px-3 py-1 text-xs whitespace-nowrap"
+              data-ports={ports.join(",")}
+            >
+              <span className="text-foreground font-medium">Terminal</span>
+              <span className="ml-4">Previews</span>
+              {ports.length === 0 ? (
+                <span>nothing is listening yet</span>
+              ) : (
+                ports.map((port) => (
+                  <a
+                    key={port}
+                    href={`/computer/preview?port=${port}`}
+                    target="_blank"
+                    rel="noopener"
+                    className="hover:text-foreground flex items-center gap-1 underline"
+                  >
+                    :{port} <SquareArrowOutUpRight className="size-3" />
+                  </a>
+                ))
               )}
-            </TableBody>
-          </Table>
-        </section>
+            </div>
+            <div className="min-h-0 flex-1">
+              <Terminal url={shell} />
+            </div>
+          </div>
+        </div>
       </div>
 
       <footer

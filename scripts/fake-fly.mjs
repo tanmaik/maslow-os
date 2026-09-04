@@ -8,7 +8,7 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
-import { createServer as tcp } from "node:net";
+import { connect, createServer as tcp } from "node:net";
 import path from "node:path";
 
 const DAEMON = new URL("../apps/computer/server.mjs", import.meta.url);
@@ -55,12 +55,11 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     });
     mc.child = child;
     mc.port = port;
-    mc.state = "started";
-    mc.events.push({ type: "start", status: "started", timestamp: at() });
+    mc.state = "starting";
     child.on("exit", () => {
       if (mc.child === child) {
         mc.child = null;
-        if (mc.state === "started") {
+        if (mc.state === "started" || mc.state === "starting") {
           mc.state = "stopped";
           mc.events.push({ type: "exit", status: "stopped", timestamp: at() });
         }
@@ -70,9 +69,14 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
       const ok = await fetch(`http://127.0.0.1:${port}/health`)
         .then((r) => r.ok)
         .catch(() => false);
-      if (ok) return;
+      if (ok) {
+        mc.state = "started";
+        mc.events.push({ type: "start", status: "started", timestamp: at() });
+        return;
+      }
       await new Promise((r) => setTimeout(r, 50));
     }
+    child.kill();
     throw new Error(`the daemon for ${mc.id} did not come up`);
   }
 
@@ -144,6 +148,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
       if (!held.has(id)) return json(404, { error: `no such ${kind}` });
       if (kind === "machines") {
         const mc = held.get(id);
+        if (mc.booting) await mc.booting.catch(() => {});
         if (!url.searchParams.has("force") && mc.state === "started")
           return json(412, { error: "machine is running" });
         halt(mc, "destroyed");
@@ -156,6 +161,8 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     }
     const mc = machines.get(id);
     if (!mc) return json(404, { error: "no such machine" });
+    // One still booting is let finish before it is asked anything.
+    if (mc.booting) await mc.booting.catch(() => {});
     if (mc.state === "created") {
       mc.state = "stopped";
       if (action)
@@ -174,26 +181,33 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     return json(200, machineJson(mc));
   }
 
-  // The proxy: to the machine named by fly-force-instance-id, woken if it
-  // is not running, else to any running one; a fly-replay in the answer
-  // sends the request on to the machine it names.
+  // The machine a request goes to: the one fly-force-instance-id names,
+  // woken if it is not running, else any running one.
+  async function target(id) {
+    let mc = id ? machines.get(id) : null;
+    if (id && !mc) throw new Error("no such instance");
+    if (!mc)
+      mc =
+        [...machines.values()].find((x) => x.state === "started") ??
+        [...machines.values()].find((x) => x.state !== "created");
+    if (!mc) throw new Error("no machines");
+    if (mc.booting) await mc.booting;
+    if (mc.state !== "started") await boot(mc);
+    return mc;
+  }
+
+  // The proxy: a fly-replay in the answer sends the request on to the
+  // machine it names.
   async function proxy(req, res, body) {
     let id = req.headers["fly-force-instance-id"];
     for (let hop = 0; hop < 3; hop++) {
-      let mc = id ? machines.get(id) : null;
-      if (id && !mc) {
-        res.writeHead(404);
-        return res.end("no such instance");
+      let mc;
+      try {
+        mc = await target(id);
+      } catch (err) {
+        res.writeHead(err.message === "no machines" ? 503 : 404);
+        return res.end(err.message);
       }
-      if (!mc)
-        mc =
-          [...machines.values()].find((x) => x.state === "started") ??
-          [...machines.values()].find((x) => x.state !== "created");
-      if (!mc) {
-        res.writeHead(503);
-        return res.end("no machines");
-      }
-      if (mc.state !== "started") await boot(mc);
       const answer = await new Promise((resolve, reject) => {
         const r = httpRequest(
           {
@@ -221,6 +235,52 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     res.end("replayed too often");
   }
 
+  // An upgrade, a WebSocket, is piped raw to the machine; a replay in the
+  // machine's first answer sends it on.
+  async function upgrade(req, socket, head) {
+    let id = req.headers["fly-force-instance-id"];
+    for (let hop = 0; hop < 3; hop++) {
+      const mc = await target(id).catch(() => null);
+      if (!mc) return socket.destroy();
+      const replayed = await new Promise((resolve) => {
+        const out = connect(mc.port, "127.0.0.1", () => {
+          const headers = Object.entries(req.headers)
+            .map(([k, v]) => `${k}: ${v}`)
+            .join("\r\n");
+          out.write(`${req.method} ${req.url} HTTP/1.1\r\n${headers}\r\n\r\n`);
+          if (head.length) out.write(head);
+        });
+        // The answer's headers, up to the blank line, say whether it is a
+        // replay; what follows is the socket's own.
+        let seen = Buffer.alloc(0);
+        const onData = (chunk) => {
+          seen = Buffer.concat([seen, chunk]);
+          const end = seen.indexOf("\r\n\r\n");
+          if (end < 0) return;
+          out.off("data", onData);
+          const m = /fly-replay: instance=(\S+)/i.exec(
+            seen.subarray(0, end).toString(),
+          );
+          if (m) {
+            out.destroy();
+            return resolve(m[1]);
+          }
+          socket.write(seen);
+          out.pipe(socket).pipe(out);
+          resolve(null);
+        };
+        out.on("data", onData);
+        out.on("error", () => {
+          socket.destroy();
+          resolve(null);
+        });
+      });
+      if (!replayed) return;
+      id = replayed;
+    }
+    socket.destroy();
+  }
+
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://fake");
     const chunks = [];
@@ -235,6 +295,9 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
       res.end();
     }
   });
+  server.on("upgrade", (req, socket, head) =>
+    upgrade(req, socket, head).catch(() => socket.destroy()),
+  );
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const url = `http://127.0.0.1:${server.address().port}`;
   return {
