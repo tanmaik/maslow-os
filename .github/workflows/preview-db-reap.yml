@@ -11,7 +11,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: preview-db
+  group: preview-db-reap
   cancel-in-progress: false
 
 jobs:

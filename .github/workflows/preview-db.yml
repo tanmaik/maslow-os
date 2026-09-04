@@ -9,10 +9,10 @@ on:
 permissions:
   contents: read
 
-# One lifecycle job at a time across the repository: rows are scoped by
-# branch name, so two pull requests can touch the same ones.
+# One lifecycle job at a time per pull request; every pull request's own
+# database, rows and deployment are keyed by its number.
 concurrency:
-  group: preview-db
+  group: preview-db-${{ github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
