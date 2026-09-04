@@ -1,8 +1,7 @@
 # 2026-09-03 — the sign-in screen is ours; WorkOS vouches for an email
 
-Managed sign-in goes through WorkOS. How it was wired so that the screen is
-ours, nobody is asked for a name, and self-hosted is the same code from the
-callback onward.
+Sign-in goes through WorkOS. How it was wired so that the screen is ours and
+nobody is asked for a name.
 
 ## Managed: a six-digit code through WorkOS's API, behind our form
 
@@ -10,7 +9,7 @@ WorkOS's hosted AuthKit page was tried first and rejected: it is their screen,
 it asks for a first and last name on sign-up, and it needs a redirect URI per
 host, which on Vercel's shared suffix meant a wildcard WorkOS documents as
 forbidden. Their User Management API is headless, so the form is ours. The
-first leg posts an email and WorkOS mails a code; the second posts the code and
+first leg posts an email and WorkOS mints a code; the second posts the code and
 WorkOS answers with who holds the address. No redirect URI exists anywhere, so
 every preview and every checkout works with the same two values:
 `WORKOS_CLIENT_ID`, the environment's client ID, and `WORKOS_API_KEY`.
@@ -18,15 +17,6 @@ Staging for development and previews, Production for production.
 
 Passkeys were wanted too. WorkOS offers them only inside the hosted page, so
 they are absent until that changes.
-
-## Self-hosted: any OpenID Connect provider, through a redirect
-
-A self-hoster's people already have an identity provider, so the app is also a
-standard OIDC relying party through `openid-client`, with the issuer as one
-config value: `AUTH_ISSUER` and `AUTH_CLIENT_ID`. The provider's own screen
-handles credentials; ours handles nothing. Both paths end at the same
-admission and the same session, so there is one auth system with two ways of
-being vouched for.
 
 ## Sessions are rows in the org
 
@@ -44,8 +34,8 @@ next request.
 
 WorkOS organizations are free and a WorkOS user can hold zero or many
 memberships, so an org of one is a WorkOS user with no WorkOS organization at
-all. Membership lives in our tables because self-hosted has no WorkOS and the
-org must be the same object everywhere. An invitation is a row keyed by email;
+all. Membership lives in our tables because the org is ours and must be the same
+object everywhere. An invitation is a row keyed by email;
 the person is admitted when the provider vouches for that email. A WorkOS
 organization is created only when an org turns on its own identity provider,
 which is also the only point WorkOS charges per org.
@@ -75,14 +65,6 @@ field guide asks for. In production a WorkOS deployment with no mail refuses
 to start: nobody could enter it. Invitations use the same sender when it
 exists and say plainly when it does not.
 
-## Assumed: one person, one org
-
-WorkOS holds one identity per email, and `users.email` is globally unique, so a
-person is in exactly one org and an existing email signs into the org it
-already belongs to. Splitting `users` into people and memberships is the change
-if the product wants Figma-style workspaces. Assumed, not settled: the founder
-was asked and had not answered when this was built.
-
 ## Abuse limits on the anonymous surface
 
 Asking for a code and guessing a code are the two things a stranger can do,
@@ -103,7 +85,5 @@ session id is stored as is, so reading the table is holding the sessions.
 Inviting tells a signed-in person whether an address already belongs to
 someone, which is a small oracle accepted for now.
 
-The self-hosted signup rule, first arrival owns and everyone after is invited,
-needs a way to ask whether the instance is empty, which no org-scoped
-connection can. Signup is open everywhere until then. Resend needs a verified
-sending domain before production can sign anyone in.
+Resend needs a verified sending domain before production can sign anyone
+in.

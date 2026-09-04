@@ -63,12 +63,23 @@ function storage(): Storage {
   } = process.env;
   if (endpoint && region && bucket && accessKey && secretKey)
     return { kind: "s3", endpoint, region, bucket, accessKey, secretKey };
+  if (production) {
+    throw new Error(
+      "No object storage: set STORAGE_ENDPOINT, STORAGE_REGION, STORAGE_BUCKET, STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY. Production has no fallback.",
+    );
+  }
   if (process.env.VERCEL) return { kind: "none" };
   return { kind: "local", dir: process.env.UPLOADS_DIR ?? ".local/uploads" };
 }
 
 export const deployment = {
   production,
+  // Which of the three environments this is, for the developer's pill.
+  where: production
+    ? ("production" as const)
+    : process.env.VERCEL
+      ? ("preview" as const)
+      : ("local" as const),
   // Anywhere but production the seed exists and a seeded person can be
   // signed in as with one click.
   seededSignIn: !production,

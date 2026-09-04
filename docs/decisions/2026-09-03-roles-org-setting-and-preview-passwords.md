@@ -40,12 +40,3 @@ deployment — it was verified live: a marked deployment built, unmarked ones
 were skipped. If Vercel drops it, previews stop loudly; the fallback is to
 gate the ignore command on `DATABASE_OWNER_URL` and accept a second automatic
 build per push.
-
-## Open
-
-`users.email` is globally unique. Inserting an email that exists in another
-org fails with a unique violation, which tells the caller the row exists — a
-small cross-tenant oracle. Whether emails are unique per org or per person is a
-product decision; the proving schema keeps the global constraint until then.
-Sign-in now leans on it: see
-[sign-in is OIDC and sessions are ours](2026-09-03-sign-in-is-oidc-and-sessions-are-ours.md).

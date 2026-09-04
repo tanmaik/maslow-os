@@ -11,7 +11,6 @@ type Member = { id: string; name: string; email: string };
 type Notice = {
   email?: "slow" | "rejected";
   code?: "wrong" | "locked";
-  signin?: "cancelled";
 };
 
 const NOTICES = {
@@ -19,7 +18,6 @@ const NOTICES = {
   "email=rejected": "That address was refused. Check it and try again.",
   "code=wrong": "That code didn't work. Try again or start over.",
   "code=locked": "Too many wrong codes. Ask for a new one.",
-  "signin=cancelled": "Sign-in was cancelled.",
 } as const;
 
 // The one line the last action left behind, if any.

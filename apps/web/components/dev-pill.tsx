@@ -3,6 +3,8 @@
 import { ChevronsUpDown, UserRound } from "lucide-react";
 import { useState } from "react";
 
+import type { deployment } from "@/lib/deployment";
+
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -13,7 +15,7 @@ import { initials } from "@/lib/initials";
 import { cn } from "@/lib/utils";
 
 type Props = {
-  where: "local" | "preview";
+  where: typeof deployment.where;
   faked: string[];
   signedIn: boolean;
   me: { name: string; org: string } | null;

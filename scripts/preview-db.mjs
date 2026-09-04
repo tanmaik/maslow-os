@@ -183,8 +183,7 @@ async function up() {
   );
 
   // apps/web/vercel.json skips any preview build without the marker, so this
-  // is the only build of the head. `build.env` is not in Vercel's published
-  // schema for this endpoint; it was verified live on 2026-09-03.
+  // is the only build of the head.
   const { name: projectName, link } = await vercel(
     "GET",
     `/v9/projects/${project}`,

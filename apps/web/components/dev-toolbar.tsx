@@ -27,7 +27,7 @@ export async function DevToolbar() {
     .find((u) => u.id === p?.userId);
   return (
     <DevPill
-      where={process.env.VERCEL ? "preview" : "local"}
+      where={deployment.where}
       faked={[
         deployment.identity.kind === "dev" && "identity",
         deployment.mail.kind === "none" && "mail",
