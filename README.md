@@ -38,10 +38,16 @@ to start without an identity provider, or with WorkOS and no mail.
 ## Dev secrets
 
 Everything a checkout needs is in `.env.development`, encrypted, in the repo.
-One private key decrypts it: get it from a teammate and put it in `.env.keys`
-at the repo root (ignored), or set `DOTENV_PRIVATE_KEY_DEVELOPMENT` in a cloud
-environment's settings. With it, `pnpm dev` uses real vendors and says so;
-without it, vendors are faked and it says that instead.
+One private key decrypts it. On a laptop, being on the Vercel team is the
+access:
+
+```
+vercel login && pnpm env:pull      # once per checkout; writes .env.keys
+```
+
+An agent gets the same key from its environment's secret store, as
+`DOTENV_PRIVATE_KEY_DEVELOPMENT`. With it, `pnpm dev` uses real vendors and
+says so; without it, vendors are faked and it says that instead.
 
 ```
 pnpm env:set SOME_KEY value   # encrypt; commit the file

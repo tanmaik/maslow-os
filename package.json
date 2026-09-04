@@ -15,7 +15,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "env:set": "dotenvx set -f .env.development",
-    "env:get": "dotenvx get -f .env.development"
+    "env:get": "dotenvx get -f .env.development",
+    "env:pull": "node scripts/env-pull.mjs"
   },
   "devDependencies": {
     "@dotenvx/dotenvx": "^2.23.0",
