@@ -349,6 +349,16 @@ try {
         )
       ).rows[0].n;
     });
+  const pimEvents = () =>
+    asOrg(bakery.id, async (q) => {
+      await q.query("select set_config('app.member_id', $1, true)", [pimId]);
+      return (
+        await q.query(
+          "select count(*)::int as n from events where person_id = $1",
+          [pimId],
+        )
+      ).rows[0].n;
+    });
   check(
     "a leaver's notes keep their author",
     (await pimNotes()) === 1,
@@ -432,12 +442,13 @@ try {
     redirect: "manual",
   });
   check(
-    "a purged member and their notes are gone",
+    "a purged member, their notes and their log are gone",
     purged.headers.get("location")?.endsWith("member=purged") &&
       !(await settingsPage(margeOwner)).includes("past member") &&
       (await pimNotes()) === 0 &&
+      (await pimEvents()) === 0 &&
       pimSignIn.status === 400,
-    `${purged.headers.get("location")?.split("?")[1]}, 0 notes, sign-in ${pimSignIn.status}`,
+    `${purged.headers.get("location")?.split("?")[1]}, ${await pimNotes()} notes, ${await pimEvents()} events, sign-in ${pimSignIn.status}`,
   );
   const svgForm = new FormData();
   svgForm.set("name", "Blue Whale Bakery & Co");

@@ -1,3 +1,9 @@
+import {
+  defineKind,
+  defineVerb,
+  type Definition,
+  type KindDefinition,
+} from "./catalog.ts";
 import { Conflict, Invalid, NotFound } from "./errors.ts";
 import { check, propertiesOf } from "./properties.ts";
 import { recordColumns, toRecord, type RecordRow } from "./rows.ts";
@@ -104,14 +110,22 @@ export type Written = {
   edges: number;
 };
 
-// Writes records and edges as one author. Idempotent: the same input twice
+// Writes records and edges as one author, defining any kinds and verbs the
+// brain does not have yet in the same call. Idempotent: the same input twice
 // leaves the brain as it was. Each record must fit its kind's form. Edges may
 // name records written in the same call.
 export async function write(
   q: Query,
   author: Author,
-  input: { records?: RecordInput[]; edges?: EdgeInput[] },
+  input: {
+    kinds?: KindDefinition[];
+    verbs?: Definition[];
+    records?: RecordInput[];
+    edges?: EdgeInput[];
+  },
 ): Promise<Written> {
+  for (const k of input.kinds ?? []) await defineKind(q, author, k);
+  for (const v of input.verbs ?? []) await defineVerb(q, author, v);
   const known = await vocabulary(q);
   const ids: string[] = [];
   let changed = 0;
@@ -271,44 +285,65 @@ export async function restore(q: Query, author: Author, id: string) {
   throw new NotFound(`record ${id} is not deleted`);
 }
 
+// What a record stands for: itself, or the live record at the end of its
+// chain of merges.
+const STANDS_FOR = `
+with recursive chain as (
+  select ${recordColumns}, 0 as depth from records where id = $1
+  union all
+  select ${recordColumns
+    .split(", ")
+    .map((c) => `r.${c}`)
+    .join(", ")}, chain.depth + 1
+  from records r join chain on r.id = chain.merged_into)
+select * from chain order by depth desc limit 1`;
+
 // Makes one record stand for another of the same kind. The loser is hidden
-// and points at the winner; its edges stay where they are and reads follow
-// them. Merging the same pair twice changes nothing.
+// behind a pointer to the winner and nothing else is rewritten: what was
+// merged into the loser stays merged into it, and reads walk the chain.
+// Merging into an alias merges into what it stands for. Merging the same
+// pair twice changes nothing. Both rows are locked, in one order, so two
+// merges racing in opposite directions cannot close a cycle.
 export async function merge(
   q: Query,
   author: Author,
   into: string,
   id: string,
 ): Promise<BrainRecord> {
-  if (into === id) throw new Invalid("a record cannot merge into itself");
-  const { rows } = await q.query<RecordRow>(
-    `select ${recordColumns} from records where id = any($1::uuid[]) for update`,
-    [[into, id]],
-  );
-  const winner = rows.find((r) => r.id === into);
-  const loser = rows.find((r) => r.id === id);
-  if (!winner || winner.deleted_at) {
-    throw new NotFound(`record ${into} is not in this brain`);
+  for (;;) {
+    const winner = (await q.query<RecordRow>(STANDS_FOR, [into])).rows[0];
+    if (!winner || winner.deleted_at) {
+      throw new NotFound(`record ${into} is not in this brain`);
+    }
+    if (winner.id === id) {
+      throw new Invalid("a record cannot merge into itself");
+    }
+    const locked = (
+      await q.query<RecordRow>(
+        `select ${recordColumns} from records where id = any($1::uuid[])
+         order by id for update`,
+        [[winner.id, id]],
+      )
+    ).rows;
+    const held = locked.find((r) => r.id === winner.id);
+    const loser = locked.find((r) => r.id === id);
+    if (!held || held.deleted_at) continue; // merged meanwhile: resolve again
+    if (!loser) throw new NotFound(`record ${id} is not in this brain`);
+    if (loser.merged_into === winner.id) return toRecord(held);
+    if (loser.deleted_at) throw new Invalid(`record ${id} is deleted`);
+    if (loser.kind !== winner.kind) {
+      throw new Invalid(`a ${loser.kind} cannot merge into a ${winner.kind}`);
+    }
+    await q.query(
+      "update records set deleted_at = now(), merged_into = $1, author = $3 where id = $2",
+      [winner.id, id, author],
+    );
+    return toRecord(held);
   }
-  if (!loser) throw new NotFound(`record ${id} is not in this brain`);
-  if (loser.merged_into === into) return toRecord(winner);
-  if (loser.deleted_at) throw new Invalid(`record ${id} is deleted`);
-  if (loser.kind !== winner.kind) {
-    throw new Invalid(`a ${loser.kind} cannot merge into a ${winner.kind}`);
-  }
-  await q.query(
-    "update records set merged_into = $1, author = $3 where merged_into = $2",
-    [into, id, author],
-  );
-  await q.query(
-    "update records set deleted_at = now(), merged_into = $1, author = $3 where id = $2",
-    [into, id, author],
-  );
-  return toRecord(winner);
 }
 
-// Undoes a merge: the record comes back as itself. Aliases that had been
-// pointed at the winner along with it stay with the winner.
+// Undoes a merge: the record comes back as itself, and whatever was merged
+// into it comes back with it, since nothing was rewritten.
 export async function unmerge(q: Query, author: Author, id: string) {
   const result = await q.query(
     "update records set deleted_at = null, merged_into = null, author = $2 where id = $1 and merged_into is not null",

@@ -84,13 +84,13 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     "($3::text is null or layer = $3)",
     "($4::text is null or source = $4)",
     `($5::uuid is null or (
-       r.id <> $5 and (r.merged_into is null or r.merged_into <> $5)
+       r.id not in (select same_record($5))
        and exists (
          select 1 from edges e
          join records p
            on p.id = case when e.from_id = r.id then e.to_id else e.from_id end
          where (e.from_id = r.id or e.to_id = r.id)
-           and (p.id = $5 or p.merged_into = $5))))`,
+           and p.id in (select same_record($5)))))`,
     "($6::timestamptz is null or coalesce(occurred_at, created_at) >= $6)",
     "($7::timestamptz is null or coalesce(occurred_at, created_at) < $7)",
     "($8::text is null or search @@ websearch_to_tsquery('english', $8))",
@@ -185,17 +185,16 @@ export async function get(q: Query, ids: string[]): Promise<BrainRecord[]> {
   return rows.map(toRecord);
 }
 
-// Every edge touching a record or one merged into it, in either direction,
-// optionally only those carrying one verb.
+// Every edge touching a record or anything merged into it, however many
+// merges deep, in either direction; optionally only those carrying one verb.
 export async function edgesOf(
   q: Query,
   id: string,
   verb?: string,
 ): Promise<Edge[]> {
   const { rows } = await q.query<EdgeRow>(
-    `with same as (select id from records where id = $1 or merged_into = $1)
-     select ${edgeColumns} from edges
-     where (from_id in (select id from same) or to_id in (select id from same))
+    `select ${edgeColumns} from edges
+     where (from_id in (select same_record($1)) or to_id in (select same_record($1)))
        and ($2::text is null or verb = $2)
      order by coalesce(occurred_at, created_at), id`,
     [id, verb ?? null],

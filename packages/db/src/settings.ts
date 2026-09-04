@@ -283,9 +283,8 @@ export async function restoreMember(
   });
 }
 
-// Deletes a past member: the membership and every record and edge it wrote.
-// The events stay, as the log of what happened. Owners only, and only for
-// someone already removed.
+// Deletes a past member: the membership and everything it wrote, the log of
+// it included. Owners only, and only for someone already removed.
 export async function purgeMember(
   p: Principal,
   userId: string,
@@ -300,12 +299,7 @@ export async function purgeMember(
     );
     if (!past.rowCount) return "gone";
     await q.query("select set_config('app.member_id', $1, true)", [id]);
-    await q.query("delete from edges where person_id = $1", [id]);
-    await q.query("delete from records where person_id = $1", [id]);
-    await q.query(
-      "delete from users where id = $1 and removed_at is not null",
-      [id],
-    );
+    await q.query("select purge_member($1)", [id]);
     return "purged";
   });
 }

@@ -1,4 +1,4 @@
-import { Invalid, defineKind, write } from "@placeholder/brain";
+import { Invalid, write } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
@@ -19,11 +19,10 @@ export async function POST(request: Request) {
   const author = `person:${p.userId}`;
   try {
     await asPerson(p, async (db) => {
-      await defineKind(db, author, {
-        name: "note",
-        description: "Something you wrote down yourself.",
-      });
       await write(db, author, {
+        kinds: [
+          { name: "note", description: "Something you wrote down yourself." },
+        ],
         records: [
           {
             kind: "note",

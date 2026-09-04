@@ -481,6 +481,53 @@ export async function smokeBrain(stack) {
       `${merged.undone.records.length} about Road Runner`,
     );
 
+    // A merge rewrites nothing, so merges chain and unmerge one link at a
+    // time. A kind can be defined in the write that first uses it.
+    const chain = await me(acme)(async (q) => {
+      const {
+        records: [a, b, c],
+      } = await brain.write(q, "smoke", {
+        kinds: [{ name: "alias", description: "A name someone also goes by." }],
+        verbs: [{ name: "also_called", description: "Goes by this too." }],
+        records: ["a", "b", "c"].map((n) => ({
+          kind: "alias",
+          layer: "source",
+          source: "smoke",
+          sourceRef: `alias:${n}`,
+          title: n,
+        })),
+        edges: [
+          {
+            from: { source: "smoke", sourceRef: "alias:a" },
+            verb: "also_called",
+            to: { source: "smoke", sourceRef: "alias:c" },
+            source: "smoke",
+          },
+        ],
+      });
+      await brain.merge(q, "smoke", b, a);
+      await brain.merge(q, "smoke", c, b);
+      const [aliasA] = await brain.get(q, [a]);
+      const viaAlias = await brain.merge(q, "smoke", b, c).catch((e) => e);
+      const deep = (await brain.edgesOf(q, c)).length;
+      await brain.unmerge(q, "smoke", b);
+      const got = await brain.get(q, [b, a]);
+      const afterB = got.find((r) => r.id === b);
+      const afterA = got.find((r) => r.id === a);
+      const viaB = (await brain.edgesOf(q, b)).length;
+      return { aliasA, viaAlias, deep, afterB, afterA, viaB };
+    });
+    check(
+      "merges chain and rewrite nothing",
+      chain.aliasA.mergedInto !== null &&
+        chain.deep === 1 &&
+        chain.viaAlias instanceof brain.Invalid &&
+        chain.afterB.mergedInto === null &&
+        chain.afterA.mergedInto === chain.afterB.id &&
+        chain.viaB === 1,
+      `a stays behind b, ${chain.deep} edge seen from c, ${chain.viaB} from b after unmerge`,
+    );
+
     // The log.
     const events = await me(acme)(async (q) => {
       const log = await brain.changes(q, 0, 200);
@@ -562,17 +609,18 @@ export async function smokeBrain(stack) {
       },
     );
     const before = await me(acme)((q) => brain.read(q, { limit: 200 }));
+    const vocab = await me(acme)((q) => brain.catalog(q));
     check(
       "export imports to the same answers",
       JSON.stringify(titles(imported.all)) === JSON.stringify(titles(before)) &&
         JSON.stringify(titles(imported.rockets)) ===
           JSON.stringify(titles(rockets)) &&
-        imported.vocab.kinds.length === lift.kinds.length &&
+        imported.vocab.kinds.length === vocab.kinds.length &&
         imported.vocab.kinds.find((k) => k.name === "lift").properties
           .length === 2 &&
-        imported.counts.merges === 1 &&
+        imported.counts.merges === 2 &&
         imported.aboutBeep.records.length === 5,
-      `${imported.all.records.length} records, ${imported.counts.edges} edges, ${imported.counts.properties} fields, ${imported.counts.merges} merge`,
+      `${imported.all.records.length} records, ${imported.counts.edges} edges, ${imported.counts.properties} fields, ${imported.counts.merges} merges`,
     );
     check(
       "importing twice adds nothing",
