@@ -115,10 +115,11 @@ every change. The brain is a graph of a mind, not a copy of its sources:
 nothing mirrors a mailbox or a calendar into it. Whatever writes into it — a
 person today, an agent reading an app through a tool later — writes what it
 concluded, with a confidence and an edge back to what it rests on. What it
-rests on is a stub: the app, the app's own id, and enough to find and cite
-the original, never the whole thing. A question the brain cannot answer is
-answered outside it, and the answer and its stub are written so the next
-time is a read.
+rests on is a source record the writer chose to bring in: the app, the app's
+own id, and as much of the original as it judged worth keeping, from a
+citation to a copy. A question the brain cannot answer is answered outside
+it, and the answer and what it rests on are written so the next time is a
+read.
 
 Kinds and verbs are the org's own vocabulary, open to the person and the
 agent, each with a description and an author. A brain starts with none:
