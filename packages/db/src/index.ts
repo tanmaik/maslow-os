@@ -51,6 +51,16 @@ export function asOrg<T>(
   return scoped({ "app.org_id": orgId }, fn);
 }
 
+// Runs fn as one person in their org: the org's shared rows and that person's
+// own, nobody else's.
+export function asPerson<T>(
+  orgId: string,
+  personId: string,
+  fn: (q: Query) => Promise<T>,
+): Promise<T> {
+  return scoped({ "app.org_id": orgId, "app.person_id": personId }, fn);
+}
+
 // Runs fn seeing only the person and invitations that carry one email: the
 // view a sign-in has before it knows an org.
 export function asEmail<T>(

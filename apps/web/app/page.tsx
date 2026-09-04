@@ -64,11 +64,16 @@ export default async function Page({
     <main className="space-y-6">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">{orgName}</h1>
-        <form action="/auth/sign-out" method="post">
-          <Button variant="ghost" size="sm" type="submit">
-            Sign out, {me?.name}
+        <div className="flex gap-1">
+          <Button variant="ghost" size="sm" render={<a href="/brain" />}>
+            Brain
           </Button>
-        </form>
+          <form action="/auth/sign-out" method="post">
+            <Button variant="ghost" size="sm" type="submit">
+              Sign out, {me?.name}
+            </Button>
+          </form>
+        </div>
       </header>
 
       <section className="space-y-2">

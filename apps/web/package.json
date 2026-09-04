@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@placeholder/brain": "workspace:*",
     "@placeholder/db": "workspace:*",
     "@shadcn/react": "^0.3.1",
     "@tailwindcss/postcss": "^4.3.3",

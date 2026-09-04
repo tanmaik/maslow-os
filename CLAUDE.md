@@ -86,6 +86,33 @@ Database roles are created with SQL, never through Neon's API: an API-made role
 is a `neon_superuser` with `BYPASSRLS`, and every policy silently stops
 applying to it.
 
+## The brain
+
+What a person knows lives in records, the links between them, and a log of
+every change. A record is either what a source returned, written by code and
+keyed by the source's own id, or what the agent concluded, written by the
+model with a confidence and an edge back to the records it rests on. Derived
+records can be thrown away and made again; source records cannot.
+
+Kinds and verbs are the org's own vocabulary, open to the person and the
+agent, each with a description and an author. A brain starts with none:
+whoever writes the first record of a kind defines it, with a description, in
+the same call, and a record of an undefined kind is refused, never stored. A kind may declare its fields
+as rows, never as columns: values stay in one JSON column and the doors check
+and query them by the declaration. Nothing changes a table's shape after
+deploy.
+
+Records and edges are the person's; the vocabulary is the org's. A colleague
+in the same org sees none of a person's records until sharing says otherwise.
+Ownership is never null: what an org shares is a later visibility rule, not a
+class of ownerless records.
+
+One read door and one write door, in `packages/brain`; nothing else touches
+the tables. Writes are idempotent on a record's source and ref. Events are
+written by the database and the app cannot write them. A merge hides the
+loser behind a pointer to the winner and rewrites nothing, so it reverses.
+A brain exports to a file that imports into any brain, as the importer.
+
 ## Self-hosting
 
 The same app with one org in it. Multi-tenancy is not switched off — that org

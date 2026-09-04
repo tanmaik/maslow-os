@@ -5,6 +5,7 @@
 import path from "node:path";
 
 import { orgs } from "../packages/db/src/seed.ts";
+import { smokeBrain } from "./smoke-brain.mjs";
 import { root, startStack } from "./stack.mjs";
 
 // The smoke carries no credentials: a checkout's pulled config must not reach
@@ -221,6 +222,7 @@ try {
     stale.includes("Development sign-in"),
     "sign-in page",
   );
+  failed ||= !(await smokeBrain(stack));
 } finally {
   await stack.stop();
 }

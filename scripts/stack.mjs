@@ -10,7 +10,8 @@ import { config as decrypt } from "@dotenvx/dotenvx";
 
 import { migrate } from "../packages/db/src/migrate.ts";
 import { ensureAppRole, startPostgres } from "../packages/db/src/postgres.ts";
-import { seed } from "../packages/db/src/seed.ts";
+import { orgs, seed } from "../packages/db/src/seed.ts";
+import { seedBrain } from "../packages/brain/src/seed.ts";
 
 export const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -75,6 +76,7 @@ export async function startStack({
       path.join(root, "packages", "db", "migrations"),
     );
     await seed(cluster.url);
+    await seedBrain(cluster.url, orgs);
   } catch (err) {
     await cluster.stop();
     throw err;
