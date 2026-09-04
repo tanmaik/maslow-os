@@ -36,8 +36,9 @@ without a daemon starts everywhere.
 
 Every checkout is self-contained — its own database, its own ports picked free
 at start, nothing shared with another checkout. Ten worktrees are ten
-independent stacks. Migrations are named by timestamp so parallel work cannot
-collide on a number.
+independent stacks. A migration is created with `pnpm migration:new <name>`,
+which stamps the clock; the runner refuses two files with the same stamp, so
+parallel work cannot collide on a name.
 
 ## Config
 

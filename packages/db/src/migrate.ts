@@ -30,6 +30,18 @@ export async function migrate(url: string, dir: string): Promise<string[]> {
       .readdirSync(dir)
       .filter((f) => f.endsWith(".sql"))
       .sort();
+    const stamps = new Map<string, string>();
+    for (const name of files) {
+      const stamp = name.slice(0, 15);
+      const other = stamps.get(stamp);
+      if (other) {
+        throw new Error(
+          `${name} and ${other} share a timestamp, so their order is not fixed. ` +
+            `Rename one with \`pnpm migration:new\`.`,
+        );
+      }
+      stamps.set(stamp, name);
+    }
     for (const name of files) {
       const sql = fs.readFileSync(path.join(dir, name), "utf8");
       const checksum = createHash("sha256").update(sql).digest("hex");
