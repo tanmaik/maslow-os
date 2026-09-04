@@ -61,7 +61,7 @@ try {
   const out = await page();
   check(
     "signed out",
-    out.includes("Pick a person in the toolbar"),
+    out.includes("Pick a person from the pill"),
     "sign-in page",
   );
 
@@ -71,7 +71,7 @@ try {
     const html = await page(await signIn(org.users[0].id));
     const got = html.match(/(\d+) members?/);
     check(
-      `${org.users[0].name} (${org.name})`,
+      `${org.users[0].firstName} (${org.name})`,
       new RegExp(`<h1[^>]*>${org.name}</h1>`).test(html) &&
         Number(got?.[1]) === org.users.length,
       got?.[0] ?? "no match",
@@ -105,7 +105,7 @@ try {
   );
   check(
     "old cookie worthless after sign-out",
-    (await page(marge)).includes("Pick a person in the toolbar"),
+    (await page(marge)).includes("Pick a person from the pill"),
     "sign-in page",
   );
 
@@ -142,7 +142,8 @@ try {
   const { signIn: admit } = await import("../packages/db/src/auth.ts");
   const hire = await admit({
     email: "hire@acme-rockets.test",
-    name: "New Hire",
+    firstName: "New",
+    lastName: "Hire",
   });
   const after = await page(wile);
   check(
@@ -156,7 +157,11 @@ try {
       ),
     after.match(/\d+ members?/)?.[0] ?? "no match",
   );
-  const stranger = await admit({ email: "solo@example.test", name: "Solo" });
+  const stranger = await admit({
+    email: "solo@example.test",
+    firstName: "Solo",
+    lastName: null,
+  });
   check(
     "uninvited person gets an org of one",
     !orgs.some((o) => o.id === stranger.orgId),
@@ -200,7 +205,7 @@ try {
   check(
     "session under another org",
     (await page(`session=${orgs[1].id}.${wileSession}`)).includes(
-      "Pick a person in the toolbar",
+      "Pick a person from the pill",
     ),
     "sign-in page",
   );
@@ -216,7 +221,9 @@ try {
     hits.map((h) => (h ? "ok" : "no")).join(" "),
   );
   const raced = await Promise.all(
-    [1, 2, 3].map(() => admit({ email: "race@example.test", name: "Race" })),
+    [1, 2, 3].map(() =>
+      admit({ email: "race@example.test", firstName: "Race", lastName: null }),
+    ),
   );
   check(
     "racing first sign-ins share one row",
@@ -268,7 +275,8 @@ try {
     "Acme unchanged",
   );
   const profileForm = new FormData();
-  profileForm.set("name", "Otto L.");
+  profileForm.set("first_name", "Otto");
+  profileForm.set("last_name", "L.");
   await settings("/settings/profile", profileForm, otto);
   check(
     "profile renamed",
@@ -298,7 +306,7 @@ try {
   );
   check(
     "removed member's session is dead",
-    (await page(pim)).includes("Pick a person in the toolbar"),
+    (await page(pim)).includes("Pick a person from the pill"),
     "sign-in page",
   );
   const svgForm = new FormData();
@@ -439,7 +447,11 @@ try {
     ottoNow,
   );
   const { signIn: admitLate } = await import("../packages/db/src/auth.ts");
-  const late = await admitLate({ email: "late@bluewhale.test", name: "Late" });
+  const late = await admitLate({
+    email: "late@bluewhale.test",
+    firstName: "Late",
+    lastName: null,
+  });
   check(
     "withdrawn invitation admits nobody",
     late.orgId !== "00000000-0000-4000-8000-000000000002" &&
@@ -502,7 +514,8 @@ try {
   );
   const wileAgain = await admit({
     email: "wile@acme-rockets.test",
-    name: "Wile Coyote",
+    firstName: "Wile",
+    lastName: "Coyote",
   });
   const { membershipsOf } = await import("../packages/db/src/auth.ts");
   const wileOrgs = (await membershipsOf(wileAgain))
@@ -516,7 +529,8 @@ try {
   );
   // The same person's profile is one: renaming in one org renames everywhere.
   const rename = new FormData();
-  rename.set("name", "Otto L. Loaf");
+  rename.set("first_name", "Otto");
+  rename.set("last_name", "L. Loaf");
   await settings("/settings/profile", rename, ottoObs);
   check(
     "a person's name is one across orgs",
@@ -528,7 +542,8 @@ try {
     ["Otto A", "Otto B", "Otto C", "Otto D", "Otto E", "Otto F"].map(
       (name, i) => {
         const f = new FormData();
-        f.set("name", name);
+        f.set("first_name", "Otto");
+        f.set("last_name", name.slice("Otto ".length));
         return settings("/settings/profile", f, i % 2 ? ottoObs : ottoNow);
       },
     ),
@@ -541,7 +556,6 @@ try {
     seen[0] !== undefined && seen[0] === seen[1],
     seen.join(" vs "),
   );
-  rename.set("name", "Otto L. Loaf");
   await settings("/settings/profile", rename, ottoObs);
 
   const signedOutSettings = await fetch(`${stack.url}/settings`, {
@@ -560,7 +574,7 @@ try {
   );
   check(
     "unknown session",
-    stale.includes("Pick a person in the toolbar"),
+    stale.includes("Pick a person from the pill"),
     "sign-in page",
   );
   failed ||= !(await smokeBrain(stack));

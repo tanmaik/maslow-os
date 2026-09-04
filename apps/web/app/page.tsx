@@ -79,10 +79,20 @@ export default async function Page({
           )}
         </div>
         <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" render={<a href="/brain" />}>
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<a href="/brain" />}
+            nativeButton={false}
+          >
             Brain
           </Button>
-          <Button variant="ghost" size="sm" render={<a href="/settings" />}>
+          <Button
+            variant="ghost"
+            size="sm"
+            render={<a href="/settings" />}
+            nativeButton={false}
+          >
             Settings
           </Button>
           <form action="/auth/sign-out" method="post">
@@ -174,7 +184,7 @@ async function SignIn({ said }: { said: string | null }) {
       <main className="space-y-4">
         <h1 className="text-2xl font-semibold">Sign in</h1>
         {said && <p className="text-destructive text-sm">{said}</p>}
-        <Button render={<a href="/auth/sign-in" />}>
+        <Button render={<a href="/auth/sign-in" />} nativeButton={false}>
           Continue with {new URL(identity.issuer).host}
         </Button>
       </main>
@@ -185,7 +195,8 @@ async function SignIn({ said }: { said: string | null }) {
     <main className="space-y-4">
       <h1 className="text-2xl font-semibold">Sign in</h1>
       <p className="text-muted-foreground">
-        No identity provider is configured. Pick a person in the toolbar below.
+        No identity provider is configured. Pick a person from the pill in the
+        corner.
       </p>
       {said && <p className="text-destructive text-sm">{said}</p>}
     </main>

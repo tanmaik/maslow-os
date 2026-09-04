@@ -40,7 +40,11 @@ export async function smokeBrain(stack) {
     // A brand-new org, made the way sign-in makes one, starts with nothing and
     // refuses a kind nobody has defined.
     const { signIn } = await import("../packages/db/src/auth.ts");
-    const fresh = await signIn({ email: "fresh@brain.test", name: "Fresh" });
+    const fresh = await signIn({
+      email: "fresh@brain.test",
+      firstName: "Fresh",
+      lastName: null,
+    });
     const newcomer = await asPerson(fresh.orgId, fresh.userId, async (q) => {
       const empty = await brain.catalog(q);
       const note = {
@@ -511,11 +515,11 @@ export async function smokeBrain(stack) {
         [target],
       );
       await owner.query(
-        "insert into people (id, email, name) values ($1, 'someone@export-target.test', 'Someone')",
+        "insert into people (id, email, first_name) values ($1, 'someone@export-target.test', 'Someone')",
         [targetPerson],
       );
       await owner.query(
-        "insert into users (id, org_id, person_id, email, name) values ($1, $2, $1, 'someone@export-target.test', 'Someone')",
+        "insert into users (id, org_id, person_id, email, first_name) values ($1, $2, $1, 'someone@export-target.test', 'Someone')",
         [targetPerson, target],
       );
     } finally {

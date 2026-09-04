@@ -41,7 +41,12 @@ export default async function Page({
     <main className="space-y-8">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">{me}&apos;s brain</h1>
-        <Button variant="ghost" size="sm" render={<a href="/" />}>
+        <Button
+          variant="ghost"
+          size="sm"
+          render={<a href="/" />}
+          nativeButton={false}
+        >
           Home
         </Button>
       </header>
@@ -126,7 +131,11 @@ export default async function Page({
 
       <section className="space-y-2">
         <h2 className="font-medium">Export and import</h2>
-        <Button variant="outline" render={<a href="/brain/export" />}>
+        <Button
+          variant="outline"
+          render={<a href="/brain/export" />}
+          nativeButton={false}
+        >
           Download this brain as a file
         </Button>
         <form action="/brain/import" method="post" className="space-y-2">

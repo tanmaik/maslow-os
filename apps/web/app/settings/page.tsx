@@ -11,10 +11,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ImageInput } from "@/components/image-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { deployment } from "@/lib/deployment";
+import { initials } from "@/lib/initials";
 import { principal } from "@/lib/session";
 import { storage } from "@/lib/storage";
 
@@ -30,12 +32,14 @@ type Notice = {
 const NOTICES: Record<string, string> = {
   "org=saved": "Saved.",
   "org=name": "The org needs a name of up to 80 characters.",
-  "org=image": "The logo must be a PNG, JPEG or WebP under 2 MB.",
+  "org=image":
+    "That file can't be the logo. A PNG, JPEG or WebP under 2 MB always works.",
   "org=storage":
     "Saved the name. Images need object storage, which is not set up yet.",
   "profile=saved": "Saved.",
-  "profile=name": "You need a name of up to 80 characters.",
-  "profile=image": "The avatar must be a PNG, JPEG or WebP under 2 MB.",
+  "profile=name": "You need a first name. Names are up to 80 characters.",
+  "profile=image":
+    "That file can't be the avatar. A PNG, JPEG or WebP under 2 MB always works.",
   "profile=storage":
     "Saved the name. Images need object storage, which is not set up yet.",
   "member=removed": "Removed. Their sessions are ended.",
@@ -50,13 +54,6 @@ const NOTICES: Record<string, string> = {
   "invite=member": "That address already belongs to someone.",
   "member=member": "They are a member now.",
 };
-
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
 
 // The signed-in person's org and profile, and who is in the org.
 export default async function Settings({
@@ -77,7 +74,12 @@ export default async function Settings({
     <main className="space-y-6">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">Settings</h1>
-        <Button variant="ghost" size="sm" render={<a href="/" />}>
+        <Button
+          variant="ghost"
+          size="sm"
+          render={<a href="/" />}
+          nativeButton={false}
+        >
           Back
         </Button>
       </header>
@@ -107,12 +109,7 @@ export default async function Settings({
                 {uploads ? (
                   <div className="space-y-2">
                     <Label htmlFor="logo">Logo</Label>
-                    <Input
-                      id="logo"
-                      name="logo"
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                    />
+                    <ImageInput id="logo" name="logo" />
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-sm">
@@ -163,12 +160,7 @@ export default async function Settings({
               {uploads ? (
                 <div className="space-y-2">
                   <Label htmlFor="avatar">Avatar</Label>
-                  <Input
-                    id="avatar"
-                    name="avatar"
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                  />
+                  <ImageInput id="avatar" name="avatar" />
                 </div>
               ) : (
                 <p className="text-muted-foreground text-sm">
@@ -176,15 +168,26 @@ export default async function Settings({
                 </p>
               )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="your-name">Name</Label>
-              <Input
-                id="your-name"
-                name="name"
-                defaultValue={me.name}
-                required
-                maxLength={80}
-              />
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="first-name">First name</Label>
+                <Input
+                  id="first-name"
+                  name="first_name"
+                  defaultValue={me.firstName}
+                  required
+                  maxLength={80}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="last-name">Last name</Label>
+                <Input
+                  id="last-name"
+                  name="last_name"
+                  defaultValue={me.lastName ?? ""}
+                  maxLength={80}
+                />
+              </div>
             </div>
             <div className="flex items-center gap-3">
               <Button type="submit">Save</Button>

@@ -5,6 +5,8 @@ export type Org = { id: string; name: string; logoKey: string | null };
 export type Member = {
   id: string;
   name: string;
+  firstName: string;
+  lastName: string | null;
   email: string;
   role: Role;
   avatarKey: string | null;
@@ -49,7 +51,7 @@ export async function orgOf(p: Principal): Promise<{
     ).rows[0]!,
     members: (
       await q.query<Member>(
-        'select id, name, email, role, avatar_key as "avatarKey" from users order by role, name',
+        'select id, name, first_name as "firstName", last_name as "lastName", email, role, avatar_key as "avatarKey" from users order by role, name',
       )
     ).rows,
     invited: (
@@ -74,9 +76,13 @@ export async function setOrgLogo(p: Principal, key: string): Promise<void> {
 // disagreeing.
 async function setProfile(
   p: Principal,
-  column: "name" | "avatar_key",
-  value: string,
+  fields:
+    { first_name: string; last_name: string | null } | { avatar_key: string },
 ): Promise<void> {
+  const values = Object.values(fields);
+  const set = Object.keys(fields)
+    .map((c, i) => `${c} = $${i + 2}`)
+    .join(", ");
   await asPerson(p.orgId, p.personId, async (q) => {
     const person = (
       await q.query<{ email: string }>(
@@ -85,9 +91,9 @@ async function setProfile(
       )
     ).rows[0];
     if (!person) return;
-    await q.query(`update people set ${column} = $1 where id = $2`, [
-      value,
+    await q.query(`update people set ${set} where id = $1`, [
       p.personId,
+      ...values,
     ]);
     await q.query("select set_config('app.email', $1, true)", [person.email]);
     const orgIds = (
@@ -98,20 +104,24 @@ async function setProfile(
     ).rows.map((r) => r.org_id);
     for (const orgId of orgIds) {
       await q.query("select set_config('app.org_id', $1, true)", [orgId]);
-      await q.query(`update users set ${column} = $1 where person_id = $2`, [
-        value,
+      await q.query(`update users set ${set} where person_id = $1`, [
         p.personId,
+        ...values,
       ]);
     }
   });
 }
 
-export async function renameSelf(p: Principal, name: string): Promise<void> {
-  await setProfile(p, "name", name);
+export async function renameSelf(
+  p: Principal,
+  firstName: string,
+  lastName: string | null,
+): Promise<void> {
+  await setProfile(p, { first_name: firstName, last_name: lastName });
 }
 
 export async function setAvatar(p: Principal, key: string): Promise<void> {
-  await setProfile(p, "avatar_key", key);
+  await setProfile(p, { avatar_key: key });
 }
 
 // Removes a member from the org, ending their sessions and forgetting their

@@ -2,8 +2,38 @@ import { randomUUID } from "node:crypto";
 
 import { asEmail, asOrg, asSignIn } from "./index.ts";
 
-// What an identity provider vouches for.
-export type Identity = { email: string; name: string };
+// What an identity provider vouches for. A last name is optional.
+export type Identity = {
+  email: string;
+  firstName: string;
+  lastName: string | null;
+};
+
+// A person's name in full.
+export const fullName = (p: { firstName: string; lastName: string | null }) =>
+  p.lastName ? `${p.firstName} ${p.lastName}` : p.firstName;
+
+// The identity behind what a provider offered: its own first and last name
+// where given, else its full name cut after the first name, else the
+// address's local part as a first name alone.
+export function identity(
+  email: string,
+  given: unknown,
+  family: unknown,
+  full: unknown,
+): Identity {
+  const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const words = text(full).split(/\s+/).filter(Boolean);
+  const first = text(given) || words[0] || email.split("@")[0]!;
+  const rest = text(full).startsWith(first)
+    ? text(full).slice(first.length).trim()
+    : words.slice(1).join(" ");
+  return {
+    email: email.toLowerCase(),
+    firstName: first,
+    lastName: text(family) || rest || null,
+  };
+}
 
 // Who a request acts as: one person, in one org, through one membership.
 export type Role = "owner" | "member";
@@ -38,16 +68,26 @@ async function admit(identity: Identity): Promise<Principal> {
   const email = identity.email.toLowerCase();
   const { person, invitedTo } = await asEmail(email, async (q) => {
     let person = (
-      await q.query<{ id: string; name: string; avatar_key: string | null }>(
-        "select id, name, avatar_key from people where email = $1",
+      await q.query<{
+        id: string;
+        firstName: string;
+        lastName: string | null;
+        avatar_key: string | null;
+      }>(
+        'select id, first_name as "firstName", last_name as "lastName", avatar_key from people where email = $1',
         [email],
       )
     ).rows[0];
     if (!person) {
-      person = { id: randomUUID(), name: identity.name, avatar_key: null };
+      person = {
+        id: randomUUID(),
+        firstName: identity.firstName,
+        lastName: identity.lastName,
+        avatar_key: null,
+      };
       await q.query(
-        "insert into people (id, email, name) values ($1, $2, $3)",
-        [person.id, email, person.name],
+        "insert into people (id, email, first_name, last_name) values ($1, $2, $3, $4)",
+        [person.id, email, person.firstName, person.lastName],
       );
     }
     const invitedTo = (
@@ -69,8 +109,16 @@ async function admit(identity: Identity): Promise<Principal> {
       );
       if (!claim.rowCount) return;
       await q.query(
-        "insert into users (id, org_id, person_id, email, name, avatar_key) values ($1, $2, $3, $4, $5, $6) on conflict (org_id, person_id) do nothing",
-        [randomUUID(), orgId, person.id, email, person.name, person.avatar_key],
+        "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key) values ($1, $2, $3, $4, $5, $6, $7) on conflict (org_id, person_id) do nothing",
+        [
+          randomUUID(),
+          orgId,
+          person.id,
+          email,
+          person.firstName,
+          person.lastName,
+          person.avatar_key,
+        ],
       );
     });
   }
@@ -97,11 +145,19 @@ async function admit(identity: Identity): Promise<Principal> {
     await q.query("insert into orgs (id, slug, name) values ($1, $2, $3)", [
       orgId,
       orgId,
-      person.name,
+      fullName(person),
     ]);
     await q.query(
-      "insert into users (id, org_id, person_id, email, name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, 'owner')",
-      [userId, orgId, person.id, email, person.name, person.avatar_key],
+      "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, $7, 'owner')",
+      [
+        userId,
+        orgId,
+        person.id,
+        email,
+        person.firstName,
+        person.lastName,
+        person.avatar_key,
+      ],
     );
     return { personId: person.id, orgId, userId, role: "owner" };
   });

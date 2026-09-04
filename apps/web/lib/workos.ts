@@ -1,4 +1,4 @@
-import type { Identity } from "@placeholder/db/auth";
+import { type Identity, identity } from "@placeholder/db/auth";
 
 import { deployment } from "./deployment.ts";
 
@@ -70,9 +70,5 @@ export async function redeemCode(
     email,
     code,
   });
-  const name = [user.first_name, user.last_name].filter(Boolean).join(" ");
-  return {
-    email: user.email.toLowerCase(),
-    name: name || user.email.split("@")[0]!,
-  };
+  return identity(user.email, user.first_name, user.last_name, null);
 }

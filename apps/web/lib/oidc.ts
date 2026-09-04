@@ -1,4 +1,4 @@
-import type { Identity } from "@placeholder/db/auth";
+import { type Identity, identity } from "@placeholder/db/auth";
 import * as client from "openid-client";
 
 import { deployment } from "./deployment.ts";
@@ -54,8 +54,5 @@ export async function finishSignIn(
   const info = await client.fetchUserInfo(config, tokens.access_token, sub);
   if (typeof info.email !== "string")
     throw new Error("The identity provider returned no email.");
-  return {
-    email: info.email.toLowerCase(),
-    name: typeof info.name === "string" ? info.name : info.email.split("@")[0]!,
-  };
+  return identity(info.email, info.given_name, info.family_name, info.name);
 }

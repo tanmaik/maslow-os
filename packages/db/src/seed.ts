@@ -5,32 +5,38 @@ import pg from "pg";
 export const people = [
   {
     id: "10000000-0000-4000-8000-000000000001",
-    name: "Wile Coyote",
+    firstName: "Wile",
+    lastName: "Coyote",
     email: "wile@acme-rockets.test",
   },
   {
     id: "10000000-0000-4000-8000-000000000002",
-    name: "Road Runner",
+    firstName: "Road",
+    lastName: "Runner",
     email: "beep@acme-rockets.test",
   },
   {
     id: "20000000-0000-4000-8000-000000000001",
-    name: "Marge Crumb",
+    firstName: "Marge",
+    lastName: "Crumb",
     email: "marge@bluewhale.test",
   },
   {
     id: "20000000-0000-4000-8000-000000000002",
-    name: "Otto Loaf",
+    firstName: "Otto",
+    lastName: "Loaf",
     email: "otto@bluewhale.test",
   },
   {
     id: "20000000-0000-4000-8000-000000000003",
-    name: "Pim Sourdough",
+    firstName: "Pim",
+    lastName: "Sourdough",
     email: "pim@bluewhale.test",
   },
   {
     id: "30000000-0000-4000-8000-000000000001",
-    name: "Vera Nebula",
+    firstName: "Vera",
+    lastName: "Nebula",
     email: "vera@chartreuse.test",
   },
 ] as const;
@@ -98,8 +104,8 @@ export async function seed(url: string): Promise<void> {
   try {
     for (const p of people) {
       await client.query(
-        "insert into people (id, email, name) values ($1, $2, $3) on conflict (id) do nothing",
-        [p.id, p.email, p.name],
+        "insert into people (id, email, first_name, last_name) values ($1, $2, $3, $4) on conflict (id) do nothing",
+        [p.id, p.email, p.firstName, p.lastName],
       );
     }
     for (const org of orgs) {
@@ -110,13 +116,14 @@ export async function seed(url: string): Promise<void> {
       for (const [i, u] of org.users.entries()) {
         const personId = people.find((p) => p.email === u.email)!.id;
         await client.query(
-          "insert into users (id, org_id, person_id, email, name, role) values ($1, $2, $3, $4, $5, $6) on conflict (id) do nothing",
+          "insert into users (id, org_id, person_id, email, first_name, last_name, role) values ($1, $2, $3, $4, $5, $6, $7) on conflict (id) do nothing",
           [
             u.id,
             org.id,
             personId,
             u.email,
-            u.name,
+            u.firstName,
+            u.lastName,
             i === 0 ? "owner" : "member",
           ],
         );

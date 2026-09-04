@@ -19,10 +19,17 @@ export async function POST(request: Request) {
   }
   const home = origin(request);
 
-  const name = form.get("name");
-  if (typeof name !== "string" || !name.trim() || name.length > 80)
+  const first = form.get("first_name");
+  const last = form.get("last_name") ?? "";
+  if (
+    typeof first !== "string" ||
+    !first.trim() ||
+    first.length > 80 ||
+    typeof last !== "string" ||
+    last.length > 80
+  )
     return NextResponse.redirect(`${home}/settings?profile=name`, 303);
-  await renameSelf(p, name.trim());
+  await renameSelf(p, first.trim(), last.trim() || null);
 
   const avatar = form.get("avatar");
   if (avatar instanceof File && avatar.size > 0) {
