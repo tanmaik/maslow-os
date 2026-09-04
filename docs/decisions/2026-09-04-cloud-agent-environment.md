@@ -22,3 +22,11 @@ The agent's own Node (22.14) sits on `PATH` ahead of the image's, so a bare
 `.ts` failure. Each command prepends `/usr/local/bin` — where the image's Node
 24 lives — so the pinned Node wins wherever the command runs. It is harmless
 when the image's Node is already first.
+
+## Dev secrets reach the box through one environment secret
+
+The repo's `.env.development` is encrypted; a Cloud Agent decrypts it only if
+`DOTENV_PRIVATE_KEY_DEVELOPMENT` is set as a secret on the Cursor environment
+(Dashboard → Cloud Agents → Secrets). Claude Code's cloud environment takes the
+same name in its environment variables. Nothing else is configured per box:
+`pnpm dev` finds the key and says whether vendors are real or faked.

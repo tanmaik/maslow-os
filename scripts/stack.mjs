@@ -1,9 +1,12 @@
 // The whole local stack: this checkout's Postgres, migrated and seeded, and
 // Next on a free port with the app role's URL.
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { config as decrypt } from "@dotenvx/dotenvx";
 
 import { migrate } from "../packages/db/src/migrate.ts";
 import { ensureAppRole, startPostgres } from "../packages/db/src/postgres.ts";
@@ -22,6 +25,29 @@ export function freePort() {
   });
 }
 
+// Dev secrets travel with the repo, encrypted; the private key does not. With
+// the key, vendors are real; without it, they are faked.
+export function devSecrets() {
+  const keysFile = path.join(root, ".env.keys");
+  if (!process.env.DOTENV_PRIVATE_KEY_DEVELOPMENT && !fs.existsSync(keysFile)) {
+    return null;
+  }
+  const { parsed, error } = decrypt({
+    path: path.join(root, ".env.development"),
+    envKeysFile: keysFile,
+    processEnv: {},
+    quiet: true,
+  });
+  if (error) {
+    throw new Error(
+      `.env.development could not be decrypted (${error.code}). ` +
+        "Is DOTENV_PRIVATE_KEY_DEVELOPMENT the current key?",
+    );
+  }
+  const { DOTENV_PUBLIC_KEY_DEVELOPMENT, ...values } = parsed;
+  return values;
+}
+
 const exited = (child) => child.exitCode !== null || child.signalCode !== null;
 
 export async function startStack({
@@ -30,7 +56,9 @@ export async function startStack({
   dataDir = path.join(root, ".local", "pg"),
   distDir = ".next",
   fresh = false,
+  secrets = true,
 } = {}) {
+  const values = secrets ? devSecrets() : null;
   const pgPort = await freePort();
   webPort ??= await freePort();
 
@@ -56,6 +84,7 @@ export async function startStack({
       stdio: stdio === "ignore" ? ["ignore", "ignore", "pipe"] : stdio,
       env: {
         ...process.env,
+        ...values,
         DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
         NEXT_DIST_DIR: distDir,
         NEXT_TELEMETRY_DISABLED: "1",
@@ -72,6 +101,7 @@ export async function startStack({
     webPort,
     url,
     applied,
+    secrets: values && Object.keys(values).length,
     web,
     // Resolves once Next answers; fails at once if Next has died.
     ready: async (ms = 60_000) => {

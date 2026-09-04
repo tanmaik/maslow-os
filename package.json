@@ -13,9 +13,12 @@
     "typecheck": "turbo run typecheck",
     "build": "turbo run build",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "env:set": "dotenvx set -f .env.development",
+    "env:get": "dotenvx get -f .env.development"
   },
   "devDependencies": {
+    "@dotenvx/dotenvx": "^2.23.0",
     "prettier": "^3.9.6",
     "turbo": "^2.10.12",
     "typescript": "^5.9.3"

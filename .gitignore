@@ -5,6 +5,7 @@ next-env.d.ts
 .turbo/
 .local/
 .env*
+!.env.development
 .DS_Store
 *.tsbuildinfo
 .vercel/

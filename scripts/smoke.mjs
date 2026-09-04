@@ -10,6 +10,7 @@ const stack = await startStack({
   dataDir: path.join(root, ".local", "smoke"),
   distDir: ".next-smoke",
   fresh: true,
+  secrets: false,
 });
 
 let failed = false;

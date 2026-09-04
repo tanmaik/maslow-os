@@ -41,8 +41,20 @@ collide on a number.
 
 ## Config
 
-Vercel's environment store holds configuration. Nothing in it is ever marked
-Sensitive: values stay readable so they can be pulled, diffed and audited.
+Every secret a checkout needs lives in the repo, in `.env.development`,
+encrypted per value; one private key, never committed, decrypts it. A laptop
+or a cloud agent holding the key gets real vendors, one without it gets the
+fakes, and `pnpm dev` says which. Adding or rotating a dev secret is a commit.
+
+For an agent: the key is `DOTENV_PRIVATE_KEY_DEVELOPMENT`, set in your
+environment by a human; if it is there, `pnpm dev` already uses it. Add a
+secret with `pnpm env:set NAME value` and commit `.env.development`. Never
+print a decrypted value, and never commit `.env.keys`.
+
+Vercel's environment store holds preview and production. Nothing in it is ever
+marked Sensitive: values stay readable so they can be pulled, diffed and
+audited. A Vercel token is a full-account key: it lives only on the GitHub
+`preview-db` environment, never with a person or an agent.
 
 Local boots with no credentials at all. The agent working on the repo can read
 and change configuration — that is what lets it help set things up.
