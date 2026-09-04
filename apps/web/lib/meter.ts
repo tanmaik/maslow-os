@@ -29,7 +29,7 @@ export type Measure = {
   quantity: number;
   price: number;
   // What is ticking right now, and how much of it: a running machine, a
-  // filesystem of so many GB, so many bytes of files or brain.
+  // disk of so many GB, so many bytes in the bucket or the brain.
   live: number;
   liveUnit: string;
   from: Date;
@@ -492,9 +492,9 @@ export async function live(
             : m.resource === "rootfs"
               ? `stopped machine's ${m.live} GB image`
               : m.resource === "disk"
-                ? `${m.live} GB filesystem`
+                ? `${m.live} GB disk`
                 : m.resource === "bucket"
-                  ? `${human(m.live)} of files`
+                  ? `${human(m.live)} in the bucket`
                   : `${human(m.live)} of brain`,
         ratePerHour: (m.resource === "compute" ? 1 : m.live) * m.price * 3600,
       }));

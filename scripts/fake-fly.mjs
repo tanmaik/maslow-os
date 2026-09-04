@@ -51,7 +51,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
         OS_ROOT: undefined,
         FLY_MACHINE_ID: mc.id,
         DATA_DIR: data,
-        DISK_GB: String(volumes.get(mc.volume)?.size_gb ?? 10),
+        DISK_GB: String(volumes.get(mc.volume)?.size_gb ?? 3),
         PORT: String(port),
       },
       stdio: ["ignore", "ignore", "inherit"],

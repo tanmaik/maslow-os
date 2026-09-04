@@ -32,7 +32,9 @@ export type Machine = {
 // and the Vercel CLI, copied onto the volume on first boot.
 export const IMAGE = "registry.fly.io/placeholder-computers:v7";
 export const SIZE = "shared-cpu-1x:1024";
-export const DISK_GB = 10;
+// Every disk starts here; the operating system takes about a gigabyte of
+// it, and it doubles when it fills, to the cap.
+export const DISK_GB = 3;
 // Fly's limit for one volume.
 export const MAX_DISK_GB = 500;
 

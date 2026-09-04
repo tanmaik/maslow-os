@@ -23,15 +23,9 @@ export async function AppHeader() {
   return (
     <header className="mb-6 flex flex-wrap items-center justify-between gap-2">
       <div className="flex flex-wrap items-center gap-1">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="text-base font-semibold"
-          nativeButton={false}
-          render={<a href="/" />}
-        >
+        <a href="/" className="px-2 text-base font-semibold">
           {orgName}
-        </Button>
+        </a>
         {others.length > 0 && (
           <form action="/auth/switch" method="post" className="flex gap-1">
             {others.map((m) => (
@@ -44,7 +38,7 @@ export async function AppHeader() {
                 value={m.userId}
                 className="text-muted-foreground"
               >
-                {m.orgName}
+                Switch to {m.orgName}
               </Button>
             ))}
           </form>

@@ -704,7 +704,7 @@ try {
   check(
     "a person in two orgs is offered the other",
     /<h1[^>]*>Blue Whale Bakery/.test(ottoHome) &&
-      /<button[^>]*value="30000000-0000-4000-8000-000000000002"[^>]*>Chartreuse Observatory</.test(
+      /<button[^>]*value="30000000-0000-4000-8000-000000000002"[^>]*>Switch to Chartreuse Observatory</.test(
         ottoHome,
       ),
     "bakery, with the observatory offered",
@@ -802,7 +802,7 @@ try {
     [...fake.machines.values()][0]?.state === "started",
     /data-state="started"/.test(ottoComputer),
     ottoComputer.includes("This folder is empty"),
-    / of 10\.0 GB used/.test(ottoComputer),
+    / of 3\.0 GB used/.test(ottoComputer),
   ];
   check(
     "opening the computer makes the machine, wakes it and shows the disk",
@@ -939,9 +939,9 @@ try {
   );
   check(
     "a declared size grows nothing; arrived bytes grow to fit",
-    notGrown.disk_gb === 10 &&
-      sizeFor(1e9, 10) === 10 &&
-      sizeFor(9e9, 10) === 20 &&
+    notGrown.disk_gb === 3 &&
+      sizeFor(1e9, 3) === 3 &&
+      sizeFor(3e9, 3) === 6 &&
       sizeFor(400e9, 20) === 500 &&
       sizeFor(600e9, 500) === 500,
     `${notGrown.disk_gb} GB after declaring 9 GB`,

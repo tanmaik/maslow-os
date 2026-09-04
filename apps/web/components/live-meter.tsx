@@ -87,8 +87,7 @@ export function LiveMeter() {
           ))}
         </ul>
         <p className="text-muted-foreground mt-2 text-xs">
-          What Fly, Tigris and Neon charge us for it at their list prices, from
-          the last sixty seconds. Nobody is billed yet.
+          Nobody is billed yet.
         </p>
       </HoverCardContent>
     </HoverCard>
