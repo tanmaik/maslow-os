@@ -52,6 +52,25 @@ export function devSecrets() {
   return values;
 }
 
+// Which vendor each contract has, from the environment the app will read:
+// the vendor's name when it is real, null when the app will fake it.
+export function vendorsOf(env) {
+  const has = (...keys) => keys.every((k) => env[k]);
+  return {
+    identity: has("WORKOS_API_KEY", "WORKOS_CLIENT_ID") ? "WorkOS" : null,
+    mail: has("RESEND_API_KEY", "MAIL_FROM") ? "Resend" : null,
+    storage: has(
+      "STORAGE_ENDPOINT",
+      "STORAGE_REGION",
+      "STORAGE_BUCKET",
+      "STORAGE_ACCESS_KEY",
+      "STORAGE_SECRET_KEY",
+    )
+      ? "S3"
+      : null,
+  };
+}
+
 const exited = (child) => child.exitCode !== null || child.signalCode !== null;
 
 export async function startStack({
@@ -109,6 +128,7 @@ export async function startStack({
     url,
     applied,
     secrets: values && Object.keys(values).length,
+    vendors: vendorsOf({ ...process.env, ...values, ...extraEnv }),
     web,
     // Resolves once Next answers; fails at once if Next has died.
     ready: async (ms = 60_000) => {

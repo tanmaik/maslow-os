@@ -28,11 +28,11 @@ export async function DevToolbar() {
   return (
     <DevPill
       where={deployment.where}
-      faked={[
-        deployment.identity.kind === "dev" && "identity",
-        deployment.mail.kind === "none" && "mail",
-        deployment.storage.kind === "none" && "storage",
-      ].filter((f) => f !== false)}
+      vendors={{
+        identity: deployment.identity.kind === "workos" ? "WorkOS" : null,
+        mail: deployment.mail.kind === "resend" ? "Resend" : null,
+        storage: deployment.storage.kind === "s3" ? "S3" : null,
+      }}
       signedIn={p !== null}
       me={me ?? null}
       orgs={seeded}

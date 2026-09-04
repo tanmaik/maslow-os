@@ -16,7 +16,8 @@ import { cn } from "@/lib/utils";
 
 type Props = {
   where: typeof deployment.where;
-  faked: string[];
+  // Each contract's vendor when real, null when this deployment fakes it.
+  vendors: Record<"identity" | "mail" | "storage", string | null>;
   signedIn: boolean;
   me: { name: string; org: string } | null;
   orgs: {
@@ -31,12 +32,21 @@ type Props = {
 const onPill =
   "text-primary-foreground/85 hover:bg-primary-foreground/12 hover:text-primary-foreground aria-expanded:bg-primary-foreground/12 aria-expanded:text-primary-foreground";
 
-// A pill in the corner: closed, it is who you are, with a dot when anything
-// is faked; open, it says where this is, what is faked, and lets you be
+// A pill in the corner: closed, it is who you are, with a count of what is
+// faked; open, it says where this is, what each vendor is, and lets you be
 // someone else.
-export function DevPill({ where, faked, signedIn, me, orgs, current }: Props) {
+export function DevPill({
+  where,
+  vendors,
+  signedIn,
+  me,
+  orgs,
+  current,
+}: Props) {
   const [open, setOpen] = useState(false);
-  const fakedSaid = faked.length > 0 ? `${faked.join(", ")} faked` : null;
+  const faked = Object.entries(vendors).filter(([, v]) => v === null);
+  const fakedSaid =
+    faked.length > 0 ? `${faked.map(([k]) => k).join(", ")} faked` : null;
   return (
     <div
       className={cn(
@@ -59,11 +69,21 @@ export function DevPill({ where, faked, signedIn, me, orgs, current }: Props) {
           <span className="bg-primary-foreground/12 rounded-full px-2 py-0.5 font-medium">
             {where}
           </span>
-          {fakedSaid && (
-            <span className="text-primary-foreground/60 px-1.5">
-              {fakedSaid}
-            </span>
-          )}
+          <span className="text-primary-foreground/60 px-1.5">
+            {Object.entries(vendors).map(([name, vendor], i) => (
+              <span key={name}>
+                {i > 0 && " · "}
+                {name}{" "}
+                <span
+                  className={
+                    vendor ? "text-primary-foreground/85" : "font-semibold"
+                  }
+                >
+                  {vendor ?? "faked"}
+                </span>
+              </span>
+            ))}
+          </span>
           <Popover>
             <PopoverTrigger
               render={<Button variant="ghost" size="xs" />}
@@ -130,7 +150,9 @@ export function DevPill({ where, faked, signedIn, me, orgs, current }: Props) {
       >
         {me ? initials(me.name) : <UserRound />}
         {fakedSaid && !open && (
-          <span className="bg-primary-foreground ring-primary absolute top-2 right-2 size-1.5 rounded-full ring-2" />
+          <span className="bg-primary-foreground text-primary ring-primary absolute -top-1 -right-1 grid size-4 place-items-center rounded-full text-[10px] leading-none font-bold ring-2">
+            {faked.length}
+          </span>
         )}
       </Button>
     </div>
