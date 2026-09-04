@@ -21,15 +21,6 @@ WORKOS_CLIENT_ID=client_...   # the WorkOS environment's client ID
 WORKOS_API_KEY=sk_...
 ```
 
-A self-hoster points the app at their own OpenID Connect provider instead, and
-its screen handles sign-in:
-
-```
-AUTH_ISSUER=https://<issuer>
-AUTH_CLIENT_ID=client_...
-AUTH_CLIENT_SECRET=...        # optional; without it the client is public with PKCE
-```
-
 Mail goes through Resend when `RESEND_API_KEY` and `MAIL_FROM` are set: the
 sign-in code, and invitations. Without them, locally and on previews, the code
 is printed to the server's terminal and the page says so. Production refuses

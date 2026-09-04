@@ -179,18 +179,6 @@ async function SignIn({ said }: { said: string | null }) {
     );
   }
 
-  if (identity.kind === "oidc") {
-    return (
-      <main className="space-y-4">
-        <h1 className="text-2xl font-semibold">Sign in</h1>
-        {said && <p className="text-destructive text-sm">{said}</p>}
-        <Button render={<a href="/auth/sign-in" />} nativeButton={false}>
-          Continue with {new URL(identity.issuer).host}
-        </Button>
-      </main>
-    );
-  }
-
   return (
     <main className="space-y-4">
       <h1 className="text-2xl font-semibold">Sign in</h1>

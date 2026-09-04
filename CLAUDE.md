@@ -62,6 +62,12 @@ audited. A Vercel token is a full-account key: it lives only on the GitHub
 Local boots with no credentials at all. The agent working on the repo can read
 and change configuration — that is what lets it help set things up.
 
+One object describes what a deployment can do — sign-in, mail, storage, and
+later billing, sizing and sharing — and the interface reads it, never the
+environment. A register in `docs/dependencies.md` lists every vendor, written
+when the vendor is added. Every vendor sits behind an interface of ours, so a
+second supplier is a second implementation, never a second code path.
+
 CI holds exactly two credentials — a Neon key and a Vercel token — on a GitHub
 environment only `main` can use. The per-PR database workflow runs main's code
 with them; a pull request's code never sees them.
@@ -69,8 +75,8 @@ with them; a pull request's code never sees them.
 ## Tenancy
 
 Everyone is in an org; a person alone is an org of one. Enterprise is the same
-org with more people in it and the owner paying for all of them. Self-hosted
-has exactly one. The org is the same object in every case.
+org with more people in it and the owner paying for all of them. The org is
+the same object in every case.
 
 One database, one set of tables. Every row belongs to an org and the database
 enforces it — row-level security, not a `where` clause someone can forget.
@@ -128,25 +134,6 @@ written by the database and the app cannot write them. A merge hides the
 loser behind a pointer to the winner and rewrites nothing, so it reverses.
 A brain exports to a file that imports into any brain, as the importer.
 
-## Self-hosting
-
-The same app with one org in it. Multi-tenancy is not switched off — that org
-is simply the only one. Same tables, same migrations, same code.
-
-Managed instances use credentials we supply; self-hosted ones bring their own.
-Signing up differs the same way: the first person to arrive owns the instance,
-everyone after is invited, and the org's own identity provider sits behind the
-same contract. Not a second auth system.
-
-**Every external dependency must answer: can a self-hoster supply their own?**
-If not, the feature it powers is absent on self-hosted — off, never
-half-working. A register lists every dependency with its self-hosted answer,
-written when the vendor is added.
-
-One object describes what a deployment can do — signup, billing, sizing,
-sharing — and the interface reads it. Never a scattered "is this self-hosted"
-check.
-
 ## Real and fake
 
 Development runs against the real thing — real models, real machines, your own
@@ -163,15 +150,13 @@ from starting. Nothing degrades quietly, and no error is swallowed.
 **"Download my data"** gives a person what is theirs — their rows, their
 machine's files — with stored tokens stripped. Nobody's export holds anyone
 else's slice, the org owner included. Importing is additive: each member's
-file adds theirs, so an org is rebuilt one person at a time. The same pair is
-how a customer moves to self-hosted. No production credential ever leaves
-production; only files travel.
+file adds theirs, so an org is rebuilt one person at a time. No production
+credential ever leaves production; only files travel.
 
 Local runs the managed profile with test-mode keys — Stripe test, dev model
 keys, mail to the founders only — seeded from the founders' own exports. So
-local is production, as us, with fake money. One config value runs the
-self-hosted profile instead. Agents get the synthetic seed unless a human
-hands them a file.
+local is production, as us, with fake money. Agents get the synthetic seed
+unless a human hands them a file.
 
 A preview is the same: a Neon branch off an empty parent — never off
 production — migrated, loaded from exports, on preview keys. The per-PR
@@ -222,13 +207,6 @@ transcripts. Nothing the user started stays down. Fast resume is pure upside.
 
 Suspend is only fast at 2GB and below. Sizing up trades resume speed for room,
 and the user sees that trade.
-
-Self-hosted machines are containers on hardware the org already runs. They share
-the box's CPU and memory fluidly among everyone on it, pause with memory
-resident, and can have limits raised live. They cannot grow past the box.
-Weaker isolation than a VM — right among colleagues, wrong among strangers,
-which is why managed uses VMs — so they take the strongest isolation the host
-offers: rootless, one per user, nothing running as root on the host.
 
 ## Agents
 

@@ -1,7 +1,7 @@
 import { createHash, createHmac } from "node:crypto";
 
-// A signed request to any S3-compatible store: AWS, MinIO, R2, whatever a
-// self-hoster brings. Signature version 4, nothing else.
+// A signed request to any S3-compatible store: AWS, MinIO, R2. Signature
+// version 4, nothing else.
 export type S3 = {
   endpoint: string;
   region: string;

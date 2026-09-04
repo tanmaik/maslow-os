@@ -2,9 +2,7 @@
 // reads this object and never the environment.
 
 export type IdentityProvider =
-  | { kind: "workos"; clientId: string; apiKey: string }
-  | { kind: "oidc"; issuer: string; clientId: string; clientSecret?: string }
-  | { kind: "dev" };
+  { kind: "workos"; clientId: string; apiKey: string } | { kind: "dev" };
 
 export type Mail =
   { kind: "resend"; apiKey: string; from: string } | { kind: "none" };
@@ -33,25 +31,16 @@ const production = process.env.VERCEL
 const https = Boolean(process.env.VERCEL) || production;
 
 function identityProvider(): IdentityProvider {
-  const { WORKOS_API_KEY, WORKOS_CLIENT_ID, AUTH_ISSUER, AUTH_CLIENT_ID } =
-    process.env;
+  const { WORKOS_API_KEY, WORKOS_CLIENT_ID } = process.env;
   if (WORKOS_API_KEY && WORKOS_CLIENT_ID)
     return {
       kind: "workos",
       clientId: WORKOS_CLIENT_ID,
       apiKey: WORKOS_API_KEY,
     };
-  if (AUTH_ISSUER && AUTH_CLIENT_ID) {
-    return {
-      kind: "oidc",
-      issuer: AUTH_ISSUER,
-      clientId: AUTH_CLIENT_ID,
-      clientSecret: process.env.AUTH_CLIENT_SECRET || undefined,
-    };
-  }
   if (production) {
     throw new Error(
-      "No identity provider: set WORKOS_API_KEY and WORKOS_CLIENT_ID, or AUTH_ISSUER and AUTH_CLIENT_ID. Production has no fallback sign-in.",
+      "No identity provider: set WORKOS_API_KEY and WORKOS_CLIENT_ID. Production has no fallback sign-in.",
     );
   }
   return { kind: "dev" };

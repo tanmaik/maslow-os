@@ -5,8 +5,8 @@ import path from "node:path";
 import { deployment } from "./deployment.ts";
 import { s3 } from "./s3.ts";
 
-// Where uploaded images live. One contract; a self-hoster brings their own
-// S3-compatible store, development uses a directory.
+// Where uploaded images live. One contract; production uses an S3-compatible
+// store, development uses a directory.
 export type Storage = {
   put(bytes: Uint8Array, ext: string): Promise<string>;
   url(key: string): string;

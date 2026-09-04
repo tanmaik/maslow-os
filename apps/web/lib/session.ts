@@ -8,11 +8,9 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
 import { cookie, FLOW, SESSION, SESSION_LIFETIME } from "./cookie.ts";
-import type { OidcFlow } from "./oidc.ts";
 
-// What a sign-in remembers between its two legs: the OIDC state and verifier,
-// or the email a code was sent to.
-export type Flow = OidcFlow | { email: string };
+// What a sign-in remembers between its two legs: the email a code was sent to.
+export type Flow = { email: string };
 
 // Who the current request acts as, or null when nobody is signed in.
 export async function principal(): Promise<Principal | null> {
@@ -57,10 +55,8 @@ export async function pendingFlow(): Promise<Flow | null> {
   const raw = (await cookies()).get(FLOW)?.value;
   if (!raw) return null;
   try {
-    const flow = JSON.parse(raw) as Partial<OidcFlow & { email: string }>;
+    const flow = JSON.parse(raw) as Partial<Flow>;
     if (typeof flow.email === "string") return { email: flow.email };
-    if (typeof flow.state === "string" && typeof flow.verifier === "string")
-      return { state: flow.state, verifier: flow.verifier };
   } catch {}
   return null;
 }
