@@ -26,6 +26,10 @@ async function scoped<T>(
 ): Promise<T> {
   const client = await connection().connect();
   try {
+    // A pooled connection may arrive carrying whatever a previous holder
+    // set at session level; nothing set outside this transaction may
+    // speak for it.
+    await client.query("reset all");
     await client.query("begin");
     for (const [name, value] of Object.entries(settings))
       await client.query("select set_config($1, $2, true)", [name, value]);
