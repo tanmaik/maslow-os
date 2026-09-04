@@ -66,10 +66,10 @@ export async function seed(url: string): Promise<void> {
         "insert into orgs (id, slug, name) values ($1, $2, $3) on conflict (id) do nothing",
         [org.id, org.slug, org.name],
       );
-      for (const u of org.users) {
+      for (const [i, u] of org.users.entries()) {
         await client.query(
-          "insert into users (id, org_id, email, name) values ($1, $2, $3, $4) on conflict (id) do nothing",
-          [u.id, org.id, u.email, u.name],
+          "insert into users (id, org_id, email, name, role) values ($1, $2, $3, $4, $5) on conflict (id) do nothing",
+          [u.id, org.id, u.email, u.name, i === 0 ? "owner" : "member"],
         );
       }
     }

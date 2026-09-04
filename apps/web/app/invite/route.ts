@@ -18,7 +18,7 @@ export async function POST(request: Request) {
   const address = email.trim().toLowerCase();
   const home = origin(request);
 
-  const outcome = await invite(p.orgId, address);
+  const outcome = await invite(p, address);
   if (outcome === "sent" && deployment.mail.kind !== "none") {
     const org = await asOrg(
       p.orgId,
@@ -32,5 +32,5 @@ export async function POST(request: Request) {
       text: `Sign in at ${home} with this email address and you'll be in ${org}.`,
     });
   }
-  return NextResponse.redirect(`${home}/?invite=${outcome}`, 303);
+  return NextResponse.redirect(`${home}/settings?invite=${outcome}`, 303);
 }

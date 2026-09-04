@@ -59,13 +59,17 @@ try {
   await stack.ready();
 
   const out = await page();
-  check("signed out", out.includes("Development sign-in"), "sign-in page");
+  check(
+    "signed out",
+    out.includes("Pick a person in the toolbar"),
+    "sign-in page",
+  );
 
   // The first org signs in again at the end: its second visit reuses a pooled
   // connection where an old org setting exists as '' rather than missing.
   for (const org of [...orgs, orgs[0]]) {
     const html = await page(await signIn(org.users[0].id));
-    const got = html.match(/(\d+) members/);
+    const got = html.match(/(\d+) members?/);
     check(
       `${org.users[0].name} (${org.name})`,
       new RegExp(`<h1[^>]*>${org.name}</h1>`).test(html) &&
@@ -101,7 +105,7 @@ try {
   );
   check(
     "old cookie worthless after sign-out",
-    (await page(marge)).includes("Development sign-in"),
+    (await page(marge)).includes("Pick a person in the toolbar"),
     "sign-in page",
   );
 
@@ -116,9 +120,11 @@ try {
     redirect: "manual",
   });
   check("invite", invited.status === 303, `answered ${invited.status}`);
+  const settingsHtml = async (cookie) =>
+    (await fetch(`${stack.url}/settings`, { headers: { cookie } })).text();
   check(
     "invitation pending",
-    (await page(wile)).includes("hire@acme-rockets.test"),
+    (await settingsHtml(wile)).includes("hire@acme-rockets.test"),
     "listed",
   );
   const anonymous = await fetch(`${stack.url}/invite`, {
@@ -142,9 +148,13 @@ try {
   check(
     "invited person admitted",
     hire.orgId === orgs[0].id &&
-      /3 members/.test(after) &&
-      !after.includes("Invited, not yet signed in"),
-    after.match(/\d+ members/)?.[0] ?? "no match",
+      /3 members?/.test(after) &&
+      !/invited/.test(
+        (await settingsHtml(wile))
+          .split("hire@acme-rockets.test")[1]
+          ?.slice(0, 200) ?? "",
+      ),
+    after.match(/\d+ members?/)?.[0] ?? "no match",
   );
   const stranger = await admit({ email: "solo@example.test", name: "Solo" });
   check(
@@ -163,7 +173,7 @@ try {
   });
   check(
     "inviting a member says so",
-    twice.headers.get("location")?.endsWith("/?invite=member") === true,
+    twice.headers.get("location")?.endsWith("/settings?invite=member") === true,
     twice.headers.get("location") ?? "no redirect",
   );
   await fetch(`${stack.url}/invite`, {
@@ -180,7 +190,8 @@ try {
   });
   check(
     "inviting twice says pending",
-    again.headers.get("location")?.endsWith("/?invite=pending") === true,
+    again.headers.get("location")?.endsWith("/settings?invite=pending") ===
+      true,
     again.headers.get("location") ?? "no redirect",
   );
 
@@ -189,7 +200,7 @@ try {
   check(
     "session under another org",
     (await page(`session=${orgs[1].id}.${wileSession}`)).includes(
-      "Development sign-in",
+      "Pick a person in the toolbar",
     ),
     "sign-in page",
   );
@@ -212,6 +223,239 @@ try {
     new Set(raced.map((r) => r.userId)).size === 1,
     `${new Set(raced.map((r) => r.userId)).size} rows`,
   );
+  // Settings: the org and the person can be renamed, a logo lands in local
+  // storage and is served back, a member can be removed but not oneself, and
+  // an invitation can be withdrawn. Every write stays inside the org.
+  const otto = await signIn("20000000-0000-4000-8000-000000000002");
+  const margeOwner = await signIn("20000000-0000-4000-8000-000000000001");
+  const settings = async (path, body, cookie = margeOwner) =>
+    fetch(`${stack.url}${path}`, {
+      method: "POST",
+      body,
+      headers: { cookie },
+      redirect: "manual",
+    });
+  const orgForm = new FormData();
+  orgForm.set("name", "Blue Whale Bakery & Co");
+  const png = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==",
+    "base64",
+  );
+  orgForm.set("logo", new File([png], "l.png", { type: "image/png" }));
+  const renamed = await settings("/settings/org", orgForm);
+  const settingsPage = async (cookie) =>
+    (await fetch(`${stack.url}/settings`, { headers: { cookie } })).text();
+  const afterRename = await settingsPage(margeOwner);
+  check(
+    "org renamed, logo stored",
+    renamed.headers.get("location")?.endsWith("?org=saved") &&
+      afterRename.includes("Blue Whale Bakery &amp; Co") &&
+      /\/uploads\/[0-9a-f]{32}\.png/.test(afterRename),
+    `${renamed.status} ${renamed.headers.get("location")?.split("?")[1]}`,
+  );
+  const logoUrl = afterRename.match(/\/uploads\/[0-9a-f]{32}\.png/)?.[0];
+  const served = await fetch(`${stack.url}${logoUrl}`);
+  check(
+    "logo served back",
+    served.status === 200 && served.headers.get("content-type") === "image/png",
+    `${served.status} ${served.headers.get("content-type")}`,
+  );
+  const wileHome = await page(wile);
+  check(
+    "rename stays in its org",
+    /<h1[^>]*>Acme Rockets<\/h1>/.test(wileHome) &&
+      !/<h1[^>]*>[^<]*Bakery/.test(wileHome),
+    "Acme unchanged",
+  );
+  const profileForm = new FormData();
+  profileForm.set("name", "Otto L.");
+  await settings("/settings/profile", profileForm, otto);
+  check(
+    "profile renamed",
+    (await page(otto)).includes("Sign out, Otto L."),
+    "Sign out, Otto L.",
+  );
+  const selfRemove = await settings(
+    "/settings/members",
+    new URLSearchParams({ remove: "20000000-0000-4000-8000-000000000001" }),
+  );
+  check(
+    "cannot remove oneself",
+    selfRemove.headers.get("location")?.endsWith("member=self"),
+    selfRemove.headers.get("location")?.split("?")[1],
+  );
+  const pim = await signIn("20000000-0000-4000-8000-000000000003");
+  const pimRemove = await settings(
+    "/settings/members",
+    new URLSearchParams({ remove: "20000000-0000-4000-8000-000000000003" }),
+  );
+  const afterRemove = await settingsPage(margeOwner);
+  check(
+    "member removed",
+    pimRemove.headers.get("location")?.endsWith("member=removed") &&
+      !afterRemove.includes("pim@bluewhale.test"),
+    "Pim gone",
+  );
+  check(
+    "removed member's session is dead",
+    (await page(pim)).includes("Pick a person in the toolbar"),
+    "sign-in page",
+  );
+  const svgForm = new FormData();
+  svgForm.set("name", "Blue Whale Bakery & Co");
+  svgForm.set(
+    "logo",
+    new File(
+      ["<svg xmlns='http://www.w3.org/2000/svg'><script>1</script></svg>"],
+      "x.svg",
+      {
+        type: "image/png",
+      },
+    ),
+  );
+  const svg = await settings("/settings/org", svgForm);
+  check(
+    "svg refused whatever it claims to be",
+    svg.headers.get("location")?.endsWith("org=image"),
+    svg.headers.get("location")?.split("?")[1],
+  );
+  check(
+    "served image is nosniff",
+    served.headers.get("x-content-type-options") === "nosniff",
+    served.headers.get("x-content-type-options") ?? "missing",
+  );
+  const acmeRemove = await settings(
+    "/settings/members",
+    new URLSearchParams({ remove: "10000000-0000-4000-8000-000000000002" }),
+  );
+  check(
+    "removal stays in its org",
+    (await settingsHtml(wile)).includes("beep@acme-rockets.test"),
+    `Road Runner still in Acme (${acmeRemove.status})`,
+  );
+  await settings(
+    "/invite",
+    new URLSearchParams({ email: "new@bluewhale.test" }),
+  );
+  const withdrawn = await settings(
+    "/settings/members",
+    new URLSearchParams({ uninvite: "new@bluewhale.test" }),
+  );
+  check(
+    "invitation withdrawn",
+    withdrawn.headers.get("location")?.endsWith("member=uninvited") &&
+      !(await settingsPage(margeOwner)).includes("new@bluewhale.test"),
+    "gone from the list",
+  );
+  // Roles: Marge owns the bakery, Otto is a member. A member may not touch
+  // the org or the roster; the last owner cannot be demoted; a promoted member
+  // can.
+  const asMember = await settings("/settings/org", orgForm, otto);
+  check(
+    "member cannot rename the org",
+    asMember.status === 403,
+    `answered ${asMember.status}`,
+  );
+  const memberRemove = await settings(
+    "/settings/members",
+    new URLSearchParams({ remove: "20000000-0000-4000-8000-000000000001" }),
+    otto,
+  );
+  check(
+    "member cannot remove",
+    memberRemove.status === 403,
+    `answered ${memberRemove.status}`,
+  );
+  const lastOwner = await settings(
+    "/settings/members",
+    new URLSearchParams({ demote: "20000000-0000-4000-8000-000000000001" }),
+    margeOwner,
+  );
+  check(
+    "last owner stays an owner",
+    lastOwner.headers.get("location")?.endsWith("member=last"),
+    lastOwner.headers.get("location")?.split("?")[1],
+  );
+  const promoted = await settings(
+    "/settings/members",
+    new URLSearchParams({ promote: "20000000-0000-4000-8000-000000000002" }),
+    margeOwner,
+  );
+  const ottoNow = await signIn("20000000-0000-4000-8000-000000000002");
+  const ottoRenames = await settings("/settings/org", orgForm, ottoNow);
+  check(
+    "promoted member becomes an owner",
+    promoted.headers.get("location")?.endsWith("member=owner") &&
+      ottoRenames.status === 303,
+    `promote ${promoted.headers.get("location")?.split("?")[1]}, then rename ${ottoRenames.status}`,
+  );
+
+  // A demotion that lands first is honoured by a request that was already
+  // authorised: Otto (owner) demotes Marge, then Marge's request — carrying a
+  // cookie that resolved to owner a moment ago — cannot rename the org.
+  await settings(
+    "/settings/members",
+    new URLSearchParams({ demote: "20000000-0000-4000-8000-000000000001" }),
+    ottoNow,
+  );
+  const staleOwner = await settings("/settings/org", orgForm, margeOwner);
+  check(
+    "a demoted owner's next write is refused",
+    staleOwner.status === 403,
+    `answered ${staleOwner.status}`,
+  );
+  await settings(
+    "/settings/members",
+    new URLSearchParams({ promote: "20000000-0000-4000-8000-000000000001" }),
+    ottoNow,
+  );
+  // A body with no Content-Length is bounded while it streams.
+  const big = new Uint8Array(4 * 1024 * 1024);
+  const bigForm = new FormData();
+  bigForm.set("name", "x");
+  bigForm.set("logo", new File([big], "big.png", { type: "image/png" }));
+  const chunked = await fetch(`${stack.url}/settings/org`, {
+    method: "POST",
+    body: bigForm,
+    headers: { cookie: ottoNow },
+    redirect: "manual",
+  });
+  check(
+    "oversized upload refused",
+    chunked.status === 413,
+    `answered ${chunked.status}`,
+  );
+
+  // A withdrawn invitation admits nobody: the person signs in and gets an org
+  // of their own instead.
+  await settings(
+    "/invite",
+    new URLSearchParams({ email: "late@bluewhale.test" }),
+    ottoNow,
+  );
+  await settings(
+    "/settings/members",
+    new URLSearchParams({ uninvite: "late@bluewhale.test" }),
+    ottoNow,
+  );
+  const { signIn: admitLate } = await import("../packages/db/src/auth.ts");
+  const late = await admitLate({ email: "late@bluewhale.test", name: "Late" });
+  check(
+    "withdrawn invitation admits nobody",
+    late.orgId !== "00000000-0000-4000-8000-000000000002" &&
+      late.role === "owner",
+    `own org, ${late.role}`,
+  );
+
+  const signedOutSettings = await fetch(`${stack.url}/settings`, {
+    redirect: "manual",
+  });
+  check(
+    "settings need a session",
+    signedOutSettings.status === 307 || signedOutSettings.status === 303,
+    `answered ${signedOutSettings.status}`,
+  );
+
   await globalThis.__pool?.end();
 
   const stale = await page(
@@ -219,7 +463,7 @@ try {
   );
   check(
     "unknown session",
-    stale.includes("Development sign-in"),
+    stale.includes("Pick a person in the toolbar"),
     "sign-in page",
   );
   failed ||= !(await smokeBrain(stack));

@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { migrate } from "../packages/db/src/migrate.ts";
+import { seed } from "../packages/db/src/seed.ts";
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const url = process.env.DATABASE_OWNER_URL;
@@ -26,3 +27,8 @@ const applied = await migrate(
 console.log(
   applied.length ? `migrated ${applied.join(", ")}` : "migrations up to date",
 );
+// A preview is seeded so its people exist to be signed in as. Production never is.
+if (process.env.VERCEL_ENV !== "production") {
+  await seed(url);
+  console.log("seeded");
+}

@@ -9,6 +9,20 @@ export type IdentityProvider =
 export type Mail =
   { kind: "resend"; apiKey: string; from: string } | { kind: "none" };
 
+// Uploaded images live in an S3-compatible store, or in a directory on a
+// real machine, or nowhere.
+export type Storage =
+  | {
+      kind: "s3";
+      endpoint: string;
+      region: string;
+      bucket: string;
+      accessKey: string;
+      secretKey: string;
+    }
+  | { kind: "local"; dir: string }
+  | { kind: "none" };
+
 // Production is the live Vercel environment or any box that is not a
 // development server and not a Vercel preview.
 const production = process.env.VERCEL
@@ -50,8 +64,26 @@ function mail(): Mail {
   return { kind: "none" };
 }
 
+function storage(): Storage {
+  const {
+    STORAGE_ENDPOINT: endpoint,
+    STORAGE_REGION: region,
+    STORAGE_BUCKET: bucket,
+    STORAGE_ACCESS_KEY: accessKey,
+    STORAGE_SECRET_KEY: secretKey,
+  } = process.env;
+  if (endpoint && region && bucket && accessKey && secretKey)
+    return { kind: "s3", endpoint, region, bucket, accessKey, secretKey };
+  if (process.env.VERCEL) return { kind: "none" };
+  return { kind: "local", dir: process.env.UPLOADS_DIR ?? ".local/uploads" };
+}
+
 export const deployment = {
   production,
+  // Anywhere but production the seed exists and a seeded person can be
+  // signed in as with one click.
+  seededSignIn: !production,
+  storage: storage(),
   https,
   identity: identityProvider(),
   mail: mail(),

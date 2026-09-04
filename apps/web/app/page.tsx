@@ -1,6 +1,4 @@
 import { asOrg } from "@placeholder/db";
-import { orgs } from "@placeholder/db/seed";
-
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deployment } from "@/lib/deployment";
@@ -13,7 +11,6 @@ type Notice = {
   email?: "slow" | "rejected";
   code?: "wrong" | "locked";
   signin?: "cancelled";
-  invite?: "sent" | "pending" | "member";
 };
 
 const NOTICES = {
@@ -22,9 +19,6 @@ const NOTICES = {
   "code=wrong": "That code didn't work. Try again or start over.",
   "code=locked": "Too many wrong codes. Ask for a new one.",
   "signin=cancelled": "Sign-in was cancelled.",
-  "invite=pending":
-    "Already invited. They sign in with that address and they're in.",
-  "invite=member": "That address already belongs to someone.",
 } as const;
 
 // The one line the last action left behind, if any.
@@ -35,8 +29,8 @@ function notice(n: Notice): string | null {
   return null;
 }
 
-// The signed-in person's org: who is in it, who is invited, and a way to
-// invite more. Signed out, a way in.
+// Home for the signed-in person: their org, and the way to its settings.
+// Signed out, a way in.
 export default async function Page({
   searchParams,
 }: {
@@ -46,27 +40,28 @@ export default async function Page({
   const p = await principal();
   if (!p) return <SignIn said={said} />;
 
-  const { orgName, members, invited } = await asOrg(p.orgId, async (q) => ({
-    orgName: (await q.query<{ name: string }>("select name from orgs")).rows[0]
-      ?.name,
-    members: (
+  const { orgName, members, me } = await asOrg(p.orgId, async (q) => {
+    const rows = (
       await q.query<Member>("select id, name, email from users order by name")
-    ).rows,
-    invited: (
-      await q.query<{ email: string }>(
-        "select email from invitations where accepted_at is null order by created_at",
-      )
-    ).rows,
-  }));
-  const me = members.find((m) => m.id === p.userId);
+    ).rows;
+    return {
+      orgName: (await q.query<{ name: string }>("select name from orgs"))
+        .rows[0]?.name,
+      members: rows.length,
+      me: rows.find((m) => m.id === p.userId),
+    };
+  });
 
   return (
     <main className="space-y-6">
       <header className="flex items-baseline justify-between">
         <h1 className="text-2xl font-semibold">{orgName}</h1>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" render={<a href="/brain" />}>
             Brain
+          </Button>
+          <Button variant="ghost" size="sm" render={<a href="/settings" />}>
+            Settings
           </Button>
           <form action="/auth/sign-out" method="post">
             <Button variant="ghost" size="sm" type="submit">
@@ -75,47 +70,14 @@ export default async function Page({
           </form>
         </div>
       </header>
-
-      <section className="space-y-2">
-        <p>{members.length} members</p>
-        <ul>
-          {members.map((m) => (
-            <li key={m.id}>
-              {m.name} <span className="text-muted-foreground">{m.email}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {invited.length > 0 && (
-        <section className="space-y-2">
-          <p>Invited, not yet signed in</p>
-          <ul className="text-muted-foreground">
-            {invited.map((i) => (
-              <li key={i.email}>{i.email}</li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <form action="/invite" method="post" className="space-y-2">
-        {said && <p className="text-muted-foreground text-sm">{said}</p>}
-        <div className="flex gap-2">
-          <Input
-            name="email"
-            type="email"
-            required
-            placeholder="colleague@example.com"
-          />
-          <Button type="submit">Invite</Button>
-        </div>
-        {deployment.mail.kind === "none" && (
-          <p className="text-muted-foreground text-sm">
-            No mail is configured, so tell them yourself: they sign in with this
-            address and they&apos;re in.
-          </p>
-        )}
-      </form>
+      <p className="text-muted-foreground">
+        {members} {members === 1 ? "member" : "members"}. Invite people and
+        manage the org in{" "}
+        <a href="/settings" className="underline">
+          settings
+        </a>
+        .
+      </p>
     </main>
   );
 }
@@ -199,23 +161,11 @@ async function SignIn({ said }: { said: string | null }) {
 
   return (
     <main className="space-y-4">
-      <h1 className="text-2xl font-semibold">Development sign-in</h1>
-      <p className="text-muted-foreground">Pick a seeded person.</p>
-      {orgs.map((o) => (
-        <section key={o.id} className="space-y-1">
-          <h2 className="font-medium">{o.name}</h2>
-          <div className="flex flex-wrap gap-2">
-            {o.users.map((u) => (
-              <form key={u.id} action="/auth/dev" method="post">
-                <input type="hidden" name="user" value={u.id} />
-                <Button variant="outline" size="sm" type="submit">
-                  {u.name}
-                </Button>
-              </form>
-            ))}
-          </div>
-        </section>
-      ))}
+      <h1 className="text-2xl font-semibold">Sign in</h1>
+      <p className="text-muted-foreground">
+        No identity provider is configured. Pick a person in the toolbar below.
+      </p>
+      {said && <p className="text-destructive text-sm">{said}</p>}
     </main>
   );
 }

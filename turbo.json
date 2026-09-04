@@ -15,7 +15,12 @@
         "WORKOS_API_KEY",
         "WORKOS_CLIENT_ID",
         "RESEND_API_KEY",
-        "MAIL_FROM"
+        "MAIL_FROM",
+        "STORAGE_ENDPOINT",
+        "STORAGE_REGION",
+        "STORAGE_BUCKET",
+        "STORAGE_ACCESS_KEY",
+        "STORAGE_SECRET_KEY"
       ]
     },
     "typecheck": {
