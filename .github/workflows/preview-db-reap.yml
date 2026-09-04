@@ -31,5 +31,5 @@ jobs:
           NEON_PROJECT_ID: quiet-wave-64485699
           NEON_PARENT_BRANCH: preview-parent
           VERCEL_TEAM_ID: team_7NQXOFvUYkNy7L2ztTSnohQ8
-          VERCEL_PROJECT_ID: prj_E5ppOrhc3HY2TMdsNVWUIdSByjwa
+          VERCEL_PROJECT_ID: prj_rAZ2iUe98KkFuLsvFc7uwqTh8ko0
         run: node scripts/preview-db.mjs reap
