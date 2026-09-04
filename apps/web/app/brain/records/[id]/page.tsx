@@ -3,6 +3,7 @@ import {
   catalog,
   edgesOf,
   get,
+  grantsOf,
   graph,
   history,
   read,
@@ -12,6 +13,7 @@ import {
   type Verb,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
+import { groupsOf } from "@placeholder/db/groups";
 import { notFound, redirect } from "next/navigation";
 
 import { DateField } from "@/components/date-field";
@@ -54,6 +56,7 @@ import { BrainGraph } from "../../graph/lazy";
 import { Split } from "../../graph/split";
 import { KindIcon, KindMark } from "../../kind-icon";
 import { TypeBadge } from "../../type-badge";
+import { Sharing } from "./sharing";
 
 // One record as a page to read: its body, with everything about it beside
 // the graph around it: fields, origin, links read as sentences, history,
@@ -85,10 +88,10 @@ export default async function Page({
     while (winner?.mergedInto) {
       winner = (await get(db, [winner.mergedInto]))[0];
     }
-    // Every record there is, for the link picker.
+    // Every record the person can see, for the link picker.
     const all: BrainRecord[] = [];
     for (let cursor: string | null = null; ;) {
-      const page = await read(db, { limit: 200, cursor });
+      const page = await read(db, { scope: "all", limit: 200, cursor });
       all.push(...page.records);
       cursor = page.cursor;
       if (!cursor) break;
@@ -104,6 +107,7 @@ export default async function Page({
       verbs: vocabulary.verbs,
       events: await history(db, { of: id }),
       near: await graph(db, [id]),
+      grants: await grantsOf(db, id),
       all,
       people: new Map(
         (
@@ -115,6 +119,7 @@ export default async function Page({
     };
   });
   if (!found) notFound();
+  const groups = await groupsOf(p);
   const {
     record: r,
     aliases,
@@ -125,9 +130,12 @@ export default async function Page({
     verbs,
     events,
     near,
+    grants,
     all,
     people,
   } = found;
+  const canEdit = r.access === "edit" || r.access === "owner";
+  const isOwner = r.access === "owner";
   const who = (author: string) => authorText(author, people);
   const properties = kind?.properties ?? [];
   const undeclared = Object.keys(r.props).filter(
@@ -214,7 +222,16 @@ export default async function Page({
         </TableBody>
       </Table>
 
-      {!r.deletedAt && (
+      <Sharing
+        action={`${recordHref(r.id)}/share`}
+        owner={isOwner}
+        ownerName={people.get(r.ownerId) ?? "someone no longer here"}
+        grants={grants}
+        groups={groups}
+        members={[...people].map(([id, name]) => ({ id, name }))}
+      />
+
+      {!r.deletedAt && canEdit && (
         <div className="flex flex-wrap gap-2">
           <FormDialog trigger="Edit" title={`Edit ${r.title || "this record"}`}>
             <form action={action} method="post" className="grid gap-3">
@@ -273,6 +290,7 @@ export default async function Page({
         edges={edges}
         others={others}
         action={action}
+        canEdit={canEdit && !r.deletedAt}
       />
       <History events={events} who={who} />
     </>
@@ -289,21 +307,23 @@ export default async function Page({
           <h1 className="text-2xl font-semibold">{r.title || "(untitled)"}</h1>
           <KindMark kind={r.kind} className="text-muted-foreground text-sm" />
         </div>
-        <form action={action} method="post">
-          {r.mergedInto ? (
-            <Button variant="outline" size="sm" name="intent" value="unmerge">
-              Unmerge
-            </Button>
-          ) : r.deletedAt ? (
-            <Button variant="outline" size="sm" name="intent" value="restore">
-              Restore
-            </Button>
-          ) : (
-            <Button variant="ghost" size="sm" name="intent" value="delete">
-              Delete
-            </Button>
-          )}
-        </form>
+        {isOwner && (
+          <form action={action} method="post">
+            {r.mergedInto ? (
+              <Button variant="outline" size="sm" name="intent" value="unmerge">
+                Unmerge
+              </Button>
+            ) : r.deletedAt ? (
+              <Button variant="outline" size="sm" name="intent" value="restore">
+                Restore
+              </Button>
+            ) : (
+              <Button variant="ghost" size="sm" name="intent" value="delete">
+                Delete
+              </Button>
+            )}
+          </form>
+        )}
       </div>
 
       {r.mergedInto && (
@@ -343,12 +363,14 @@ function Links({
   edges,
   others,
   action,
+  canEdit,
 }: {
   record: BrainRecord;
   aliases: Set<string>;
   edges: Edge[];
   others: Map<string, BrainRecord>;
   action: string;
+  canEdit: boolean;
 }) {
   const name = (id: string) =>
     aliases.has(id) ? (
@@ -381,12 +403,19 @@ function Links({
               <LocalTime at={e.occurredAt ?? e.createdAt} />
             </TableCell>
             <TableCell className="text-right">
-              <form action={action} method="post">
-                <input type="hidden" name="edge" value={e.id} />
-                <Button variant="ghost" size="xs" name="intent" value="unlink">
-                  Unlink
-                </Button>
-              </form>
+              {canEdit && (
+                <form action={action} method="post">
+                  <input type="hidden" name="edge" value={e.id} />
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    name="intent"
+                    value="unlink"
+                  >
+                    Unlink
+                  </Button>
+                </form>
+              )}
             </TableCell>
           </TableRow>
         ))}

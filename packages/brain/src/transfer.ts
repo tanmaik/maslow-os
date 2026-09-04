@@ -8,12 +8,21 @@ import {
   type EventRow,
   type RecordRow,
 } from "./rows.ts";
-import type { Author, Event, Layer, PropertyType, Query } from "./types.ts";
+import { share } from "./share.ts";
+import type {
+  Access,
+  Author,
+  Event,
+  Layer,
+  PropertyType,
+  Query,
+} from "./types.ts";
 import { merge, write } from "./write.ts";
 
-// One org's brain as a file: the vocabulary, every live record and edge, and
-// the log. Edges name their ends by source and ref, never by id, so the file
-// imports into any brain.
+// One person's brain as a file: the org's vocabulary, every live record and
+// edge of their own, the shares they gave, and their log. Edges name their
+// ends by source and ref, never by id, and shares name people by email and
+// groups by name, so the file imports into any brain.
 export type Snapshot = {
   format: "maslow-brain/1";
   exportedAt: string;
@@ -53,7 +62,23 @@ export type Snapshot = {
     sourceRef: string | null;
     author: Author;
   }[];
+  grants: {
+    record: { source: string; sourceRef: string };
+    subject: "everyone" | { group: string } | { member: string };
+    level: Access;
+    author: Author;
+  }[];
   events: Event[];
+};
+
+type GrantExportRow = {
+  source: string;
+  source_ref: string;
+  subject: "everyone" | "group" | "member";
+  level: Access;
+  author: string;
+  group_name: string | null;
+  member_email: string | null;
 };
 
 type EdgeExportRow = {
@@ -82,7 +107,8 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       .join(", ")},
             w.source as into_source, w.source_ref as into_ref
      from records r left join records w on w.id = r.merged_into
-     where r.deleted_at is null or r.merged_into is not null
+     where r.person_id = current_member()
+       and (r.deleted_at is null or r.merged_into is not null)
      order by r.created_at, r.id`,
   );
   const edges = await q.query<EdgeExportRow>(
@@ -93,12 +119,25 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
      from edges e
      join records f on f.id = e.from_id
      join records t on t.id = e.to_id
-     where (f.deleted_at is null or f.merged_into is not null)
+     where f.person_id = current_member() and t.person_id = current_member()
+       and (f.deleted_at is null or f.merged_into is not null)
        and (t.deleted_at is null or t.merged_into is not null)
      order by e.created_at, e.id`,
   );
+  const grants = await q.query<GrantExportRow>(
+    `select r.source, r.source_ref, g.subject, g.level, g.author,
+            gr.name as group_name, u.email as member_email
+     from grants g
+     join records r on r.id = g.record_id
+     left join groups gr on gr.id = g.group_id
+     left join users u on u.id = g.member_id
+     where r.person_id = current_member() and r.deleted_at is null
+       and g.author = 'person:' || current_member()::text
+     order by g.created_at, g.id`,
+  );
   const events = await q.query<EventRow>(
-    `select ${eventColumns} from events order by seq`,
+    `select ${eventColumns} from events
+     where person_id = current_member() order by seq`,
   );
   const strip = ({ name, description, author }: (typeof verbs)[number]) => ({
     name,
@@ -147,6 +186,26 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       sourceRef: e.source_ref,
       author: e.author,
     })),
+    grants: grants.rows.flatMap((g) => {
+      const subject =
+        g.subject === "everyone"
+          ? "everyone"
+          : g.subject === "group" && g.group_name
+            ? { group: g.group_name }
+            : g.subject === "member" && g.member_email
+              ? { member: g.member_email }
+              : null;
+      return subject
+        ? [
+            {
+              record: { source: g.source, sourceRef: g.source_ref },
+              subject,
+              level: g.level,
+              author: g.author,
+            },
+          ]
+        : [];
+    }),
     events: events.rows.map(toEvent),
   };
 }
@@ -158,6 +217,7 @@ export type Imported = {
   records: number;
   edges: number;
   merges: number;
+  grants: number;
 };
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -201,6 +261,18 @@ const isRecordEntry = (v: unknown) =>
   isConfidence(v.confidence) &&
   (v.layer === "derived" || v.confidence === null) &&
   (v.mergedInto === null || isRef(v.mergedInto));
+const LEVELS = new Set<string>(["view", "edit", "owner"]);
+const isGrantEntry = (v: unknown) =>
+  isObject(v) &&
+  isRef(v.record) &&
+  (v.subject === "everyone" ||
+    (isObject(v.subject) &&
+      Object.keys(v.subject).length === 1 &&
+      (isText(v.subject.group) || isText(v.subject.member)))) &&
+  isText(v.level) &&
+  LEVELS.has(v.level) &&
+  (v.subject !== "everyone" || v.level === "view") &&
+  isText(v.author);
 const isEdgeEntry = (v: unknown) =>
   isObject(v) &&
   isRef(v.from) &&
@@ -223,7 +295,8 @@ export function isSnapshot(file: unknown): file is Snapshot {
     every(file.verbs, isNamed) &&
     every(file.properties ?? [], isProperty) &&
     every(file.records, isRecordEntry) &&
-    every(file.edges, isEdgeEntry)
+    every(file.edges, isEdgeEntry) &&
+    every(file.grants ?? [], isGrantEntry)
   );
 }
 
@@ -275,6 +348,34 @@ export async function importBrain(
     await merge(q, author, winner.id, loser.id);
     merges += 1;
   }
+  // A share lands where its record, its group or its person is here.
+  let grants = 0;
+  for (const g of snapshot.grants ?? []) {
+    const record = await byRef(g.record);
+    if (!record) continue;
+    let subject:
+      | { kind: "everyone" }
+      | { kind: "group"; id: string }
+      | { kind: "member"; id: string }
+      | null = null;
+    if (g.subject === "everyone") subject = { kind: "everyone" };
+    else if ("group" in g.subject) {
+      const found = await q.query<{ id: string }>(
+        "select id from groups where name = $1",
+        [g.subject.group],
+      );
+      if (found.rows[0]) subject = { kind: "group", id: found.rows[0].id };
+    } else {
+      const found = await q.query<{ id: string }>(
+        "select id from users where email = $1",
+        [g.subject.member],
+      );
+      if (found.rows[0]) subject = { kind: "member", id: found.rows[0].id };
+    }
+    if (!subject) continue;
+    await share(q, author, record.id, subject, g.level);
+    grants += 1;
+  }
   return {
     kinds: after.kinds - before.kinds,
     properties: after.properties - before.properties,
@@ -282,5 +383,6 @@ export async function importBrain(
     records,
     edges,
     merges,
+    grants,
   };
 }

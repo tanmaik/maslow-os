@@ -6,7 +6,7 @@ export {
   type Definition,
   type KindDefinition,
 } from "./catalog.ts";
-export { Conflict, Invalid, NotFound } from "./errors.ts";
+export { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
 export { defineProperty, type PropertyDefinition } from "./properties.ts";
 export {
   aliasesOf,
@@ -21,6 +21,7 @@ export {
   type Page,
   type ReadOptions,
 } from "./read.ts";
+export { accessOf, grantsOf, share, unshare } from "./share.ts";
 export {
   exportBrain,
   importBrain,

@@ -1,3 +1,4 @@
+import { groupsOf } from "@placeholder/db/groups";
 import { orgOf } from "@placeholder/db/settings";
 import { redirect } from "next/navigation";
 
@@ -39,6 +40,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeleteOrg } from "@/app/settings/delete-org";
+import { Groups } from "@/app/settings/groups";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
 import { amount, dollars } from "@/lib/meter";
@@ -64,6 +66,7 @@ type Notice = {
     | "member"
     | "gone";
   invite?: "sent" | "pending" | "member";
+  group?: "saved" | "deleted" | "gone";
 };
 
 const NOTICES: Record<string, string> = {
@@ -101,6 +104,9 @@ const NOTICES: Record<string, string> = {
   "invite=founders":
     "Outside production, invitations reach founders only; that address would get no mail.",
   "member=member": "They are a member now.",
+  "group=saved": "Saved.",
+  "group=deleted": "Group deleted, and the shares it held with it.",
+  "group=gone": "Nobody by that id is in the org.",
 };
 
 // The signed-in person's org and profile, and who is in the org.
@@ -114,6 +120,7 @@ export default async function Settings({
   const n = await searchParams;
   const said = (k: keyof Notice) => (n[k] ? NOTICES[`${k}=${n[k]}`] : null);
   const { org, members, invited, past } = await orgOf(p);
+  const groups = await groupsOf(p);
   const me = members.find((m) => m.id === p.userId)!;
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
@@ -563,6 +570,13 @@ export default async function Settings({
           </CardContent>
         </Card>
       )}
+
+      <Groups
+        groups={groups}
+        members={members.map((m) => ({ id: m.id, name: m.name }))}
+        owner={owner}
+        said={said("group")}
+      />
     </main>
   );
 }

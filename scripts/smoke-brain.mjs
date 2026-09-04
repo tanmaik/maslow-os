@@ -26,6 +26,14 @@ export async function smokeBrain(stack) {
     );
   const brain = await import("../packages/brain/src/index.ts");
   const { seeds, vocabulary } = await import("../packages/brain/src/seed.ts");
+  const groupsDoor = await import("../packages/db/src/groups.ts");
+  // A member of an org as a principal, the way a session names one.
+  const member = (org, i) => ({
+    orgId: org.id,
+    personId: org.users[i].personId,
+    userId: org.users[i].id,
+    role: i === 0 ? "owner" : "member",
+  });
 
   let ok = true;
   const check = (label, pass, detail) => {
@@ -639,6 +647,557 @@ export async function smokeBrain(stack) {
       leaked.length === 0,
       `${leaked.length} rows`,
     );
+
+    // Sharing inside an org made for it: an owner, an editor and a viewer
+    // admitted by invitation, and a stranger in an org of their own.
+    const { invite } = await import("../packages/db/src/auth.ts");
+    const admit = (email, firstName) =>
+      signIn({ email, firstName, lastName: null });
+    const marge = await admit("owner@sharing.test", "Marge");
+    await invite(marge, "editor@sharing.test");
+    await invite(marge, "viewer@sharing.test");
+    const otto = await admit("editor@sharing.test", "Otto");
+    const pim = await admit("viewer@sharing.test", "Pim");
+    const ottoElsewhere = await admit("stranger@sharing.test", "Stranger");
+    const as = (who) => (fn) => asPerson(who, fn);
+    const attempt = async (fn) => {
+      try {
+        await fn();
+        return "allowed";
+      } catch (err) {
+        return err.constructor.name;
+      }
+    };
+    const noteOf = (ref, title) => ({
+      kind: "note",
+      layer: "source",
+      source: "smoke",
+      sourceRef: ref,
+      title,
+    });
+    const [privateNote] = (
+      await as(marge)((q) =>
+        brain.write(q, "smoke", {
+          kinds: [{ name: "note", description: "Something written down." }],
+          verbs: [{ name: "mentions", description: "Talks about." }],
+          records: [noteOf("share-1", "Levain log")],
+        }),
+      )
+    ).records;
+    const unseen = await as(otto)(async (q) => ({
+      got: await brain.get(q, [privateNote]),
+      shared: await brain.read(q, { scope: "shared" }),
+    }));
+    check(
+      "a colleague sees nothing until shared",
+      unseen.got.length === 0 && unseen.shared.records.length === 0,
+      `${unseen.got.length} records`,
+    );
+
+    await as(marge)((q) =>
+      brain.share(
+        q,
+        `person:${marge.userId}`,
+        privateNote,
+        {
+          kind: "member",
+          id: otto.userId,
+        },
+        "view",
+      ),
+    );
+    const viewer = await as(otto)(async (q) => {
+      const [r] = await brain.get(q, [privateNote]);
+      return {
+        r,
+        shared: (await brain.read(q, { scope: "shared" })).records.length,
+        mine: (await brain.read(q, { scope: "mine" })).records.length,
+        edit: await attempt(() =>
+          brain.edit(q, "smoke", privateNote, r.version, { title: "Mine now" }),
+        ),
+        share: await attempt(() =>
+          brain.share(q, "smoke", privateNote, { kind: "everyone" }, "view"),
+        ),
+        history: (await brain.history(q, { of: privateNote })).length,
+      };
+    });
+    check(
+      "view sees, and only sees",
+      viewer.r?.access === "view" &&
+        viewer.r.ownerId === marge.userId &&
+        viewer.shared === 1 &&
+        viewer.mine === 0 &&
+        viewer.edit === "Forbidden" &&
+        viewer.share === "Forbidden" &&
+        viewer.history >= 1,
+      `access ${viewer.r?.access}, edit ${viewer.edit}, share ${viewer.share}`,
+    );
+
+    await as(marge)((q) =>
+      brain.share(
+        q,
+        `person:${marge.userId}`,
+        privateNote,
+        {
+          kind: "member",
+          id: otto.userId,
+        },
+        "edit",
+      ),
+    );
+    const editor = await as(otto)(async (q) => {
+      const [r] = await brain.get(q, [privateNote]);
+      const edited = await brain.edit(q, "smoke", privateNote, r.version, {
+        title: "Levain log, revised",
+      });
+      const [own] = (
+        await brain.write(q, "smoke", {
+          records: [noteOf("otto-1", "Otto's addendum")],
+        })
+      ).records;
+      const link = await attempt(() =>
+        brain.write(q, "smoke", {
+          edges: [
+            {
+              from: { id: own },
+              verb: "mentions",
+              to: { id: privateNote },
+              source: "smoke",
+            },
+          ],
+        }),
+      );
+      return {
+        edited,
+        link,
+        remove: await attempt(() => brain.remove(q, "smoke", privateNote)),
+      };
+    });
+    check(
+      "edit changes and links, but does not remove",
+      editor.edited.title === "Levain log, revised" &&
+        editor.edited.access === "edit" &&
+        editor.link === "allowed" &&
+        editor.remove === "Forbidden",
+      `link ${editor.link}, remove ${editor.remove}`,
+    );
+
+    await as(marge)((q) =>
+      brain.share(
+        q,
+        `person:${marge.userId}`,
+        privateNote,
+        {
+          kind: "member",
+          id: otto.userId,
+        },
+        "owner",
+      ),
+    );
+    const coOwner = await as(otto)(async (q) => {
+      await brain.remove(q, "smoke", privateNote);
+      await brain.restore(q, "smoke", privateNote);
+      const [r] = await brain.get(q, [privateNote]);
+      return r;
+    });
+    check(
+      "owner removes and restores",
+      coOwner?.access === "owner" && coOwner.deletedAt === null,
+      `access ${coOwner?.access}`,
+    );
+
+    // Groups: owners make them; a share to a group reaches its members.
+    const bakers = await groupsDoor.defineGroup(
+      marge,
+      "Bakers",
+      "At the ovens.",
+    );
+    await groupsDoor.addToGroup(marge, bakers, otto.userId);
+    const [teamNote] = (
+      await as(marge)((q) =>
+        brain.write(q, "smoke", { records: [noteOf("share-2", "Oven rota")] }),
+      )
+    ).records;
+    await as(marge)((q) =>
+      brain.share(
+        q,
+        `person:${marge.userId}`,
+        teamNote,
+        {
+          kind: "group",
+          id: bakers,
+        },
+        "view",
+      ),
+    );
+    const reach = {
+      otto: (await as(otto)((q) => brain.get(q, [teamNote]))).length,
+      pim: (await as(pim)((q) => brain.get(q, [teamNote]))).length,
+    };
+    await groupsDoor.addToGroup(marge, bakers, pim.userId);
+    const reachAfter = (await as(pim)((q) => brain.get(q, [teamNote]))).length;
+    const notOwner = await attempt(() =>
+      groupsDoor.defineGroup(pim, "Rebels", ""),
+    );
+    const listed = await groupsDoor.groupsOf(pim);
+    check(
+      "a group share follows the group",
+      reach.otto === 1 &&
+        reach.pim === 0 &&
+        reachAfter === 1 &&
+        notOwner === "Forbidden" &&
+        listed[0].everyone &&
+        listed[0].members.length === 3 &&
+        listed.some((g) => g.name === "Bakers" && g.members.length === 2),
+      `pim ${reach.pim} then ${reachAfter}, define as member ${notOwner}`,
+    );
+
+    // Everyone: view only.
+    const [orgNote] = (
+      await as(marge)((q) =>
+        brain.write(q, "smoke", { records: [noteOf("share-3", "Market day")] }),
+      )
+    ).records;
+    const everyoneEdit = await attempt(() =>
+      as(marge)((q) =>
+        brain.share(q, "smoke", orgNote, { kind: "everyone" }, "edit"),
+      ),
+    );
+    await as(marge)((q) =>
+      brain.share(
+        q,
+        `person:${marge.userId}`,
+        orgNote,
+        { kind: "everyone" },
+        "view",
+      ),
+    );
+    const pimSees = await as(pim)(async (q) => {
+      const [r] = await brain.get(q, [orgNote]);
+      const [own] = (
+        await brain.write(q, "smoke", {
+          records: [noteOf("pim-1", "Pim's stall list")],
+        })
+      ).records;
+      return {
+        r,
+        linkFrom: await attempt(() =>
+          brain.write(q, "smoke", {
+            edges: [
+              {
+                from: { id: orgNote },
+                verb: "mentions",
+                to: { id: own },
+                source: "smoke",
+              },
+            ],
+          }),
+        ),
+        linkTo: await attempt(() =>
+          brain.write(q, "smoke", {
+            edges: [
+              {
+                from: { id: own },
+                verb: "mentions",
+                to: { id: orgNote },
+                source: "smoke",
+              },
+            ],
+          }),
+        ),
+      };
+    });
+    const elsewhere = await as(ottoElsewhere)((q) =>
+      brain.get(q, [privateNote, teamNote, orgNote]),
+    );
+    check(
+      "everyone sees, at view, inside the org",
+      everyoneEdit === "Invalid" &&
+        pimSees.r?.access === "view" &&
+        pimSees.linkFrom === "Forbidden" &&
+        pimSees.linkTo === "allowed" &&
+        elsewhere.length === 0,
+      `everyone at edit ${everyoneEdit}, link from ${pimSees.linkFrom}, to ${pimSees.linkTo}, other org ${elsewhere.length}`,
+    );
+
+    // Export carries the shares a person gave, and nothing of anyone else's.
+    const margeFile = await as(marge)((q) => brain.exportBrain(q));
+    const ottoFile = await as(otto)((q) => brain.exportBrain(q));
+    check(
+      "export holds your rows and the shares you gave",
+      margeFile.grants.length === 3 &&
+        margeFile.grants.some((g) => g.subject === "everyone") &&
+        margeFile.grants.some((g) => g.subject.group === "Bakers") &&
+        margeFile.grants.some(
+          (g) => g.subject.member === "editor@sharing.test",
+        ) &&
+        !ottoFile.records.some((r) => r.sourceRef === "share-1") &&
+        ottoFile.records.some((r) => r.sourceRef === "otto-1"),
+      `${margeFile.grants.length} shares, otto's file has ${ottoFile.records.length} records`,
+    );
+
+    // An editor cannot make themselves the owner, and a link's maker can
+    // unlink it after its far end stopped being shared with them.
+    await as(marge)((q) =>
+      brain.share(
+        q,
+        `person:${marge.userId}`,
+        privateNote,
+        {
+          kind: "member",
+          id: otto.userId,
+        },
+        "edit",
+      ),
+    );
+    const grab = await as(otto)((q) =>
+      attempt(() =>
+        q.query("update records set person_id = $2 where id = $1", [
+          privateNote,
+          otto.userId,
+        ]),
+      ),
+    );
+    const stillMarge = await as(marge)(async (q) => {
+      const [r] = await brain.get(q, [privateNote]);
+      return r.ownerId === marge.userId && r.access === "owner";
+    });
+    const edgeToNote = await as(otto)(async (q) => {
+      const [own] = (
+        await brain.write(q, "smoke", {
+          records: [noteOf("otto-3", "Otto links out")],
+        })
+      ).records;
+      await brain.write(q, "smoke", {
+        edges: [
+          {
+            from: { id: own },
+            verb: "mentions",
+            to: { id: privateNote },
+            source: "smoke",
+          },
+        ],
+      });
+      return (await brain.edgesOf(q, own))[0].id;
+    });
+    await as(marge)((q) =>
+      brain.unshare(q, privateNote, { kind: "member", id: otto.userId }),
+    );
+    const unlinked = await as(otto)((q) =>
+      attempt(() => brain.unlink(q, "smoke", edgeToNote)),
+    );
+    check(
+      "ownership cannot be taken; a maker can always unlink",
+      grab !== "allowed" && stillMarge && unlinked === "allowed",
+      `grab ${grab}, unlink ${unlinked}`,
+    );
+    await as(marge)((q) =>
+      brain.share(
+        q,
+        `person:${marge.userId}`,
+        privateNote,
+        {
+          kind: "member",
+          id: otto.userId,
+        },
+        "owner",
+      ),
+    );
+
+    // A co-owner's share on my record is theirs, not mine, in my export; and
+    // a group from another org cannot be joined.
+    await as(otto)((q) =>
+      brain.share(
+        q,
+        `person:${otto.userId}`,
+        privateNote,
+        {
+          kind: "member",
+          id: pim.userId,
+        },
+        "view",
+      ),
+    );
+    const margeGave = (await as(marge)((q) => brain.exportBrain(q))).grants
+      .filter((g) => g.record.sourceRef === "share-1")
+      .map((g) => g.subject.member ?? g.subject);
+    const theirs = await groupsDoor.defineGroup(ottoElsewhere, "Theirs", "");
+    const joinTheirs = await as(marge)((q) =>
+      attempt(() =>
+        q.query(
+          "insert into group_members (group_id, member_id) values ($1, $2)",
+          [theirs, otto.userId],
+        ),
+      ),
+    );
+    check(
+      "a share given for you is not yours to export; groups stay in their org",
+      !margeGave.includes("viewer@sharing.test") && joinTheirs !== "allowed",
+      `marge's shares on share-1: ${margeGave.join(", ") || "none"}; joining another org's group ${joinTheirs}`,
+    );
+
+    // An editor rewrites a link on a shared record; a ref two people carry
+    // must be named by id; merging into an alias needs its winner.
+    const relinked = await as(marge)(async (q) => {
+      const [target] = (
+        await brain.write(q, "smoke", {
+          records: [noteOf("target-1", "A target")],
+        })
+      ).records;
+      await brain.share(
+        q,
+        `person:${marge.userId}`,
+        target,
+        {
+          kind: "member",
+          id: otto.userId,
+        },
+        "view",
+      );
+      await brain.write(q, "smoke", {
+        edges: [
+          {
+            from: { id: privateNote },
+            verb: "mentions",
+            to: { id: target },
+            source: "smoke",
+            confidence: 0.5,
+          },
+        ],
+      });
+      return target;
+    });
+    const rewritten = await as(otto)((q) =>
+      brain.write(q, "smoke", {
+        edges: [
+          {
+            from: { id: privateNote },
+            verb: "mentions",
+            to: { id: relinked },
+            source: "smoke",
+            confidence: 0.9,
+          },
+        ],
+      }),
+    );
+    for (const who of [marge, otto]) {
+      await as(who)(async (q) => {
+        const [dup] = (
+          await brain.write(q, "smoke", {
+            records: [noteOf("dup-1", "Same ref")],
+          })
+        ).records;
+        await brain.share(
+          q,
+          `person:${who.userId}`,
+          dup,
+          { kind: "everyone" },
+          "view",
+        );
+      });
+    }
+    const ambiguous = await as(pim)(async (q) => {
+      const [own] = (
+        await brain.write(q, "smoke", {
+          records: [noteOf("pim-2", "Pim points")],
+        })
+      ).records;
+      return attempt(() =>
+        brain.write(q, "smoke", {
+          edges: [
+            {
+              from: { id: own },
+              verb: "mentions",
+              to: { source: "smoke", sourceRef: "dup-1" },
+              source: "smoke",
+            },
+          ],
+        }),
+      );
+    });
+    const [a, b, c] = (
+      await as(marge)((q) =>
+        brain.write(q, "smoke", {
+          records: [
+            noteOf("marge-a", "Marge a"),
+            noteOf("marge-b", "Marge b"),
+            noteOf("marge-c", "Marge c"),
+          ],
+        }),
+      )
+    ).records;
+    await as(marge)(async (q) => {
+      await brain.merge(q, "smoke", b, a);
+      for (const r of [a, c]) {
+        await brain.share(
+          q,
+          `person:${marge.userId}`,
+          r,
+          { kind: "member", id: otto.userId },
+          "owner",
+        );
+      }
+      await brain.share(
+        q,
+        `person:${marge.userId}`,
+        b,
+        { kind: "member", id: otto.userId },
+        "view",
+      );
+    });
+    const intoAlias = await as(otto)((q) =>
+      attempt(() => brain.merge(q, "smoke", a, c)),
+    );
+    const crossPerson = await as(otto)(async (q) => {
+      const [o] = (
+        await brain.write(q, "smoke", {
+          records: [noteOf("otto-5", "Otto's own")],
+        })
+      ).records;
+      return attempt(() => brain.merge(q, "smoke", c, o));
+    });
+    check(
+      "editors relink, ambiguous refs are refused, a merge needs its winner",
+      rewritten.edges === 1 &&
+        ambiguous === "Invalid" &&
+        intoAlias === "Forbidden" &&
+        crossPerson === "Invalid",
+      `relink ${rewritten.edges}, ambiguous ${ambiguous}, merge into alias ${intoAlias}, across people ${crossPerson}`,
+    );
+
+    // A deleted group takes its shares with it, even on records the org
+    // owner does not own.
+    const [ottoNote] = (
+      await as(otto)((q) =>
+        brain.write(q, "smoke", { records: [noteOf("otto-2", "Otto's rota")] }),
+      )
+    ).records;
+    await as(otto)((q) =>
+      brain.share(
+        q,
+        `person:${otto.userId}`,
+        ottoNote,
+        {
+          kind: "group",
+          id: bakers,
+        },
+        "view",
+      ),
+    );
+    const pimHad = (await as(pim)((q) => brain.get(q, [ottoNote]))).length;
+    await groupsDoor.deleteGroup(marge, bakers);
+    const pimHas = (await as(pim)((q) => brain.get(q, [ottoNote]))).length;
+    check(
+      "deleting a group takes its shares",
+      pimHad === 1 && pimHas === 0,
+      `pim ${pimHad} then ${pimHas}`,
+    );
+
+    await as(marge)((q) =>
+      brain.unshare(q, privateNote, { kind: "member", id: otto.userId }),
+    );
+    const gone = (await as(otto)((q) => brain.get(q, [privateNote]))).length;
+    check("unshare takes it away", gone === 0, `${gone} records`);
 
     // Export and import.
     const owner = new pg.Client({

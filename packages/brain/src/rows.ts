@@ -4,7 +4,11 @@ import type { BrainRecord, Edge, Event, Property, Verb } from "./types.ts";
 
 export const recordColumns =
   "id, kind, layer, source, source_ref, title, body, props, occurred_at, " +
-  "confidence, author, version, created_at, updated_at, deleted_at, merged_into";
+  "confidence, author, version, created_at, updated_at, deleted_at, " +
+  "merged_into, person_id";
+
+// The columns and what the reader may do, for any select of records.
+export const recordSelect = `${recordColumns}, access_level(id) as access`;
 
 export type RecordRow = {
   id: string;
@@ -23,6 +27,8 @@ export type RecordRow = {
   updated_at: Date;
   deleted_at: Date | null;
   merged_into: string | null;
+  person_id: string;
+  access: BrainRecord["access"];
 };
 
 export const toRecord = (r: RecordRow): BrainRecord => ({
@@ -42,6 +48,8 @@ export const toRecord = (r: RecordRow): BrainRecord => ({
   updatedAt: r.updated_at,
   deletedAt: r.deleted_at,
   mergedInto: r.merged_into,
+  ownerId: r.person_id,
+  access: r.access,
 });
 
 export const verbColumns = "id, name, description, author, created_at";

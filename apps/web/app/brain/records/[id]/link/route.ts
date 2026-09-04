@@ -1,4 +1,4 @@
-import { Invalid, NotFound, write } from "@placeholder/brain";
+import { Forbidden, Invalid, NotFound, write } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { NextResponse } from "next/server";
 
@@ -42,6 +42,9 @@ export async function POST(
   } catch (err) {
     if (err instanceof Invalid || err instanceof NotFound) {
       return new Response(err.message, { status: 400 });
+    }
+    if (err instanceof Forbidden) {
+      return new Response(err.message, { status: 403 });
     }
     throw err;
   }

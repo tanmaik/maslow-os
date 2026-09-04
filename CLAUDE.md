@@ -128,10 +128,14 @@ as rows, never as columns: values stay in one JSON column and the doors check
 and query them by the declaration. Nothing changes a table's shape after
 deploy.
 
-Records and edges are the person's; the vocabulary is the org's. A colleague
-in the same org sees none of a person's records until sharing says otherwise.
-Ownership is never null: what an org shares is a later visibility rule, not a
-class of ownerless records.
+Records and edges are the person's; the vocabulary is the org's. A record is
+owned by whoever wrote it, always, and seen by nobody else until its owner
+shares it: with a person, a group, or everyone in the org, at view, edit or
+owner. The most any path gives a member is what they may do; there are no
+deny rules. Everyone is every current member and is not a row. Editors
+change; owners also share, remove and merge; everyone can only be given
+view. Org owners manage groups, not content. A share records who gave it,
+person or agent.
 
 One read door and one write door, in `packages/brain`; nothing else touches
 the tables. Writes are idempotent on a record's source and ref. Events are

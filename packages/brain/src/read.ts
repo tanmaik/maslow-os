@@ -4,6 +4,7 @@ import {
   edgeColumns,
   eventColumns,
   recordColumns,
+  recordSelect,
   toEdge,
   toEvent,
   toRecord,
@@ -23,6 +24,8 @@ import type {
 } from "./types.ts";
 
 export type ReadOptions = {
+  // Whose records: the reader's own, what others shared with them, or both.
+  scope?: "mine" | "shared" | "all";
   kind?: string;
   layer?: Layer;
   source?: string;
@@ -103,6 +106,10 @@ const DIRECTIONS = { asc: "asc", desc: "desc" } as const;
 // record carries its source and ref, so a caller can cite it.
 export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+  const scope = opts.scope ?? "mine";
+  if (!["mine", "shared", "all"].includes(scope)) {
+    throw new Invalid(`"${String(scope)}" is not a scope`);
+  }
   const params: unknown[] = [
     opts.includeDeleted ?? false,
     opts.kind ?? null,
@@ -129,6 +136,11 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     "($6::timestamptz is null or coalesce(occurred_at, created_at) >= $6)",
     "($7::timestamptz is null or coalesce(occurred_at, created_at) < $7)",
     "($8::text is null or search @@ websearch_to_tsquery('english', $8))",
+    scope === "mine"
+      ? "person_id = current_member()"
+      : scope === "shared"
+        ? "person_id <> current_member()"
+        : "true",
   ];
   const param = (value: unknown) => `$${params.push(value)}`;
 
@@ -188,7 +200,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     direction = DIRECTIONS[wanted];
     keyOf = (r) => String(r.props[p.name]);
   }
-  const orderName = `${opts.kind ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
+  const orderName = `${scope}/${opts.kind ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
   if (opts.cursor) {
     const c = decode(opts.cursor, orderName);
     if (!keyFits(orderType, c.key)) throw new Invalid("that is not a cursor");
@@ -198,7 +210,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   }
 
   const { rows } = await q.query<RecordRow>(
-    `select ${recordColumns} from records r
+    `select ${recordSelect} from records r
      where ${where.join("\n       and ")}
      order by ${order} ${direction}, id ${direction}
      limit ${param(limit + 1)}`,
@@ -218,7 +230,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
 export async function get(q: Query, ids: string[]): Promise<BrainRecord[]> {
   if (ids.length === 0) return [];
   const { rows } = await q.query<RecordRow>(
-    `select ${recordColumns} from records where id = any($1::uuid[])`,
+    `select ${recordSelect} from records where id = any($1::uuid[])`,
     [ids],
   );
   return rows.map(toRecord);

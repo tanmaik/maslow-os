@@ -8,6 +8,25 @@ export type Author = string;
 
 export type Layer = "source" | "derived";
 
+// What a member may do with a record: see it, change it, or everything.
+export type Access = "view" | "edit" | "owner";
+
+// Who a grant is for: one member, one group, or everyone in the org.
+export type Subject =
+  | { kind: "everyone" }
+  | { kind: "group"; id: string }
+  | { kind: "member"; id: string };
+
+// One share: a subject may do this much with one record.
+export type Grant = {
+  id: string;
+  recordId: string;
+  subject: Subject;
+  level: Access;
+  author: Author;
+  createdAt: Date;
+};
+
 // One verb an edge can carry.
 export type Verb = {
   id: string;
@@ -55,6 +74,9 @@ export type BrainRecord = {
   deletedAt: Date | null;
   // Set when this record was merged into another and now stands aside for it.
   mergedInto: string | null;
+  // The membership that wrote it, and what the reader may do with it.
+  ownerId: string;
+  access: Access;
 };
 
 // One directed link between two records: what, how strongly, since when.

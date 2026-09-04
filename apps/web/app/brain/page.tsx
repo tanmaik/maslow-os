@@ -48,6 +48,7 @@ import { TypeBadge } from "./type-badge";
 // The query the table shows: a kind or all, a search, one value per enum
 // field, a sort column and direction, and where the page starts.
 type Params = {
+  scope?: "mine" | "shared" | "all";
   kind?: string;
   q?: string;
   sort?: string;
@@ -103,10 +104,13 @@ export default async function Page({
     (f) => f.name === params.sort && sortable(f),
   );
   const dir = params.dir === "asc" ? "asc" : "desc";
+  const scope =
+    params.scope === "shared" || params.scope === "all" ? params.scope : "mine";
   let page, whole;
   try {
     ({ page, whole } = await asPerson(p, async (db) => ({
       page: await read(db, {
+        scope,
         kind: kind?.name,
         query: params.q || undefined,
         where,
@@ -155,6 +159,16 @@ export default async function Page({
       </div>
       <form method="get" className="flex flex-wrap items-center gap-2">
         {kind && <input type="hidden" name="kind" value={kind.name} />}
+        <Select name="scope" defaultValue={scope}>
+          <SelectTrigger aria-label="Whose">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="mine">Mine</SelectItem>
+            <SelectItem value="shared">Shared with me</SelectItem>
+            <SelectItem value="all">Everything I can see</SelectItem>
+          </SelectContent>
+        </Select>
         <div className="relative w-full sm:w-64">
           <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
@@ -298,6 +312,11 @@ function Row({ r, kind }: { r: BrainRecord; kind?: Kind }) {
         {r.deletedAt && (
           <Badge variant="outline" className="ml-2">
             {r.mergedInto ? "merged" : "deleted"}
+          </Badge>
+        )}
+        {r.access !== "owner" && (
+          <Badge variant="secondary" className="ml-2">
+            shared, {r.access}
           </Badge>
         )}
       </TableCell>

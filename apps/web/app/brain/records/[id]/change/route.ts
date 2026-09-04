@@ -2,6 +2,7 @@ import {
   catalog,
   Conflict,
   edit,
+  Forbidden,
   get,
   Invalid,
   NotFound,
@@ -71,6 +72,9 @@ export async function POST(
   } catch (err) {
     if (err instanceof Invalid || err instanceof NotFound) {
       return new Response(err.message, { status: 400 });
+    }
+    if (err instanceof Forbidden) {
+      return new Response(err.message, { status: 403 });
     }
     if (err instanceof Conflict) {
       return new Response(
