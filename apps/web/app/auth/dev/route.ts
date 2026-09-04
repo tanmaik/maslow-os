@@ -1,4 +1,5 @@
-import { orgs, people } from "@placeholder/db/seed";
+import { asOrg } from "@placeholder/db";
+import { orgs } from "@placeholder/db/seed";
 
 import { deployment } from "@/lib/deployment";
 import { origin } from "@/lib/origin";
@@ -11,9 +12,23 @@ export async function POST(request: Request) {
   const org = orgs.find((o) => o.users.some((u) => u.id === userId));
   if (!org || typeof userId !== "string")
     return new Response("No such seeded person.", { status: 400 });
-  // The seed makes each org's first membership its owner.
+  const live = await asOrg(
+    org.id,
+    async (q) =>
+      (
+        await q.query<{ role: "owner" | "member" }>(
+          "select role from users where id = $1",
+          [userId],
+        )
+      ).rows[0],
+  );
+  if (!live)
+    return new Response("That person was removed from the org.", {
+      status: 400,
+    });
   const u = org.users.find((u) => u.id === userId)!;
-  const role = org.users[0]?.id === userId ? "owner" : "member";
-  const personId = people.find((p) => p.email === u.email)!.id;
-  return signedIn({ personId, orgId: org.id, userId, role }, origin(request));
+  return signedIn(
+    { personId: u.personId, orgId: org.id, userId, role: live.role },
+    origin(request),
+  );
 }

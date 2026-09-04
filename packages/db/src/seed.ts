@@ -41,9 +41,13 @@ export const people = [
   },
 ] as const;
 
-const person = (id: string) => people.find((p) => p.id === id)!;
+// A membership carries its person's email and name, and remembers the person.
+const person = (id: string) => ({
+  ...people.find((p) => p.id === id)!,
+  personId: id,
+});
 
-// Each org lists its memberships; the first is the owner. A membership id is
+// Each org lists its memberships; the first is the principal. A membership id is
 // the person id with the org's digit swapped in, so it stays readable.
 export const orgs = [
   {
@@ -97,11 +101,13 @@ export const orgs = [
   },
 ] as const;
 
-// Idempotent: rows that already exist are left alone.
+// Idempotent: rows that already exist are left alone. One transaction, so an
+// org and its principal arrive together.
 export async function seed(url: string): Promise<void> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
+    await client.query("begin");
     for (const p of people) {
       await client.query(
         "insert into people (id, email, first_name, last_name) values ($1, $2, $3, $4) on conflict (id) do nothing",
@@ -110,17 +116,16 @@ export async function seed(url: string): Promise<void> {
     }
     for (const org of orgs) {
       await client.query(
-        "insert into orgs (id, slug, name) values ($1, $2, $3) on conflict (id) do nothing",
-        [org.id, org.slug, org.name],
+        "insert into orgs (id, slug, name, principal_id) values ($1, $2, $3, $4) on conflict (id) do nothing",
+        [org.id, org.slug, org.name, org.users[0].id],
       );
       for (const [i, u] of org.users.entries()) {
-        const personId = people.find((p) => p.email === u.email)!.id;
         await client.query(
           "insert into users (id, org_id, person_id, email, first_name, last_name, role) values ($1, $2, $3, $4, $5, $6, $7) on conflict (id) do nothing",
           [
             u.id,
             org.id,
-            personId,
+            u.personId,
             u.email,
             u.firstName,
             u.lastName,
@@ -129,6 +134,7 @@ export async function seed(url: string): Promise<void> {
         );
       }
     }
+    await client.query("commit");
   } finally {
     await client.end();
   }

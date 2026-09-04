@@ -251,7 +251,11 @@ try {
   orgForm.set("logo", new File([png], "l.png", { type: "image/png" }));
   const renamed = await settings("/settings/org", orgForm);
   const settingsPage = async (cookie) =>
-    (await fetch(`${stack.url}/settings`, { headers: { cookie } })).text();
+    (
+      await (
+        await fetch(`${stack.url}/settings`, { headers: { cookie } })
+      ).text()
+    ).replaceAll("<!-- -->", "");
   const afterRename = await settingsPage(margeOwner);
   check(
     "org renamed, logo stored",
@@ -293,21 +297,153 @@ try {
     selfRemove.headers.get("location")?.split("?")[1],
   );
   const pim = await signIn("20000000-0000-4000-8000-000000000003");
-  const pimRemove = await settings(
-    "/settings/members",
-    new URLSearchParams({ remove: "20000000-0000-4000-8000-000000000003" }),
+  // Pim writes a note before leaving. Removed, he is a past member: hidden
+  // from the roster, listed under past members, his note kept under the
+  // membership he held. Brought back, or invited back, he is the same member
+  // with the same note. Purged, he and the note are gone.
+  const noted = await fetch(`${stack.url}/brain/note`, {
+    method: "POST",
+    headers: { cookie: pim },
+    body: new URLSearchParams({ title: "Ovens", body: "Preheat by five." }),
+    redirect: "manual",
+  });
+  check(
+    "member writes a note",
+    noted.status === 303,
+    `answered ${noted.status}`,
   );
+  const pimId = "20000000-0000-4000-8000-000000000003";
+  const remove = (cookie = margeOwner) =>
+    settings(
+      "/settings/members",
+      new URLSearchParams({ remove: pimId }),
+      cookie,
+    );
+  const pimRemove = await remove();
   const afterRemove = await settingsPage(margeOwner);
+  // A form button that acts on Pim, whichever order its attributes render in.
+  const button = (name) =>
+    new RegExp(`<button(?=[^>]*name="${name}")(?=[^>]*value="${pimId}")`);
   check(
     "member removed",
     pimRemove.headers.get("location")?.endsWith("member=removed") &&
-      !afterRemove.includes("pim@bluewhale.test"),
-    "Pim gone",
+      !button("remove").test(afterRemove) &&
+      afterRemove.includes("Show 1 past member") &&
+      button("restore").test(afterRemove),
+    "off the roster, under past members",
   );
   check(
     "removed member's session is dead",
     (await page(pim)).includes("Pick a person from the pill"),
     "sign-in page",
+  );
+  check(
+    "a member sees no past members",
+    !(await settingsPage(otto)).includes("Show 1 past member"),
+    "no past members for Otto",
+  );
+  const { asOrg, asPerson } = await import("../packages/db/src/index.ts");
+  const bakery = orgs.find((o) => o.users.some((u) => u.id === pimId));
+  const pimSeed = bakery.users.find((u) => u.id === pimId);
+  // Read as the org naming the old membership, which no person can be now.
+  const pimNotes = () =>
+    asOrg(bakery.id, async (q) => {
+      await q.query("select set_config('app.member_id', $1, true)", [pimId]);
+      return (
+        await q.query(
+          "select count(*)::int as n from records where title = 'Ovens'",
+        )
+      ).rows[0].n;
+    });
+  check(
+    "a leaver's notes keep their author",
+    (await pimNotes()) === 1,
+    "1 note",
+  );
+  // A request that resolved Pim before his removal cannot act as him after.
+  const stalePim = await asPerson(
+    { orgId: bakery.id, personId: pimSeed.personId, userId: pimId },
+    async (q) => q.query("select 1"),
+  ).then(
+    () => "acted",
+    (err) => err.constructor.name,
+  );
+  check("a stale principal is refused", stalePim === "Gone", stalePim);
+  const memberRestore = await settings(
+    "/settings/members",
+    new URLSearchParams({ restore: pimId }),
+    otto,
+  );
+  check(
+    "member cannot bring back",
+    memberRestore.status === 403,
+    `answered ${memberRestore.status}`,
+  );
+  const restored = await settings(
+    "/settings/members",
+    new URLSearchParams({ restore: pimId }),
+  );
+  const pimAgain = await signIn(pimId);
+  const pimBrain = await (
+    await fetch(`${stack.url}/brain`, { headers: { cookie: pimAgain } })
+  ).text();
+  check(
+    "a past member brought back has their notes",
+    restored.headers.get("location")?.endsWith("member=restored") &&
+      (await settingsPage(margeOwner)).includes("pim@bluewhale.test") &&
+      pimBrain.includes("Ovens"),
+    `${restored.headers.get("location")?.split("?")[1]}, Ovens on his brain page`,
+  );
+  await remove();
+  const reinvite = await fetch(`${stack.url}/invite`, {
+    method: "POST",
+    headers: { cookie: margeOwner },
+    body: new URLSearchParams({ email: pimSeed.email }),
+    redirect: "manual",
+  });
+  const { signIn: readmit, membershipsOf: orgsOf } =
+    await import("../packages/db/src/auth.ts");
+  const pimBack = await readmit({
+    email: pimSeed.email,
+    firstName: "Pim",
+    lastName: null,
+  });
+  check(
+    "a leaver invited back is the same member",
+    reinvite.headers.get("location")?.endsWith("invite=sent") &&
+      pimBack.orgId === bakery.id &&
+      pimBack.userId === pimId &&
+      (await orgsOf(pimBack)).some((m) => m.orgId === bakery.id) &&
+      (await pimNotes()) === 1,
+    `${reinvite.headers.get("location")?.split("?")[1]}, same membership, 1 note`,
+  );
+  await remove();
+  const purgeLive = await settings(
+    "/settings/members",
+    new URLSearchParams({ purge: "20000000-0000-4000-8000-000000000002" }),
+  );
+  check(
+    "only a past member can be purged",
+    purgeLive.headers.get("location")?.endsWith("member=gone") &&
+      (await settingsPage(margeOwner)).includes("otto@bluewhale.test"),
+    "Otto still in",
+  );
+  const purged = await settings(
+    "/settings/members",
+    new URLSearchParams({ purge: pimId }),
+  );
+  const pimSignIn = await fetch(`${stack.url}/auth/dev`, {
+    method: "POST",
+    body: new URLSearchParams({ user: pimId }),
+    redirect: "manual",
+  });
+  check(
+    "a purged member and their notes are gone",
+    purged.headers.get("location")?.endsWith("member=purged") &&
+      !(await settingsPage(margeOwner)).includes("past member") &&
+      (await pimNotes()) === 0 &&
+      pimSignIn.status === 400,
+    `${purged.headers.get("location")?.split("?")[1]}, 0 notes, sign-in ${pimSignIn.status}`,
   );
   const svgForm = new FormData();
   svgForm.set("name", "Blue Whale Bakery & Co");
@@ -356,7 +492,7 @@ try {
     "gone from the list",
   );
   // Roles: Marge owns the bakery, Otto is a member. A member may not touch
-  // the org or the roster; the last owner cannot be demoted; a promoted member
+  // the org or the roster; the principal cannot be demoted; a promoted member
   // can.
   const asMember = await settings("/settings/org", orgForm, otto);
   check(
@@ -374,15 +510,15 @@ try {
     memberRemove.status === 403,
     `answered ${memberRemove.status}`,
   );
-  const lastOwner = await settings(
+  const demotePrincipal = await settings(
     "/settings/members",
     new URLSearchParams({ demote: "20000000-0000-4000-8000-000000000001" }),
     margeOwner,
   );
   check(
-    "last owner stays an owner",
-    lastOwner.headers.get("location")?.endsWith("member=last"),
-    lastOwner.headers.get("location")?.split("?")[1],
+    "the principal stays an owner",
+    demotePrincipal.headers.get("location")?.endsWith("member=principal"),
+    demotePrincipal.headers.get("location")?.split("?")[1],
   );
   const promoted = await settings(
     "/settings/members",
@@ -398,12 +534,55 @@ try {
     `promote ${promoted.headers.get("location")?.split("?")[1]}, then rename ${ottoRenames.status}`,
   );
 
+  // Marge holds the bakery. An owner cannot remove her, demote her or hand
+  // the org over; she can hand it to Otto, and then she is an owner like any
+  // other.
+  const margeId = "20000000-0000-4000-8000-000000000001";
+  const ottoRemovesMarge = await settings(
+    "/settings/members",
+    new URLSearchParams({ remove: margeId }),
+    ottoNow,
+  );
+  const ottoHandsOver = await settings(
+    "/settings/members",
+    new URLSearchParams({ handover: margeId }),
+    ottoNow,
+  );
+  check(
+    "only the principal hands the org over",
+    ottoRemovesMarge.headers.get("location")?.endsWith("member=principal") &&
+      ottoHandsOver.status === 403,
+    `remove ${ottoRemovesMarge.headers.get("location")?.split("?")[1]}, hand over ${ottoHandsOver.status}`,
+  );
+  const handedElsewhere = await settings(
+    "/settings/members",
+    new URLSearchParams({ handover: "10000000-0000-4000-8000-000000000001" }),
+    margeOwner,
+  );
+  check(
+    "the org cannot be handed outside it",
+    handedElsewhere.headers.get("location")?.endsWith("member=gone"),
+    handedElsewhere.headers.get("location")?.split("?")[1],
+  );
+  const handed = await settings(
+    "/settings/members",
+    new URLSearchParams({ handover: "20000000-0000-4000-8000-000000000002" }),
+    margeOwner,
+  );
+  const afterHandOver = await settingsPage(ottoNow);
+  check(
+    "the principal hands the org over",
+    handed.headers.get("location")?.endsWith("member=handed") &&
+      /otto@bluewhale\.test[\s\S]*?principal<\/span>/.test(afterHandOver) &&
+      afterHandOver.includes("Delete Blue Whale Bakery"),
+    "Otto holds the bakery and may delete it",
+  );
   // A demotion that lands first is honoured by a request that was already
-  // authorised: Otto (owner) demotes Marge, then Marge's request — carrying a
-  // cookie that resolved to owner a moment ago — cannot rename the org.
+  // authorised: Otto demotes Marge, then Marge's request — carrying a cookie
+  // that resolved to owner a moment ago — cannot rename the org.
   await settings(
     "/settings/members",
-    new URLSearchParams({ demote: "20000000-0000-4000-8000-000000000001" }),
+    new URLSearchParams({ demote: margeId }),
     ottoNow,
   );
   const staleOwner = await settings("/settings/org", orgForm, margeOwner);
@@ -414,7 +593,12 @@ try {
   );
   await settings(
     "/settings/members",
-    new URLSearchParams({ promote: "20000000-0000-4000-8000-000000000001" }),
+    new URLSearchParams({ promote: margeId }),
+    ottoNow,
+  );
+  await settings(
+    "/settings/members",
+    new URLSearchParams({ handover: margeId }),
     ottoNow,
   );
   // A body with no Content-Length is bounded while it streams.
@@ -557,6 +741,135 @@ try {
     seen.join(" vs "),
   );
   await settings("/settings/profile", rename, ottoObs);
+
+  // Leaving. Road Runner leaves Acme and becomes a past member; Wile, who
+  // holds Acme, cannot leave until he hands it over.
+  const roadRunner = await signIn("10000000-0000-4000-8000-000000000002");
+  const left = await fetch(`${stack.url}/auth/leave`, {
+    method: "POST",
+    headers: { cookie: roadRunner },
+    redirect: "manual",
+  });
+  const acmeAfter = await settingsPage(wile);
+  check(
+    "a member leaves",
+    left.status === 303 &&
+      /^session=;/.test(left.headers.get("set-cookie") ?? "") &&
+      !/name="remove"[^>]*value="10000000-0000-4000-8000-000000000002"|value="10000000-0000-4000-8000-000000000002"[^>]*name="remove"/.test(
+        acmeAfter,
+      ) &&
+      acmeAfter.includes("Show 1 past member"),
+    "signed out, under Acme's past members",
+  );
+  const wileLeaves = await fetch(`${stack.url}/auth/leave`, {
+    method: "POST",
+    headers: { cookie: wile },
+    redirect: "manual",
+  });
+  const roadRunnerBack = await settings(
+    "/settings/members",
+    new URLSearchParams({ restore: "10000000-0000-4000-8000-000000000002" }),
+    wile,
+  );
+  check(
+    "the principal cannot leave",
+    wileLeaves.headers.get("location")?.endsWith("leave=principal") &&
+      (await settingsPage(wile)).includes("wile@acme-rockets.test") &&
+      roadRunnerBack.headers.get("location")?.endsWith("member=restored"),
+    "sent back, still in Acme; Road Runner brought back",
+  );
+
+  // Deleting an org. Only its principal, and only by typing its name. Late
+  // holds an org with a note in it, a member and a past member, and deletes
+  // it; nothing of it is left, and Late is still a person.
+  const { createSession } = await import("../packages/db/src/auth.ts");
+  const lateCookie = `session=${await createSession(late)}`;
+  const lateNote = await fetch(`${stack.url}/brain/note`, {
+    method: "POST",
+    headers: { cookie: lateCookie },
+    body: new URLSearchParams({ title: "Rent", body: "Due on the first." }),
+    redirect: "manual",
+  });
+  await settings(
+    "/invite",
+    new URLSearchParams({ email: "mate@late.test" }),
+    lateCookie,
+  );
+  await settings(
+    "/invite",
+    new URLSearchParams({ email: "gone@late.test" }),
+    lateCookie,
+  );
+  const mate = await admit({
+    email: "mate@late.test",
+    firstName: "Mate",
+    lastName: null,
+  });
+  const goneMate = await admit({
+    email: "gone@late.test",
+    firstName: "Gone",
+    lastName: null,
+  });
+  await settings(
+    "/settings/members",
+    new URLSearchParams({ remove: goneMate.userId }),
+    lateCookie,
+  );
+  const mateCookie = `session=${await createSession(mate)}`;
+  const ottoDeletes = await fetch(`${stack.url}/auth/delete-org`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ name: "Blue Whale Bakery & Co" }),
+    redirect: "manual",
+  });
+  const wrongName = await fetch(`${stack.url}/auth/delete-org`, {
+    method: "POST",
+    headers: { cookie: lateCookie },
+    body: new URLSearchParams({ name: "late" }),
+    redirect: "manual",
+  });
+  check(
+    "deleting an org takes its principal and its exact name",
+    ottoDeletes.status === 403 &&
+      wrongName.headers.get("location")?.endsWith("delete=mismatch") &&
+      (await settingsPage(ottoNow)).includes("Blue Whale Bakery"),
+    `owner ${ottoDeletes.status}, wrong name ${wrongName.headers.get("location")?.split("?")[1]}`,
+  );
+  const deleted = await fetch(`${stack.url}/auth/delete-org`, {
+    method: "POST",
+    headers: { cookie: lateCookie },
+    body: new URLSearchParams({ name: "Late" }),
+    redirect: "manual",
+  });
+  const leftOfLate = await asOrg(late.orgId, async (q) => {
+    await q.query("select set_config('app.past_members', 'on', true)");
+    await q.query("select set_config('app.member_id', $1, true)", [
+      late.userId,
+    ]);
+    return {
+      orgs: (await q.query("select 1 from orgs")).rowCount,
+      users: (await q.query("select 1 from users")).rowCount,
+      records: (await q.query("select 1 from records")).rowCount,
+    };
+  });
+  const { asEmail } = await import("../packages/db/src/index.ts");
+  const latePerson = await asEmail(
+    "late@bluewhale.test",
+    async (q) => (await q.query("select 1 from people")).rowCount,
+  );
+  check(
+    "an org deleted is gone, its people remain",
+    lateNote.status === 303 &&
+      deleted.status === 303 &&
+      /^session=;/.test(deleted.headers.get("set-cookie") ?? "") &&
+      leftOfLate.orgs === 0 &&
+      leftOfLate.users === 0 &&
+      leftOfLate.records === 0 &&
+      latePerson === 1 &&
+      (await page(lateCookie)).includes("Pick a person from the pill") &&
+      (await page(mateCookie)).includes("Pick a person from the pill"),
+    `note ${lateNote.status}; ${leftOfLate.orgs} orgs, ${leftOfLate.users} users, ${leftOfLate.records} records, ${latePerson} person, Mate signed out`,
+  );
 
   const signedOutSettings = await fetch(`${stack.url}/settings`, {
     redirect: "manual",

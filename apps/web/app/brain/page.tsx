@@ -22,20 +22,15 @@ export default async function Page({
   const p = await principal();
   if (!p) redirect("/");
   const { q = "", kind = "", imported } = await searchParams;
-  const { me, vocabulary, page } = await asPerson(
-    p.orgId,
-    p.userId,
-    async (db) => ({
-      me: (
-        await db.query<{ name: string }>(
-          "select name from users where id = $1",
-          [p.userId],
-        )
-      ).rows[0]?.name,
-      vocabulary: await catalog(db),
-      page: await read(db, { query: q || undefined, kind: kind || undefined }),
-    }),
-  );
+  const { me, vocabulary, page } = await asPerson(p, async (db) => ({
+    me: (
+      await db.query<{ name: string }>("select name from users where id = $1", [
+        p.userId,
+      ])
+    ).rows[0]?.name,
+    vocabulary: await catalog(db),
+    page: await read(db, { query: q || undefined, kind: kind || undefined }),
+  }));
 
   return (
     <main className="space-y-8">

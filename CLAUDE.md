@@ -82,6 +82,18 @@ connection hides every isolation bug until production finds it.
 The seed holds several orgs with obviously distinguishable data, so a leak looks
 wrong on sight.
 
+Every org has one principal: the owner who pays for it and can do what no
+other owner can — hand the org to another member, or delete it. The principal
+stays until they hand over, so an org is never without one. Anyone else may
+leave. Deleting an org takes its name typed exactly, and takes everything in
+it with it.
+
+A membership that ends is a past member: kept with everything it wrote, seen
+by nobody, until an owner brings it back or purges it. One membership per
+person per org, ever — brought back or invited back, they are the same member
+with the same records; purged, the membership and all it wrote are gone, and
+that is the owner's call to make.
+
 Database roles are created with SQL, never through Neon's API: an API-made role
 is a `neon_superuser` with `BYPASSRLS`, and every policy silently stops
 applying to it.

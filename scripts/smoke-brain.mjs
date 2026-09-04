@@ -15,7 +15,15 @@ export async function smokeBrain(stack) {
   process.env.DATABASE_URL = `postgres://app@127.0.0.1:${stack.pgPort}/postgres`;
   globalThis.__pool = undefined;
   const { asOrg, asPerson } = await import("../packages/db/src/index.ts");
-  const me = (org) => (fn) => asPerson(org.id, org.users[0].id, fn);
+  const me = (org) => (fn) =>
+    asPerson(
+      {
+        orgId: org.id,
+        personId: org.users[0].personId,
+        userId: org.users[0].id,
+      },
+      fn,
+    );
   const brain = await import("../packages/brain/src/index.ts");
   const { seeds, vocabulary } = await import("../packages/brain/src/seed.ts");
 
@@ -45,7 +53,7 @@ export async function smokeBrain(stack) {
       firstName: "Fresh",
       lastName: null,
     });
-    const newcomer = await asPerson(fresh.orgId, fresh.userId, async (q) => {
+    const newcomer = await asPerson(fresh, async (q) => {
       const empty = await brain.catalog(q);
       const note = {
         kind: "note",
@@ -106,10 +114,17 @@ export async function smokeBrain(stack) {
       );
     }
     const orgOnly = await asOrg(acme.id, (q) => brain.read(q));
-    const colleague = await asPerson(acme.id, acme.users[1].id, async (q) => ({
-      page: await brain.read(q),
-      vocab: await brain.catalog(q),
-    }));
+    const colleague = await asPerson(
+      {
+        orgId: acme.id,
+        personId: acme.users[1].personId,
+        userId: acme.users[1].id,
+      },
+      async (q) => ({
+        page: await brain.read(q),
+        vocab: await brain.catalog(q),
+      }),
+    );
     check(
       "a colleague shares the vocabulary, not the records",
       orgOnly.records.length === 0 &&
@@ -510,37 +525,42 @@ export async function smokeBrain(stack) {
     const target = randomUUID();
     const targetPerson = randomUUID();
     try {
+      await owner.query("begin");
       await owner.query(
-        "insert into orgs (id, slug, name) values ($1, 'export-target', 'Export Target')",
-        [target],
+        "insert into orgs (id, slug, name, principal_id) values ($1, 'export-target', 'Export Target', $2)",
+        [target, targetPerson],
       );
       await owner.query(
         "insert into people (id, email, first_name) values ($1, 'someone@export-target.test', 'Someone')",
         [targetPerson],
       );
       await owner.query(
-        "insert into users (id, org_id, person_id, email, first_name) values ($1, $2, $1, 'someone@export-target.test', 'Someone')",
+        "insert into users (id, org_id, person_id, email, first_name, role) values ($1, $2, $1, 'someone@export-target.test', 'Someone', 'owner')",
         [targetPerson, target],
       );
+      await owner.query("commit");
     } finally {
       await owner.end();
     }
     const exported = await me(acme)((q) => brain.exportBrain(q));
-    const imported = await asPerson(target, targetPerson, async (q) => {
-      const counts = await brain.importBrain(q, "smoke", exported);
-      const twice = await brain.importBrain(q, "smoke", exported);
-      const beep = (await brain.read(q, { kind: "person" })).records.find(
-        (r) => r.title === "Road Runner",
-      );
-      return {
-        counts,
-        twice,
-        all: await brain.read(q, { limit: 200 }),
-        rockets: await brain.read(q, { query: "rocket" }),
-        vocab: await brain.catalog(q),
-        aboutBeep: await brain.read(q, { person: beep.id }),
-      };
-    });
+    const imported = await asPerson(
+      { orgId: target, personId: targetPerson, userId: targetPerson },
+      async (q) => {
+        const counts = await brain.importBrain(q, "smoke", exported);
+        const twice = await brain.importBrain(q, "smoke", exported);
+        const beep = (await brain.read(q, { kind: "person" })).records.find(
+          (r) => r.title === "Road Runner",
+        );
+        return {
+          counts,
+          twice,
+          all: await brain.read(q, { limit: 200 }),
+          rockets: await brain.read(q, { query: "rocket" }),
+          vocab: await brain.catalog(q),
+          aboutBeep: await brain.read(q, { person: beep.id }),
+        };
+      },
+    );
     const before = await me(acme)((q) => brain.read(q, { limit: 200 }));
     check(
       "export imports to the same answers",

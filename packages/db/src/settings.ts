@@ -1,7 +1,12 @@
-import { asOrg, asPerson, type Query } from "./index.ts";
+import { asOrg, asPerson, Gone, type Query } from "./index.ts";
 import type { Principal, Role } from "./auth.ts";
 
-export type Org = { id: string; name: string; logoKey: string | null };
+export type Org = {
+  id: string;
+  name: string;
+  logoKey: string | null;
+  principalId: string;
+};
 export type Member = {
   id: string;
   name: string;
@@ -11,24 +16,49 @@ export type Member = {
   role: Role;
   avatarKey: string | null;
 };
+export type PastMember = Member & { removedAt: Date };
 
-// Thrown when a member tries what only an owner may do.
+// Thrown when someone tries what only an owner, or only the principal, may do.
 export class Forbidden extends Error {}
 
+// Locks the org and reads who holds it.
+async function holdOrg(q: Query): Promise<string> {
+  const held = (
+    await q.query<{ principal_id: string }>(
+      "select principal_id from orgs for update",
+    )
+  ).rows[0];
+  if (!held) throw new Gone("This org was deleted.");
+  return held.principal_id;
+}
+
 // Locks the org and checks the actor's role from the row itself, not from the
-// session's snapshot, so a demotion that lands first is honoured.
+// session's snapshot, so a demotion that lands first is honoured. fn is told
+// who the principal is.
 async function asOwner<T>(
   p: Principal,
-  fn: (q: Query) => Promise<T>,
+  fn: (q: Query, principal: string) => Promise<T>,
 ): Promise<T> {
   return asOrg(p.orgId, async (q) => {
-    await q.query("select 1 from orgs for update");
+    const principal = await holdOrg(q);
     const me = await q.query<{ role: Role }>(
       "select role from users where id = $1",
       [p.userId],
     );
     if (me.rows[0]?.role !== "owner")
       throw new Forbidden("Only an owner can do that.");
+    return fn(q, principal);
+  });
+}
+
+// Locks the org and checks the actor holds it.
+async function asPrincipal<T>(
+  p: Principal,
+  fn: (q: Query) => Promise<T>,
+): Promise<T> {
+  return asOrg(p.orgId, async (q) => {
+    if ((await holdOrg(q)) !== p.userId)
+      throw new Forbidden("Only the principal owner can do that.");
     return fn(q);
   });
 }
@@ -38,28 +68,46 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // comparison and a uuid comparison agree.
 const canonical = (id: string) => (UUID.test(id) ? id : null);
 
+// Shows the org's past memberships to the rest of the transaction.
+const seeingPast = (q: Query) =>
+  q.query("select set_config('app.past_members', 'on', true)");
+
 // The org as the signed-in person sees it: its name and logo, everyone in
-// it, and who is invited but not yet arrived.
+// it, who is invited but not yet arrived, and, for an owner, who has left.
 export async function orgOf(p: Principal): Promise<{
   org: Org;
   members: Member[];
   invited: string[];
+  past: PastMember[];
 }> {
-  return asOrg(p.orgId, async (q) => ({
-    org: (
-      await q.query<Org>('select id, name, logo_key as "logoKey" from orgs')
-    ).rows[0]!,
-    members: (
-      await q.query<Member>(
-        'select id, name, first_name as "firstName", last_name as "lastName", email, role, avatar_key as "avatarKey" from users order by role, name',
+  return asOrg(p.orgId, async (q) => {
+    const org = (
+      await q.query<Org>(
+        'select id, name, logo_key as "logoKey", principal_id as "principalId" from orgs',
       )
-    ).rows,
-    invited: (
+    ).rows[0]!;
+    const members = (
+      await q.query<Member>(
+        'select id, name, first_name as "firstName", last_name as "lastName", email, role, avatar_key as "avatarKey" from users order by id <> $1, role, name',
+        [org.principalId],
+      )
+    ).rows;
+    const invited = (
       await q.query<{ email: string }>(
         "select email from invitations where accepted_at is null order by created_at",
       )
-    ).rows.map((r) => r.email),
-  }));
+    ).rows.map((r) => r.email);
+    const owner = members.find((m) => m.id === p.userId)?.role === "owner";
+    if (owner) await seeingPast(q);
+    const past = owner
+      ? (
+          await q.query<PastMember>(
+            'select id, name, first_name as "firstName", last_name as "lastName", email, role, avatar_key as "avatarKey", removed_at as "removedAt" from users where removed_at is not null order by removed_at desc',
+          )
+        ).rows
+      : [];
+    return { org, members, invited, past };
+  });
 }
 
 export async function renameOrg(p: Principal, name: string): Promise<void> {
@@ -83,7 +131,7 @@ async function setProfile(
   const set = Object.keys(fields)
     .map((c, i) => `${c} = $${i + 2}`)
     .join(", ");
-  await asPerson(p.orgId, p.personId, async (q) => {
+  await asPerson(p, async (q) => {
     const person = (
       await q.query<{ email: string }>(
         "select email from people where id = $1 for update",
@@ -124,56 +172,155 @@ export async function setAvatar(p: Principal, key: string): Promise<void> {
   await setProfile(p, { avatar_key: key });
 }
 
-// Removes a member from the org, ending their sessions and forgetting their
-// invitation so they can be invited again. Owners only; a person cannot
-// remove themselves, and an org keeps at least one owner. The org row is
-// locked so two removals cannot each see the other still there.
+// Ends a membership: its sessions, and its invitation. It becomes a past
+// member, kept with everything it wrote, unseen, until an owner brings it back
+// or purges it.
+async function endMembership(q: Query, id: string): Promise<boolean> {
+  await seeingPast(q);
+  const leaving = (
+    await q.query<{ email: string }>(
+      "update users set removed_at = now() where id = $1 and removed_at is null returning email",
+      [id],
+    )
+  ).rows[0];
+  if (!leaving) return false;
+  await q.query("delete from sessions where user_id = $1", [id]);
+  await q.query("delete from invitations where email = $1", [leaving.email]);
+  return true;
+}
+
+// Removes a member from the org. Owners only; a person cannot remove
+// themselves, and nobody removes the principal. The org row is locked so two
+// removals cannot each see the other still there.
 export async function removeMember(
   p: Principal,
   userId: string,
-): Promise<"removed" | "self" | "last" | "gone"> {
+): Promise<"removed" | "self" | "principal" | "gone"> {
   const id = canonical(userId);
   if (!id) return "gone";
   if (id === p.userId) return "self";
-  return asOwner(p, async (q) => {
-    const owners = (
-      await q.query<{ n: number }>(
-        "select count(*)::int as n from users where role = 'owner' and id <> $1",
-        [id],
-      )
-    ).rows[0]!.n;
-    if (owners === 0) return "last";
-    const gone = await q.query<{ email: string }>(
-      "delete from users where id = $1 returning email",
-      [id],
-    );
-    if (gone.rowCount === 0) return "gone";
-    await q.query("delete from invitations where email = $1", [
-      gone.rows[0]!.email,
-    ]);
-    return "removed";
+  return asOwner(p, async (q, principal) => {
+    if (id === principal) return "principal";
+    return (await endMembership(q, id)) ? "removed" : "gone";
   });
 }
 
-// Makes a member an owner, or an owner a member. Owners only; an org keeps at
-// least one owner.
+// Leaves the org. The principal cannot: they hand the org over first, or
+// delete it.
+export async function leaveOrg(p: Principal): Promise<"left" | "principal"> {
+  return asOrg(p.orgId, async (q) => {
+    if ((await holdOrg(q)) === p.userId) return "principal";
+    await endMembership(q, p.userId);
+    return "left";
+  });
+}
+
+// Hands the org to another member, who becomes an owner and the principal.
+// The principal only.
+export async function handOver(
+  p: Principal,
+  userId: string,
+): Promise<"handed" | "gone"> {
+  const id = canonical(userId);
+  if (!id || id === p.userId) return "gone";
+  return asPrincipal(p, async (q) => {
+    const made = await q.query(
+      "update users set role = 'owner' where id = $1",
+      [id],
+    );
+    if (!made.rowCount) return "gone";
+    await q.query("update orgs set principal_id = $1", [id]);
+    return "handed";
+  });
+}
+
+// Deletes the org and everything in it: every member and past member, every
+// record, every session. The principal only, naming the org exactly.
+export async function deleteOrg(
+  p: Principal,
+  name: string,
+): Promise<"deleted" | "mismatch"> {
+  return asPrincipal(p, async (q) => {
+    const gone = await q.query("delete from orgs where name = $1", [name]);
+    return gone.rowCount ? "deleted" : "mismatch";
+  });
+}
+
+// Brings a past member back as the member they were, with everything they
+// wrote, carrying the name and avatar they have today. They sign in and they
+// are in. Owners only.
+export async function restoreMember(
+  p: Principal,
+  userId: string,
+): Promise<"restored" | "gone"> {
+  const id = canonical(userId);
+  if (!id) return "gone";
+  return asOwner(p, async (q) => {
+    await seeingPast(q);
+    const past = (
+      await q.query<{ email: string }>(
+        "select email from users where id = $1 and removed_at is not null",
+        [id],
+      )
+    ).rows[0];
+    if (!past) return "gone";
+    await q.query("select set_config('app.email', $1, true)", [past.email]);
+    const person = (
+      await q.query<{
+        first_name: string;
+        last_name: string | null;
+        avatar_key: string | null;
+      }>(
+        "select first_name, last_name, avatar_key from people where email = $1",
+        [past.email],
+      )
+    ).rows[0]!;
+    await q.query(
+      "update users set removed_at = null, first_name = $2, last_name = $3, avatar_key = $4 where id = $1",
+      [id, person.first_name, person.last_name, person.avatar_key],
+    );
+    return "restored";
+  });
+}
+
+// Deletes a past member: the membership and every record and edge it wrote.
+// The events stay, as the log of what happened. Owners only, and only for
+// someone already removed.
+export async function purgeMember(
+  p: Principal,
+  userId: string,
+): Promise<"purged" | "gone"> {
+  const id = canonical(userId);
+  if (!id) return "gone";
+  return asOwner(p, async (q) => {
+    await seeingPast(q);
+    const past = await q.query(
+      "select 1 from users where id = $1 and removed_at is not null",
+      [id],
+    );
+    if (!past.rowCount) return "gone";
+    await q.query("select set_config('app.member_id', $1, true)", [id]);
+    await q.query("delete from edges where person_id = $1", [id]);
+    await q.query("delete from records where person_id = $1", [id]);
+    await q.query(
+      "delete from users where id = $1 and removed_at is not null",
+      [id],
+    );
+    return "purged";
+  });
+}
+
+// Makes a member an owner, or an owner a member. Owners only; the principal
+// stays an owner.
 export async function setRole(
   p: Principal,
   userId: string,
   role: Role,
-): Promise<"set" | "last" | "gone"> {
+): Promise<"set" | "principal" | "gone"> {
   const id = canonical(userId);
   if (!id) return "gone";
-  return asOwner(p, async (q) => {
-    if (role === "member") {
-      const others = (
-        await q.query<{ n: number }>(
-          "select count(*)::int as n from users where role = 'owner' and id <> $1",
-          [id],
-        )
-      ).rows[0]!.n;
-      if (others === 0) return "last";
-    }
+  return asOwner(p, async (q, principal) => {
+    if (id === principal && role === "member") return "principal";
     const set = await q.query(
       "update users set role = $1 where id = $2 and role <> $1",
       [role, id],

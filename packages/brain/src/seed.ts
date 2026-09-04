@@ -395,7 +395,7 @@ export async function seedBrain(
         await client.query("select set_config('app.org_id', $1, true)", [
           org.id,
         ]);
-        await client.query("select set_config('app.person_id', $1, true)", [
+        await client.query("select set_config('app.member_id', $1, true)", [
           org.users[0]!.id,
         ]);
         for (const k of vocabulary.kinds) await defineKind(client, "seed", k);

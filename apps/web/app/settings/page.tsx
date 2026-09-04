@@ -1,6 +1,17 @@
 import { orgOf } from "@placeholder/db/settings";
 import { redirect } from "next/navigation";
 
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,10 +22,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { ImageInput } from "@/components/image-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { DeleteOrg } from "@/app/settings/delete-org";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
 import { principal } from "@/lib/session";
@@ -23,9 +40,20 @@ import { storage } from "@/lib/storage";
 // What the last save left to say, by the query it redirected with.
 type Notice = {
   org?: "saved" | "name" | "image" | "storage";
+  leave?: "principal";
+  delete?: "mismatch";
   profile?: "saved" | "name" | "image" | "storage";
   member?:
-    "removed" | "self" | "last" | "uninvited" | "owner" | "member" | "gone";
+    | "removed"
+    | "restored"
+    | "purged"
+    | "self"
+    | "principal"
+    | "handed"
+    | "uninvited"
+    | "owner"
+    | "member"
+    | "gone";
   invite?: "sent" | "pending" | "member";
 };
 
@@ -36,15 +64,24 @@ const NOTICES: Record<string, string> = {
     "That file can't be the logo. A PNG, JPEG or WebP under 2 MB always works.",
   "org=storage":
     "Saved the name. Images need object storage, which is not set up yet.",
+  "delete=mismatch": "Type the org's name exactly to delete it.",
+  "leave=principal":
+    "You hold the org. Hand it to someone else before you leave, or delete it.",
   "profile=saved": "Saved.",
   "profile=name": "You need a first name. Names are up to 80 characters.",
   "profile=image":
     "That file can't be the avatar. A PNG, JPEG or WebP under 2 MB always works.",
   "profile=storage":
     "Saved the name. Images need object storage, which is not set up yet.",
-  "member=removed": "Removed. Their sessions are ended.",
-  "member=self": "You can't remove yourself.",
-  "member=last": "An org keeps at least one owner.",
+  "member=removed":
+    "Removed. Their sessions are ended, and what they wrote is kept under past members.",
+  "member=restored":
+    "They're back, with everything they wrote. They sign in and they're in.",
+  "member=purged":
+    "Purged. Their membership and everything they wrote are gone.",
+  "member=self": "You can't remove yourself. Leave from the card above.",
+  "member=principal": "The principal owner stays until they hand the org over.",
+  "member=handed": "They hold the org now.",
   "member=uninvited": "Invitation withdrawn.",
   "member=owner": "They are an owner now.",
   "member=gone": "Nobody by that id or address is in the org.",
@@ -65,9 +102,10 @@ export default async function Settings({
   if (!p) redirect("/");
   const n = await searchParams;
   const said = (k: keyof Notice) => (n[k] ? NOTICES[`${k}=${n[k]}`] : null);
-  const { org, members, invited } = await orgOf(p);
+  const { org, members, invited, past } = await orgOf(p);
   const me = members.find((m) => m.id === p.userId)!;
   const owner = p.role === "owner";
+  const holder = p.userId === org.principalId;
   const uploads = deployment.storage.kind !== "none";
 
   return (
@@ -198,6 +236,37 @@ export default async function Settings({
               )}
             </div>
           </form>
+          {holder ? (
+            <p className="text-muted-foreground mt-4 text-sm">
+              {said("leave") ??
+                "You hold the org. Hand it to someone else before you leave, or delete it below."}
+            </p>
+          ) : (
+            <AlertDialog>
+              <AlertDialogTrigger
+                render={<Button variant="ghost" size="sm" className="mt-4" />}
+              >
+                Leave {org.name}
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Leave {org.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You become a past member. What you wrote stays under your
+                    name, seen by nobody, and an owner can bring you back.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Stay</AlertDialogCancel>
+                  <form action="/auth/leave" method="post">
+                    <AlertDialogAction variant="destructive" type="submit">
+                      Leave
+                    </AlertDialogAction>
+                  </form>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
         </CardContent>
       </Card>
 
@@ -251,20 +320,36 @@ export default async function Settings({
                       {m.email}
                     </p>
                   </TableCell>
-                  <TableCell className="text-right">
-                    {m.id === p.userId ? (
+                  <TableCell className="space-x-1 text-right">
+                    {m.id === p.userId && (
                       <Badge variant="secondary">you</Badge>
-                    ) : m.role === "owner" ? (
-                      <Badge variant="outline">owner</Badge>
-                    ) : null}
+                    )}
+                    {m.id === org.principalId ? (
+                      <Badge variant="outline">principal</Badge>
+                    ) : (
+                      m.role === "owner" && (
+                        <Badge variant="outline">owner</Badge>
+                      )
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {owner && m.id !== p.userId && (
+                    {owner && m.id !== p.userId && m.id !== org.principalId && (
                       <form
                         action="/settings/members"
                         method="post"
                         className="flex justify-end gap-1"
                       >
+                        {holder && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            type="submit"
+                            name="handover"
+                            value={m.id}
+                          >
+                            Hand over
+                          </Button>
+                        )}
                         <Button
                           variant="ghost"
                           size="sm"
@@ -313,8 +398,122 @@ export default async function Settings({
               ))}
             </TableBody>
           </Table>
+          {owner && past.length > 0 && (
+            <Collapsible>
+              <CollapsibleTrigger
+                render={<Button variant="ghost" size="sm" className="group" />}
+              >
+                <span className="group-data-panel-open:hidden">
+                  Show {past.length} past{" "}
+                  {past.length === 1 ? "member" : "members"}
+                </span>
+                <span className="hidden group-data-panel-open:inline">
+                  Hide past members
+                </span>
+              </CollapsibleTrigger>
+              <CollapsibleContent keepMounted>
+                <Table>
+                  <TableBody>
+                    {past.map((m) => (
+                      <TableRow key={m.id} className="text-muted-foreground">
+                        <TableCell className="w-10">
+                          <Avatar className="size-8">
+                            {m.avatarKey && (
+                              <AvatarImage
+                                src={storage.url(m.avatarKey)}
+                                alt=""
+                              />
+                            )}
+                            <AvatarFallback>{initials(m.name)}</AvatarFallback>
+                          </Avatar>
+                        </TableCell>
+                        <TableCell>
+                          <p className="truncate">{m.name}</p>
+                          <p className="truncate text-sm">{m.email}</p>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline">
+                            left {m.removedAt.toISOString().slice(0, 10)}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                            <form action="/settings/members" method="post">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                type="submit"
+                                name="restore"
+                                value={m.id}
+                              >
+                                Bring back
+                              </Button>
+                            </form>
+                            <AlertDialog>
+                              <AlertDialogTrigger
+                                render={<Button variant="ghost" size="sm" />}
+                              >
+                                Purge
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>
+                                    Purge {m.name}?
+                                  </AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Their membership and everything they wrote
+                                    in the brain are deleted, including anything
+                                    others may depend on. Nothing brings it
+                                    back. Inviting them again starts them fresh.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Keep</AlertDialogCancel>
+                                  <form
+                                    action="/settings/members"
+                                    method="post"
+                                  >
+                                    <AlertDialogAction
+                                      variant="destructive"
+                                      type="submit"
+                                      name="purge"
+                                      value={m.id}
+                                    >
+                                      Purge
+                                    </AlertDialogAction>
+                                  </form>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
         </CardContent>
       </Card>
+
+      {holder && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Delete {org.name}</CardTitle>
+            <CardDescription>
+              Everything in it goes with it, for everyone in it. Hand the org
+              over instead if someone else should keep it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center gap-3">
+            <DeleteOrg name={org.name} />
+            {said("delete") && (
+              <p className="text-muted-foreground text-sm">{said("delete")}</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </main>
   );
 }

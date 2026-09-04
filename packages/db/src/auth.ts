@@ -99,15 +99,24 @@ async function admit(identity: Identity): Promise<Principal> {
     return { person, invitedTo };
   });
 
-  // Claim each invitation, then join as the person is known today. A
-  // withdrawn one admits nobody.
+  // Claim each invitation, then join as the person is known today. A past
+  // member gets their membership back, with everything they wrote. A
+  // withdrawn invitation admits nobody. Under the org lock, like every other
+  // change to who is in an org.
   for (const orgId of invitedTo) {
     await asOrg(orgId, async (q) => {
+      await q.query("select 1 from orgs for update");
       const claim = await q.query(
         "update invitations set accepted_at = now() where email = $1 and accepted_at is null",
         [email],
       );
       if (!claim.rowCount) return;
+      await q.query("select set_config('app.past_members', 'on', true)");
+      const back = await q.query(
+        "update users set removed_at = null, first_name = $2, last_name = $3, avatar_key = $4 where person_id = $1 and removed_at is not null",
+        [person.id, person.firstName, person.lastName, person.avatar_key],
+      );
+      if (back.rowCount) return;
       await q.query(
         "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key) values ($1, $2, $3, $4, $5, $6, $7) on conflict (org_id, person_id) do nothing",
         [
@@ -142,11 +151,10 @@ async function admit(identity: Identity): Promise<Principal> {
         userId: m.id,
         role: m.role,
       };
-    await q.query("insert into orgs (id, slug, name) values ($1, $2, $3)", [
-      orgId,
-      orgId,
-      fullName(person),
-    ]);
+    await q.query(
+      "insert into orgs (id, slug, name, principal_id) values ($1, $2, $3, $4)",
+      [orgId, orgId, fullName(person), userId],
+    );
     await q.query(
       "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, $7, 'owner')",
       [

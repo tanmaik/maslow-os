@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     return new Response("That is not a brain file.", { status: 400 });
   }
   try {
-    const imported = await asPerson(p.orgId, p.userId, (db) =>
+    const imported = await asPerson(p, (db) =>
       importBrain(db, `person:${p.userId}`, snapshot),
     );
     return NextResponse.redirect(

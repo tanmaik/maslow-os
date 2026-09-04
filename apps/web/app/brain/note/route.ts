@@ -18,7 +18,7 @@ export async function POST(request: Request) {
 
   const author = `person:${p.userId}`;
   try {
-    await asPerson(p.orgId, p.userId, async (db) => {
+    await asPerson(p, async (db) => {
       await defineKind(db, author, {
         name: "note",
         description: "Something you wrote down yourself.",

@@ -51,14 +51,33 @@ export function asOrg<T>(
   return scoped({ "app.org_id": orgId }, fn);
 }
 
-// Runs fn as one person in their org: the org's shared rows and that person's
-// own, nobody else's.
+// Thrown when the membership a request acts through has been removed since
+// the request began.
+export class Gone extends Error {}
+
+// Runs fn as one person through one membership: the org's shared rows, the
+// person's own row, and what that membership wrote in the brain. The
+// membership is held for the transaction, so a removal that lands first is
+// honoured and one that lands later waits.
 export function asPerson<T>(
-  orgId: string,
-  personId: string,
+  p: { orgId: string; personId: string; userId: string },
   fn: (q: Query) => Promise<T>,
 ): Promise<T> {
-  return scoped({ "app.org_id": orgId, "app.person_id": personId }, fn);
+  return scoped(
+    {
+      "app.org_id": p.orgId,
+      "app.person_id": p.personId,
+      "app.member_id": p.userId,
+    },
+    async (q) => {
+      const live = await q.query(
+        "select 1 from users where id = $1 and person_id = $2 for share",
+        [p.userId, p.personId],
+      );
+      if (!live.rowCount) throw new Gone("This membership was removed.");
+      return fn(q);
+    },
+  );
 }
 
 // Runs fn seeing only the person and invitations that carry one email: the
