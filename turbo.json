@@ -24,7 +24,9 @@
         "FLY_REGION",
         "FLY_REPORT_URL",
         "VERCEL_PROJECT_PRODUCTION_URL",
-        "CRON_SECRET"
+        "CRON_SECRET",
+        "FLY_NAME_PREFIX",
+        "VERCEL_AUTOMATION_BYPASS_SECRET"
       ]
     },
     "typecheck": {

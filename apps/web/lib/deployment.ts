@@ -33,6 +33,11 @@ export type Computers =
       // The Machines API, and where machines report on themselves.
       api: string;
       report: string;
+      // Every machine and volume name starts with this; a preview's names
+      // carry its pull request, so the reap can find them.
+      namePrefix: string;
+      // Lets a machine's report through Vercel's protection on previews.
+      reportBypass: string | null;
     }
   | { kind: "none" };
 
@@ -95,12 +100,12 @@ function storage(): Storage {
   return { kind: "local", dir: process.env.UPLOADS_DIR ?? ".local/uploads" };
 }
 
-// A computer costs money, so previews never have them, and a production
-// that is only half told about Fly refuses to start rather than quietly
-// having none.
+// A computer costs money, so a deployment has them only when told about a
+// Fly app: production's own, or a preview's app of its own with names that
+// carry the pull request. Half a configuration refuses to start rather than
+// quietly having none.
 function computers(): Computers {
   const { FLY_API_TOKEN: token, FLY_COMPUTERS_APP: app } = process.env;
-  if (process.env.VERCEL && !production) return { kind: "none" };
   if (!token && !app) return { kind: "none" };
   if (!token || !app)
     throw new Error(
@@ -121,6 +126,15 @@ function computers(): Computers {
     region: process.env.FLY_REGION ?? "sjc",
     api: process.env.FLY_API_HOST ?? "https://api.machines.dev",
     report,
+    // A preview must name its machines for the pull request, or they land
+    // among production's and nothing can tell them apart.
+    namePrefix:
+      process.env.VERCEL && !production && !process.env.FLY_NAME_PREFIX
+        ? (() => {
+            throw new Error("Preview computers need FLY_NAME_PREFIX.");
+          })()
+        : (process.env.FLY_NAME_PREFIX ?? ""),
+    reportBypass: process.env.VERCEL_AUTOMATION_BYPASS_SECRET ?? null,
   };
 }
 

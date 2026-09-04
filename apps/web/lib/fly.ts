@@ -24,16 +24,17 @@ export const MAX_DISK_GB = 500;
 
 // Fly names carry our id, so a sweep can tell ours apart and match an
 // unrecorded one back to its row.
-export const volumeName = (computerId: string) =>
-  `c_${computerId.replaceAll("-", "").slice(0, 16)}`;
-export const machineName = (computerId: string) =>
-  `c-${computerId.slice(0, 8)}`;
 
 function config() {
   const c = deployment.computers;
   if (c.kind !== "fly") throw new Error("Computers are not set up here.");
   return c;
 }
+
+export const volumeName = (computerId: string) =>
+  `${config().namePrefix.replaceAll("-", "_")}c_${computerId.replaceAll("-", "").slice(0, 16)}`;
+export const machineName = (computerId: string) =>
+  `${config().namePrefix}c-${computerId.slice(0, 8)}`;
 
 async function call<T>(
   method: string,
@@ -86,7 +87,13 @@ export const fly = {
       skip_launch: true,
       config: {
         image: IMAGE,
-        env: { COMPUTER_SECRET: secret, REPORT_URL: config().report },
+        env: {
+          COMPUTER_SECRET: secret,
+          REPORT_URL: config().report,
+          ...(config().reportBypass
+            ? { REPORT_BYPASS: config().reportBypass }
+            : {}),
+        },
         guest: {
           cpu_kind: cpuKind,
           cpus: Number(cpus),

@@ -32,6 +32,7 @@ jobs:
           STORAGE_BUCKET: placeholder-uploads-tigris
           STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
           STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
+          FLY_PREVIEW_TOKEN: ${{ secrets.FLY_PREVIEW_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
           NEON_PROJECT_ID: quiet-wave-64485699
           NEON_PARENT_BRANCH: preview-parent

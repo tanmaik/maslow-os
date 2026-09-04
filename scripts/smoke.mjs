@@ -42,6 +42,7 @@ const stack = await startStack({
     FLY_COMPUTERS_APP: "fake",
     FLY_API_HOST: fake.url,
     FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
+    FLY_NAME_PREFIX: "pr0-",
     CRON_SECRET: "smoke",
     FILES_PART_SIZE: "3600",
   },
@@ -786,6 +787,11 @@ try {
     `${fake.volumes.size} volumes, ${fake.machines.size} machines`,
   );
   const volumesAtSignIn = fake.volumes.size;
+  check(
+    "a preview's volumes carry its pull request in their names",
+    [...fake.volumes.values()].every((v) => v.name.startsWith("pr0_c_")),
+    [...fake.volumes.values()].map((v) => v.name).join(", "),
+  );
   check(
     "a look at the computer attaches nothing",
     /data-state="no-compute"/.test(await computerPage(ottoNow)) &&

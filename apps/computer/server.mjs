@@ -4,7 +4,8 @@
 // to report when the machine is made.
 import { statfs } from "node:fs/promises";
 
-const { COMPUTER_SECRET, REPORT_URL, FLY_MACHINE_ID } = process.env;
+const { COMPUTER_SECRET, REPORT_URL, FLY_MACHINE_ID, REPORT_BYPASS } =
+  process.env;
 if (!COMPUTER_SECRET || !REPORT_URL || !FLY_MACHINE_ID) {
   console.error(
     "A computer needs COMPUTER_SECRET, REPORT_URL and FLY_MACHINE_ID.",
@@ -24,6 +25,10 @@ async function report() {
         authorization: `Bearer ${COMPUTER_SECRET}`,
         "fly-machine-id": FLY_MACHINE_ID,
         "content-type": "application/json",
+        // A preview sits behind Vercel's protection; this lets a report in.
+        ...(REPORT_BYPASS
+          ? { "x-vercel-protection-bypass": REPORT_BYPASS }
+          : {}),
       },
       body: JSON.stringify({ disk }),
       signal: AbortSignal.timeout(10000),

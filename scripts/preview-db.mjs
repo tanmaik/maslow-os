@@ -106,9 +106,29 @@ async function sql(uri, query) {
   return (await r.json()).rows ?? [];
 }
 
-const keys = ["DATABASE_URL", "DATABASE_OWNER_URL", "STORAGE_PREFIX"];
+const keys = [
+  "DATABASE_URL",
+  "DATABASE_OWNER_URL",
+  "STORAGE_PREFIX",
+  "FLY_API_TOKEN",
+  "FLY_COMPUTERS_APP",
+  "FLY_NAME_PREFIX",
+  "FLY_REPORT_URL",
+];
 // Previews share the bucket under a prefix of their own, emptied with them.
 const prefixFor = (n) => `preview/pr-${n}/`;
+// Previews make real computers in a Fly app of their own, every machine and
+// volume named for the pull request, destroyed with it. The token is scoped
+// to that app and nothing else.
+const flyPreviewApp = "placeholder-computers-preview";
+const flyNamePrefixFor = (n) => `pr${n}-`;
+// Vercel's branch alias: the daemon reports there, whichever deployment is
+// current for the branch.
+const branchUrlFor = (projectName, branch, teamSlug) =>
+  `https://${projectName}-git-${branch
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")}-${teamSlug}.vercel.app`;
 const branchNameFor = (n) => `preview/pr-${n}`;
 // A row is ours by its stamp — Vercel never returns an encrypted value for
 // reading. The stamp names the pull request and the Neon branch it points at.
@@ -165,10 +185,37 @@ async function up() {
   app.username = "app";
   app.password = password;
   app.host = app.host.replace(/^(ep-[a-z0-9-]+?)\./, "$1-pooler.");
+  const {
+    name: projectName,
+    link,
+    accountId,
+  } = await vercel("GET", `/v9/projects/${project}`);
+  const { slug: teamSlug } = await vercel("GET", `/v2/teams/${accountId}`);
+  const flyToken = process.env.FLY_PREVIEW_TOKEN;
+  if (!flyToken) {
+    console.log("fly: no FLY_PREVIEW_TOKEN, this preview has no computers");
+    await removeRows(
+      (await envs()).filter(
+        (e) =>
+          stampedFor(pr)(e) && e.gitBranch === ref && e.key.startsWith("FLY_"),
+      ),
+    );
+  }
   for (const [key, value] of [
     ["DATABASE_URL", app.toString()],
     ["DATABASE_OWNER_URL", owner],
     ["STORAGE_PREFIX", prefixFor(pr)],
+    ...(flyToken
+      ? [
+          ["FLY_API_TOKEN", flyToken],
+          ["FLY_COMPUTERS_APP", flyPreviewApp],
+          ["FLY_NAME_PREFIX", flyNamePrefixFor(pr)],
+          [
+            "FLY_REPORT_URL",
+            `${branchUrlFor(projectName, ref, teamSlug)}/computer/report`,
+          ],
+        ]
+      : []),
   ]) {
     await vercel("POST", `/v10/projects/${project}/env?upsert=true`, {
       key,
@@ -187,10 +234,6 @@ async function up() {
 
   // apps/web/vercel.json skips any preview build without the marker, so this
   // is the only build of the head.
-  const { name: projectName, link } = await vercel(
-    "GET",
-    `/v9/projects/${project}`,
-  );
   const d = await vercel("POST", `/v13/deployments`, {
     name: projectName,
     gitSource: { type: "github", repoId: link.repoId, ref, sha: opt.sha },
@@ -276,15 +319,112 @@ async function emptyPrefix(prefix) {
   );
 }
 
-// Removes the pull request's rows and objects, then its branch if it still
-// exists.
+// Destroys the pull request's machines, then its volumes, in the preview
+// Fly app, when this run holds that app's token.
+async function destroyComputers(prNumber) {
+  const token = process.env.FLY_PREVIEW_TOKEN;
+  if (!token) {
+    console.log(
+      `fly: no FLY_PREVIEW_TOKEN, pr${prNumber} computers left as is`,
+    );
+    return;
+  }
+  const prefix = flyNamePrefixFor(prNumber);
+  const api = async (method, path, allow404 = false) => {
+    const r = await fetch(
+      `https://api.machines.dev/v1/apps/${flyPreviewApp}${path}`,
+      { method, headers: { authorization: `Bearer ${token}` } },
+    );
+    if (r.status === 404 && allow404) return null;
+    if (!r.ok) throw new Error(`fly ${method} ${path} → ${r.status}`);
+    return r.json();
+  };
+  let gone = 0;
+  for (const m of (await api("GET", "/machines")).filter((m) =>
+    m.name.startsWith(prefix),
+  )) {
+    await api("DELETE", `/machines/${m.id}?force=true`, true);
+    let still;
+    for (let i = 0; i < 60; i++) {
+      still = await api("GET", `/machines/${m.id}`, true);
+      if (!still || still.state === "destroyed") break;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    if (still && still.state !== "destroyed")
+      throw new Error(`fly: machine ${m.id} did not go within a minute`);
+    gone++;
+  }
+  for (const v of (await api("GET", "/volumes")).filter((v) =>
+    v.name.startsWith(prefix.replaceAll("-", "_")),
+  )) {
+    let last;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        await api("DELETE", `/volumes/${v.id}`, true);
+        last = null;
+        break;
+      } catch (err) {
+        last = err;
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+    }
+    if (last) throw last;
+    gone++;
+  }
+  console.log(`fly: ${gone} of pr${prNumber}'s machines and volumes destroyed`);
+}
+
+// Every preview deployment of the project, oldest last.
+async function previewDeployments() {
+  const all = [];
+  let next;
+  do {
+    const page = await vercel(
+      "GET",
+      `/v6/deployments?projectId=${project}&target=preview&limit=100${next ? `&until=${next}` : ""}`,
+    );
+    all.push(...page.deployments);
+    next = page.pagination?.next;
+  } while (next);
+  return all;
+}
+
+// Deletes the preview deployments of the given branches: their URLs stop
+// answering for a database that is gone.
+async function removeDeployments(branches) {
+  let removed = 0;
+  for (const d of await previewDeployments()) {
+    if (!branches.has(d.meta?.githubCommitRef)) continue;
+    await vercel("DELETE", `/v13/deployments/${d.uid}`);
+    removed++;
+  }
+  console.log(
+    `vercel: ${removed} preview deployment${removed === 1 ? "" : "s"} removed`,
+  );
+}
+
+// Removes the pull request's rows, objects, computers and deployments, then
+// its branch if it still exists.
 async function down(prNumber = pr, branch = undefined) {
   for (const d of await deploymentsOf(prNumber)) {
     await vercel("DELETE", `/v13/deployments/${d.uid}`);
     console.log(`vercel: deleted deployment ${d.url}`);
   }
-  await removeRows((await envs()).filter(stampedFor(prNumber)));
+  const rows = (await envs()).filter(stampedFor(prNumber));
+  await removeRows(rows);
   await emptyPrefix(prefixFor(prNumber));
+  await destroyComputers(prNumber);
+  const headRef =
+    prNumber === pr && ref
+      ? ref
+      : (
+          await gh(
+            `/repos/${need("GITHUB_REPOSITORY")}/pulls/${prNumber}`,
+          ).catch(() => null)
+        )?.head?.ref;
+  await removeDeployments(
+    new Set([...rows.map((e) => e.gitBranch), headRef].filter(Boolean)),
+  );
   const name = branchNameFor(prNumber);
   branch ??= (await branches()).find((b) => b.name === name);
   if (!branch) return;
@@ -294,10 +434,11 @@ async function down(prNumber = pr, branch = undefined) {
 
 // Everything of ours that no open pull request owns: preview branches whose
 // pull request is closed or missing, and stamped rows whose branch is gone.
+const gh = async (p) =>
+  call("https://api.github.com", need("GITHUB_TOKEN"), "GET", p);
+
 async function reap() {
   const repo = need("GITHUB_REPOSITORY");
-  const gh = (p) =>
-    call("https://api.github.com", need("GITHUB_TOKEN"), "GET", p);
   let swept = 0;
 
   const existing = await branches();
@@ -312,12 +453,50 @@ async function reap() {
     swept++;
   }
 
+  // Machines and volumes of any pull request that is not open, whether or
+  // not its branch survived.
+  if (process.env.FLY_PREVIEW_TOKEN) {
+    const r = await fetch(
+      `https://api.machines.dev/v1/apps/${flyPreviewApp}/volumes`,
+      { headers: { authorization: `Bearer ${process.env.FLY_PREVIEW_TOKEN}` } },
+    );
+    const numbers = new Set(
+      (await r.json())
+        .map((v) => /^pr(\d+)_/.exec(v.name)?.[1])
+        .filter(Boolean),
+    );
+    for (const n of numbers) {
+      const p = await gh(`/repos/${repo}/pulls/${n}`).catch((e) =>
+        e.status === 404 ? null : Promise.reject(e),
+      );
+      if (p?.state === "open") continue;
+      await destroyComputers(Number(n));
+      swept++;
+    }
+  }
+
   const live = new Set(existing.map((b) => b.id));
   const orphaned = (await envs()).filter(
     (e) => ours(e) && !live.has(e.comment.split(":").at(-1)),
   );
   await removeRows(orphaned);
   swept += orphaned.length;
+
+  // Deployments of any branch with no open pull request.
+  const openHeads = new Set();
+  for (let page = 1; ; page++) {
+    const pulls = await gh(
+      `/repos/${repo}/pulls?state=open&per_page=100&page=${page}`,
+    );
+    for (const p of pulls) openHeads.add(p.head.ref);
+    if (pulls.length < 100) break;
+  }
+  const stale = new Set(
+    (await previewDeployments())
+      .map((d) => d.meta?.githubCommitRef)
+      .filter((b) => b && !openHeads.has(b)),
+  );
+  if (stale.size) await removeDeployments(stale);
 
   console.log(`reap: ${swept} stale item${swept === 1 ? "" : "s"} removed`);
 }
