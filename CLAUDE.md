@@ -12,8 +12,7 @@ Industries serves its stakeholders; the code is how.
 
 ## Stack
 
-Node 24 to develop on, 22.18 as the floor since that is what a fresh cloud
-agent box ships. pnpm. Monorepo under Turborepo. Next.js for the app. Vercel
+Node 24 to develop on, 22.18 as the floor: where importing `.ts` arrived. pnpm. Monorepo under Turborepo. Next.js for the app. Vercel
 for hosting. Neon for the managed database. Fly for managed machines.
 
 ## Local
@@ -80,6 +79,9 @@ the same object in every case.
 
 One database, one set of tables. Every row belongs to an org and the database
 enforces it — row-level security, not a `where` clause someone can forget.
+The few rows that exist before an org is known — a person, a throttle — are
+shown one key at a time by a policy of their own, and the migrations table is
+the runner's alone.
 
 Local and CI connect as the same restricted role production uses. Never a
 superuser: RLS does not apply to a table's owner, so a privileged local
@@ -108,12 +110,13 @@ applying to it.
 
 What a person knows lives in records, the links between them, and a log of
 every change. The brain is a graph of a mind, not a copy of its sources:
-nothing mirrors a mailbox or a calendar into it. The agent reads an app
-through a tool and writes what it concluded, with a confidence and an edge
-back to what it rests on. What it rests on is a stub: the app, the app's own
-id, and enough to find and cite the original, never the whole thing. A
-question the brain cannot answer is answered through a tool, and the answer
-and its stub are written so the next time is a read.
+nothing mirrors a mailbox or a calendar into it. Whatever writes into it — a
+person today, an agent reading an app through a tool later — writes what it
+concluded, with a confidence and an edge back to what it rests on. What it
+rests on is a stub: the app, the app's own id, and enough to find and cite
+the original, never the whole thing. A question the brain cannot answer is
+answered outside it, and the answer and its stub are written so the next
+time is a read.
 
 Kinds and verbs are the org's own vocabulary, open to the person and the
 agent, each with a description and an author. A brain starts with none:
@@ -136,9 +139,10 @@ A brain exports to a file that imports into any brain, as the importer.
 
 ## Real and fake
 
-Development runs against the real thing — real models, real machines, your own
-keys — because a product nobody lives in does not get good. Tests run against
-recorded traffic: fast, deterministic, no credentials, since CI has none.
+Development runs against the real thing — real vendors, your own keys —
+because a product nobody lives in does not get good. Tests run with no
+credentials: the smoke boots a fresh stack with every vendor key blanked, so
+CI needs none.
 
 The fake is a fallback, never a default. Credential present, real thing;
 absent, fake — so a fresh checkout still gives a working app. A fallback in
@@ -147,24 +151,22 @@ development stays visible on screen for as long as it is active.
 **In production there is no fallback.** A missing credential stops the app
 from starting. Nothing degrades quietly, and no error is swallowed.
 
-**"Download my data"** gives a person what is theirs — their rows, their
-machine's files — with stored tokens stripped. Nobody's export holds anyone
-else's slice, the org owner included. Importing is additive: each member's
-file adds theirs, so an org is rebuilt one person at a time. No production
-credential ever leaves production; only files travel.
+**"Download my data"** gives a person what is theirs, and today that is
+their brain: an export that imports into any brain, as the importer. Nobody's
+export holds anyone else's slice, the org owner included. Importing is
+additive, so an org is rebuilt one person at a time. No production credential
+ever leaves production; only files travel.
 
-Local runs the managed profile with test-mode keys — Stripe test, dev model
-keys, mail to the founders only — seeded from the founders' own exports. So
-local is production, as us, with fake money. Agents get the synthetic seed
-unless a human hands them a file.
-
-A preview is the same: a Neon branch off an empty parent — never off
-production — migrated, loaded from exports, on preview keys. The per-PR
-workflow is the only thing that builds a preview: database first, then deploy. Its machines
-are real, on a dev Fly account with a spend cap, made when first used and
-destroyed with the pull request. Outside production a dev sign-in exists —
-pick a seeded person, no email — visibly flagged like every fake and impossible
-in production.
+Local runs on the dev-tier keys in `.env.development` — WorkOS staging
+today; Resend and a dev bucket once they exist, since a preview's are
+production's — and the synthetic seed: three orgs with obviously
+distinguishable data. Whatever is not there is faked, and `pnpm dev` and the
+pill say which. A preview is the same: a Neon branch off an empty
+parent — never off production — migrated and seeded on deploy, on preview
+keys. The per-PR workflow is the only thing that builds a preview: database
+first, then deploy, and both die with the pull request. Outside production a
+dev sign-in exists — pick a seeded person, no email — visibly flagged like
+every fake and impossible in production.
 
 ## The machine
 

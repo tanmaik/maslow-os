@@ -196,8 +196,28 @@ async function up() {
   console.log(`vercel: deployed ${opt.sha.slice(0, 7)} → https://${d.url}`);
 }
 
-// Removes the pull request's rows, then its branch if it still exists.
+// The pull request's preview deployments, however many pushes made them.
+async function deploymentsOf(prNumber) {
+  const all = [];
+  for (let until; ;) {
+    const page = await vercel(
+      "GET",
+      `/v6/deployments?projectId=${project}&target=preview&limit=100${until ? `&until=${until}` : ""}`,
+    );
+    all.push(...page.deployments);
+    until = page.pagination?.next;
+    if (!until) break;
+  }
+  return all.filter((d) => d.meta?.githubPrId === String(prNumber));
+}
+
+// Removes the pull request's deployments and rows, then its branch if it
+// still exists.
 async function down(prNumber = pr, branch = undefined) {
+  for (const d of await deploymentsOf(prNumber)) {
+    await vercel("DELETE", `/v13/deployments/${d.uid}`);
+    console.log(`vercel: deleted deployment ${d.url}`);
+  }
   await removeRows((await envs()).filter(stampedFor(prNumber)));
   const name = branchNameFor(prNumber);
   branch ??= (await branches()).find((b) => b.name === name);

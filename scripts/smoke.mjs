@@ -11,9 +11,17 @@ import { root, startStack } from "./stack.mjs";
 // The smoke carries no credentials: a checkout's pulled config must not reach
 // it. Next leaves a variable alone once it is set, even to nothing.
 const noCredentials = Object.fromEntries(
-  ["WORKOS_API_KEY", "WORKOS_CLIENT_ID", "RESEND_API_KEY", "MAIL_FROM"].map(
-    (k) => [k, ""],
-  ),
+  [
+    "WORKOS_API_KEY",
+    "WORKOS_CLIENT_ID",
+    "RESEND_API_KEY",
+    "MAIL_FROM",
+    "STORAGE_ENDPOINT",
+    "STORAGE_REGION",
+    "STORAGE_BUCKET",
+    "STORAGE_ACCESS_KEY",
+    "STORAGE_SECRET_KEY",
+  ].map((k) => [k, ""]),
 );
 
 const stack = await startStack({
