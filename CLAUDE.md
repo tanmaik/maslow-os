@@ -264,6 +264,24 @@ superseded docs, unused artifacts and the old half of a reversed decision are
 deleted in the change that made them dead, never in a later cleanup that does
 not come.
 
+## Merging
+
+A pull request merges when nothing lingers behind it. The gate is mechanical
+where it can be, and Macroscope where it cannot.
+
+- `check` is green: typecheck, format, and the smoke, which migrates an empty
+  database and signs in as every seeded org.
+- The preview built and its database migrated. Both are required checks, so a
+  change that fails `next build` or a migration never reaches main.
+- Macroscope read it. A finding is fixed or answered in its thread, and every
+  thread is resolved before merge.
+- Every environment is answered: it works locally with no credentials, on the
+  preview, and in production. A vendor it adds is in `docs/dependencies.md`
+  in the same commit.
+- A migration is a new file from `pnpm migration:new`. Docs changed with the
+  code. Nothing in it points at a later pull request to finish it.
+- Squash-merged onto a linear main. The branch and its preview die with it.
+
 ## Comments
 
 A comment states the purpose of the unit it sits on, in the vocabulary of the
