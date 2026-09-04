@@ -3,3 +3,4 @@ node_modules
 .next
 .local
 .turbo
+.claude/worktrees
