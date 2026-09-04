@@ -13,7 +13,6 @@ import {
   setVolume,
   type Computer,
 } from "@placeholder/db/computers";
-import { filesOf } from "@placeholder/db/files";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
@@ -50,11 +49,10 @@ export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
   const held = c.volumeId ? null : await lease(p, c.id);
   if (held) {
     try {
-      // Read again under the lease: another request may have made it. The
-      // volume is made big enough for what the person's files already hold.
+      // Read again under the lease: another request may have made it.
       c = (await computerOf(p))!;
       if (!c.volumeId) {
-        const size = sizeFor((await filesOf(p)).bytes, c.diskGb);
+        const size = c.diskGb;
         const volume = await fly.createVolume(volumeName(c.id), size);
         try {
           await setVolume(p, c, volume.id, size);
@@ -73,21 +71,28 @@ export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
   return c;
 }
 
-// Attaches compute to the filesystem: a machine on the volume, recorded,
-// placed, then started. The first look at the computer is the first need;
-// looks that race wait for the one that holds the lease.
+// Attaches compute to the filesystem: a machine on the volume, recorded
+// and placed. Fly's proxy starts it at the first request that names it.
+// The first look at the computer is the first need; looks that race wait
+// for the one that holds the lease.
 export async function build(p: Principal): Promise<Built> {
   if (deployment.computers.kind === "none") return "off";
   let c = await ensureFilesystem(p);
   if (!c) return "not-allowed";
   if (!c.volumeId) return "exists";
   if (c.machineId && c.state !== "failed") return "exists";
-  let started = false;
   const held = await lease(p, c.id);
   if (!held) return "exists";
   try {
     c = (await computerOf(p))!;
     if (c.machineId && c.state !== "failed") return "exists";
+    // A machine whose build failed is let go of, and a new one made.
+    if (c.machineId) {
+      await fly.destroyMachine(c.machineId).catch(() => {});
+      await noteState(p, c, "destroyed");
+      await clearMachine(p, c.id, c.machineId);
+      c.machineId = null;
+    }
     if (!c.machineId) {
       const machine = await fly.createMachine(
         machineName(c.id),
@@ -106,15 +111,9 @@ export async function build(p: Principal): Promise<Built> {
     }
     const placed = await fly.placed(c.machineId);
     await noteState(p, c, placed.state);
-    await noteRequest(p, c, "start");
-    await fly.start(c.machineId);
-    started = true;
-    // Fly answers once it runs; the meter starts here, not at the next look.
-    await noteState(p, c, "started");
     return "built";
   } catch (err) {
-    // A machine that did start is not a failed build, whatever came after.
-    if (!started) await noteState(p, c, "failed");
+    await noteState(p, c, "failed");
     throw err;
   } finally {
     await release(p, c.id, held);
@@ -149,7 +148,16 @@ export async function growFor(p: Principal, bytes: number): Promise<void> {
     const fresh = (await computerOf(p))!;
     const size = sizeFor(bytes, fresh.diskGb);
     if (size === fresh.diskGb) return;
-    await fly.extendVolume(fresh.volumeId!, size);
+    const { needs_restart } = await fly.extendVolume(fresh.volumeId!, size);
+    // The room shows at the next boot, so a running machine boots now; the
+    // size is written last, so a restart that failed is tried again.
+    if (needs_restart && fresh.machineId) {
+      const m = await fly.machine(fresh.machineId);
+      if (m?.state === "started") {
+        await noteRequest(p, fresh, "restart");
+        await fly.restart(fresh.machineId);
+      }
+    }
     await setDiskGb(p, fresh, size);
   } finally {
     await release(p, c.id, held);
@@ -200,42 +208,4 @@ export async function status(p: Principal): Promise<Status | null> {
   if (!machine)
     return { computer: { ...computer, machineId: null }, state: "no-compute" };
   return { computer, state: machine.state };
-}
-
-// Starting is new use, so the org must still be allowed it; stopping never
-// needs permission.
-export async function start(p: Principal): Promise<boolean> {
-  const c = await computerOf(p);
-  if (!c || !(await computersAllowed(p))) return false;
-  if (!c.machineId || c.state === "failed") return (await build(p)) === "built";
-  // Under the lease, after placement: a start that races a build waits for
-  // it instead of failing against a machine not yet placed.
-  const held = await lease(p, c.id);
-  if (!held) return false;
-  try {
-    await fly.placed(c.machineId);
-    await noteRequest(p, c, "start");
-    await fly.start(c.machineId);
-    await noteState(p, c, "started");
-    return true;
-  } finally {
-    await release(p, c.id, held);
-  }
-}
-
-export async function stop(p: Principal): Promise<boolean> {
-  const c = await computerOf(p);
-  if (!c?.machineId) return false;
-  // Under the lease, so a stop cannot land inside a build's start.
-  const held = await lease(p, c.id);
-  if (!held) return false;
-  try {
-    await noteRequest(p, c, "stop");
-    await fly.stop(c.machineId);
-    // Fly answers once it is stopped; the meter stops here.
-    await noteState(p, c, "stopped");
-    return true;
-  } finally {
-    await release(p, c.id, held);
-  }
 }

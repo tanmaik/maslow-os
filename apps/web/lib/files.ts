@@ -1,26 +1,20 @@
 import type { Principal } from "@placeholder/db/auth";
+import { computersIn } from "@placeholder/db/computers";
 import {
   beginFile,
   claimJoin,
-  createFolder,
-  deleteFolder,
-  filesUnder,
-  folderExists,
-  forgetFileUnder,
-  listing,
-  moveFile,
-  moveFolder,
-  renameFile,
   claimStale,
   fileOf,
   filesOf,
   forgetFile,
+  forgetFileIn,
   readyFile,
   rejectFile,
+  stagedFile,
+  stagedIn,
   staleUploads,
   unclaimJoin,
   unclaimStale,
-  unforgetFile,
   uploadingFile,
   type StoredFile,
 } from "@placeholder/db/files";
@@ -35,29 +29,28 @@ import { Readable } from "node:stream";
 import path from "node:path";
 
 import { growFor } from "./computer.ts";
-import { MAX_DISK_GB } from "./fly.ts";
 import { deployment } from "./deployment.ts";
+import { callIn, disk, DiskError } from "./disk.ts";
+import { MAX_DISK_GB } from "./fly.ts";
 import { presign, s3 } from "./s3.ts";
 
-// Files go from the browser straight to the store in parts, so a file can
-// be as large as the filesystem allows and never passes through us. The
-// store is the bucket, or a directory on a real machine.
+// A file goes from the browser to the store in parts, then from the store
+// onto the person's disk, so it can be as large as the disk allows and
+// never passes through us. The store is the bucket, or a directory on a
+// real machine; the file is staged there only until it has landed.
 export const PART_SIZE =
   Number(process.env.FILES_PART_SIZE) || 64 * 1024 * 1024;
 export const MAX_FILE = MAX_DISK_GB * 1e9;
 
 export class FileRejected extends Error {}
 
-// A download's filename, any script, as RFC 6266 spells it.
-export const disposition = (name: string) =>
-  `attachment; filename="${name.replace(/[^\x20-\x7e]|["\\]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name).replace(/[!'()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)}`;
-
 type Part = { partNumber: number; etag: string };
 
 const objectKey = (p: Principal, id: string) =>
   `${deployment.storage.kind === "s3" ? deployment.storage.prefix : ""}orgs/${p.orgId}/members/${p.userId}/files/${id}`;
 
-// Where local parts live, and the token that lets a browser write one.
+// Where local parts live, and the token that lets a browser write one or
+// the machine read the whole.
 const localDir = () =>
   deployment.storage.kind === "local"
     ? path.join(deployment.storage.dir, "..", "files")
@@ -102,7 +95,11 @@ export const localPartPath = (key: string, part: number) =>
 export const localFilePath = (key: string) =>
   path.join(localDir()!, key.replaceAll("/", "_"));
 
-// Opens an upload: a row, and for the bucket a multipart upload id.
+export const joined = (folder: string, name: string) =>
+  folder === "/" ? `/${name}` : `${folder}/${name}`;
+
+// Opens an upload: a row, and for the bucket a multipart upload id. The
+// folder must be on the disk, and the name free.
 export async function begin(
   p: Principal,
   f: { name: string; size: number; contentType: string; path: string },
@@ -111,10 +108,13 @@ export async function begin(
     throw new FileRejected("Files need object storage, which is not set up.");
   if (!(f.size >= 0) || f.size > MAX_FILE)
     throw new FileRejected("A file is limited to 500 GB.");
-  // What is declared counts against the cap at once; the filesystem grows
-  // only for bytes that have arrived.
-  if (!(await folderExists(p, f.path)))
+  if (cleanName(f.name) !== f.name)
+    throw new FileRejected("That is not a name a file can have.");
+  const there = await disk.stat(p, f.path);
+  if (there?.kind !== "folder")
     throw new FileRejected("That folder does not exist.");
+  if (await disk.stat(p, joined(f.path, f.name)))
+    throw new FileRejected(`Something named ${f.name} is already there.`);
   const id = randomUUID();
   const key = objectKey(p, id);
   let uploadId: string | null = null;
@@ -135,12 +135,13 @@ export async function begin(
       (await r.text()).match(/<UploadId>([^<]+)<\/UploadId>/)?.[1] ?? null;
     if (!uploadId) throw new Error("multipart begin: no upload id");
   }
+  // What is declared counts against the cap at once.
   if (!(await beginFile(p, { id, key, uploadId, ...f }, MAX_FILE))) {
     if (deployment.storage.kind === "s3" && uploadId)
       await s3(deployment.storage, "DELETE", key, undefined, undefined, {
         uploadId,
       });
-    throw new FileRejected("Your filesystem is full at 500 GB.");
+    throw new FileRejected("Your disk is full at 500 GB.");
   }
   return {
     id,
@@ -172,8 +173,20 @@ export async function partUrl(
   return `/files/local/${localToken(f.key, partNumber, Date.now() + 3600_000, `${p.orgId}|${p.userId}|${f.id}`)}`;
 }
 
-// Closes the upload with the parts the browser sent, and records the size
-// the store confirms.
+// Where the machine fetches the staged whole from: a presigned GET, or our
+// own route with a token good for a day.
+function stagedUrl(p: Principal, f: StoredFile): string {
+  if (deployment.storage.kind === "s3")
+    return presign(deployment.storage, "GET", f.key, {}, 86400);
+  const site = new URL(
+    deployment.computers.kind === "fly" ? deployment.computers.report : "/",
+  ).origin;
+  return `${site}/files/local/${localToken(f.key, 0, Date.now() + 86400_000, `${p.orgId}|${p.userId}|${f.id}`)}`;
+}
+
+// Closes the upload with the parts the browser sent, checks the size the
+// store confirms, then lands the file on the disk and lets the staged copy
+// go. A file that will not land is refused, not kept.
 export async function complete(
   p: Principal,
   id: string,
@@ -248,9 +261,10 @@ export async function complete(
   }
   // What arrived must be what was declared, or the quota means nothing; and
   // a row deleted while joining does not come back to life.
+  const staged = { key: f.key, state: "ready", uploadId: null };
   if (size !== f.size || !(await readyFile(p, id, size))) {
     // The bytes go before the row hides, so a refusal leaves it findable.
-    await dropBytes({ key: f.key, state: "ready", uploadId: null });
+    await dropBytes(staged);
     await rejectFile(p, id);
     if (size !== f.size)
       throw new FileRejected(
@@ -258,40 +272,124 @@ export async function complete(
       );
     return null;
   }
-  await growFor(p, (await filesOf(p)).bytes);
+  // Onto the disk, grown first if it would not fit.
+  try {
+    const { disk: space } = await disk.list(p, f.path);
+    if (space.used + size > 0.9 * space.total)
+      await growFor(p, space.used + size);
+    await disk.pull(
+      p,
+      joined(f.path, f.name),
+      stagedUrl(p, { ...f, size }),
+      size,
+    );
+  } catch (err) {
+    await dropBytes(staged);
+    await rejectFile(p, id);
+    if (err instanceof DiskError)
+      throw new FileRejected(
+        `${f.name} could not land on your disk: ${err.message}`,
+      );
+    throw err;
+  }
+  await landed(p, f, staged);
   return { ...f, state: "ready", size };
 }
 
-// Where the browser fetches the file: a presigned GET for the bucket, our
-// own route locally.
-export async function downloadUrl(
+// Once on the disk, the staged copy is let go of and then the row closed.
+// A copy that will not go leaves the row open, so the sweep tries again;
+// the file is on the disk already, and a second landing finds it there.
+async function landed(
   p: Principal,
-  id: string,
-): Promise<string | null> {
-  const f = await fileOf(p, id);
-  if (!f || f.state !== "ready") return null;
-  if (deployment.storage.kind === "s3")
-    return presign(deployment.storage, "GET", f.key, {
-      "response-content-disposition": disposition(f.name),
-    });
-  return null;
+  f: { id: string },
+  staged: { key: string; state: string; uploadId: string | null },
+) {
+  try {
+    await dropBytes(staged);
+  } catch (err) {
+    console.error(`staged copy stays: ${(err as Error).message}`);
+    return;
+  }
+  await forgetFile(p, f.id);
 }
 
-// The file itself, streamed, for the local store; a file can be far larger
-// than memory.
-export async function localStream(p: Principal, id: string) {
-  const f = await fileOf(p, id);
-  if (!f || f.state !== "ready") return null;
-  // Opened before answering, so a file deleted meanwhile is a 404 and not
-  // a download that breaks off.
+// Files the store holds whole that never reached a disk, landed by the
+// sweep: a landing interrupted midway is not lost. The disk is grown for
+// them as for any upload; a name taken by something else is stepped
+// past, and one taken by this very file is a landing already done. Per
+// org.
+export async function landStaged(orgId: string, now: Date): Promise<void> {
+  const stragglers = await stagedIn(orgId, new Date(now.getTime() - 120_000));
+  if (stragglers.length === 0) return;
+  const computers = new Map(
+    (await computersIn(orgId)).map((c) => [c.userId, c]),
+  );
+  for (const f of stragglers) {
+    const c = computers.get(f.userId);
+    if (!c?.machineId) continue;
+    const p = { orgId, userId: f.userId } as Principal;
+    try {
+      const { disk: space } = await callIn<{
+        disk: { used: number; total: number };
+      }>(c, "GET", `/fs?path=${encodeURIComponent(f.path)}`);
+      if (space.used + f.size > 0.9 * space.total)
+        await growFor(p, space.used + f.size);
+      let name = f.name;
+      for (let n = 2; n < 12; n++) {
+        const there = await callIn<{ kind: string; size: number }>(
+          c,
+          "GET",
+          `/fs/stat?path=${encodeURIComponent(joined(f.path, name))}`,
+        ).catch((err) => {
+          if (err instanceof DiskError && err.status === 404) return null;
+          throw err;
+        });
+        if (!there) {
+          await callIn(c, "POST", "/fs/pull", {
+            path: joined(f.path, name),
+            url: stagedUrl(p, f),
+            size: f.size,
+          });
+          break;
+        }
+        if (there.kind === "file" && there.size === f.size) break;
+        name = f.name.replace(/(\.[^.]*)?$/, ` (${n})$1`);
+      }
+    } catch (err) {
+      console.error(`landing ${f.id}: ${(err as Error).message}`);
+      continue;
+    }
+    try {
+      await dropBytes({ key: f.key, state: "ready", uploadId: null });
+    } catch (err) {
+      // The row stays open, so the copy is tried again next sweep.
+      console.error(`staged copy stays: ${(err as Error).message}`);
+      continue;
+    }
+    await forgetFileIn(orgId, f.userId, f.id);
+  }
+}
+
+// The staged whole, streamed, for the machine fetching it from the local
+// store; a file can be far larger than memory.
+export async function localStagedStream(claim: {
+  orgId: string;
+  userId: string;
+  id: string;
+}) {
+  const f = await stagedFile(claim.orgId, claim.userId, claim.id);
+  if (!f) return null;
+  // Opened before answering, so a file gone meanwhile is a 404 and not a
+  // download that breaks off.
   let handle;
   try {
     handle = await fs.open(localFilePath(f.key), "r");
   } catch {
     return null;
   }
+  const { size } = await handle.stat();
   return {
-    file: f,
+    size,
     body: Readable.toWeb(
       handle.createReadStream(),
     ) as ReadableStream<Uint8Array>,
@@ -327,10 +425,12 @@ export async function dropBytes(f: {
   }
 }
 
-// Deletes the bytes; the row stays, marked, for the meter.
-export async function remove(p: Principal, id: string): Promise<boolean> {
+// Abandons an upload not yet whole: the bytes go, the row stays marked for
+// the meter. One already whole is on its way to the disk and is left to
+// land.
+export async function abandon(p: Principal, id: string): Promise<boolean> {
   const f = await fileOf(p, id);
-  if (!f) return false;
+  if (!f || f.state === "ready") return false;
   await dropBytes(f);
   await forgetFile(p, id);
   return true;
@@ -367,7 +467,7 @@ export function stillUploading(claim: {
   return uploadingFile(claim.orgId, claim.userId, claim.id);
 }
 
-// A path as the filesystem spells it: "/" or "/a/b", no empty or dotted
+// A path as the disk spells it: "/" or "/a/b", no empty or dotted
 // segments, nothing a shell would mind. Null when it is not one.
 export function cleanPath(raw: unknown): string | null {
   if (typeof raw !== "string") return null;
@@ -389,9 +489,8 @@ export function cleanName(raw: unknown): string | null {
   if (
     !name ||
     name.length > 255 ||
-    /[\/\x00-\x1f]/.test(name) ||
-    name === "." ||
-    name === ".."
+    name.startsWith(".") ||
+    /[\/\x00-\x1f]/.test(name)
   )
     return null;
   return name;
@@ -399,28 +498,3 @@ export function cleanName(raw: unknown): string | null {
 
 export const parentOf = (path: string) =>
   path === "/" ? "/" : path.slice(0, path.lastIndexOf("/")) || "/";
-
-export async function newFolder(p: Principal, path: string): Promise<void> {
-  await createFolder(p, path);
-}
-
-// A folder goes with everything in it: each file's bytes, then the rows.
-export async function removeFolder(
-  p: Principal,
-  path: string,
-): Promise<boolean> {
-  // Each file is marked gone only if it is still under the folder, so one
-  // moved out meanwhile survives; then its bytes go, or the mark comes back.
-  for (const f of await filesUnder(p, path)) {
-    if (!(await forgetFileUnder(p, f.id, path))) continue;
-    try {
-      await dropBytes(f);
-    } catch (err) {
-      await unforgetFile(p, f.id);
-      throw err;
-    }
-  }
-  return deleteFolder(p, path);
-}
-
-export { folderExists, listing, moveFile, moveFolder, renameFile };

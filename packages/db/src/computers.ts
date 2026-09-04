@@ -145,7 +145,7 @@ export async function noteState(
 export async function noteRequest(
   p: Principal,
   c: Computer,
-  kind: "start" | "stop",
+  kind: "start" | "stop" | "restart",
 ): Promise<void> {
   await asOrg(p.orgId, (q) =>
     q.query(
@@ -257,6 +257,27 @@ export async function noteStateIn(
       "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, $2, $3, $4)",
       [c.id, state, c.size, c.diskGb],
     );
+  });
+}
+
+// Fly's own record of a machine's starts and stops, each once, at the
+// moment it happened: the proxy wakes and suspends machines without us.
+export async function noteEventsIn(
+  orgId: string,
+  c: Computer,
+  events: { status: string; timestamp: number }[],
+): Promise<void> {
+  const kinds = new Set(["started", "stopped", "suspended", "destroyed"]);
+  await asOrg(orgId, async (q) => {
+    for (const e of events) {
+      if (!kinds.has(e.status)) continue;
+      await q.query(
+        `insert into computer_events (computer_id, kind, size, disk_gb, at)
+         values ($1, $2, $3, $4, to_timestamp($5 / 1000.0))
+         on conflict (computer_id, kind, at) do nothing`,
+        [c.id, e.status, c.size, c.diskGb, e.timestamp],
+      );
+    }
   });
 }
 

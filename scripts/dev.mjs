@@ -19,6 +19,7 @@ const stack = await startStack({
         FLY_API_TOKEN: "fake",
         FLY_COMPUTERS_APP: "fake",
         FLY_API_HOST: fake.url,
+        FLY_MACHINES_HOST: fake.url,
         FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
       }
     : {},

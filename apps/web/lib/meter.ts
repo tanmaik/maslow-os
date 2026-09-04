@@ -2,11 +2,12 @@ import { asMeter, asOrg, type Query } from "@placeholder/db";
 import {
   clearMachineIn,
   computersIn,
+  noteEventsIn,
   noteStateIn,
 } from "@placeholder/db/computers";
 
 import { deployment } from "./deployment.ts";
-import { expireUploads } from "./files.ts";
+import { expireUploads, landStaged } from "./files.ts";
 import { settle } from "./orphans.ts";
 import { fly } from "./fly.ts";
 import { PRICES } from "./prices.ts";
@@ -256,6 +257,8 @@ export async function sweep(now = new Date()): Promise<number> {
           if (!c.machineId) continue;
           try {
             const m = await fly.machine(c.machineId);
+            // What Fly's proxy did to it since: exact starts and stops.
+            if (m?.events) await noteEventsIn(orgId, c, m.events);
             await noteStateIn(orgId, c, m ? m.state : "destroyed");
             if (!m) await clearMachineIn(orgId, c.id, c.machineId);
           } catch (err) {
@@ -263,6 +266,7 @@ export async function sweep(now = new Date()): Promise<number> {
           }
         }
       await expireUploads(orgId, now);
+      await landStaged(orgId, now);
       await settle(orgId);
       if (!orgs.includes(orgId)) continue;
       appended += await asOrg(orgId, async (q) => {

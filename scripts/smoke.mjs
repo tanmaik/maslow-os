@@ -41,6 +41,7 @@ const stack = await startStack({
     FLY_API_TOKEN: "fake",
     FLY_COMPUTERS_APP: "fake",
     FLY_API_HOST: fake.url,
+    FLY_MACHINES_HOST: fake.url,
     FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
     FLY_NAME_PREFIX: "pr0-",
     CRON_SECRET: "smoke",
@@ -766,16 +767,15 @@ try {
   rename.set("last_name", "L. Loaf");
   await settings("/settings/profile", rename, ottoObs);
 
-  // Computers: in an org that may have them, the first look at your
-  // computer makes it, recorded and started; an org that may not is told so.
-  const computerPage = async (cookie) =>
-    (await fetch(`${stack.url}/computer`, { headers: { cookie } })).text();
-  const computerAct = (action, cookie) =>
-    fetch(`${stack.url}/computer/${action}`, {
-      method: "POST",
-      headers: { cookie },
-      redirect: "manual",
-    });
+  // Computers: in an org that may have them, signing in makes the
+  // filesystem, and the first look at the computer makes the machine and
+  // wakes it, so the page is the disk; an org that may not is told so.
+  const computerPage = async (cookie, path = "/") =>
+    (
+      await fetch(`${stack.url}/computer?path=${encodeURIComponent(path)}`, {
+        headers: { cookie },
+      })
+    ).text();
   check(
     "computers are gated by org",
     (await computerPage(wile)).includes("not available for this org"),
@@ -792,35 +792,25 @@ try {
     [...fake.volumes.values()].every((v) => v.name.startsWith("pr0_c_")),
     [...fake.volumes.values()].map((v) => v.name).join(", "),
   );
-  check(
-    "a look at the computer attaches nothing",
-    /data-state="no-compute"/.test(await computerPage(ottoNow)) &&
-      fake.machines.size === 0,
-    `${fake.machines.size} machines`,
-  );
-  const started = await computerAct("start", ottoNow);
   const ottoComputer = await computerPage(ottoNow);
+  const opened = [
+    fake.machines.size === 1,
+    fake.volumes.size === volumesAtSignIn,
+    [...fake.machines.values()][0]?.state === "started",
+    /data-state="started"/.test(ottoComputer),
+    ottoComputer.includes("This folder is empty"),
+    / of [0-9.]+ [KMG]B used/.test(ottoComputer),
+  ];
   check(
-    "starting attaches compute, recorded and running",
-    started.headers.get("location")?.endsWith("start=true") &&
-      fake.machines.size === 1 &&
-      fake.volumes.size === volumesAtSignIn &&
-      /data-state="started"/.test(ottoComputer) &&
-      ottoComputer.includes("1.2 GB of 10.0 GB used, reported 0 min ago"),
-    `${fake.machines.size} machine, ${fake.volumes.size} volume`,
+    "opening the computer makes the machine, wakes it and shows the disk",
+    opened.every(Boolean),
+    `${fake.machines.size} machine, ${fake.volumes.size} volume, ${opened.map(Number).join("")}`,
   );
   await computerPage(ottoNow);
   check(
     "a second look makes nothing",
     fake.machines.size === 1 && fake.volumes.size === volumesAtSignIn,
     `${fake.machines.size} machine`,
-  );
-  const stopped = await computerAct("stop", ottoNow);
-  check(
-    "a computer stops",
-    stopped.headers.get("location")?.endsWith("stop=true") &&
-      /data-state="stopped"/.test(await computerPage(ottoNow)),
-    "Off",
   );
   const events = await asOrg(
     "00000000-0000-4000-8000-000000000002",
@@ -832,14 +822,16 @@ try {
       ).rows.map((r) => r.kind),
   );
   check(
-    "a computer's states are events",
-    [...events].sort().join(",") ===
-      "created,reported,start,started,stop,stopped,stopped,volume",
+    "a computer's states are events, and the machine reported on boot",
+    ["created", "volume", "stopped", "reported"].every((k) =>
+      events.includes(k),
+    ),
     events.join(","),
   );
-  // Files go to the store in parts; here the store is a directory behind
-  // our own PUT. Three parts make one file, listed with its size, fetched
-  // back whole, unseen by anyone else, and deleted.
+  // Files go to the store in parts, then land on the disk. Here the store
+  // is a directory behind our own PUT and the disk is a daemon process.
+  // Three parts make one file, listed from the disk with its size, fetched
+  // back whole from the machine, unseen on anyone else's disk, and deleted.
   const json = (path, body, cookie) =>
     fetch(`${stack.url}${path}`, {
       method: "POST",
@@ -870,28 +862,58 @@ try {
     await json("/files/complete", { id: begun.id, parts: etags }, ottoNow)
   ).json();
   const listed = await computerPage(ottoNow);
+  const staged = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) => {
+      await q.query("select set_config('app.meter', 'sweep', true)");
+      return (
+        await q.query(
+          "select state, deleted_at is not null as gone from files where id = $1",
+          [begun.id],
+        )
+      ).rows[0];
+    },
+  );
   check(
-    "a file arrives in parts and is listed",
+    "a file arrives in parts, lands on the disk and leaves the store",
     closed.size === whole.length &&
-      listed.includes(`data-file="${begun.id}"`) &&
-      listed.includes(`data-files-bytes="${whole.length}"`),
-    `${closed.size} bytes`,
+      listed.includes('data-file="/notes.txt"') &&
+      staged?.gone === true,
+    `${closed.size} bytes, staged row ${JSON.stringify(staged)}`,
   );
-  const fetched = await fetch(`${stack.url}/files/${begun.id}`, {
-    headers: { cookie: ottoNow },
-  });
+  const download = async (cookie, path) => {
+    const sent = await fetch(
+      `${stack.url}/files/download?path=${encodeURIComponent(path)}`,
+      { headers: { cookie }, redirect: "manual" },
+    );
+    const to = sent.headers.get("location");
+    if (!to) return { status: sent.status, body: "" };
+    const got = await fetch(to);
+    return { status: got.status, body: await got.text(), to };
+  };
+  const fetched = await download(ottoNow, "/notes.txt");
   check(
-    "a file comes back whole",
-    fetched.status === 200 && (await fetched.text()) === whole,
-    `answered ${fetched.status}`,
+    "a file comes back whole, from the machine itself",
+    fetched.status === 200 &&
+      fetched.body === whole &&
+      fetched.to.startsWith(`${fake.url}/dl/`),
+    `answered ${fetched.status} from ${fetched.to}`,
   );
-  const otherMember = await fetch(`${stack.url}/files/${begun.id}`, {
-    headers: { cookie: margeOwner },
-  });
+  const otherMember = await download(margeOwner, "/notes.txt");
   check(
-    "a file is nobody else's",
+    "a file is on nobody else's disk",
     otherMember.status === 404,
     `answered ${otherMember.status}`,
+  );
+  const taken = await json(
+    "/files/begin",
+    { name: "notes.txt", size: 1, type: "text/plain" },
+    ottoNow,
+  );
+  check(
+    "a name already on the disk is refused",
+    taken.status === 413 && (await taken.text()).includes("already there"),
+    `answered ${taken.status}`,
   );
   // The filesystem grows for bytes that arrived, never for a declared
   // size, and stops at Fly's limit.
@@ -931,31 +953,6 @@ try {
     tooBig.status === 413,
     `answered ${tooBig.status}`,
   );
-  await fetch(`${stack.url}/files/delete`, {
-    method: "POST",
-    headers: { cookie: ottoNow },
-    body: new URLSearchParams({ file: archive.id }),
-    redirect: "manual",
-  });
-  const fileDeleted = await fetch(`${stack.url}/files/delete`, {
-    method: "POST",
-    headers: { cookie: ottoNow },
-    body: new URLSearchParams({ file: begun.id }),
-    redirect: "manual",
-  });
-  check(
-    "a file is deleted",
-    fileDeleted.headers.get("location")?.includes("deleted=yes") &&
-      !(await computerPage(ottoNow)).includes(`data-file="${begun.id}"`) &&
-      (
-        await fetch(`${stack.url}/files/${begun.id}`, {
-          headers: { cookie: ottoNow },
-        })
-      ).status === 404,
-    "gone from the list and the store",
-  );
-  // The filesystem: folders to open, files inside them, renamed, moved, and
-  // a folder deleted with what it holds.
   const form = (path, body, cookie) =>
     fetch(`${stack.url}${path}`, {
       method: "POST",
@@ -963,21 +960,40 @@ try {
       body: new URLSearchParams(body),
       redirect: "manual",
     });
+  const arriving = await computerPage(ottoNow);
+  const abandoned = await form(
+    "/files/delete",
+    { path: "/", upload: archive.id },
+    ottoNow,
+  );
+  const fileDeleted = await form(
+    "/files/delete",
+    { path: "/", target: "/notes.txt" },
+    ottoNow,
+  );
+  check(
+    "an upload on its way is shown, and can be abandoned; a file is deleted",
+    arriving.includes(`data-upload="${archive.id}"`) &&
+      abandoned.headers.get("location")?.includes("deleted=yes") &&
+      fileDeleted.headers.get("location")?.includes("deleted=yes") &&
+      !(await computerPage(ottoNow)).includes('data-file="/notes.txt"') &&
+      (await download(ottoNow, "/notes.txt")).status === 404,
+    "gone from the list and the disk",
+  );
+  // The filesystem: folders to open, in the tree and the listing; files
+  // inside them, renamed, moved; a folder deleted with what it holds.
   const folderMade = await form(
     "/files/folder",
     { path: "/", name: "photos" },
     ottoNow,
   );
-  const inPhotos = await (
-    await fetch(`${stack.url}/computer?path=%2Fphotos`, {
-      headers: { cookie: ottoNow },
-    })
-  ).text();
+  const inPhotos = await computerPage(ottoNow, "/photos");
   check(
-    "a folder is made and opens empty",
+    "a folder is made, opens empty, and is in the tree",
     folderMade.headers.get("location")?.includes("folder=made") &&
       inPhotos.includes('data-path="/photos"') &&
-      inPhotos.includes("This folder is empty"),
+      inPhotos.includes("This folder is empty") &&
+      inPhotos.includes('data-tree="/photos"'),
     "photos, empty",
   );
   const photo = await (
@@ -997,26 +1013,22 @@ try {
     ottoNow,
   );
   const rootView = await computerPage(ottoNow);
-  const photosView = await (
-    await fetch(`${stack.url}/computer?path=%2Fphotos`, {
-      headers: { cookie: ottoNow },
-    })
-  ).text();
+  const photosView = await computerPage(ottoNow, "/photos");
   check(
     "a file uploaded into a folder is there and not at the root",
-    photosView.includes(`data-file="${photo.id}"`) &&
-      !rootView.includes(`data-file="${photo.id}"`) &&
+    photosView.includes('data-file="/photos/sunset.txt"') &&
+      !rootView.includes("sunset.txt") &&
       rootView.includes('data-folder="/photos"'),
     "sunset.txt in photos",
   );
   const fileRenamed = await form(
     "/files/rename",
-    { path: "/photos", file: photo.id, name: "dusk.txt" },
+    { path: "/photos", target: "/photos/sunset.txt", name: "dusk.txt" },
     ottoNow,
   );
   const fileMoved = await form(
     "/files/move",
-    { path: "/photos", file: photo.id, to: "/" },
+    { path: "/photos", target: "/photos/dusk.txt", to: "/" },
     ottoNow,
   );
   const rootAfter = await computerPage(ottoNow);
@@ -1024,18 +1036,29 @@ try {
     "a file is renamed and moved to the root",
     fileRenamed.headers.get("location")?.includes("renamed=yes") &&
       fileMoved.headers.get("location")?.includes("moved=yes") &&
-      rootAfter.includes(`data-file="${photo.id}"`) &&
-      rootAfter.includes("dusk.txt"),
+      rootAfter.includes('data-file="/dusk.txt"') &&
+      (await download(ottoNow, "/dusk.txt")).body === "hello",
     "dusk.txt at the root",
+  );
+  const escaped = await form(
+    "/files/move",
+    { path: "/", target: "/dusk.txt", to: "/../../etc" },
+    ottoNow,
+  );
+  check(
+    "nothing leaves the disk",
+    escaped.headers.get("location")?.includes("moved=where") &&
+      (await computerPage(ottoNow)).includes('data-file="/dusk.txt"'),
+    "a path with .. is not a path",
   );
   const folderGone = await form(
     "/files/delete",
-    { path: "/", folder: "/photos" },
+    { path: "/", target: "/photos" },
     ottoNow,
   );
   const fileGone = await form(
     "/files/delete",
-    { path: "/", file: photo.id },
+    { path: "/", target: "/dusk.txt" },
     ottoNow,
   );
   const rootFinal = await computerPage(ottoNow);
@@ -1044,7 +1067,7 @@ try {
     folderGone.headers.get("location")?.includes("deleted=yes") &&
       fileGone.headers.get("location")?.includes("deleted=yes") &&
       !rootFinal.includes('data-folder="/photos"') &&
-      !rootFinal.includes(`data-file="${photo.id}"`),
+      !rootFinal.includes('data-file="/dusk.txt"'),
     "photos and dusk.txt gone",
   );
   // The meter: a sweep turns what happened into priced usage, per person,
@@ -1078,14 +1101,13 @@ try {
   const by = Object.fromEntries(ottoMetered.map((r) => [r.resource, r]));
   const margeBrain = margeMetered.find((r) => r.resource === "brain");
   check(
-    "the meter prices compute, disk, files and brain per person",
+    "the meter prices compute, disk and brain per person",
     swept.appended > 0 &&
       by.compute?.unit === "second" &&
       by.compute.q > 0 &&
       by.disk?.unit === "gb_second" &&
       by.disk.q > 0 &&
-      by.bucket?.unit === "byte_second" &&
-      by.bucket.q > 0 &&
+      (by.bucket === undefined || by.bucket.unit === "byte_second") &&
       margeBrain?.unit === "byte_second" &&
       margeBrain.q > 0 &&
       [...ottoMetered, ...margeMetered].every((r) => r.n === 2 && r.cost >= 0),
@@ -1120,20 +1142,20 @@ try {
       !/data-usage-total="0"/.test(settingsUsage),
     `settings total ${settingsUsage.match(/data-usage-total="([^"]+)"/)?.[1]}`,
   );
-  // A machine gone behind our back is forgotten by the row, and compute can
-  // be attached to the same filesystem again.
-  const [goneId] = fake.machines.keys();
+  // A machine gone behind our back is forgotten by the row, and the next
+  // look makes a new one on the same filesystem.
+  const machinesBeforeGone = fake.machines.size;
+  const [goneId, goneMachine] = [...fake.machines.entries()][0];
+  goneMachine.child?.kill();
   fake.machines.delete(goneId);
   const afterGone = await computerPage(ottoNow);
-  const reattached = await computerAct("start", ottoNow);
   check(
-    "a machine gone behind our back is forgotten and can be attached again",
-    /data-state="no-compute"/.test(afterGone) &&
-      reattached.headers.get("location")?.endsWith("start=true") &&
-      /data-state="started"/.test(await computerPage(ottoNow)),
+    "a machine gone behind our back is replaced at the next look",
+    /data-state="started"/.test(afterGone) &&
+      fake.machines.size === machinesBeforeGone &&
+      !fake.machines.has(goneId),
     `${fake.machines.size} machines now`,
   );
-  await computerAct("stop", ottoNow);
   // A report with the wrong secret, or for a machine we never made, is a 404.
   const [m1] = fake.machines.keys();
   const forged = await fetch(`${stack.url}/computer/report`, {
@@ -1147,16 +1169,13 @@ try {
   });
   check(
     "a report needs the machine's own secret",
-    forged.status === 404 &&
-      (await computerPage(ottoNow)).includes("1.2 GB of 10.0 GB used"),
+    forged.status === 404,
     `answered ${forged.status}`,
   );
-  // Six starts at once for one membership make one computer.
-  await Promise.all(
-    Array.from({ length: 6 }, () => computerAct("start", margeOwner)),
-  );
+  // Six looks at once for one membership make one computer.
+  await Promise.all(Array.from({ length: 6 }, () => computerPage(margeOwner)));
   check(
-    "racing starts make one computer",
+    "racing looks make one computer",
     fake.machines.size === 2 &&
       fake.volumes.size === volumesAtSignIn &&
       /data-state="started"/.test(await computerPage(margeOwner)),

@@ -13,10 +13,21 @@ export type MachineState =
   | "destroying"
   | "destroyed";
 
-export type Machine = { id: string; state: MachineState; region: string };
+// What Fly remembers happening to a machine, newest last.
+export type MachineEvent = {
+  type: string;
+  status: string;
+  timestamp: number;
+};
+export type Machine = {
+  id: string;
+  state: MachineState;
+  region: string;
+  events?: MachineEvent[];
+};
 
 // The bootstrap image: enough to mount the volume and answer for it.
-export const IMAGE = "registry.fly.io/placeholder-computers:v1";
+export const IMAGE = "registry.fly.io/placeholder-computers:v2";
 export const SIZE = "shared-cpu-1x:1024";
 export const DISK_GB = 10;
 // Fly's limit for one volume.
@@ -72,8 +83,8 @@ export const fly = {
   },
 
   // A machine on its volume, made stopped: it is recorded before it runs.
-  // It has no public address: nothing reaches it, so nothing but us can
-  // start it, and it reports on itself to us instead.
+  // Fly's proxy fronts it: a request naming it wakes it, and it is
+  // suspended again once nothing has asked for it for a while.
   async createMachine(
     name: string,
     volumeId: string,
@@ -100,6 +111,19 @@ export const fly = {
           memory_mb: Number(memoryMb),
         },
         mounts: [{ volume: volumeId, path: "/data" }],
+        services: [
+          {
+            protocol: "tcp",
+            internal_port: 8080,
+            autostart: true,
+            autostop: "suspend",
+            min_machines_running: 0,
+            ports: [
+              { port: 443, handlers: ["tls", "http"] },
+              { port: 80, handlers: ["http"] },
+            ],
+          },
+        ],
         restart: { policy: "always" },
         auto_destroy: false,
       },
@@ -128,8 +152,14 @@ export const fly = {
     await call("POST", `/machines/${id}/start`);
   },
 
+  // Off until the proxy is asked for it again: a past member's machine.
   async stop(id: string): Promise<void> {
     await call("POST", `/machines/${id}/stop`);
+  },
+
+  // Boots again on the volume as it is now, for a disk that grew.
+  async restart(id: string): Promise<void> {
+    await call("POST", `/machines/${id}/restart`);
   },
 
   // Gone for good. One already gone is fine. The machine goes first and is
@@ -159,9 +189,12 @@ export const fly = {
     throw last;
   },
 
-  // Bigger, never smaller. A running machine sees the room at its next
-  // boot; one that is off sees it at once.
-  async extendVolume(id: string, sizeGb: number): Promise<void> {
-    await call("PUT", `/volumes/${id}/extend`, { size_gb: sizeGb });
+  // Bigger, never smaller. Fly says whether the machine must boot again
+  // to see the room.
+  async extendVolume(
+    id: string,
+    sizeGb: number,
+  ): Promise<{ needs_restart: boolean }> {
+    return call("PUT", `/volumes/${id}/extend`, { size_gb: sizeGb });
   },
 };

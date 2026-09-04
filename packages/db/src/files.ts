@@ -6,10 +6,10 @@ export type StoredFile = {
   name: string;
   size: number;
   contentType: string;
-  // The folder it lives in: "/" or "/a/b".
+  // The folder on the disk it lands in: "/" or "/a/b".
   path: string;
   key: string;
-  state: "uploading" | "ready";
+  state: "uploading" | "joining" | "ready";
   uploadId: string | null;
   createdAt: Date;
   readyAt: Date | null;
@@ -235,169 +235,50 @@ export async function uploadingFile(
   });
 }
 
-export type Folder = { path: string; name: string; createdAt: Date };
-
-// One folder of the person's filesystem: its folders and its files.
-export async function listing(
-  p: Principal,
-  path: string,
-): Promise<{ folders: Folder[]; files: StoredFile[] }> {
-  const prefix = path === "/" ? "/" : `${path}/`;
-  return asPerson(p, async (q) => ({
-    folders: (
-      await q.query<Folder>(
-        `select path, substring(path from '[^/]+$') as name, created_at as "createdAt"
-           from folders where left(path, length($1)) = $1 and position('/' in substring(path from length($1) + 1)) = 0 order by name`,
-        [prefix],
-      )
-    ).rows,
-    files: (
-      await q.query<StoredFile>(
-        `select ${COLUMNS} from files where path = $1 and deleted_at is null order by name`,
-        [path],
-      )
-    ).rows,
-  }));
-}
-
-export async function folderExists(p: Principal, path: string) {
-  if (path === "/") return true;
-  return asPerson(
-    p,
-    async (q) =>
-      (await q.query("select 1 from folders where path = $1", [path]))
-        .rowCount === 1,
-  );
-}
-
-// Makes a folder, and the folders above it that do not exist yet.
-export async function createFolder(p: Principal, path: string): Promise<void> {
-  await asPerson(p, async (q) => {
-    const parts = path.split("/").filter(Boolean);
-    for (let i = 1; i <= parts.length; i++)
-      await q.query(
-        "insert into folders (org_id, user_id, path) values ($1, $2, $3) on conflict do nothing",
-        [p.orgId, p.userId, "/" + parts.slice(0, i).join("/")],
-      );
+// A staged file's state for the machine fetching it: ready and not gone,
+// or not.
+export async function stagedFile(
+  orgId: string,
+  userId: string,
+  id: string,
+): Promise<{ key: string } | null> {
+  return asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [userId]);
+    return (
+      (
+        await q.query<{ key: string }>(
+          "select key from files where id = $1 and state = 'ready' and deleted_at is null",
+          [id],
+        )
+      ).rows[0] ?? null
+    );
   });
 }
 
-export async function renameFile(
-  p: Principal,
-  id: string,
-  name: string,
-): Promise<boolean> {
-  return asPerson(
-    p,
-    async (q) =>
-      (
-        await q.query(
-          "update files set name = $2 where id = $1 and deleted_at is null",
-          [id, name],
-        )
-      ).rowCount === 1,
-  );
-}
-
-export async function moveFile(
-  p: Principal,
-  id: string,
-  path: string,
-): Promise<boolean> {
-  return asPerson(
-    p,
-    async (q) =>
-      (
-        await q.query(
-          "update files set path = $2 where id = $1 and deleted_at is null",
-          [id, path],
-        )
-      ).rowCount === 1,
-  );
-}
-
-// Moves or renames a folder: it and everything under it take the new path.
-export async function moveFolder(
-  p: Principal,
-  from: string,
-  to: string,
-): Promise<boolean> {
-  return asPerson(p, async (q) => {
-    const moved = await q.query(
-      "update folders set path = $2 where path = $1",
-      [from, to],
-    );
-    if (!moved.rowCount) return false;
-    // Descendants by literal prefix, never by pattern: a folder named with
-    // % or _ moves only its own.
-    await q.query(
-      "update folders set path = $2 || substring(path from length($1) + 1) where left(path, length($1) + 1) = $1 || '/'",
-      [from, to],
-    );
-    await q.query(
-      "update files set path = $2 || substring(path from length($1) + 1) where path = $1 or left(path, length($1) + 1) = $1 || '/'",
-      [from, to],
-    );
-    return true;
+// Files ready in the store but not yet on a disk, older than a moment: a
+// landing that was interrupted, to be tried again by the sweep.
+export async function stagedIn(
+  orgId: string,
+  before: Date,
+): Promise<(StoredFile & { userId: string })[]> {
+  return asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.meter', 'sweep', true)");
+    return (
+      await q.query<StoredFile & { userId: string }>(
+        `select ${COLUMNS}, user_id as "userId" from files where state = 'ready' and deleted_at is null and ready_at < $1`,
+        [before],
+      )
+    ).rows;
   });
 }
 
-// Every file under a folder, any depth, that still has bytes.
-export async function filesUnder(
-  p: Principal,
-  path: string,
-): Promise<StoredFile[]> {
-  return asPerson(
-    p,
-    async (q) =>
-      (
-        await q.query<StoredFile>(
-          `select ${COLUMNS} from files where (path = $1 or left(path, length($1) + 1) = $1 || '/') and deleted_at is null`,
-          [path],
-        )
-      ).rows,
-  );
-}
-
-// Forgets a folder and every folder under it; its files must be gone first.
-export async function deleteFolder(
-  p: Principal,
-  path: string,
-): Promise<boolean> {
-  return asPerson(
-    p,
-    async (q) =>
-      (
-        await q.query(
-          "delete from folders where path = $1 or left(path, length($1) + 1) = $1 || '/'",
-          [path],
-        )
-      ).rowCount! > 0,
-  );
-}
-
-// Marks a file gone only if it is still under the folder being deleted; one
-// moved out meanwhile is left alone. True when marked.
-export async function forgetFileUnder(
-  p: Principal,
+export async function forgetFileIn(
+  orgId: string,
+  userId: string,
   id: string,
-  path: string,
-): Promise<boolean> {
-  return asPerson(
-    p,
-    async (q) =>
-      (
-        await q.query(
-          "update files set deleted_at = now() where id = $1 and deleted_at is null and (path = $2 or left(path, length($2) + 1) = $2 || '/')",
-          [id, path],
-        )
-      ).rowCount === 1,
-  );
-}
-
-// Gives a file back its place when its bytes would not go.
-export async function unforgetFile(p: Principal, id: string): Promise<void> {
-  await asPerson(p, (q) =>
-    q.query("update files set deleted_at = null where id = $1", [id]),
-  );
+): Promise<void> {
+  await asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [userId]);
+    await q.query("update files set deleted_at = now() where id = $1", [id]);
+  });
 }

@@ -30,9 +30,12 @@ export type Computers =
       token: string;
       app: string;
       region: string;
-      // The Machines API, and where machines report on themselves.
+      // The Machines API, where machines report on themselves, and the
+      // hostname Fly's proxy answers for the app, through which a machine
+      // is reached by id.
       api: string;
       report: string;
+      host: string;
       // Every machine and volume name starts with this; a preview's names
       // carry its pull request, so the reap can find them.
       namePrefix: string;
@@ -126,6 +129,7 @@ function computers(): Computers {
     region: process.env.FLY_REGION ?? "sjc",
     api: process.env.FLY_API_HOST ?? "https://api.machines.dev",
     report,
+    host: process.env.FLY_MACHINES_HOST ?? `https://${app}.fly.dev`,
     // A preview must name its machines for the pull request, or they land
     // among production's and nothing can tell them apart.
     namePrefix:

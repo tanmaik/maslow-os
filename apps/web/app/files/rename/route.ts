@@ -1,35 +1,17 @@
-import { NextResponse } from "next/server";
-
-import {
-  cleanName,
-  cleanPath,
-  moveFolder,
-  parentOf,
-  renameFile,
-} from "@/lib/files";
-import { origin } from "@/lib/origin";
+import { act } from "@/lib/act";
+import { disk } from "@/lib/disk";
+import { cleanName, cleanPath, joined, parentOf } from "@/lib/files";
 import { principal } from "@/lib/session";
 
-// Renames a file (by id) or a folder (by path) in place.
+// Renames a file or a folder in place.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
-  const form = await request.formData();
-  const at = cleanPath(form.get("path") ?? "/") ?? "/";
-  const name = cleanName(form.get("name"));
-  const back = (outcome: string) =>
-    NextResponse.redirect(
-      `${origin(request)}/computer?path=${encodeURIComponent(at)}&renamed=${outcome}`,
-      303,
-    );
-  if (!name) return back("name");
-  const file = form.get("file");
-  if (typeof file === "string")
-    return back((await renameFile(p, file, name)) ? "yes" : "gone");
-  const folder = cleanPath(form.get("folder"));
-  if (folder && folder !== "/") {
-    const to = `${parentOf(folder) === "/" ? "" : parentOf(folder)}/${name}`;
-    return back((await moveFolder(p, folder, to)) ? "yes" : "gone");
-  }
-  return back("name");
+  return act(request, async (form) => {
+    const target = cleanPath(form.get("target"));
+    const name = cleanName(form.get("name"));
+    if (!target || target === "/" || !name) return "renamed=name";
+    await disk.move(p, target, joined(parentOf(target), name));
+    return "renamed=yes";
+  });
 }

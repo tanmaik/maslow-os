@@ -187,6 +187,11 @@ layers:
   auto-extend at a threshold and cap at 500GB.
 - **The memory snapshot** is what they were doing. Usually survives a suspend.
 
+A person's files are on the volume and nowhere else; the Computer page is
+that disk, read from the machine. Opening the page wakes the machine, and
+Fly's proxy suspends it once nothing has asked for it. An upload is staged
+in the bucket only until the machine has pulled it onto the disk.
+
 Every machine and volume on Fly is recorded in our database with the org and
 person it belongs to, at creation, before it is used. A sweep reconciles Fly's
 inventory against ours; anything Fly has that we do not is an incident.

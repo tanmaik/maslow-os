@@ -339,7 +339,6 @@ export async function purgeMember(
       [id],
     );
     await q.query("delete from files where user_id = $1", [id]);
-    await q.query("delete from folders where user_id = $1", [id]);
     await q.query(
       "delete from computer_events where computer_id in (select id from computers where user_id = $1)",
       [id],

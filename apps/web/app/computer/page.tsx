@@ -1,6 +1,12 @@
 import { computersAllowed } from "@placeholder/db/computers";
 import { usageOfMember } from "@placeholder/db/usage";
-import { File as FileIcon, Folder as FolderIcon } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  File as FileIcon,
+  Folder as FolderIcon,
+  HardDrive,
+} from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { FileActions } from "@/components/file-actions";
@@ -14,11 +20,6 @@ import {
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-import {
   Table,
   TableBody,
   TableCell,
@@ -29,16 +30,19 @@ import {
 import { Uploader } from "@/components/uploader";
 import { ensureFilesystem, status } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
-import { cleanPath, filesOf, listing } from "@/lib/files";
-import { amount, dollars } from "@/lib/meter";
+import { disk, DiskError, type Tree } from "@/lib/disk";
+import { cleanPath, filesOf } from "@/lib/files";
+import { dollars } from "@/lib/meter";
 import { principal } from "@/lib/session";
 
 const gb = (n: number) =>
-  n < 1e6
-    ? `${(n / 1e3).toFixed(0)} KB`
-    : n < 1e9
-      ? `${(n / 1e6).toFixed(1)} MB`
-      : `${(n / 1e9).toFixed(1)} GB`;
+  n < 1e3
+    ? `${n} B`
+    : n < 1e6
+      ? `${(n / 1e3).toFixed(0)} KB`
+      : n < 1e9
+        ? `${(n / 1e6).toFixed(1)} MB`
+        : `${(n / 1e9).toFixed(1)} GB`;
 
 const STATES: Record<string, string> = {
   started: "Running",
@@ -50,16 +54,20 @@ const STATES: Record<string, string> = {
   created: "Built, not yet started",
   building: "Being built",
   failed: "The build failed",
-  "no-compute": "None attached",
-  unknown: "Fly is not answering; try again shortly",
+  "no-compute": "Off",
+  unknown: "Fly is not answering",
 };
 
-// The person's computer, as its filesystem: folders to open, files to take
-// out and put in. What the machine is doing sits folded at the bottom.
+const href = (path: string) => `/computer?path=${encodeURIComponent(path)}`;
+
+// The person's computer: its disk, laid out as an editor lays out a
+// project. Every folder down the left, the one being looked at in the
+// middle, and what the machine is doing along the bottom. Opening the
+// page wakes the machine.
 export default async function Computer({
   searchParams,
 }: {
-  searchParams: Promise<{ path?: string }>;
+  searchParams: Promise<{ path?: string; error?: string }>;
 }) {
   const p = await principal();
   if (!p) redirect("/");
@@ -67,6 +75,8 @@ export default async function Computer({
     return <Note>Computers are not set up on this deployment.</Note>;
   if (!(await computersAllowed(p)))
     return <Note>Computers are not available for this org yet.</Note>;
+  const params = await searchParams;
+  const at = cleanPath(params.path ?? "/") ?? "/";
   let s = await status(p);
   if (!s) {
     await ensureFilesystem(p);
@@ -74,176 +84,242 @@ export default async function Computer({
   }
   if (!s)
     return <Note>Your filesystem could not be made. Try again shortly.</Note>;
-  const { computer, state } = s;
-  const at = cleanPath((await searchParams).path ?? "/") ?? "/";
-  const { folders, files } = await listing(p, at);
-  const { bytes, files: all } = await filesOf(p);
+  let listing: Awaited<ReturnType<typeof disk.list>>;
+  let tree: Tree;
+  try {
+    [listing, { tree }] = await Promise.all([disk.list(p, at), disk.tree(p)]);
+  } catch (err) {
+    if (!(err instanceof DiskError)) throw err;
+    if (err.status === 404 && at !== "/") redirect("/computer");
+    return (
+      <Note>
+        <span data-disk-error>{err.message}</span>
+      </Note>
+    );
+  }
+  const { entries, disk: space } = listing;
+  // Files still on their way to this folder, shown in it until they land.
+  const arriving = (await filesOf(p)).files.filter((f) => f.path === at);
+  // The machine is awake now, having just answered.
+  const state =
+    s.state === "no-compute" || s.state === "created" || s.state === "stopped"
+      ? "started"
+      : s.state;
   const crumbs = at.split("/").filter(Boolean);
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
-  const usage = await usageOfMember(p, monthStart);
-  const total = usage.reduce((n, l) => n + l.cost, 0);
-  const href = (path: string) => `/computer?path=${encodeURIComponent(path)}`;
+  const total = (await usageOfMember(p, monthStart)).reduce(
+    (n, l) => n + l.cost,
+    0,
+  );
 
   return (
-    <main className="mx-auto max-w-3xl p-6">
-      <div className="flex items-center justify-between gap-4">
-        <Breadcrumb>
-          <BreadcrumbList>
-            <BreadcrumbItem>
-              {at === "/" ? (
-                <BreadcrumbPage>Your computer</BreadcrumbPage>
-              ) : (
-                <BreadcrumbLink href={href("/")}>Your computer</BreadcrumbLink>
-              )}
-            </BreadcrumbItem>
-            {crumbs.map((c, i) => {
-              const path = "/" + crumbs.slice(0, i + 1).join("/");
-              const last = i === crumbs.length - 1;
-              return (
-                <span key={path} className="contents">
-                  <BreadcrumbSeparator />
-                  <BreadcrumbItem>
-                    {last ? (
-                      <BreadcrumbPage>{c}</BreadcrumbPage>
-                    ) : (
-                      <BreadcrumbLink href={href(path)}>{c}</BreadcrumbLink>
-                    )}
-                  </BreadcrumbItem>
-                </span>
-              );
-            })}
-          </BreadcrumbList>
-        </Breadcrumb>
-        <NewFolder at={at} />
-      </div>
+    <main className="bg-background fixed inset-x-0 top-8 bottom-0 flex flex-col">
+      <div className="flex min-h-0 flex-1">
+        <nav
+          className="bg-muted/30 w-64 shrink-0 overflow-y-auto border-r p-2 text-sm"
+          aria-label="Folders"
+        >
+          <a
+            href={href("/")}
+            className={`flex items-center gap-2 rounded px-2 py-1 font-medium ${at === "/" ? "bg-accent" : "hover:bg-accent/50"}`}
+          >
+            <HardDrive className="size-4" /> Your computer
+          </a>
+          <Branch node={tree} at={at} depth={0} />
+        </nav>
 
-      <div className="mt-4" data-path={at}>
-        <Uploader path={at} />
-      </div>
+        <section className="flex min-w-0 flex-1 flex-col overflow-y-auto px-6 py-4">
+          <div className="flex items-center justify-between gap-4">
+            <Breadcrumb>
+              <BreadcrumbList>
+                <BreadcrumbItem>
+                  {at === "/" ? (
+                    <BreadcrumbPage>Your computer</BreadcrumbPage>
+                  ) : (
+                    <BreadcrumbLink href={href("/")}>
+                      Your computer
+                    </BreadcrumbLink>
+                  )}
+                </BreadcrumbItem>
+                {crumbs.map((c, i) => {
+                  const path = "/" + crumbs.slice(0, i + 1).join("/");
+                  const last = i === crumbs.length - 1;
+                  return (
+                    <span key={path} className="contents">
+                      <BreadcrumbSeparator />
+                      <BreadcrumbItem>
+                        {last ? (
+                          <BreadcrumbPage>{c}</BreadcrumbPage>
+                        ) : (
+                          <BreadcrumbLink href={href(path)}>{c}</BreadcrumbLink>
+                        )}
+                      </BreadcrumbItem>
+                    </span>
+                  );
+                })}
+              </BreadcrumbList>
+            </Breadcrumb>
+            <NewFolder at={at} />
+          </div>
 
-      <Table className="mt-4">
-        <TableHeader>
-          <TableRow>
-            <TableHead>Name</TableHead>
-            <TableHead className="w-28">Size</TableHead>
-            <TableHead className="w-32">Modified</TableHead>
-            <TableHead className="w-12"></TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {folders.map((f) => (
-            <TableRow key={f.path} data-folder={f.path}>
-              <TableCell>
-                <a href={href(f.path)} className="flex items-center gap-2">
-                  <FolderIcon className="text-muted-foreground size-4" />
-                  {f.name}
-                </a>
-              </TableCell>
-              <TableCell className="text-muted-foreground">—</TableCell>
-              <TableCell className="text-muted-foreground">
-                {f.createdAt.toISOString().slice(0, 10)}
-              </TableCell>
-              <TableCell>
-                <FileActions
-                  target={{ folder: f.path }}
-                  name={f.name}
-                  at={at}
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-          {files.map((f) => (
-            <TableRow key={f.id} data-file={f.id}>
-              <TableCell>
-                {f.state === "ready" ? (
-                  <a
-                    href={`/files/${f.id}`}
-                    className="flex items-center gap-2"
-                  >
-                    <FileIcon className="text-muted-foreground size-4" />
-                    {f.name}
-                  </a>
-                ) : (
-                  <span className="text-muted-foreground flex items-center gap-2">
-                    <FileIcon className="size-4" />
-                    {f.name} (uploading)
-                  </span>
-                )}
-              </TableCell>
-              <TableCell>{gb(f.size)}</TableCell>
-              <TableCell className="text-muted-foreground">
-                {(f.readyAt ?? f.createdAt).toISOString().slice(0, 10)}
-              </TableCell>
-              <TableCell>
-                <FileActions
-                  target={{ file: f.id }}
-                  name={f.name}
-                  at={at}
-                  downloadHref={
-                    f.state === "ready" ? `/files/${f.id}` : undefined
-                  }
-                />
-              </TableCell>
-            </TableRow>
-          ))}
-          {folders.length === 0 && files.length === 0 && (
-            <TableRow>
-              <TableCell colSpan={4} className="text-muted-foreground">
-                This folder is empty.
-              </TableCell>
-            </TableRow>
+          {params.error && (
+            <p className="text-destructive mt-3 text-sm" data-error>
+              {params.error}
+            </p>
           )}
-        </TableBody>
-      </Table>
-      <p
-        className="text-muted-foreground mt-2 text-sm"
-        data-files-bytes={bytes}
-      >
-        {gb(bytes)} in {all.filter((f) => f.state === "ready").length} files, on
-        a {computer.diskGb} GB filesystem
-      </p>
 
-      <Collapsible className="mt-10">
-        <CollapsibleTrigger className="text-muted-foreground text-sm underline">
-          About this computer
-        </CollapsibleTrigger>
-        <CollapsibleContent keepMounted>
-          <dl className="mt-3 grid grid-cols-[8rem_1fr] gap-y-2 text-sm">
-            <dt className="text-muted-foreground">Compute</dt>
-            <dd data-state={state}>
-              {STATES[state] ?? state} · {computer.size}
-            </dd>
-            <dt className="text-muted-foreground">Filesystem</dt>
-            <dd>
-              {computer.diskUsed !== null && computer.diskTotal !== null
-                ? `${gb(computer.diskUsed)} of ${gb(computer.diskTotal)} used, ${computer.seenAt ? `reported ${Math.max(0, Math.round((Date.now() - computer.seenAt.getTime()) / 60000))} min ago` : "not reported yet"}`
-                : `${computer.diskGb} GB, ${computer.seenAt ? "reported" : "not reported yet"}`}
-            </dd>
-            <dt className="text-muted-foreground">This month</dt>
-            <dd data-month-total={total}>
-              {dollars(total)}
-              {usage.length > 0 && (
-                <span className="text-muted-foreground">
-                  {" "}
-                  (
-                  {usage
-                    .map(
-                      (l) =>
-                        `${l.resource} ${amount(l.resource, l.unit, l.quantity)} ${dollars(l.cost)}`,
-                    )
-                    .join(", ")}
-                  )
-                </span>
+          <div className="mt-4" data-path={at}>
+            <Uploader path={at} />
+          </div>
+
+          <Table className="mt-4">
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead className="w-28">Size</TableHead>
+                <TableHead className="w-32">Modified</TableHead>
+                <TableHead className="w-12"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((e) => {
+                const path = at === "/" ? `/${e.name}` : `${at}/${e.name}`;
+                return (
+                  <TableRow
+                    key={path}
+                    {...(e.kind === "folder"
+                      ? { "data-folder": path }
+                      : { "data-file": path })}
+                  >
+                    <TableCell>
+                      <a
+                        href={
+                          e.kind === "folder"
+                            ? href(path)
+                            : `/files/download?path=${encodeURIComponent(path)}`
+                        }
+                        className="flex items-center gap-2"
+                      >
+                        {e.kind === "folder" ? (
+                          <FolderIcon className="text-muted-foreground size-4" />
+                        ) : (
+                          <FileIcon className="text-muted-foreground size-4" />
+                        )}
+                        {e.name}
+                      </a>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {e.kind === "folder" ? "—" : gb(e.size)}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {e.modified.slice(0, 10)}
+                    </TableCell>
+                    <TableCell>
+                      <FileActions
+                        target={path}
+                        kind={e.kind}
+                        name={e.name}
+                        at={at}
+                      />
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {arriving.map((f) => (
+                <TableRow key={f.id} data-upload={f.id}>
+                  <TableCell>
+                    <span className="text-muted-foreground flex items-center gap-2">
+                      <FileIcon className="size-4" />
+                      {f.name} ({f.state === "ready" ? "landing" : "arriving"})
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {gb(f.size)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {f.createdAt.toISOString().slice(0, 10)}
+                  </TableCell>
+                  <TableCell>
+                    <FileActions
+                      upload={f.id}
+                      target={f.path}
+                      kind="file"
+                      name={f.name}
+                      at={at}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+              {entries.length === 0 && arriving.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-muted-foreground">
+                    This folder is empty.
+                  </TableCell>
+                </TableRow>
               )}
-            </dd>
-            <dt className="text-muted-foreground">Region</dt>
-            <dd>{computer.region}</dd>
-          </dl>
-        </CollapsibleContent>
-      </Collapsible>
+            </TableBody>
+          </Table>
+        </section>
+      </div>
+
+      <footer
+        className="bg-muted/50 text-muted-foreground flex items-center gap-6 border-t py-1.5 pr-4 pl-20 text-xs"
+        data-state={state}
+        data-disk-used={space.used}
+        data-month-total={total}
+      >
+        <span>{STATES[state] ?? state}</span>
+        <span>{s.computer.size}</span>
+        <span>{`${gb(space.used)} of ${gb(space.total)} used`}</span>
+        <span>{s.computer.region}</span>
+        <span className="ml-auto">{dollars(total)} this month</span>
+      </footer>
     </main>
+  );
+}
+
+// One folder of the tree and, when it is on the way to where the person
+// is, the folders inside it.
+function Branch({
+  node,
+  at,
+  depth,
+}: {
+  node: Tree;
+  at: string;
+  depth: number;
+}) {
+  return (
+    <ul>
+      {node.folders.map((f) => {
+        const open = at === f.path || at.startsWith(`${f.path}/`);
+        return (
+          <li key={f.path}>
+            <a
+              href={href(f.path)}
+              data-tree={f.path}
+              className={`flex items-center gap-1 rounded py-1 pr-2 ${at === f.path ? "bg-accent" : "hover:bg-accent/50"}`}
+              style={{ paddingLeft: `${0.5 + depth * 0.75}rem` }}
+            >
+              {f.folders.length > 0 ? (
+                open ? (
+                  <ChevronDown className="size-3.5 shrink-0" />
+                ) : (
+                  <ChevronRight className="size-3.5 shrink-0" />
+                )
+              ) : (
+                <span className="size-3.5 shrink-0" />
+              )}
+              <FolderIcon className="text-muted-foreground size-4 shrink-0" />
+              <span className="truncate">{f.name}</span>
+            </a>
+            {open && <Branch node={f} at={at} depth={depth + 1} />}
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 

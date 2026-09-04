@@ -21,29 +21,31 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 
-type Target = { file: string } | { folder: string };
-
-// What can be done to a file or a folder: download, rename, move, delete.
-// Each is a form to a route; rename and move ask first.
+// What can be done to a file or a folder on the disk: download, rename,
+// move, delete. Each is a form to a route; rename and move ask first. An
+// upload still arriving can only be abandoned.
 export function FileActions({
   target,
+  kind,
   name,
   at,
-  downloadHref,
+  upload,
 }: {
-  target: Target;
+  target: string;
+  kind: "file" | "folder";
   name: string;
   at: string;
-  downloadHref?: string;
+  upload?: string;
 }) {
   const [asking, setAsking] = useState<"rename" | "move" | null>(null);
+  const id = upload ?? target;
   const hidden = (
     <>
       <input type="hidden" name="path" value={at} />
-      {"file" in target ? (
-        <input type="hidden" name="file" value={target.file} />
+      {upload ? (
+        <input type="hidden" name="upload" value={upload} />
       ) : (
-        <input type="hidden" name="folder" value={target.folder} />
+        <input type="hidden" name="target" value={target} />
       )}
     </>
   );
@@ -56,33 +58,38 @@ export function FileActions({
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          {downloadHref && (
-            <DropdownMenuItem render={<a href={downloadHref} />}>
+          {!upload && kind === "file" && (
+            <DropdownMenuItem
+              render={
+                <a
+                  href={`/files/download?path=${encodeURIComponent(target)}`}
+                />
+              }
+            >
               Download
             </DropdownMenuItem>
           )}
-          <DropdownMenuItem onClick={() => setAsking("rename")}>
-            Rename
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => setAsking("move")}>
-            Move to…
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
+          {!upload && (
+            <>
+              <DropdownMenuItem onClick={() => setAsking("rename")}>
+                Rename
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setAsking("move")}>
+                Move to…
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
           <DropdownMenuItem
             variant="destructive"
-            render={
-              <button
-                type="submit"
-                form={`delete-${"file" in target ? target.file : target.folder}`}
-              />
-            }
+            render={<button type="submit" form={`delete-${id}`} />}
           >
-            Delete
+            {upload ? "Abandon" : "Delete"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
       <form
-        id={`delete-${"file" in target ? target.file : target.folder}`}
+        id={`delete-${id}`}
         action="/files/delete"
         method="post"
         className="hidden"

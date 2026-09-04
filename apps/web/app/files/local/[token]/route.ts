@@ -8,13 +8,33 @@ import { deployment } from "@/lib/deployment";
 import {
   localClaim,
   localPartPath,
+  localStagedStream,
   PART_SIZE,
   stillUploading,
 } from "@/lib/files";
 
 // Stands in for the bucket on a real machine: takes one part of an upload,
-// let in by a token we signed, streamed to disk and no larger than a part.
-// Never on a deployment with a bucket.
+// let in by a token we signed, streamed to disk and no larger than a part;
+// and hands the staged whole to the machine fetching it, by a token for
+// part 0. Never on a deployment with a bucket.
+export async function GET(
+  _: Request,
+  { params }: { params: Promise<{ token: string }> },
+) {
+  if (deployment.storage.kind !== "local")
+    return new Response(null, { status: 404 });
+  const claim = localClaim((await params).token);
+  if (!claim || claim.part !== 0) return new Response(null, { status: 403 });
+  const staged = await localStagedStream(claim);
+  if (!staged) return new Response(null, { status: 404 });
+  return new Response(staged.body, {
+    headers: {
+      "content-type": "application/octet-stream",
+      "content-length": String(staged.size),
+    },
+  });
+}
+
 export async function PUT(
   request: Request,
   { params }: { params: Promise<{ token: string }> },
@@ -22,7 +42,7 @@ export async function PUT(
   if (deployment.storage.kind !== "local")
     return new Response(null, { status: 404 });
   const claim = localClaim((await params).token);
-  if (!claim || !(await stillUploading(claim)))
+  if (!claim || claim.part < 1 || !(await stillUploading(claim)))
     return new Response(null, { status: 403 });
   if (!request.body) return new Response(null, { status: 400 });
   const target = localPartPath(claim.key, claim.part);
