@@ -26,8 +26,9 @@ export type Machine = {
   events?: MachineEvent[];
 };
 
-// The bootstrap image: enough to mount the volume and answer for it.
-export const IMAGE = "registry.fly.io/placeholder-computers:v4";
+// The bootstrap image: a whole Debian with node, git, gh, Claude Code
+// and the Vercel CLI, copied onto the volume on first boot.
+export const IMAGE = "registry.fly.io/placeholder-computers:v6";
 export const SIZE = "shared-cpu-1x:1024";
 export const DISK_GB = 10;
 // Fly's limit for one volume.
@@ -101,6 +102,8 @@ export const fly = {
         env: {
           COMPUTER_SECRET: secret,
           REPORT_URL: config().report,
+          // The operating system lives here on the volume.
+          OS_ROOT: "/data/os",
           ...(config().reportBypass
             ? { REPORT_BYPASS: config().reportBypass }
             : {}),

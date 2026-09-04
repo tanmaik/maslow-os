@@ -27,9 +27,20 @@ if (!COMPUTER_SECRET || !REPORT_URL || !FLY_MACHINE_ID) {
   );
   process.exit(1);
 }
-const ROOT = path.resolve(process.env.DATA_DIR ?? "/data");
+// On a machine the volume holds the whole operating system at OS_ROOT,
+// copied there from the image on first boot; the person's files are
+// root's home inside it, and every shell runs inside it. On a laptop
+// there is no OS_ROOT: the directory is the disk and the shell is the
+// laptop's.
+const OS_ROOT = process.env.OS_ROOT ? path.resolve(process.env.OS_ROOT) : null;
+const ROOT = path.resolve(
+  process.env.DATA_DIR ?? (OS_ROOT ? path.join(OS_ROOT, "root") : "/data"),
+);
+const MOUNT =
+  process.env.DISK_MOUNT ?? (OS_ROOT ? path.dirname(OS_ROOT) : ROOT);
 const PORT = Number(process.env.PORT) || 8080;
 const SHELL = process.env.SHELL_PATH ?? "/bin/bash";
+let ready = !OS_ROOT;
 // Where a backup asks us for somewhere to put each part: beside the report.
 const BACKUP_URL = REPORT_URL.replace(/\/report$/, "/backup");
 const PART = 64 * 1024 * 1024;
@@ -52,7 +63,7 @@ async function disk() {
     await walk(ROOT);
     return { used, total: Number(process.env.DISK_GB) * 1e9 };
   }
-  const s = await fs.statfs(ROOT).catch(() => null);
+  const s = await fs.statfs(MOUNT).catch(() => null);
   return s
     ? { used: (s.blocks - s.bfree) * s.bsize, total: s.blocks * s.bsize }
     : { used: 0, total: 0 };
@@ -466,6 +477,8 @@ async function handle(req, res) {
   }
   if (req.headers.authorization !== `Bearer ${COMPUTER_SECRET}`)
     return json(401, { error: "no" });
+  if (!ready)
+    return json(503, { error: "Your computer is being set up; a minute." });
 
   if (url.pathname === "/fs/ports" && req.method === "GET")
     return json(200, { ports: await listening() });
@@ -607,13 +620,30 @@ try {
 shells.on("connection", (ws) => {
   let shell;
   try {
-    shell = pty.spawn(SHELL, ["-l"], {
-      name: "xterm-256color",
-      cols: 100,
-      rows: 30,
-      cwd: ROOT,
-      env: { ...process.env, HOME: ROOT, TERM: "xterm-256color" },
-    });
+    // Inside the operating system on the volume, at home, as root.
+    shell = OS_ROOT
+      ? pty.spawn(
+          "/usr/sbin/chroot",
+          [OS_ROOT, "/usr/bin/env", "-C", "/root", "HOME=/root", SHELL, "-l"],
+          {
+            name: "xterm-256color",
+            cols: 100,
+            rows: 30,
+            cwd: "/",
+            env: {
+              PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+              TERM: "xterm-256color",
+              LANG: "C.UTF-8",
+            },
+          },
+        )
+      : pty.spawn(SHELL, ["-l"], {
+          name: "xterm-256color",
+          cols: 100,
+          rows: 30,
+          cwd: ROOT,
+          env: { ...process.env, HOME: ROOT, TERM: "xterm-256color" },
+        });
   } catch (err) {
     console.error(`no shell: ${err.message}`);
     return ws.close(1011, "The shell could not start.");
@@ -656,6 +686,7 @@ function upgrade(req, socket, head) {
     if (term.replay) return replay(term.replay);
     if (term.refused) return refuse(403, "Forbidden");
     if (!pty) return refuse(501, "No terminal on this machine");
+    if (!ready) return refuse(503, "Being set up");
     return shells.handleUpgrade(req, socket, head, (ws) =>
       shells.emit("connection", ws, req),
     );
@@ -675,9 +706,53 @@ function upgrade(req, socket, head) {
   target.on("error", () => refuse(502, "Bad Gateway"));
 }
 
+// First boot: the image's own root goes onto the volume, once; every
+// boot: the kernel's views are bound inside it and its DNS is ours, so
+// what runs in there is a whole machine.
+async function settle() {
+  if (!OS_ROOT) return;
+  const run = (cmd, args) =>
+    new Promise((resolve, reject) => {
+      const c = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
+      c.on("exit", (code) =>
+        code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)),
+      );
+    });
+  const done = path.join(OS_ROOT, ".os-ready");
+  if (!(await fs.stat(done).catch(() => null))) {
+    console.log("first boot: copying the operating system onto the volume");
+    await fs.rm(OS_ROOT, { recursive: true, force: true });
+    await fs.mkdir(OS_ROOT, { recursive: true });
+    // One copy, straight: the image's root minus the kernel's views, the
+    // volume itself and the daemon.
+    for (const name of await fs.readdir("/")) {
+      if (
+        ["proc", "sys", "dev", "run", "tmp", "data", "computer"].includes(name)
+      )
+        continue;
+      await run("cp", ["-a", `/${name}`, `${OS_ROOT}/${name}`]);
+    }
+    for (const d of ["proc", "sys", "dev", "run", "tmp"])
+      await fs.mkdir(path.join(OS_ROOT, d), { recursive: true });
+    await fs.chmod(path.join(OS_ROOT, "tmp"), 0o1777);
+    await fs.writeFile(done, new Date().toISOString());
+  }
+  for (const d of ["proc", "sys", "dev"])
+    await run("mount", ["--rbind", `/${d}`, path.join(OS_ROOT, d)]);
+  await fs.copyFile("/etc/resolv.conf", path.join(OS_ROOT, "etc/resolv.conf"));
+  await fs.mkdir(ROOT, { recursive: true });
+  ready = true;
+  console.log("the operating system on the volume is up");
+}
+
+// A root that cannot be made is a machine that cannot serve: said now.
 await fs.mkdir(ROOT, { recursive: true });
 server.listen(PORT, "0.0.0.0", () =>
   console.log(`serving ${ROOT} on ${PORT} as ${FLY_MACHINE_ID}`),
 );
+settle().catch((err) => {
+  console.error(`the operating system could not be set up: ${err.message}`);
+  process.exit(1);
+});
 await report();
 setInterval(report, 5 * 60 * 1000).unref();

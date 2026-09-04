@@ -47,6 +47,8 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
       env: {
         ...process.env,
         ...mc.env,
+        // A laptop has no operating system on the volume.
+        OS_ROOT: undefined,
         FLY_MACHINE_ID: mc.id,
         DATA_DIR: data,
         DISK_GB: String(volumes.get(mc.volume)?.size_gb ?? 10),

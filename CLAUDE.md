@@ -181,7 +181,8 @@ machine you cannot use. The agent gets root and full freedom because of three
 layers:
 
 - **The image** is only a bootstrap — enough to start and hand off. It almost
-  never changes.
+  never changes. It carries a whole Debian with node, git, gh, Claude Code
+  and the Vercel CLI, and that is what is copied onto the volume.
 - **The volume** is the computer. It holds the whole operating system, copied
   there on first boot and switched to on every boot after. Installs, config,
   files: all of it persists, because it is a real machine. The daemon updates
@@ -192,8 +193,10 @@ layers:
   auto-extend at a threshold and cap at 500GB.
 - **The memory snapshot** is what they were doing. Usually survives a suspend.
 
-A person's files are on the volume and nowhere else; the Computer page is
-that disk, read from the machine. Opening the page wakes the machine, and
+A person's files are root's home in the operating system on the volume,
+and nowhere else; every shell runs inside that operating system, so what
+is installed or signed into stays. The Computer page is that home, read
+from the machine. Opening the page wakes the machine, and
 Fly's proxy suspends it once nothing has asked for it. An upload is staged
 in the bucket only until the machine has pulled it onto the disk. The page
 has a shell on the disk, and every port the machine listens on is a
