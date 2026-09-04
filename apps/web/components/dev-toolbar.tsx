@@ -1,6 +1,7 @@
 import { fullName } from "@placeholder/db/auth";
 import { orgs } from "@placeholder/db/seed";
 
+import { Annotations } from "@/components/annotations";
 import { DevPill } from "@/components/dev-pill";
 import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
@@ -26,17 +27,20 @@ export async function DevToolbar() {
     )
     .find((u) => u.id === p?.userId);
   return (
-    <DevPill
-      where={deployment.where}
-      vendors={{
-        identity: deployment.identity.kind === "workos" ? "WorkOS" : null,
-        mail: deployment.mail.kind === "resend" ? "Resend" : null,
-        storage: deployment.storage.kind === "s3" ? "S3" : null,
-      }}
-      signedIn={p !== null}
-      me={me ?? null}
-      orgs={seeded}
-      current={p?.userId ?? null}
-    />
+    <>
+      <Annotations />
+      <DevPill
+        where={deployment.where}
+        vendors={{
+          identity: deployment.identity.kind === "workos" ? "WorkOS" : null,
+          mail: deployment.mail.kind === "resend" ? "Resend" : null,
+          storage: deployment.storage.kind === "s3" ? "S3" : null,
+        }}
+        signedIn={p !== null}
+        me={me ?? null}
+        orgs={seeded}
+        current={p?.userId ?? null}
+      />
+    </>
   );
 }

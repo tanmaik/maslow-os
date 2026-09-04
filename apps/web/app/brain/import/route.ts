@@ -5,32 +5,40 @@ import { NextResponse } from "next/server";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-// Adds an exported file to the signed-in person's brain. A file that is not a
-// brain, or a record in it that does not fit its kind's form, is refused.
+// Adds an exported file to the signed-in person's brain. A file that is not
+// a brain, or a record in it that does not fit its kind's form, is refused
+// and the page says so.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
+  const back = (query: string) =>
+    NextResponse.redirect(`${origin(request)}/brain/transfer?${query}`, 303);
 
+  const form = await request.formData();
+  const file = form.get("file");
   let snapshot: unknown;
   try {
-    snapshot = JSON.parse(String((await request.formData()).get("snapshot")));
+    snapshot = file instanceof File ? JSON.parse(await file.text()) : null;
   } catch {
     snapshot = null;
   }
-  if (!isSnapshot(snapshot)) {
-    return new Response("That is not a brain file.", { status: 400 });
-  }
+  if (!isSnapshot(snapshot)) return back("error=file");
+
   try {
-    const imported = await asPerson(p, (db) =>
+    const done = await asPerson(p, (db) =>
       importBrain(db, `person:${p.userId}`, snapshot),
     );
-    return NextResponse.redirect(
-      `${origin(request)}/brain?imported=${imported.records}`,
-      303,
+    return back(
+      new URLSearchParams({
+        records: String(done.records),
+        edges: String(done.edges),
+        kinds: String(done.kinds),
+        properties: String(done.properties),
+        verbs: String(done.verbs),
+      }).toString(),
     );
   } catch (err) {
-    if (err instanceof Invalid)
-      return new Response(err.message, { status: 400 });
+    if (err instanceof Invalid) return back("error=refused");
     throw err;
   }
 }

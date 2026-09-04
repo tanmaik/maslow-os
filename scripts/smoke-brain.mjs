@@ -393,6 +393,72 @@ export async function smokeBrain(stack) {
       `${detail.seeded[0]?.confidence} then ${detail.after[0]?.confidence}`,
     );
 
+    // An edge joins two records and can be taken back.
+    const links = await me(acme)(async (q) => {
+      const wile = { source: "seed", sourceRef: "person:wile" };
+      let loop = null;
+      try {
+        await brain.write(q, "smoke", {
+          edges: [{ from: wile, verb: "mentions", to: wile, source: "seed" }],
+        });
+      } catch (err) {
+        loop = err;
+      }
+      const owes = (await brain.read(q, { kind: "person" })).records.find(
+        (r) => r.title === "Wile Coyote",
+      );
+      const before = await brain.edgesOf(q, owes.id, "owes");
+      await brain.unlink(q, "smoke:unlinker", before[0].id);
+      const after = await brain.edgesOf(q, owes.id, "owes");
+      const gone = await brain.history(q, { of: before[0].id });
+      await brain.write(q, "smoke", {
+        edges: [
+          {
+            from: wile,
+            verb: "owes",
+            to: { source: "seed", sourceRef: "person:beep" },
+            confidence: 0.95,
+            occurredAt: "2026-08-28T15:04:00Z",
+            props: { what: "batch 7 rocket skates" },
+            source: "seed",
+          },
+        ],
+      });
+      const whole = await brain.graph(q);
+      const near = await brain.graph(q, [owes.id]);
+      const nearIds = new Set(near.nodes.map((n) => n.id));
+      const mine = (await brain.edgesOf(q, owes.id)).length;
+      return {
+        loop,
+        before,
+        after,
+        gone,
+        whole,
+        near,
+        nearIds,
+        mine,
+        me: owes.id,
+      };
+    });
+    check(
+      "an edge joins two records and unlinks",
+      links.loop instanceof brain.Invalid &&
+        links.before.length === 1 &&
+        links.after.length === 0 &&
+        links.gone[0].action === "deleted" &&
+        links.gone[0].author === "smoke:unlinker" &&
+        links.gone.filter((e) => e.author === "smoke:unlinker").length === 1 &&
+        links.whole.edges.length === 9 &&
+        links.near.nodes.length === 5 &&
+        links.near.edges.filter(
+          (e) => e.fromId === links.me || e.toId === links.me,
+        ).length === links.mine &&
+        links.near.edges.every(
+          (e) => links.nearIds.has(e.fromId) && links.nearIds.has(e.toId),
+        ),
+      `self refused, ${links.before.length} then ${links.after.length}, logged ${links.gone.map((e) => e.action).join("+")} by ${links.gone[0].author}, graph ${links.whole.nodes.length}/${links.whole.edges.length}, near ${links.near.nodes.length}/${links.near.edges.length}`,
+    );
+
     // Merging and unmerging.
     const merged = await me(acme)(async (q) => {
       const people = await brain.read(q, { kind: "person" });

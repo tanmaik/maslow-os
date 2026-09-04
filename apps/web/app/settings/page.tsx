@@ -110,17 +110,7 @@ export default async function Settings({
 
   return (
     <main className="space-y-6">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">Settings</h1>
-        <Button
-          variant="ghost"
-          size="sm"
-          render={<a href="/" />}
-          nativeButton={false}
-        >
-          Back
-        </Button>
-      </header>
+      <h1 className="text-2xl font-semibold">Settings</h1>
 
       {owner && (
         <Card>

@@ -1,5 +1,4 @@
 import { asOrg } from "@placeholder/db";
-import { membershipsOf } from "@placeholder/db/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deployment } from "@/lib/deployment";
@@ -51,63 +50,20 @@ export default async function Page({
     };
   });
 
-  const memberships = await membershipsOf(p);
-  const others = memberships.filter((m) => m.userId !== p.userId);
-
   return (
-    <main className="space-y-6">
-      <header className="flex items-baseline justify-between">
-        <div className="flex items-baseline gap-3">
-          <h1 className="text-2xl font-semibold">{orgName}</h1>
-          {others.length > 0 && (
-            <form action="/auth/switch" method="post" className="flex gap-1">
-              {others.map((m) => (
-                <Button
-                  key={m.userId}
-                  variant="ghost"
-                  size="sm"
-                  type="submit"
-                  name="membership"
-                  value={m.userId}
-                >
-                  {m.orgName}
-                </Button>
-              ))}
-            </form>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            render={<a href="/brain" />}
-            nativeButton={false}
-          >
-            Brain
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            render={<a href="/settings" />}
-            nativeButton={false}
-          >
-            Settings
-          </Button>
-          <form action="/auth/sign-out" method="post">
-            <Button variant="ghost" size="sm" type="submit">
-              Sign out, {me?.name}
-            </Button>
-          </form>
-        </div>
-      </header>
+    <main className="space-y-4">
+      <h1 className="text-2xl font-semibold">{orgName}</h1>
       <p className="text-muted-foreground">
-        {members} {members === 1 ? "member" : "members"}. Invite people and
-        manage the org in{" "}
+        {members} {members === 1 ? "member" : "members"}
+        {me && ` · you are ${me.name}`}. Invite people and manage the org in{" "}
         <a href="/settings" className="underline">
           settings
         </a>
         .
       </p>
+      <Button nativeButton={false} render={<a href="/brain" />}>
+        Open the brain
+      </Button>
     </main>
   );
 }

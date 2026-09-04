@@ -9,10 +9,15 @@ export {
 export { Conflict, Invalid, NotFound } from "./errors.ts";
 export { defineProperty, type PropertyDefinition } from "./properties.ts";
 export {
+  aliasesOf,
   changes,
   edgesOf,
   get,
+  graph,
+  history,
   read,
+  type Graph,
+  type HistoryOptions,
   type Page,
   type ReadOptions,
 } from "./read.ts";
@@ -29,6 +34,7 @@ export {
   merge,
   remove,
   restore,
+  unlink,
   unmerge,
   write,
   type Patch,

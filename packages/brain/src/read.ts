@@ -44,15 +44,50 @@ export type ReadOptions = {
 
 export type Page = { records: BrainRecord[]; cursor: string | null };
 
+export type HistoryOptions = {
+  // Only the changes to one record, edge, kind, verb or field.
+  of?: string;
+  // Only changes before this point in the log; the next page.
+  before?: number;
+  limit?: number;
+};
+
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
-// A page ends at a sort key and an id; the next page starts after them.
-type Cursor = { key: string; id: string };
+// A page ends at a sort key and an id, under one order; the next page
+// starts after them, under the same order.
+type Cursor = { key: string; id: string; order: string };
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const encode = (c: Cursor) =>
   Buffer.from(JSON.stringify(c)).toString("base64url");
-const decode = (s: string): Cursor =>
-  JSON.parse(Buffer.from(s, "base64url").toString());
+function decode(s: string, order: string): Cursor {
+  let c: Partial<Cursor> | null = null;
+  try {
+    c = JSON.parse(Buffer.from(s, "base64url").toString());
+  } catch {
+    // Not a cursor at all; refused below.
+  }
+  if (
+    typeof c?.key !== "string" ||
+    typeof c.id !== "string" ||
+    !UUID.test(c.id)
+  ) {
+    throw new Invalid("that is not a cursor");
+  }
+  if (c.order !== order) throw new Invalid("that cursor is from another query");
+  return c as Cursor;
+}
+
+// Whether a cursor's key can be cast to the column it is compared with.
+const keyFits = (type: string, key: string) =>
+  type === "timestamptz" || type === "date"
+    ? !Number.isNaN(Date.parse(key))
+    : type === "numeric"
+      ? Number.isFinite(Number(key))
+      : type === "boolean"
+        ? key === "true" || key === "false"
+        : true;
 
 const OPERATORS: Record<Exclude<Filter["op"], "in" | "contains">, string> = {
   eq: "=",
@@ -153,8 +188,10 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     direction = DIRECTIONS[wanted];
     keyOf = (r) => String(r.props[p.name]);
   }
+  const orderName = `${opts.kind ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
   if (opts.cursor) {
-    const c = decode(opts.cursor);
+    const c = decode(opts.cursor, orderName);
+    if (!keyFits(orderType, c.key)) throw new Invalid("that is not a cursor");
     where.push(
       `(${order}, id) ${direction === "desc" ? "<" : ">"} (${param(c.key)}::${orderType}, ${param(c.id)}::uuid)`,
     );
@@ -171,7 +208,9 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   const last = rows.length > limit ? rows[limit - 1] : undefined;
   return {
     records: page,
-    cursor: last ? encode({ key: keyOf(last), id: last.id }) : null,
+    cursor: last
+      ? encode({ key: keyOf(last), id: last.id, order: orderName })
+      : null,
   };
 }
 
@@ -202,6 +241,80 @@ export async function edgesOf(
   return rows.map(toEdge);
 }
 
+// A record's id and the ids of everything merged into it, however many
+// merges deep.
+export async function aliasesOf(q: Query, id: string): Promise<string[]> {
+  const { rows } = await q.query<{ id: string }>(
+    "select same_record($1) as id",
+    [id],
+  );
+  return rows.map((r) => r.id);
+}
+
+export type Graph = {
+  nodes: { id: string; kind: string; title: string }[];
+  edges: Edge[];
+};
+
+// What every record stands for, and every edge read between what its ends
+// stand for: a merged record's links show on its winner.
+const STANDING = `
+  with recursive up as (
+    select id, id as at, merged_into from records
+    union all
+    select up.id, r.id, r.merged_into
+    from up join records r on r.id = up.merged_into
+  ), winner as (
+    select id, at as winner from up where merged_into is null
+  ), resolved as (
+    select distinct on (wf.winner, e.verb, wt.winner)
+      e.id, wf.winner as from_id, e.verb, wt.winner as to_id, e.props,
+      e.confidence, e.occurred_at, e.source, e.source_ref, e.author,
+      e.created_at
+    from edges e
+    join winner wf on wf.id = e.from_id
+    join winner wt on wt.id = e.to_id
+    where wf.winner <> wt.winner
+    order by wf.winner, e.verb, wt.winner, e.created_at, e.id
+  )`;
+
+// The brain as a graph: live records and the edges between them. Given
+// records to look around, only those, their neighbours and the edges among
+// them; a record looked around is on the map even when deleted, and a
+// merged one is looked around as its winner.
+export async function graph(q: Query, around?: string[]): Promise<Graph> {
+  const { rows: nodes } = await q.query<{
+    id: string;
+    kind: string;
+    title: string;
+  }>(
+    `${STANDING}, focus as (
+       select winner from winner where id = any($1::uuid[])
+     ), near as (
+       select from_id as id from resolved
+       where to_id in (select winner from focus)
+       union select to_id from resolved
+       where from_id in (select winner from focus)
+       union select winner from focus
+     )
+     select r.id, r.kind, r.title from records r
+     where r.merged_into is null
+       and (r.deleted_at is null or r.id = any($1::uuid[]))
+       and ($1::uuid[] is null or r.id in (select id from near))
+     order by r.id`,
+    [around ?? null],
+  );
+  const ids = nodes.map((n) => n.id);
+  const { rows: edges } = await q.query<EdgeRow>(
+    `${STANDING}
+     select ${edgeColumns} from resolved
+     where from_id = any($1::uuid[]) and to_id = any($1::uuid[])
+     order by id`,
+    [ids],
+  );
+  return { nodes, edges: edges.map(toEdge) };
+}
+
 // What changed after a point in the log. Start from 0 for everything.
 export async function changes(
   q: Query,
@@ -211,6 +324,25 @@ export async function changes(
   const { rows } = await q.query<EventRow>(
     `select ${eventColumns} from events where seq > $1 order by seq limit $2`,
     [after, Math.min(Math.max(limit, 1), MAX_LIMIT)],
+  );
+  return rows.map(toEvent);
+}
+
+// The log read backwards, newest first, as a person looks at it.
+export async function history(
+  q: Query,
+  opts: HistoryOptions = {},
+): Promise<Event[]> {
+  const { rows } = await q.query<EventRow>(
+    `select ${eventColumns} from events
+     where ($1::uuid is null or subject_id = $1)
+       and ($2::bigint is null or seq < $2)
+     order by seq desc limit $3`,
+    [
+      opts.of ?? null,
+      opts.before ?? null,
+      Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT),
+    ],
   );
   return rows.map(toEvent);
 }

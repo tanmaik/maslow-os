@@ -164,6 +164,11 @@ export async function write(
     known.verb(e.verb);
     const fromId = await resolve(q, e.from, written);
     const toId = await resolve(q, e.to, written);
+    if (fromId === toId) {
+      throw new Invalid(
+        `an edge joins two records; ${fromId} cannot ${e.verb} itself`,
+      );
+    }
     const result = await q.query(
       `insert into edges
            (from_id, verb, to_id, props, confidence, occurred_at, source,
@@ -193,12 +198,20 @@ export async function write(
   return { records: ids, changed, edges };
 }
 
+// Removes an edge, in the author's name. The log keeps what it said.
+export async function unlink(q: Query, author: Author, id: string) {
+  await q.query("select set_config('app.author', $1, true)", [author]);
+  const result = await q.query("delete from edges where id = $1", [id]);
+  if (!result.rowCount) throw new NotFound(`edge ${id} is not in this brain`);
+}
+
 export type Patch = {
   kind?: string;
   title?: string;
   body?: string;
   props?: Record<string, unknown>;
-  occurredAt?: Date | string;
+  // Null takes the time away; absent leaves it.
+  occurredAt?: Date | string | null;
   confidence?: number;
 };
 
@@ -234,7 +247,8 @@ export async function edit(
        title = coalesce($4, title),
        body = coalesce($5, body),
        props = coalesce($6::jsonb, props),
-       occurred_at = coalesce($7::timestamptz, occurred_at),
+       occurred_at = case when $10::boolean then $7::timestamptz
+         else occurred_at end,
        confidence = coalesce($8::real, confidence),
        author = $9
      where id = $1 and version = $2 and deleted_at is null
@@ -249,6 +263,7 @@ export async function edit(
       patch.occurredAt ?? null,
       patch.confidence ?? null,
       author,
+      patch.occurredAt !== undefined,
     ],
   );
   if (rows[0]) return toRecord(rows[0]);

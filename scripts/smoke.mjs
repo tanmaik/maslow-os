@@ -303,10 +303,14 @@ try {
   // from the roster, listed under past members, his note kept under the
   // membership he held. Brought back, or invited back, he is the same member
   // with the same note. Purged, he and the note are gone.
-  const noted = await fetch(`${stack.url}/brain/note`, {
+  const noted = await fetch(`${stack.url}/brain/records`, {
     method: "POST",
     headers: { cookie: pim },
-    body: new URLSearchParams({ title: "Ovens", body: "Preheat by five." }),
+    body: new URLSearchParams({
+      kind: "note",
+      title: "Ovens",
+      body: "Preheat by five.",
+    }),
     redirect: "manual",
   });
   check(
@@ -797,10 +801,14 @@ try {
   // it; nothing of it is left, and Late is still a person.
   const { createSession } = await import("../packages/db/src/auth.ts");
   const lateCookie = `session=${await createSession(late)}`;
-  const lateNote = await fetch(`${stack.url}/brain/note`, {
+  const lateNote = await fetch(`${stack.url}/brain/records`, {
     method: "POST",
     headers: { cookie: lateCookie },
-    body: new URLSearchParams({ title: "Rent", body: "Due on the first." }),
+    body: new URLSearchParams({
+      kind: "note",
+      title: "Rent",
+      body: "Due on the first.",
+    }),
     redirect: "manual",
   });
   await settings(

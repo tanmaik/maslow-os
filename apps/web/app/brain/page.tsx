@@ -1,172 +1,355 @@
-import { catalog, read, type BrainRecord } from "@placeholder/brain";
+import {
+  catalog,
+  graph,
+  Invalid,
+  read,
+  type BrainRecord,
+  type Filter,
+  type Kind,
+  type Property,
+} from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
+import { ChevronDownIcon, ChevronUpIcon, SearchIcon } from "lucide-react";
 import { redirect } from "next/navigation";
 
+import { DateField } from "@/components/date-field";
+import { FormDialog } from "@/components/form-dialog";
+import { LocalTime } from "@/components/local-time";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { principal } from "@/lib/session";
 
-// The signed-in person's brain: the org's vocabulary, a search over their
-// records, a way to write a note, and the export.
+import { FieldInputs } from "./fields";
+import { cell, recordHref } from "./format";
+import { BrainGraph } from "./graph/lazy";
+import { Split } from "./graph/split";
+import { KindIcon, KindMark } from "./kind-icon";
+import { TypeBadge } from "./type-badge";
+
+// The query the table shows: a kind or all, a search, one value per enum
+// field, a sort column and direction, and where the page starts.
+type Params = {
+  kind?: string;
+  q?: string;
+  sort?: string;
+  dir?: "asc" | "desc";
+  cursor?: string;
+  deleted?: string;
+  [filter: `f.${string}`]: string | undefined;
+};
+
+const sortable = (p: Property) => p.type !== "list";
+
+// The signed-in person's records as a table beside the graph of everything.
+// Picking a kind adds its declared fields as columns, sortable and
+// filterable, and leaves the graph to the whole view.
 export default async function Page({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; kind?: string; imported?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const p = await principal();
   if (!p) redirect("/");
-  const { q = "", kind = "", imported } = await searchParams;
-  const { me, vocabulary, page } = await asPerson(p, async (db) => ({
-    me: (
-      await db.query<{ name: string }>("select name from users where id = $1", [
-        p.userId,
-      ])
-    ).rows[0]?.name,
-    vocabulary: await catalog(db),
-    page: await read(db, { query: q || undefined, kind: kind || undefined }),
-  }));
+  // A parameter given twice counts once.
+  const params = Object.fromEntries(
+    Object.entries(await searchParams).map(([k, v]) => [
+      k,
+      Array.isArray(v) ? v[0] : v,
+    ]),
+  ) as Params;
+  const { kinds } = await asPerson(p, catalog);
+  const kind = kinds.find((k) => k.name === params.kind);
+  if (params.kind && !kind) redirect("/brain");
+  const properties = kind?.properties ?? [];
+  const enums = properties.filter((f) => f.type === "enum");
 
-  return (
-    <main className="space-y-8">
-      <header className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">{me}&apos;s brain</h1>
-        <Button
-          variant="ghost"
-          size="sm"
-          render={<a href="/" />}
-          nativeButton={false}
-        >
-          Home
-        </Button>
-      </header>
+  // The same view with one parameter changed.
+  const href = (changes: Partial<Params>) => {
+    const next = new URLSearchParams();
+    for (const [k, v] of Object.entries({ ...params, ...changes })) {
+      if (v && k !== "cursor") next.set(k, v);
+    }
+    if (changes.cursor) next.set("cursor", changes.cursor);
+    const s = next.toString();
+    return `/brain${s ? `?${s}` : ""}`;
+  };
 
-      <section className="space-y-3">
-        <form method="get" className="flex gap-2">
+  const where: Filter[] = enums.flatMap((f) => {
+    const v = params[`f.${f.name}`];
+    return v && f.options?.includes(v)
+      ? [{ property: f.name, op: "eq" as const, value: v }]
+      : [];
+  });
+  const sortField = properties.find(
+    (f) => f.name === params.sort && sortable(f),
+  );
+  const dir = params.dir === "asc" ? "asc" : "desc";
+  let page, whole;
+  try {
+    ({ page, whole } = await asPerson(p, async (db) => ({
+      page: await read(db, {
+        kind: kind?.name,
+        query: params.q || undefined,
+        where,
+        orderBy: sortField
+          ? { property: sortField.name, direction: dir }
+          : undefined,
+        includeDeleted: params.deleted === "1",
+        cursor: params.cursor,
+      }),
+      whole: kind ? null : await graph(db),
+    })));
+  } catch (err) {
+    // A cursor from another query, or none at all: the first page.
+    if (err instanceof Invalid && params.cursor) redirect(href({}));
+    throw err;
+  }
+  const sortLink = (name: string, label: string) => {
+    const active = (params.sort ?? "when") === name;
+    const nextDir = active && dir === "desc" ? "asc" : "desc";
+    return (
+      <a
+        href={href({ sort: name === "when" ? undefined : name, dir: nextDir })}
+        className="inline-flex items-center gap-1 hover:underline"
+      >
+        {label}
+        {active &&
+          (dir === "asc" ? (
+            <ChevronUpIcon className="size-3" />
+          ) : (
+            <ChevronDownIcon className="size-3" />
+          ))}
+      </a>
+    );
+  };
+
+  const view = (
+    <>
+      <div className="space-y-1">
+        <h1 className="flex items-center gap-2 text-2xl font-semibold">
+          {kind && <KindIcon kind={kind.name} className="size-5" />}
+          {kind ? kind.name : "Records"}
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          {kind?.description ?? "Everything this brain knows, newest first."}
+        </p>
+      </div>
+      <form method="get" className="flex flex-wrap items-center gap-2">
+        {kind && <input type="hidden" name="kind" value={kind.name} />}
+        <div className="relative w-full sm:w-64">
+          <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
             name="q"
-            defaultValue={q}
-            placeholder="search, e.g. rocket friday"
+            defaultValue={params.q ?? ""}
+            placeholder={kind ? `Search ${kind.name}s` : "Search"}
+            className="pl-8"
           />
-          <NativeSelect name="kind" defaultValue={kind} className="w-40">
-            <NativeSelectOption value="">any kind</NativeSelectOption>
-            {vocabulary.kinds.map((k) => (
-              <NativeSelectOption key={k.id} value={k.name}>
-                {k.name}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          <Button type="submit">Search</Button>
-        </form>
+        </div>
+        {!kind && kinds.length > 0 && (
+          <Select name="kind" defaultValue="">
+            <SelectTrigger aria-label="Kind">
+              <SelectValue placeholder="Any kind" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Any kind</SelectItem>
+              {kinds.map((k) => (
+                <SelectItem key={k.id} value={k.name}>
+                  <KindIcon kind={k.name} />
+                  {k.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {enums.map((f) => (
+          <Select
+            key={f.id}
+            name={`f.${f.name}`}
+            defaultValue={params[`f.${f.name}`] ?? ""}
+          >
+            <SelectTrigger aria-label={f.name}>
+              <SelectValue placeholder={`Any ${f.name}`} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="">Any {f.name}</SelectItem>
+              {f.options?.map((o) => (
+                <SelectItem key={o} value={o}>
+                  {o}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ))}
+        <Label className="text-muted-foreground gap-1.5 font-normal">
+          <Checkbox
+            name="deleted"
+            value="1"
+            defaultChecked={params.deleted === "1"}
+          />
+          Show deleted
+        </Label>
+        <Button type="submit" variant="outline" size="sm">
+          Apply
+        </Button>
+        <span className="text-muted-foreground text-sm">
+          {page.records.length}
+          {page.cursor ? "+" : ""} {kind ? kind.name : "record"}
+          {page.records.length === 1 ? "" : "s"}
+        </span>
+        <span className="flex-1" />
+        <NewRecord kind={kind ?? kinds.find((k) => k.name === "note")} />
+      </form>
+
+      {page.records.length === 0 && kinds.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          {page.records.length} records{page.cursor ? ", more available" : ""}
-          {imported ? ` · ${imported} added or changed by import` : ""}
+          This brain is empty. Write a note, or define a kind in{" "}
+          <a href="/brain/vocabulary" className="underline">
+            vocabulary
+          </a>{" "}
+          to start a table.
         </p>
-        <ul className="divide-y">
-          {page.records.map((r) => (
-            <RecordItem key={r.id} record={r} />
-          ))}
-        </ul>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="font-medium">Vocabulary</h2>
-        <dl className="space-y-3">
-          {vocabulary.kinds.map((k) => (
-            <div key={k.id}>
-              <dt>
-                <span className="font-medium">{k.name}</span>{" "}
-                <span className="text-muted-foreground text-sm">
-                  kind · {k.author}
-                </span>
-              </dt>
-              <dd className="text-muted-foreground text-sm">
-                {k.description}
-                {k.properties.length > 0 && (
-                  <ul className="mt-1 list-disc pl-5">
-                    {k.properties.map((f) => (
-                      <li key={f.id}>
-                        <code>{f.name}</code>: {f.type}
-                        {f.options ? ` (${f.options.join(", ")})` : ""}
-                        {f.required ? ", required" : ""} · {f.description}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </dd>
-            </div>
-          ))}
-          {vocabulary.verbs.map((v) => (
-            <div key={v.id}>
-              <dt>
-                <span className="font-medium">{v.name}</span>{" "}
-                <span className="text-muted-foreground text-sm">
-                  verb · {v.author}
-                </span>
-              </dt>
-              <dd className="text-muted-foreground text-sm">{v.description}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="font-medium">Write a note</h2>
-        <form action="/brain/note" method="post" className="space-y-2">
-          <Input name="title" placeholder="title" required />
-          <Textarea name="body" placeholder="body" rows={3} />
-          <Button type="submit">Write</Button>
-        </form>
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="font-medium">Export and import</h2>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Title</TableHead>
+              {kind ? (
+                properties.map((f) => (
+                  <TableHead key={f.id} title={f.description}>
+                    <span className="inline-flex items-center gap-1.5">
+                      {sortable(f) ? sortLink(f.name, f.name) : f.name}
+                      <TypeBadge type={f.type} />
+                    </span>
+                  </TableHead>
+                ))
+              ) : (
+                <TableHead>Kind</TableHead>
+              )}
+              <TableHead className="hidden sm:table-cell">
+                {sortLink("when", "When")}
+              </TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {page.records.map((r) => (
+              <Row key={r.id} r={r} kind={kind} />
+            ))}
+            {page.records.length === 0 && (
+              <TableRow>
+                <TableCell
+                  colSpan={2 + (kind ? properties.length : 1)}
+                  className="text-muted-foreground"
+                >
+                  Nothing matches.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      )}
+      {page.cursor && (
         <Button
           variant="outline"
-          render={<a href="/brain/export" />}
+          size="sm"
           nativeButton={false}
+          render={<a href={href({ cursor: page.cursor })} />}
         >
-          Download this brain as a file
+          Next page
         </Button>
-        <form action="/brain/import" method="post" className="space-y-2">
-          <Textarea
-            name="snapshot"
-            placeholder="paste an exported file here"
-            rows={4}
-            required
-          />
-          <Button variant="outline" type="submit">
-            Import into this brain
-          </Button>
-        </form>
-      </section>
-    </main>
+      )}
+    </>
+  );
+  if (!whole) return <div className="space-y-4">{view}</div>;
+  return <Split graph={<BrainGraph graph={whole} />}>{view}</Split>;
+}
+
+// A record as a row. The whole row opens it.
+function Row({ r, kind }: { r: BrainRecord; kind?: Kind }) {
+  return (
+    <TableRow
+      className={`relative ${r.deletedAt ? "text-muted-foreground" : ""}`}
+    >
+      <TableCell className="max-w-xs whitespace-normal">
+        <a
+          href={recordHref(r.id)}
+          className="font-medium after:absolute after:inset-0 hover:underline"
+        >
+          {r.title || "(untitled)"}
+        </a>
+        {r.deletedAt && (
+          <Badge variant="outline" className="ml-2">
+            {r.mergedInto ? "merged" : "deleted"}
+          </Badge>
+        )}
+      </TableCell>
+      {kind ? (
+        kind.properties.map((f) => (
+          <TableCell key={f.id} className="max-w-48 truncate">
+            {cell(r.props[f.name], f)}
+          </TableCell>
+        ))
+      ) : (
+        <TableCell>
+          <KindMark kind={r.kind} className="relative z-10" />
+        </TableCell>
+      )}
+      <TableCell className="text-muted-foreground hidden whitespace-nowrap sm:table-cell">
+        <LocalTime at={r.occurredAt} fallback="—" />
+      </TableCell>
+    </TableRow>
   );
 }
 
-function RecordItem({ record: r }: { record: BrainRecord }) {
+// A row added by hand: a note when no kind is chosen, otherwise a record of
+// the kind with its declared fields. A note has fields once someone has
+// declared them.
+function NewRecord({ kind }: { kind?: Kind }) {
+  const name = kind?.name ?? "note";
   return (
-    <li className="space-y-1 py-3">
-      <div className="flex items-baseline gap-2">
-        <span className="font-medium">{r.title || "(untitled)"}</span>
-        <Badge variant="secondary">{r.kind}</Badge>
-        <span className="text-muted-foreground text-xs">
-          {r.layer}
-          {r.confidence !== null ? ` · ${Math.round(r.confidence * 100)}%` : ""}
-        </span>
-      </div>
-      {r.body && <p className="text-sm">{r.body}</p>}
-      <p className="text-muted-foreground text-xs">
-        from {r.source} {r.sourceRef}
-        {r.occurredAt ? ` · ${r.occurredAt.toISOString().slice(0, 10)}` : ""}
-        {" · by "}
-        {r.author} · v{r.version}
-      </p>
-    </li>
+    <FormDialog
+      trigger={`New ${name}`}
+      variant="default"
+      title={`New ${name}`}
+      description={kind?.description}
+    >
+      <form action="/brain/records" method="post" className="grid gap-3">
+        <input type="hidden" name="kind" value={name} />
+        <div className="space-y-1">
+          <Label htmlFor="title">Title</Label>
+          <Input id="title" name="title" required autoFocus />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="body">Body, markdown</Label>
+          <Textarea id="body" name="body" rows={6} />
+        </div>
+        <FieldInputs properties={kind?.properties ?? []} />
+        <div className="space-y-1">
+          <Label htmlFor="occurred_at">When</Label>
+          <DateField id="occurred_at" name="occurred_at" time />
+        </div>
+        <div>
+          <Button type="submit">Save</Button>
+        </div>
+      </form>
+    </FormDialog>
   );
 }
