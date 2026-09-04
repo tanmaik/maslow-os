@@ -1,6 +1,7 @@
 import type { Principal } from "@placeholder/db/auth";
 import {
   clearMachine,
+  clearVolume,
   computerOf,
   computersAllowed,
   lease,
@@ -94,11 +95,27 @@ export async function build(p: Principal): Promise<Built> {
       c.machineId = null;
     }
     if (!c.machineId) {
-      const machine = await fly.createMachine(
-        machineName(c.id),
-        c.volumeId!,
-        c.secret,
-      );
+      let machine;
+      try {
+        machine = await fly.createMachine(
+          machineName(c.id),
+          c.volumeId!,
+          c.secret,
+        );
+      } catch (err) {
+        // A volume Fly no longer has: the row forgets it, and the next
+        // look makes a new filesystem. A laptop's is purged every night.
+        if (
+          /volume[^"]*(not found|does not exist|no such)/i.test(
+            (err as Error).message,
+          )
+        ) {
+          await noteState(p, c, "volume-gone");
+          await clearVolume(p, c.id, c.volumeId!);
+          return "exists";
+        }
+        throw err;
+      }
       let recorded = false;
       try {
         recorded = await setMachine(p, c.id, machine.id);

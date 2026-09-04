@@ -28,7 +28,7 @@ export type Machine = {
 
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, copied onto the volume on first boot.
-export const IMAGE = "registry.fly.io/placeholder-computers:v6";
+export const IMAGE = "registry.fly.io/placeholder-computers:v5";
 export const SIZE = "shared-cpu-1x:1024";
 export const DISK_GB = 10;
 // Fly's limit for one volume.

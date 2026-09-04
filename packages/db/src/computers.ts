@@ -281,6 +281,20 @@ export async function noteEventsIn(
   });
 }
 
+// Forgets a volume Fly no longer has, and the machine that was on it.
+export async function clearVolume(
+  p: Principal,
+  id: string,
+  volumeId: string,
+): Promise<void> {
+  await asOrg(p.orgId, (q) =>
+    q.query(
+      "update computers set volume_id = null, machine_id = null, state = 'building' where id = $1 and volume_id = $2",
+      [id, volumeId],
+    ),
+  );
+}
+
 export async function computersIn(orgId: string): Promise<Computer[]> {
   return asOrg(
     orgId,

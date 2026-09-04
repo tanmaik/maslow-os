@@ -1,9 +1,20 @@
-import { startFakeFly } from "./fake-fly.mjs";
-import { devSecrets, freePort, startStack } from "./stack.mjs";
+import { createHash } from "node:crypto";
+import os from "node:os";
 
-// Without a Fly token, computers run against a fake Machines API in this
-// process: they cost nothing and behave as Fly does.
+import { startFakeFly } from "./fake-fly.mjs";
+import { devSecrets, freePort, root, startStack } from "./stack.mjs";
+
+// Development runs the real thing: the dev secrets hold the preview Fly
+// app and the bucket, and everything this checkout makes there is named
+// for it and purged by the nightly reap. Without the secrets, computers
+// run against a fake Machines API in this process: they cost nothing and
+// behave as Fly does.
 const secrets = devSecrets();
+// This checkout, told apart from every other laptop and worktree.
+const checkout = createHash("sha1")
+  .update(`${os.hostname()}:${root}`)
+  .digest("hex")
+  .slice(0, 6);
 const webPort = Number(process.env.PORT) || (await freePort());
 // Fly as the web will see it: the environment, then the decrypted secrets.
 const effective = { ...process.env, ...secrets };
@@ -22,7 +33,11 @@ const stack = await startStack({
         FLY_MACHINES_HOST: fake.url,
         FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
       }
-    : {},
+    : {
+        FLY_NAME_PREFIX: `dev-${checkout}-`,
+        STORAGE_PREFIX: `dev/${checkout}/`,
+        FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
+      },
 });
 console.log(`postgres  127.0.0.1:${stack.pgPort}`);
 for (const name of stack.applied) console.log(`migrated  ${name}`);
@@ -41,8 +56,12 @@ for (const [name, vendor] of Object.entries(stack.vendors)) {
   console.log(`${name.padEnd(9)} ${vendor ? `real (${vendor})` : faked[name]}`);
 }
 console.log(
-  fake ? "computers faked in this process" : "computers real, on Fly",
+  fake
+    ? "computers faked in this process"
+    : `computers real, on Fly as dev-${checkout}-*, purged nightly; a machine cannot reach this laptop, so its reports and backups fail here`,
 );
+if (!fake && effective.STORAGE_BUCKET)
+  console.log(`storage   real, under dev/${checkout}/, purged nightly`);
 console.log(`web       http://localhost:${stack.webPort}`);
 
 const shutdown = () =>

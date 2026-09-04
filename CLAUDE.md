@@ -163,16 +163,21 @@ export holds anyone else's slice, the org owner included. Importing is
 additive, so an org is rebuilt one person at a time. No production credential
 ever leaves production; only files travel.
 
-Local runs on the dev-tier keys in `.env.development` — WorkOS staging
-today; Resend and a dev bucket once they exist, since a preview's are
-production's — and the synthetic seed: three orgs with obviously
-distinguishable data. Whatever is not there is faked, and `pnpm dev` and the
-pill say which. A preview is the same: a Neon branch off an empty
-parent — never off production — migrated and seeded on deploy, on preview
-keys. The per-PR workflow is the only thing that builds a preview: database
-first, then deploy, and both die with the pull request. Outside production a
-dev sign-in exists — pick a seeded person, no email — visibly flagged like
-every fake and impossible in production.
+Local runs on the dev-tier keys in `.env.development` — WorkOS staging,
+Resend to founders only, the preview Fly app and the bucket — and the
+synthetic seed: three orgs with obviously distinguishable data. Whatever is
+not there is faked, and `pnpm dev` and the pill say which. A laptop's
+computers live in the preview Fly app and its objects under a `dev/` prefix
+in the bucket, named for the checkout, and the nightly reap purges them:
+tomorrow makes new ones. A machine cannot reach a laptop, so its reports and
+backups fail there and say so. A preview is the same: a Neon branch off an
+empty parent — never off production — migrated and seeded on deploy, on
+preview keys. The per-PR workflow is the only thing that builds a preview:
+database first, then deploy, and both die with the pull request; its machines
+are real, in a Fly app of their own, made when first used and destroyed with
+the pull request. Outside production a dev sign-in exists — pick a seeded
+person, no email — visibly flagged like every fake and impossible in
+production.
 
 ## The machine
 

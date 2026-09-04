@@ -3,7 +3,7 @@ import { invite } from "@placeholder/db/auth";
 import { NextResponse } from "next/server";
 
 import { deployment } from "@/lib/deployment";
-import { send } from "@/lib/mail";
+import { mailable, send } from "@/lib/mail";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
@@ -18,6 +18,10 @@ export async function POST(request: Request) {
   const address = email.trim().toLowerCase();
   const home = origin(request);
 
+  // Asked before the invitation exists, so nothing is made that cannot be
+  // told about.
+  if (deployment.mail.kind !== "none" && !mailable(address))
+    return NextResponse.redirect(`${home}/settings?invite=founders`, 303);
   const outcome = await invite(p, address);
   if (outcome === "sent" && deployment.mail.kind !== "none") {
     const org = await asOrg(

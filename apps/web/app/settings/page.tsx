@@ -98,6 +98,8 @@ const NOTICES: Record<string, string> = {
   "invite=pending":
     "Already invited. They sign in with that address and they're in.",
   "invite=member": "That address already belongs to someone.",
+  "invite=founders":
+    "Outside production, invitations reach founders only; that address would get no mail.",
   "member=member": "They are a member now.",
 };
 

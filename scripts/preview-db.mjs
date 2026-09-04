@@ -25,24 +25,27 @@ const usage = {
   up: Number.isInteger(pr) && ref && opt.sha,
   down: Number.isInteger(pr),
   reap: true,
+  "reap-dev": [],
 };
 if (!usage[command]) {
   throw new Error(
-    "usage: preview-db.mjs up --pr N --branch REF --sha SHA | down --pr N | reap",
+    "usage: preview-db.mjs up --pr N --branch REF --sha SHA | down --pr N | reap | reap-dev",
   );
 }
 
+// Each key is demanded the moment it is used, so a command that needs only
+// some of them runs with only those.
 const need = (k) =>
   process.env[k] ||
   (() => {
     throw new Error(`${k} is not set`);
   })();
-const neonKey = need("NEON_API_KEY");
-const neonProject = need("NEON_PROJECT_ID");
-const parentName = need("NEON_PARENT_BRANCH");
-const vercelToken = need("VERCEL_TOKEN");
-const team = need("VERCEL_TEAM_ID");
-const project = need("VERCEL_PROJECT_ID");
+const neonKey = () => need("NEON_API_KEY");
+const neonProject = () => need("NEON_PROJECT_ID");
+const parentName = () => need("NEON_PARENT_BRANCH");
+const vercelToken = () => need("VERCEL_TOKEN");
+const team = () => need("VERCEL_TEAM_ID");
+const project = () => need("VERCEL_PROJECT_ID");
 
 async function call(base, token, method, path, body) {
   const r = await fetch(base + path, {
@@ -65,13 +68,13 @@ async function call(base, token, method, path, body) {
   return text ? JSON.parse(text) : {};
 }
 const neon = (m, p, b) =>
-  call("https://console.neon.tech/api/v2", neonKey, m, p, b);
+  call("https://console.neon.tech/api/v2", neonKey(), m, p, b);
 const vercel = (m, p, b) =>
   call(
     "https://api.vercel.com",
-    vercelToken,
+    vercelToken(),
     m,
-    `${p}${p.includes("?") ? "&" : "?"}teamId=${team}`,
+    `${p}${p.includes("?") ? "&" : "?"}teamId=${team()}`,
     b,
   );
 
@@ -81,7 +84,7 @@ async function branches() {
   for (let cursor; ;) {
     const page = await neon(
       "GET",
-      `/projects/${neonProject}/branches?limit=100${cursor ? `&cursor=${cursor}` : ""}`,
+      `/projects/${neonProject()}/branches?limit=100${cursor ? `&cursor=${cursor}` : ""}`,
     );
     all.push(...page.branches);
     cursor = page.pagination?.next;
@@ -89,7 +92,7 @@ async function branches() {
   }
 }
 const envs = async () =>
-  (await vercel("GET", `/v9/projects/${project}/env`)).envs;
+  (await vercel("GET", `/v9/projects/${project()}/env`)).envs;
 
 // Neon runs SQL over HTTPS on the endpoint host; no client library needed.
 async function sql(uri, query) {
@@ -141,11 +144,11 @@ const ours = (e) =>
 // The app role's password is a function of the branch, so every run sets the
 // same one and nothing has to be remembered or rotated.
 const passwordFor = (branch) =>
-  createHmac("sha256", neonKey).update(branch.id).digest("hex");
+  createHmac("sha256", neonKey()).update(branch.id).digest("hex");
 
 async function removeRows(rows) {
   for (const e of rows) {
-    await vercel("DELETE", `/v9/projects/${project}/env/${e.id}`);
+    await vercel("DELETE", `/v9/projects/${project()}/env/${e.id}`);
     console.log(`vercel: removed ${e.key} for branch ${e.gitBranch}`);
   }
 }
@@ -155,13 +158,13 @@ async function up() {
   const existing = await branches();
   let branch = existing.find((b) => b.name === name);
   if (!branch) {
-    const parent = existing.find((b) => b.name === parentName);
-    if (!parent) throw new Error(`Neon branch ${parentName} does not exist`);
-    ({ branch } = await neon("POST", `/projects/${neonProject}/branches`, {
+    const parent = existing.find((b) => b.name === parentName());
+    if (!parent) throw new Error(`Neon branch ${parentName()} does not exist`);
+    ({ branch } = await neon("POST", `/projects/${neonProject()}/branches`, {
       branch: { name, parent_id: parent.id },
       endpoints: [{ type: "read_write" }],
     }));
-    console.log(`neon: created ${name} (${branch.id}) off ${parentName}`);
+    console.log(`neon: created ${name} (${branch.id}) off ${parentName()}`);
   } else {
     console.log(`neon: ${name} exists (${branch.id})`);
   }
@@ -169,7 +172,7 @@ async function up() {
   const owner = (
     await neon(
       "GET",
-      `/projects/${neonProject}/connection_uri?branch_id=${branch.id}&database_name=neondb&role_name=neondb_owner&pooled=false`,
+      `/projects/${neonProject()}/connection_uri?branch_id=${branch.id}&database_name=neondb&role_name=neondb_owner&pooled=false`,
     )
   ).uri;
   const password = passwordFor(branch);
@@ -189,7 +192,7 @@ async function up() {
     name: projectName,
     link,
     accountId,
-  } = await vercel("GET", `/v9/projects/${project}`);
+  } = await vercel("GET", `/v9/projects/${project()}`);
   // The team's slug is part of every branch URL; the preview token cannot
   // read the team, so the workflow says it.
   const teamSlug = need("VERCEL_TEAM_SLUG");
@@ -219,7 +222,7 @@ async function up() {
         ]
       : []),
   ]) {
-    await vercel("POST", `/v10/projects/${project}/env?upsert=true`, {
+    await vercel("POST", `/v10/projects/${project()}/env?upsert=true`, {
       key,
       value,
       type: "encrypted",
@@ -323,15 +326,17 @@ async function emptyPrefix(prefix) {
 
 // Destroys the pull request's machines, then its volumes, in the preview
 // Fly app, when this run holds that app's token.
-async function destroyComputers(prNumber) {
+// Destroys every machine and volume named for a pull request, or for
+// whatever prefix is given.
+async function destroyComputers(prNumber, named = null) {
   const token = process.env.FLY_PREVIEW_TOKEN;
   if (!token) {
     console.log(
-      `fly: no FLY_PREVIEW_TOKEN, pr${prNumber} computers left as is`,
+      `fly: no FLY_PREVIEW_TOKEN, ${named ?? `pr${prNumber}`} computers left as is`,
     );
     return;
   }
-  const prefix = flyNamePrefixFor(prNumber);
+  const prefix = named ?? flyNamePrefixFor(prNumber);
   const api = async (method, path, allow404 = false) => {
     const r = await fetch(
       `https://api.machines.dev/v1/apps/${flyPreviewApp}${path}`,
@@ -373,17 +378,19 @@ async function destroyComputers(prNumber) {
     if (last) throw last;
     gone++;
   }
-  console.log(`fly: ${gone} of pr${prNumber}'s machines and volumes destroyed`);
+  console.log(
+    `fly: ${gone} of ${named ?? `pr${prNumber}`}'s machines and volumes destroyed`,
+  );
 }
 
-// Every preview deployment of the project, oldest last.
+// Every preview deployment of the project(), oldest last.
 async function previewDeployments() {
   const all = [];
   let next;
   do {
     const page = await vercel(
       "GET",
-      `/v6/deployments?projectId=${project}&target=preview&limit=100${next ? `&until=${next}` : ""}`,
+      `/v6/deployments?projectId=${project()}&target=preview&limit=100${next ? `&until=${next}` : ""}`,
     );
     all.push(...page.deployments);
     next = page.pagination?.next;
@@ -430,7 +437,7 @@ async function down(prNumber = pr, branch = undefined) {
   const name = branchNameFor(prNumber);
   branch ??= (await branches()).find((b) => b.name === name);
   if (!branch) return;
-  await neon("DELETE", `/projects/${neonProject}/branches/${branch.id}`);
+  await neon("DELETE", `/projects/${neonProject()}/branches/${branch.id}`);
   console.log(`neon: deleted ${name}`);
 }
 
@@ -438,6 +445,17 @@ async function down(prNumber = pr, branch = undefined) {
 // pull request is closed or missing, and stamped rows whose branch is gone.
 const gh = async (p) =>
   call("https://api.github.com", need("GITHUB_TOKEN"), "GET", p);
+
+// Everything a laptop made today: machines, volumes and objects named
+// dev-…, gone every night, made again tomorrow. Its own command, so it
+// can be run by hand with only the Fly and storage keys.
+async function reapDev() {
+  if (process.env.FLY_PREVIEW_TOKEN) await destroyComputers(null, "dev-");
+  else console.log("fly: no FLY_PREVIEW_TOKEN, dev computers left as is");
+  if (process.env.STORAGE_ACCESS_KEY && process.env.STORAGE_SECRET_KEY)
+    await emptyPrefix("dev/");
+  else console.log("storage: no keys, dev objects left as is");
+}
 
 async function reap() {
   const repo = need("GITHUB_REPOSITORY");
@@ -454,6 +472,8 @@ async function reap() {
     await down(Number(m[1]), b);
     swept++;
   }
+
+  await reapDev();
 
   // Machines and volumes of any pull request that is not open, whether or
   // not its branch survived.
@@ -503,4 +523,4 @@ async function reap() {
   console.log(`reap: ${swept} stale item${swept === 1 ? "" : "s"} removed`);
 }
 
-await { up, down, reap }[command]();
+await { up, down, reap, "reap-dev": reapDev }[command]();
