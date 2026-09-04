@@ -511,7 +511,11 @@ export async function smokeBrain(stack) {
         [target],
       );
       await owner.query(
-        "insert into users (id, org_id, email, name) values ($1, $2, 'someone@export-target.test', 'Someone')",
+        "insert into people (id, email, name) values ($1, 'someone@export-target.test', 'Someone')",
+        [targetPerson],
+      );
+      await owner.query(
+        "insert into users (id, org_id, person_id, email, name) values ($1, $2, $1, 'someone@export-target.test', 'Someone')",
         [targetPerson, target],
       );
     } finally {

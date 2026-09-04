@@ -1,16 +1,29 @@
 import { randomUUID } from "node:crypto";
 
-import { asEmail, asOrg } from "./index.ts";
+import { asEmail, asOrg, asSignIn } from "./index.ts";
 
 // What an identity provider vouches for.
 export type Identity = { email: string; name: string };
 
-// Who a request acts as.
+// Who a request acts as: one person, in one org, through one membership.
 export type Role = "owner" | "member";
-export type Principal = { orgId: string; userId: string; role: Role };
+export type Principal = {
+  personId: string;
+  orgId: string;
+  userId: string;
+  role: Role;
+};
 
-// Admits a person the identity provider vouched for: the one already known by
-// that email, else the one an org invited, else a new person in an org of one.
+export type Membership = {
+  userId: string;
+  orgId: string;
+  orgName: string;
+  role: Role;
+};
+
+// Admits the person an identity provider vouched for. A new email becomes a
+// person; every pending invitation becomes a membership; a person with no
+// membership at all gets an org of one. Lands in the newest membership.
 // Two first sign-ins racing for one email both land on the row the winner made.
 export async function signIn(identity: Identity): Promise<Principal> {
   try {
@@ -22,74 +35,148 @@ export async function signIn(identity: Identity): Promise<Principal> {
 }
 
 async function admit(identity: Identity): Promise<Principal> {
-  const found = await asEmail(identity.email, async (q) => {
-    const user = await q.query<{ id: string; org_id: string; role: Role }>(
-      "select id, org_id, role from users where email = $1",
-      [identity.email],
-    );
-    if (user.rows[0]) return { user: user.rows[0], invitedTo: null };
-    const invitation = await q.query<{ org_id: string }>(
-      "select org_id from invitations where email = $1 and accepted_at is null order by created_at limit 1",
-      [identity.email],
-    );
-    return { user: null, invitedTo: invitation.rows[0]?.org_id ?? null };
+  const email = identity.email.toLowerCase();
+  const { person, invitedTo } = await asEmail(email, async (q) => {
+    let person = (
+      await q.query<{ id: string; name: string; avatar_key: string | null }>(
+        "select id, name, avatar_key from people where email = $1",
+        [email],
+      )
+    ).rows[0];
+    if (!person) {
+      person = { id: randomUUID(), name: identity.name, avatar_key: null };
+      await q.query(
+        "insert into people (id, email, name) values ($1, $2, $3)",
+        [person.id, email, person.name],
+      );
+    }
+    const invitedTo = (
+      await q.query<{ org_id: string }>(
+        "select org_id from invitations where email = $1 and accepted_at is null order by created_at",
+        [email],
+      )
+    ).rows.map((r) => r.org_id);
+    return { person, invitedTo };
   });
 
-  if (found.user)
-    return {
-      orgId: found.user.org_id,
-      userId: found.user.id,
-      role: found.user.role,
-    };
-
-  const userId = randomUUID();
-  if (found.invitedTo) {
-    const orgId = found.invitedTo;
-    // The invitation is claimed first; withdrawn in the meantime means no
-    // admission, and sign-in starts over as uninvited.
-    const claimed = await asOrg(orgId, async (q) => {
+  // Claim each invitation, then join as the person is known today. A
+  // withdrawn one admits nobody.
+  for (const orgId of invitedTo) {
+    await asOrg(orgId, async (q) => {
       const claim = await q.query(
         "update invitations set accepted_at = now() where email = $1 and accepted_at is null",
-        [identity.email],
+        [email],
       );
-      if (!claim.rowCount) return false;
+      if (!claim.rowCount) return;
       await q.query(
-        "insert into users (id, org_id, email, name) values ($1, $2, $3, $4)",
-        [userId, orgId, identity.email, identity.name],
+        "insert into users (id, org_id, person_id, email, name, avatar_key) values ($1, $2, $3, $4, $5, $6) on conflict (org_id, person_id) do nothing",
+        [randomUUID(), orgId, person.id, email, person.name, person.avatar_key],
       );
-      return true;
     });
-    if (claimed) return { orgId, userId, role: "member" };
-    return admit(identity);
   }
 
+  // Land in the newest membership, or found an org of one. The email is
+  // locked while deciding, so sign-ins racing for one email found one org.
   const orgId = randomUUID();
-  await asOrg(orgId, async (q) => {
+  const userId = randomUUID();
+  return asSignIn(email, orgId, async (q) => {
+    await q.query("select pg_advisory_xact_lock(hashtext($1))", [email]);
+    const m = (
+      await q.query<{ id: string; org_id: string; role: Role }>(
+        "select id, org_id, role from users where email = $1 order by created_at desc limit 1",
+        [email],
+      )
+    ).rows[0];
+    if (m)
+      return {
+        personId: person.id,
+        orgId: m.org_id,
+        userId: m.id,
+        role: m.role,
+      };
     await q.query("insert into orgs (id, slug, name) values ($1, $2, $3)", [
       orgId,
       orgId,
-      identity.name,
+      person.name,
     ]);
     await q.query(
-      "insert into users (id, org_id, email, name, role) values ($1, $2, $3, $4, 'owner')",
-      [userId, orgId, identity.email, identity.name],
+      "insert into users (id, org_id, person_id, email, name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, 'owner')",
+      [userId, orgId, person.id, email, person.name, person.avatar_key],
     );
+    return { personId: person.id, orgId, userId, role: "owner" };
   });
-  return { orgId, userId, role: "owner" };
 }
 
-// Opens a session and returns the token the browser will hold. It lasts until
-// deleteSession: signing out is the only way a session ends.
-export async function createSession(p: Principal): Promise<string> {
-  const id = randomUUID();
-  await asOrg(p.orgId, (q) =>
-    q.query("insert into sessions (id, org_id, user_id) values ($1, $2, $3)", [
-      id,
-      p.orgId,
-      p.userId,
-    ]),
+// Every org the person is in, newest first. Memberships are read as the
+// person's email; each org's name is read inside that org, since no scope
+// sees every org at once.
+export async function membershipsOf(p: Principal): Promise<Membership[]> {
+  const email = await emailOf(p);
+  if (!email) return [];
+  const rows = await asEmail(
+    email,
+    async (q) =>
+      (
+        await q.query<{ id: string; org_id: string; role: Role }>(
+          "select id, org_id, role from users where email = $1 order by created_at desc",
+          [email],
+        )
+      ).rows,
   );
-  return `${p.orgId}.${id}`;
+  return Promise.all(
+    rows.map(async (r) => ({
+      userId: r.id,
+      orgId: r.org_id,
+      role: r.role,
+      orgName: await asOrg(
+        r.org_id,
+        async (q) =>
+          (await q.query<{ name: string }>("select name from orgs")).rows[0]!
+            .name,
+      ),
+    })),
+  );
+}
+
+// The email behind the session's membership, or null once that membership
+// has been removed.
+async function emailOf(p: Principal): Promise<string | null> {
+  return asOrg(
+    p.orgId,
+    async (q) =>
+      (
+        await q.query<{ email: string }>(
+          "select email from users where id = $1",
+          [p.userId],
+        )
+      ).rows[0]?.email ?? null,
+  );
+}
+
+// The principal for another of the person's memberships, or null if they do
+// not hold it.
+export async function switchTo(
+  p: Principal,
+  userId: string,
+): Promise<Principal | null> {
+  const m = (await membershipsOf(p)).find((m) => m.userId === userId);
+  return m
+    ? { personId: p.personId, orgId: m.orgId, userId: m.userId, role: m.role }
+    : null;
+}
+
+// Opens a session and returns the token the browser will hold, or null if
+// the membership is no longer the person's. It lasts until deleteSession:
+// signing out is the only way a session ends.
+export async function createSession(p: Principal): Promise<string | null> {
+  const id = randomUUID();
+  const opened = await asOrg(p.orgId, (q) =>
+    q.query(
+      "insert into sessions (id, org_id, user_id) select $1, $2, id from users where id = $3 and person_id = $4",
+      [id, p.orgId, p.userId, p.personId],
+    ),
+  );
+  return opened.rowCount ? `${p.orgId}.${id}` : null;
 }
 
 const TOKEN = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/;
@@ -103,13 +190,20 @@ export async function resolveSession(
   const [, orgId, id] = parts;
   const row = await asOrg(orgId!, async (q) =>
     (
-      await q.query<{ user_id: string; role: Role }>(
-        "select s.user_id, u.role from sessions s join users u on u.id = s.user_id where s.id = $1",
+      await q.query<{ user_id: string; person_id: string; role: Role }>(
+        "select s.user_id, u.person_id, u.role from sessions s join users u on u.id = s.user_id where s.id = $1",
         [id],
       )
     ).rows.at(0),
   );
-  return row ? { orgId: orgId!, userId: row.user_id, role: row.role } : null;
+  return row
+    ? {
+        personId: row.person_id,
+        orgId: orgId!,
+        userId: row.user_id,
+        role: row.role,
+      }
+    : null;
 }
 
 export async function deleteSession(token: string | undefined): Promise<void> {
@@ -123,30 +217,28 @@ export async function deleteSession(token: string | undefined): Promise<void> {
 
 export type Invited = "sent" | "pending" | "member";
 
-// Reserves a place in the org for whoever the identity provider says holds
-// this email. Says whether that is new, already pending, or pointless because
-// the email already belongs to someone.
+// Reserves a place in the org for whoever holds this email. An email that
+// already belongs to a person is fine; one that is already in this org is
+// pointless. Under the org lock, and only if the inviter is still a member.
 export async function invite(p: Principal, email: string): Promise<Invited> {
-  const taken = await asEmail(
-    email,
-    async (q) =>
-      (await q.query("select 1 from users where email = $1", [email])).rowCount,
-  );
-  if (taken) return "member";
-  // Under the org lock, and only if the inviter is still in the org.
+  const address = email.toLowerCase();
   const inserted = await asOrg(p.orgId, async (q) => {
     await q.query("select 1 from orgs for update");
     const still = await q.query("select 1 from users where id = $1", [
       p.userId,
     ]);
     if (!still.rowCount) return null;
+    const already = await q.query("select 1 from users where email = $1", [
+      address,
+    ]);
+    if (already.rowCount) return "member" as const;
     return (
       await q.query(
         "insert into invitations (id, org_id, email) values ($1, $2, $3) on conflict (org_id, email) do nothing",
-        [randomUUID(), p.orgId, email],
+        [randomUUID(), p.orgId, address],
       )
     ).rowCount;
   });
-  if (inserted === null) return "member";
+  if (inserted === null || inserted === "member") return "member";
   return inserted ? "sent" : "pending";
 }

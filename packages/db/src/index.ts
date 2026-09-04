@@ -70,6 +70,16 @@ export function asEmail<T>(
   return scoped({ "app.email": email }, fn);
 }
 
+// Runs fn as a sign-in that may found an org: the rows carrying one email,
+// and a new org's own.
+export function asSignIn<T>(
+  email: string,
+  orgId: string,
+  fn: (q: Query) => Promise<T>,
+): Promise<T> {
+  return scoped({ "app.email": email, "app.org_id": orgId }, fn);
+}
+
 // Runs fn seeing one throttle key.
 export function asThrottle<T>(
   key: string,

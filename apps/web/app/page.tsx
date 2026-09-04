@@ -1,4 +1,5 @@
 import { asOrg } from "@placeholder/db";
+import { membershipsOf } from "@placeholder/db/auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deployment } from "@/lib/deployment";
@@ -52,10 +53,31 @@ export default async function Page({
     };
   });
 
+  const memberships = await membershipsOf(p);
+  const others = memberships.filter((m) => m.userId !== p.userId);
+
   return (
     <main className="space-y-6">
       <header className="flex items-baseline justify-between">
-        <h1 className="text-2xl font-semibold">{orgName}</h1>
+        <div className="flex items-baseline gap-3">
+          <h1 className="text-2xl font-semibold">{orgName}</h1>
+          {others.length > 0 && (
+            <form action="/auth/switch" method="post" className="flex gap-1">
+              {others.map((m) => (
+                <Button
+                  key={m.userId}
+                  variant="ghost"
+                  size="sm"
+                  type="submit"
+                  name="membership"
+                  value={m.userId}
+                >
+                  {m.orgName}
+                </Button>
+              ))}
+            </form>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="sm" render={<a href="/brain" />}>
             Brain

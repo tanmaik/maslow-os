@@ -447,6 +447,103 @@ try {
     `own org, ${late.role}`,
   );
 
+  // One person, two orgs. Otto is a member of the bakery and of the
+  // observatory: signed into one, the header offers the other; switching
+  // yields a session in that org and nothing from the first leaks across;
+  // a membership that is not his is refused.
+  const ottoHome = await page(ottoNow);
+  check(
+    "a person in two orgs is offered the other",
+    /<h1[^>]*>Blue Whale Bakery/.test(ottoHome) &&
+      /<button[^>]*value="30000000-0000-4000-8000-000000000002"[^>]*>Chartreuse Observatory</.test(
+        ottoHome,
+      ),
+    "bakery, with the observatory offered",
+  );
+  const switched = await fetch(`${stack.url}/auth/switch`, {
+    method: "POST",
+    body: new URLSearchParams({
+      membership: "30000000-0000-4000-8000-000000000002",
+    }),
+    headers: { cookie: ottoNow },
+    redirect: "manual",
+  });
+  const ottoObs = switched.headers
+    .get("set-cookie")
+    ?.match(/session=[^;]+/)?.[0];
+  const obsHome = ottoObs ? await page(ottoObs) : "";
+  check(
+    "switching org yields that org",
+    switched.status === 303 &&
+      /<h1[^>]*>Chartreuse Observatory<\/h1>/.test(obsHome) &&
+      !/marge@|pim@/.test(await settingsHtml(ottoObs)),
+    `${switched.status}, observatory, no bakery people`,
+  );
+  const notMine = await fetch(`${stack.url}/auth/switch`, {
+    method: "POST",
+    body: new URLSearchParams({
+      membership: "10000000-0000-4000-8000-000000000001",
+    }),
+    headers: { cookie: ottoNow },
+    redirect: "manual",
+  });
+  check(
+    "cannot switch into an org one is not in",
+    notMine.status === 403,
+    `answered ${notMine.status}`,
+  );
+  // Inviting an address that already has an account adds a membership, not a
+  // refusal: Vera invites Wile; Wile signs in and is in two orgs.
+  const veraCookie = await signIn("30000000-0000-4000-8000-000000000001");
+  const inviteWile = await settings(
+    "/invite",
+    new URLSearchParams({ email: "wile@acme-rockets.test" }),
+    veraCookie,
+  );
+  const wileAgain = await admit({
+    email: "wile@acme-rockets.test",
+    name: "Wile Coyote",
+  });
+  const { membershipsOf } = await import("../packages/db/src/auth.ts");
+  const wileOrgs = (await membershipsOf(wileAgain))
+    .map((m) => m.orgName)
+    .sort();
+  check(
+    "inviting an existing account adds a membership",
+    inviteWile.headers.get("location")?.endsWith("invite=sent") &&
+      wileOrgs.join(",") === "Acme Rockets,Chartreuse Observatory",
+    wileOrgs.join(", "),
+  );
+  // The same person's profile is one: renaming in one org renames everywhere.
+  const rename = new FormData();
+  rename.set("name", "Otto L. Loaf");
+  await settings("/settings/profile", rename, ottoObs);
+  check(
+    "a person's name is one across orgs",
+    (await page(ottoNow)).includes("Sign out, Otto L. Loaf"),
+    "renamed in the observatory, seen in the bakery",
+  );
+  // Renames racing from both orgs end with every org agreeing on one name.
+  await Promise.all(
+    ["Otto A", "Otto B", "Otto C", "Otto D", "Otto E", "Otto F"].map(
+      (name, i) => {
+        const f = new FormData();
+        f.set("name", name);
+        return settings("/settings/profile", f, i % 2 ? ottoObs : ottoNow);
+      },
+    ),
+  );
+  const seen = [await page(ottoNow), await page(ottoObs)].map(
+    (h) => h.match(/Sign out, (Otto [A-F])</)?.[1],
+  );
+  check(
+    "racing renames leave every org agreeing",
+    seen[0] !== undefined && seen[0] === seen[1],
+    seen.join(" vs "),
+  );
+  rename.set("name", "Otto L. Loaf");
+  await settings("/settings/profile", rename, ottoObs);
+
   const signedOutSettings = await fetch(`${stack.url}/settings`, {
     redirect: "manual",
   });

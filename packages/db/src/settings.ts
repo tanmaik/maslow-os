@@ -1,4 +1,4 @@
-import { asOrg, type Query } from "./index.ts";
+import { asOrg, asPerson, type Query } from "./index.ts";
 import type { Principal, Role } from "./auth.ts";
 
 export type Org = { id: string; name: string; logoKey: string | null };
@@ -68,16 +68,50 @@ export async function setOrgLogo(p: Principal, key: string): Promise<void> {
   await asOwner(p, (q) => q.query("update orgs set logo_key = $1", [key]));
 }
 
+// A person's name and avatar live on people, and every membership carries a
+// copy. One transaction holds the person's row while it writes each
+// membership inside its own org, so two writes racing cannot leave the orgs
+// disagreeing.
+async function setProfile(
+  p: Principal,
+  column: "name" | "avatar_key",
+  value: string,
+): Promise<void> {
+  await asPerson(p.orgId, p.personId, async (q) => {
+    const person = (
+      await q.query<{ email: string }>(
+        "select email from people where id = $1 for update",
+        [p.personId],
+      )
+    ).rows[0];
+    if (!person) return;
+    await q.query(`update people set ${column} = $1 where id = $2`, [
+      value,
+      p.personId,
+    ]);
+    await q.query("select set_config('app.email', $1, true)", [person.email]);
+    const orgIds = (
+      await q.query<{ org_id: string }>(
+        "select org_id from users where email = $1",
+        [person.email],
+      )
+    ).rows.map((r) => r.org_id);
+    for (const orgId of orgIds) {
+      await q.query("select set_config('app.org_id', $1, true)", [orgId]);
+      await q.query(`update users set ${column} = $1 where person_id = $2`, [
+        value,
+        p.personId,
+      ]);
+    }
+  });
+}
+
 export async function renameSelf(p: Principal, name: string): Promise<void> {
-  await asOrg(p.orgId, (q) =>
-    q.query("update users set name = $1 where id = $2", [name, p.userId]),
-  );
+  await setProfile(p, "name", name);
 }
 
 export async function setAvatar(p: Principal, key: string): Promise<void> {
-  await asOrg(p.orgId, (q) =>
-    q.query("update users set avatar_key = $1 where id = $2", [key, p.userId]),
-  );
+  await setProfile(p, "avatar_key", key);
 }
 
 // Removes a member from the org, ending their sessions and forgetting their
