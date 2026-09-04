@@ -1,0 +1,15 @@
+{
+  "name": "placeholder",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "user": "node",
+  "install": "export PATH=\"/usr/local/bin:$PATH\"\npnpm install --frozen-lockfile",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "export PATH=\"/usr/local/bin:$PATH\"\npnpm dev",
+      "description": "This checkout's Postgres, migrated and seeded, and the Next.js app on a free port."
+    }
+  ]
+}
