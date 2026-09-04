@@ -190,7 +190,9 @@ async function up() {
     link,
     accountId,
   } = await vercel("GET", `/v9/projects/${project}`);
-  const { slug: teamSlug } = await vercel("GET", `/v2/teams/${accountId}`);
+  // The team's slug is part of every branch URL; the preview token cannot
+  // read the team, so the workflow says it.
+  const teamSlug = need("VERCEL_TEAM_SLUG");
   const flyToken = process.env.FLY_PREVIEW_TOKEN;
   if (!flyToken) {
     console.log("fly: no FLY_PREVIEW_TOKEN, this preview has no computers");
