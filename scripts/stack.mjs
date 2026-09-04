@@ -32,16 +32,19 @@ export function devSecrets() {
   if (!process.env.DOTENV_PRIVATE_KEY_DEVELOPMENT && !fs.existsSync(keysFile)) {
     return null;
   }
+  // dotenvx looks for the key in the object it is given; the real environment
+  // is never that object, so nothing decrypted leaks into it.
+  const { DOTENV_PRIVATE_KEY_DEVELOPMENT } = process.env;
   const { parsed, error } = decrypt({
     path: path.join(root, ".env.development"),
     envKeysFile: keysFile,
-    processEnv: {},
+    processEnv: { DOTENV_PRIVATE_KEY_DEVELOPMENT },
     quiet: true,
   });
   if (error) {
     throw new Error(
       `.env.development could not be decrypted (${error.code}). ` +
-        "Is DOTENV_PRIVATE_KEY_DEVELOPMENT the current key?",
+        "Run `pnpm env:pull` for the current key.",
     );
   }
   const { DOTENV_PUBLIC_KEY_DEVELOPMENT, ...values } = parsed;
