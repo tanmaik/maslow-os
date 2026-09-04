@@ -265,13 +265,23 @@ export async function smokeBrain(stack) {
           },
         ],
       });
+      let badType = null;
+      try {
+        await brain.defineProperty(q, "smoke", "lift", {
+          name: "tempo",
+          type: "tempo",
+          description: "Seconds down, pause, seconds up.",
+        });
+      } catch (err) {
+        badType = err;
+      }
       const { kinds } = await brain.catalog(q);
-      return { refused, a, b, withField, kinds };
+      return { refused, badType, a, b, withField, kinds };
     });
     check(
-      "a kind needs a description",
-      lift.refused instanceof Error,
-      lift.refused ? "refused" : "accepted",
+      "a kind needs a description, and a field a type",
+      lift.refused instanceof Error && lift.badType instanceof brain.Invalid,
+      `${lift.refused ? "refused" : "accepted"}, ${lift.badType instanceof brain.Invalid ? "refused" : "accepted"}`,
     );
     check(
       "defining a kind is idempotent",

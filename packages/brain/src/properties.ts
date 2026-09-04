@@ -37,6 +37,11 @@ export async function defineProperty(
   if (!def.description.trim()) {
     throw new Invalid(`${kind}.${def.name} needs a description`);
   }
+  if (!Object.hasOwn(sqlType, def.type)) {
+    throw new Invalid(
+      `"${String(def.type)}" is not a type; one of ${Object.keys(sqlType).join(", ")}`,
+    );
+  }
   if (def.type === "enum" && !def.options?.length) {
     throw new Invalid(`${kind}.${def.name} is an enum and needs options`);
   }
