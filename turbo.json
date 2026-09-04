@@ -4,7 +4,19 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": [".next/**", "!.next/cache/**"],
-      "env": ["DATABASE_URL", "DATABASE_OWNER_URL", "VERCEL", "VERCEL_ENV"]
+      "env": [
+        "DATABASE_URL",
+        "DATABASE_OWNER_URL",
+        "VERCEL",
+        "VERCEL_ENV",
+        "AUTH_ISSUER",
+        "AUTH_CLIENT_ID",
+        "AUTH_CLIENT_SECRET",
+        "WORKOS_API_KEY",
+        "WORKOS_CLIENT_ID",
+        "RESEND_API_KEY",
+        "MAIL_FROM"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build"]

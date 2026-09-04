@@ -17,17 +17,19 @@ function connection(): pg.Pool {
   return shared.__pool;
 }
 
-// Runs fn inside a transaction scoped to one org. With orgId null the
-// connection sees no rows at all: nothing is visible until an org is named.
-export async function asOrg<T>(
-  orgId: string | null,
-  fn: (client: pg.PoolClient) => Promise<T>,
+export type Query = pg.PoolClient;
+
+// Runs fn inside a transaction whose row-level policies read the given
+// settings. With none set the connection sees no rows at all.
+async function scoped<T>(
+  settings: Record<string, string>,
+  fn: (q: Query) => Promise<T>,
 ): Promise<T> {
   const client = await connection().connect();
   try {
     await client.query("begin");
-    if (orgId)
-      await client.query("select set_config('app.org_id', $1, true)", [orgId]);
+    for (const [name, value] of Object.entries(settings))
+      await client.query("select set_config($1, $2, true)", [name, value]);
     const result = await fn(client);
     await client.query("commit");
     client.release();
@@ -40,4 +42,21 @@ export async function asOrg<T>(
     );
     throw err;
   }
+}
+
+// Runs fn as one org. With orgId null nothing is visible until an org is named.
+export function asOrg<T>(
+  orgId: string | null,
+  fn: (q: Query) => Promise<T>,
+): Promise<T> {
+  return scoped(orgId ? { "app.org_id": orgId } : {}, fn);
+}
+
+// Runs fn seeing only the person and invitations that carry one email: the
+// view a sign-in has before it knows an org.
+export function asEmail<T>(
+  email: string,
+  fn: (q: Query) => Promise<T>,
+): Promise<T> {
+  return scoped({ "app.email": email }, fn);
 }

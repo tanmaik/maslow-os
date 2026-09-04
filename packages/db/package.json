@@ -6,7 +6,8 @@
     ".": "./src/index.ts",
     "./postgres": "./src/postgres.ts",
     "./migrate": "./src/migrate.ts",
-    "./seed": "./src/seed.ts"
+    "./seed": "./src/seed.ts",
+    "./auth": "./src/auth.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

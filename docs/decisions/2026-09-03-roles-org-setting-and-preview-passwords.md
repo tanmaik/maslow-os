@@ -47,3 +47,5 @@ build per push.
 org fails with a unique violation, which tells the caller the row exists — a
 small cross-tenant oracle. Whether emails are unique per org or per person is a
 product decision; the proving schema keeps the global constraint until then.
+Sign-in now leans on it: see
+[sign-in is OIDC and sessions are ours](2026-09-03-sign-in-is-oidc-and-sessions-are-ours.md).

@@ -195,6 +195,14 @@ machine restarted underneath one, it says so.
 The interface is an ACP client. Its layout is taken directly from t3code and
 the Beautiful UI harness, not reinvented.
 
+## Interface
+
+Every component is shadcn, and every shadcn component is installed under
+`apps/web/components/ui`. Nothing is hand-rolled beside them: no bespoke
+button, input, dialog or table, and no other component library. Styling is
+Tailwind on shadcn's theme tokens. The typeface is the system one; no font is
+fetched from anywhere.
+
 ## Metering and billing
 
 Every unit of consumption is recorded from the first day — disk held, compute
