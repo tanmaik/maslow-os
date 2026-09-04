@@ -34,7 +34,24 @@ const SHELL = process.env.SHELL_PATH ?? "/bin/bash";
 const BACKUP_URL = REPORT_URL.replace(/\/report$/, "/backup");
 const PART = 64 * 1024 * 1024;
 
+// The disk's fullness. A laptop's directory stands in for a volume of
+// DISK_GB, measured as what it holds.
 async function disk() {
+  if (process.env.DISK_GB) {
+    let used = 0;
+    const walk = async (dir) => {
+      for (const e of await fs
+        .readdir(dir, { withFileTypes: true })
+        .catch(() => [])) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) await walk(p);
+        // The link itself, never what it points at.
+        else used += (await fs.lstat(p).catch(() => ({ size: 0 }))).size;
+      }
+    };
+    await walk(ROOT);
+    return { used, total: Number(process.env.DISK_GB) * 1e9 };
+  }
   const s = await fs.statfs(ROOT).catch(() => null);
   return s
     ? { used: (s.blocks - s.bfree) * s.bsize, total: s.blocks * s.bsize }
@@ -272,7 +289,9 @@ async function restore(url) {
         throw new Refused(409, "the disk is not empty");
       // A dotfile the disk already has is kept; the archive's copy is not
       // written over it.
-      for (const name of await fs.readdir(dir))
+      const names = await fs.readdir(dir);
+      console.log(`restore: ${names.length} entries put back`);
+      for (const name of names)
         if (!have.has(name))
           await fs.rename(path.join(dir, name), path.join(ROOT, name));
     });

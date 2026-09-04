@@ -245,6 +245,32 @@ async function membersOf(q: Query): Promise<string[]> {
   return [...ids];
 }
 
+// Runs the sweep if none has run for an hour: from the page, so every
+// environment sweeps, cron or not. Production's cron is the backstop for
+// hours nobody looks.
+let sweeping: Promise<void> | null = null;
+export function sweepIfDue(now = new Date()): Promise<void> {
+  // One at a time in this process: the check is inside the claim.
+  if (!sweeping)
+    sweeping = (async () => {
+      const last = await asMeter(async (q) => {
+        await q.query("select set_config('app.meter', 'sweep', true)");
+        return (
+          await q.query<{ last: Date | null }>(
+            "select max(to_at) as last from usage",
+          )
+        ).rows[0]!.last;
+      });
+      if (last && now.getTime() - last.getTime() < 3600_000) return;
+      await sweep(now);
+    })()
+      .catch((err) => console.error(`sweep: ${(err as Error).message}`))
+      .finally(() => {
+        sweeping = null;
+      });
+  return sweeping;
+}
+
 // The hourly sweep: every org, every member, since their last row. First
 // it asks Fly what each machine is doing, so a state nobody looked at is
 // still an event, and lets go of uploads nobody finished.

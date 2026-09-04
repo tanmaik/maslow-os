@@ -9,6 +9,7 @@ import {
   SquareArrowOutUpRight,
 } from "lucide-react";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 
 import { FileActions } from "@/components/file-actions";
 import { NewFolder } from "@/components/new-folder";
@@ -37,7 +38,7 @@ import { ensureFilesystem, status } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
 import { cleanPath, filesOf } from "@/lib/files";
-import { dollars } from "@/lib/meter";
+import { dollars, sweepIfDue } from "@/lib/meter";
 import { principal } from "@/lib/session";
 
 const gb = (n: number) =>
@@ -82,6 +83,9 @@ export default async function Computer({
     return <Note>Computers are not available for this org yet.</Note>;
   const params = await searchParams;
   const at = cleanPath(params.path ?? "/") ?? "/";
+  // A look at the computer is when the meter, the backups and the
+  // stragglers catch up, wherever this runs.
+  after(() => sweepIfDue());
   let s = await status(p);
   if (!s) {
     await ensureFilesystem(p);

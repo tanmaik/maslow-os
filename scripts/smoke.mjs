@@ -801,7 +801,7 @@ try {
     [...fake.machines.values()][0]?.state === "started",
     /data-state="started"/.test(ottoComputer),
     ottoComputer.includes("This folder is empty"),
-    / of [0-9.]+ [KMG]B used/.test(ottoComputer),
+    / of 10\.0 GB used/.test(ottoComputer),
   ];
   check(
     "opening the computer makes the machine, wakes it and shows the disk",
@@ -1186,7 +1186,7 @@ try {
       back.includes('data-file="/dusk.txt"') &&
       back.includes('data-folder="/photos"') &&
       (await download(ottoNow, "/dusk.txt")).body === "hello",
-    "photos and dusk.txt back",
+    `${putBack.headers.get("location")?.split("?")[1]}; ${(back.match(/data-(?:file|folder)="[^"]+"/g) ?? []).join(" ")}; ${(await download(ottoNow, "/dusk.txt")).status}`,
   );
   const notEmpty = await form(
     "/computer/restore",

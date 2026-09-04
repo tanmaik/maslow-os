@@ -153,6 +153,10 @@ development stays visible on screen for as long as it is active.
 **In production there is no fallback.** A missing credential stops the app
 from starting. Nothing degrades quietly, and no error is swallowed.
 
+The hourly sweep — the meter, the backups, the stragglers, the orphans —
+runs from the app when an hour has passed since the last, in every
+environment, and from a cron in production as the backstop.
+
 **"Download my data"** gives a person what is theirs, and today that is
 their brain: an export that imports into any brain, as the importer. Nobody's
 export holds anyone else's slice, the org owner included. Importing is
