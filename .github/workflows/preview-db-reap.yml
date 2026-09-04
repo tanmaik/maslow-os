@@ -27,6 +27,11 @@ jobs:
       - env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          STORAGE_ENDPOINT: https://fly.storage.tigris.dev
+          STORAGE_REGION: auto
+          STORAGE_BUCKET: placeholder-uploads-tigris
+          STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
+          STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
           GITHUB_TOKEN: ${{ github.token }}
           NEON_PROJECT_ID: quiet-wave-64485699
           NEON_PARENT_BRANCH: preview-parent

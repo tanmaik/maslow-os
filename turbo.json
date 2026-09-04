@@ -17,7 +17,14 @@
         "STORAGE_REGION",
         "STORAGE_BUCKET",
         "STORAGE_ACCESS_KEY",
-        "STORAGE_SECRET_KEY"
+        "STORAGE_SECRET_KEY",
+        "FLY_API_TOKEN",
+        "FLY_COMPUTERS_APP",
+        "FLY_API_HOST",
+        "FLY_REGION",
+        "FLY_REPORT_URL",
+        "VERCEL_PROJECT_PRODUCTION_URL",
+        "CRON_SECRET"
       ]
     },
     "typecheck": {

@@ -30,11 +30,20 @@ import {
 import { ImageInput } from "@/components/image-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
+import { amount, dollars } from "@/lib/meter";
 import { principal } from "@/lib/session";
+import { usageOfOrg } from "@placeholder/db/usage";
 import { storage } from "@/lib/storage";
 
 // What the last save left to say, by the query it redirected with.
@@ -106,6 +115,11 @@ export default async function Settings({
   const me = members.find((m) => m.id === p.userId)!;
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const usage = owner ? await usageOfOrg(p, monthStart) : [];
+  const total = usage.reduce((n, l) => n + l.cost, 0);
   const uploads = deployment.storage.kind !== "none";
 
   return (
@@ -501,6 +515,49 @@ export default async function Settings({
             {said("delete") && (
               <p className="text-muted-foreground text-sm">{said("delete")}</p>
             )}
+          </CardContent>
+        </Card>
+      )}
+      {owner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Usage this month</CardTitle>
+            <CardDescription>
+              What each person is costing, in the vendors&apos; own units, at
+              their list prices. Total so far:{" "}
+              <span data-usage-total={total}>{dollars(total)}</span>.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Person</TableHead>
+                  <TableHead>Resource</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Cost</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {usage.map((l) => (
+                  <TableRow key={`${l.userId}-${l.resource}`}>
+                    <TableCell>{l.name ?? "purged member"}</TableCell>
+                    <TableCell>{l.resource}</TableCell>
+                    <TableCell>
+                      {amount(l.resource, l.unit, l.quantity)}
+                    </TableCell>
+                    <TableCell>{dollars(l.cost)}</TableCell>
+                  </TableRow>
+                ))}
+                {usage.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-muted-foreground">
+                      Nothing metered yet this month.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       )}

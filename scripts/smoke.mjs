@@ -5,6 +5,7 @@
 import path from "node:path";
 
 import { orgs } from "../packages/db/src/seed.ts";
+import { startFakeFly } from "./fake-fly.mjs";
 import { smokeBrain } from "./smoke-brain.mjs";
 import { root, startStack } from "./stack.mjs";
 
@@ -24,13 +25,26 @@ const noCredentials = Object.fromEntries(
   ].map((k) => [k, ""]),
 );
 
+// Fly is faked: computers are built and run against a server in this process.
+const fake = await startFakeFly();
+const { freePort } = await import("./stack.mjs");
+const webPort = await freePort();
 const stack = await startStack({
+  webPort,
   stdio: "ignore",
   dataDir: path.join(root, ".local", "smoke"),
   distDir: ".next-smoke",
   fresh: true,
   secrets: false,
-  env: noCredentials,
+  env: {
+    ...noCredentials,
+    FLY_API_TOKEN: "fake",
+    FLY_COMPUTERS_APP: "fake",
+    FLY_API_HOST: fake.url,
+    FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
+    CRON_SECRET: "smoke",
+    FILES_PART_SIZE: "3600",
+  },
 });
 
 // Signs in as a seeded person and returns the session cookie.
@@ -434,6 +448,7 @@ try {
     `${reinvite.headers.get("location")?.split("?")[1]}, same membership, 1 note`,
   );
   await remove();
+  const volumesBeforeLivePurge = fake.volumes.size;
   const purgeLive = await settings(
     "/settings/members",
     new URLSearchParams({ purge: "20000000-0000-4000-8000-000000000002" }),
@@ -444,6 +459,17 @@ try {
       (await settingsPage(margeOwner)).includes("otto@bluewhale.test"),
     "Otto still in",
   );
+  const memberPurge = await settings(
+    "/settings/members",
+    new URLSearchParams({ purge: pimId }),
+    otto,
+  );
+  check(
+    "a purge by a member or of a live member destroys nothing",
+    memberPurge.status === 403 && fake.volumes.size === volumesBeforeLivePurge,
+    `member answered ${memberPurge.status}; ${fake.volumes.size} volumes still`,
+  );
+  const volumesBeforePurge = fake.volumes.size;
   const purged = await settings(
     "/settings/members",
     new URLSearchParams({ purge: pimId }),
@@ -461,6 +487,11 @@ try {
       (await pimEvents()) === 0 &&
       pimSignIn.status === 400,
     `${purged.headers.get("location")?.split("?")[1]}, ${await pimNotes()} notes, ${await pimEvents()} events, sign-in ${pimSignIn.status}`,
+  );
+  check(
+    "a purged member's filesystem is gone from Fly",
+    fake.volumes.size === volumesBeforePurge - 1,
+    `${volumesBeforePurge} → ${fake.volumes.size} volumes`,
   );
   const svgForm = new FormData();
   svgForm.set("name", "Blue Whale Bakery & Co");
@@ -733,6 +764,398 @@ try {
   rename.set("first_name", "Otto");
   rename.set("last_name", "L. Loaf");
   await settings("/settings/profile", rename, ottoObs);
+
+  // Computers: in an org that may have them, the first look at your
+  // computer makes it, recorded and started; an org that may not is told so.
+  const computerPage = async (cookie) =>
+    (await fetch(`${stack.url}/computer`, { headers: { cookie } })).text();
+  const computerAct = (action, cookie) =>
+    fetch(`${stack.url}/computer/${action}`, {
+      method: "POST",
+      headers: { cookie },
+      redirect: "manual",
+    });
+  check(
+    "computers are gated by org",
+    (await computerPage(wile)).includes("not available for this org"),
+    "Acme told no",
+  );
+  check(
+    "signing in makes the filesystem, not compute",
+    fake.volumes.size >= 1 && fake.machines.size === 0,
+    `${fake.volumes.size} volumes, ${fake.machines.size} machines`,
+  );
+  const volumesAtSignIn = fake.volumes.size;
+  check(
+    "a look at the computer attaches nothing",
+    /data-state="no-compute"/.test(await computerPage(ottoNow)) &&
+      fake.machines.size === 0,
+    `${fake.machines.size} machines`,
+  );
+  const started = await computerAct("start", ottoNow);
+  const ottoComputer = await computerPage(ottoNow);
+  check(
+    "starting attaches compute, recorded and running",
+    started.headers.get("location")?.endsWith("start=true") &&
+      fake.machines.size === 1 &&
+      fake.volumes.size === volumesAtSignIn &&
+      /data-state="started"/.test(ottoComputer) &&
+      ottoComputer.includes("1.2 GB of 10.0 GB used, reported 0 min ago"),
+    `${fake.machines.size} machine, ${fake.volumes.size} volume`,
+  );
+  await computerPage(ottoNow);
+  check(
+    "a second look makes nothing",
+    fake.machines.size === 1 && fake.volumes.size === volumesAtSignIn,
+    `${fake.machines.size} machine`,
+  );
+  const stopped = await computerAct("stop", ottoNow);
+  check(
+    "a computer stops",
+    stopped.headers.get("location")?.endsWith("stop=true") &&
+      /data-state="stopped"/.test(await computerPage(ottoNow)),
+    "Off",
+  );
+  const events = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) =>
+      (
+        await q.query(
+          "select e.kind from computer_events e join computers c on c.id = e.computer_id where c.user_id = '20000000-0000-4000-8000-000000000002' order by e.at",
+        )
+      ).rows.map((r) => r.kind),
+  );
+  check(
+    "a computer's states are events",
+    [...events].sort().join(",") ===
+      "created,reported,start,started,stop,stopped,stopped,volume",
+    events.join(","),
+  );
+  // Files go to the store in parts; here the store is a directory behind
+  // our own PUT. Three parts make one file, listed with its size, fetched
+  // back whole, unseen by anyone else, and deleted.
+  const json = (path, body, cookie) =>
+    fetch(`${stack.url}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie },
+      body: JSON.stringify(body),
+    });
+  const chunks = ["alpha ".repeat(600), "beta".repeat(900), "gamma"];
+  const whole = chunks.join("");
+  const begun = await (
+    await json(
+      "/files/begin",
+      { name: "notes.txt", size: whole.length, type: "text/plain" },
+      ottoNow,
+    )
+  ).json();
+  const etags = [];
+  for (const [i, chunk] of chunks.entries()) {
+    const { url } = await (
+      await json("/files/part", { id: begun.id, partNumber: i + 1 }, ottoNow)
+    ).json();
+    const put = await fetch(`${stack.url}${url}`, {
+      method: "PUT",
+      body: chunk,
+    });
+    etags.push({ partNumber: i + 1, etag: put.headers.get("etag") });
+  }
+  const closed = await (
+    await json("/files/complete", { id: begun.id, parts: etags }, ottoNow)
+  ).json();
+  const listed = await computerPage(ottoNow);
+  check(
+    "a file arrives in parts and is listed",
+    closed.size === whole.length &&
+      listed.includes(`data-file="${begun.id}"`) &&
+      listed.includes(`data-files-bytes="${whole.length}"`),
+    `${closed.size} bytes`,
+  );
+  const fetched = await fetch(`${stack.url}/files/${begun.id}`, {
+    headers: { cookie: ottoNow },
+  });
+  check(
+    "a file comes back whole",
+    fetched.status === 200 && (await fetched.text()) === whole,
+    `answered ${fetched.status}`,
+  );
+  const otherMember = await fetch(`${stack.url}/files/${begun.id}`, {
+    headers: { cookie: margeOwner },
+  });
+  check(
+    "a file is nobody else's",
+    otherMember.status === 404,
+    `answered ${otherMember.status}`,
+  );
+  // The filesystem grows for bytes that arrived, never for a declared
+  // size, and stops at Fly's limit.
+  const { sizeFor } = await import("../apps/web/lib/computer.ts");
+  const archive = await (
+    await json(
+      "/files/begin",
+      { name: "archive.tar", size: 9e9, type: "application/x-tar" },
+      ottoNow,
+    )
+  ).json();
+  const notGrown = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) =>
+      (
+        await q.query(
+          "select disk_gb from computers where user_id = '20000000-0000-4000-8000-000000000002'",
+        )
+      ).rows[0],
+  );
+  check(
+    "a declared size grows nothing; arrived bytes grow to fit",
+    notGrown.disk_gb === 10 &&
+      sizeFor(1e9, 10) === 10 &&
+      sizeFor(9e9, 10) === 20 &&
+      sizeFor(400e9, 20) === 500 &&
+      sizeFor(600e9, 500) === 500,
+    `${notGrown.disk_gb} GB after declaring 9 GB`,
+  );
+  const tooBig = await json(
+    "/files/begin",
+    { name: "everything.tar", size: 495e9, type: "application/x-tar" },
+    ottoNow,
+  );
+  check(
+    "the filesystem stops at 500 GB",
+    tooBig.status === 413,
+    `answered ${tooBig.status}`,
+  );
+  await fetch(`${stack.url}/files/delete`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ file: archive.id }),
+    redirect: "manual",
+  });
+  const fileDeleted = await fetch(`${stack.url}/files/delete`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ file: begun.id }),
+    redirect: "manual",
+  });
+  check(
+    "a file is deleted",
+    fileDeleted.headers.get("location")?.includes("deleted=yes") &&
+      !(await computerPage(ottoNow)).includes(`data-file="${begun.id}"`) &&
+      (
+        await fetch(`${stack.url}/files/${begun.id}`, {
+          headers: { cookie: ottoNow },
+        })
+      ).status === 404,
+    "gone from the list and the store",
+  );
+  // The filesystem: folders to open, files inside them, renamed, moved, and
+  // a folder deleted with what it holds.
+  const form = (path, body, cookie) =>
+    fetch(`${stack.url}${path}`, {
+      method: "POST",
+      headers: { cookie },
+      body: new URLSearchParams(body),
+      redirect: "manual",
+    });
+  const folderMade = await form(
+    "/files/folder",
+    { path: "/", name: "photos" },
+    ottoNow,
+  );
+  const inPhotos = await (
+    await fetch(`${stack.url}/computer?path=%2Fphotos`, {
+      headers: { cookie: ottoNow },
+    })
+  ).text();
+  check(
+    "a folder is made and opens empty",
+    folderMade.headers.get("location")?.includes("folder=made") &&
+      inPhotos.includes('data-path="/photos"') &&
+      inPhotos.includes("This folder is empty"),
+    "photos, empty",
+  );
+  const photo = await (
+    await json(
+      "/files/begin",
+      { name: "sunset.txt", size: 5, type: "text/plain", path: "/photos" },
+      ottoNow,
+    )
+  ).json();
+  const { url: photoUrl } = await (
+    await json("/files/part", { id: photo.id, partNumber: 1 }, ottoNow)
+  ).json();
+  await fetch(`${stack.url}${photoUrl}`, { method: "PUT", body: "hello" });
+  await json(
+    "/files/complete",
+    { id: photo.id, parts: [{ partNumber: 1, etag: "x" }] },
+    ottoNow,
+  );
+  const rootView = await computerPage(ottoNow);
+  const photosView = await (
+    await fetch(`${stack.url}/computer?path=%2Fphotos`, {
+      headers: { cookie: ottoNow },
+    })
+  ).text();
+  check(
+    "a file uploaded into a folder is there and not at the root",
+    photosView.includes(`data-file="${photo.id}"`) &&
+      !rootView.includes(`data-file="${photo.id}"`) &&
+      rootView.includes('data-folder="/photos"'),
+    "sunset.txt in photos",
+  );
+  const fileRenamed = await form(
+    "/files/rename",
+    { path: "/photos", file: photo.id, name: "dusk.txt" },
+    ottoNow,
+  );
+  const fileMoved = await form(
+    "/files/move",
+    { path: "/photos", file: photo.id, to: "/" },
+    ottoNow,
+  );
+  const rootAfter = await computerPage(ottoNow);
+  check(
+    "a file is renamed and moved to the root",
+    fileRenamed.headers.get("location")?.includes("renamed=yes") &&
+      fileMoved.headers.get("location")?.includes("moved=yes") &&
+      rootAfter.includes(`data-file="${photo.id}"`) &&
+      rootAfter.includes("dusk.txt"),
+    "dusk.txt at the root",
+  );
+  const folderGone = await form(
+    "/files/delete",
+    { path: "/", folder: "/photos" },
+    ottoNow,
+  );
+  const fileGone = await form(
+    "/files/delete",
+    { path: "/", file: photo.id },
+    ottoNow,
+  );
+  const rootFinal = await computerPage(ottoNow);
+  check(
+    "a folder and a file are deleted",
+    folderGone.headers.get("location")?.includes("deleted=yes") &&
+      fileGone.headers.get("location")?.includes("deleted=yes") &&
+      !rootFinal.includes('data-folder="/photos"') &&
+      !rootFinal.includes(`data-file="${photo.id}"`),
+    "photos and dusk.txt gone",
+  );
+  // The meter: a sweep turns what happened into priced usage, per person,
+  // and a second sweep only adds the time since.
+  const sweepOnce = () =>
+    fetch(`${stack.url}/meter/sweep`, {
+      headers: { authorization: "Bearer smoke" },
+    });
+  check(
+    "the sweep needs its secret",
+    (await fetch(`${stack.url}/meter/sweep`)).status === 404,
+    "404 without it",
+  );
+  await new Promise((r) => setTimeout(r, 1100));
+  const swept = await (await sweepOnce()).json();
+  await new Promise((r) => setTimeout(r, 1100));
+  await sweepOnce();
+  const meteredFor = (userId) =>
+    asOrg(
+      "00000000-0000-4000-8000-000000000002",
+      async (q) =>
+        (
+          await q.query(
+            "select resource, unit, sum(quantity)::float8 as q, sum(cost)::float8 as cost, count(*)::int as n from usage where user_id = $1 group by resource, unit order by resource",
+            [userId],
+          )
+        ).rows,
+    );
+  const ottoMetered = await meteredFor("20000000-0000-4000-8000-000000000002");
+  const margeMetered = await meteredFor("20000000-0000-4000-8000-000000000001");
+  const by = Object.fromEntries(ottoMetered.map((r) => [r.resource, r]));
+  const margeBrain = margeMetered.find((r) => r.resource === "brain");
+  check(
+    "the meter prices compute, disk, files and brain per person",
+    swept.appended > 0 &&
+      by.compute?.unit === "second" &&
+      by.compute.q > 0 &&
+      by.disk?.unit === "gb_second" &&
+      by.disk.q > 0 &&
+      by.bucket?.unit === "byte_second" &&
+      by.bucket.q > 0 &&
+      margeBrain?.unit === "byte_second" &&
+      margeBrain.q > 0 &&
+      [...ottoMetered, ...margeMetered].every((r) => r.n === 2 && r.cost >= 0),
+    [...ottoMetered, margeBrain]
+      .filter(Boolean)
+      .map(
+        (r) =>
+          `${r.resource} ${r.q.toFixed(1)} ${r.unit} $${r.cost.toFixed(9)} x${r.n}`,
+      )
+      .join("; "),
+  );
+  const liveMeter = await (
+    await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
+  ).json();
+  check(
+    "the live meter ticks with a rate from the last minute",
+    liveMeter.month > 0 &&
+      liveMeter.ratePerHour > 0 &&
+      liveMeter.active.some(
+        (a) => a.resource === "disk" && a.ratePerHour > 0,
+      ) &&
+      (await fetch(`${stack.url}/meter/live`)).status === 401,
+    `$${liveMeter.month?.toFixed(8)} this month, $${liveMeter.ratePerHour?.toFixed(8)}/h, ${liveMeter.active?.map((a) => a.what).join(", ")}`,
+  );
+  const settingsUsage = await settingsPage(margeOwner);
+  const ottoMonth = await computerPage(ottoNow);
+  check(
+    "usage shows on settings and the computer page",
+    /data-usage-total="[0-9.e-]+"/.test(settingsUsage) &&
+      settingsUsage.includes("Usage this month") &&
+      /data-month-total="[0-9.e-]+"/.test(ottoMonth) &&
+      !/data-usage-total="0"/.test(settingsUsage),
+    `settings total ${settingsUsage.match(/data-usage-total="([^"]+)"/)?.[1]}`,
+  );
+  // A machine gone behind our back is forgotten by the row, and compute can
+  // be attached to the same filesystem again.
+  const [goneId] = fake.machines.keys();
+  fake.machines.delete(goneId);
+  const afterGone = await computerPage(ottoNow);
+  const reattached = await computerAct("start", ottoNow);
+  check(
+    "a machine gone behind our back is forgotten and can be attached again",
+    /data-state="no-compute"/.test(afterGone) &&
+      reattached.headers.get("location")?.endsWith("start=true") &&
+      /data-state="started"/.test(await computerPage(ottoNow)),
+    `${fake.machines.size} machines now`,
+  );
+  await computerAct("stop", ottoNow);
+  // A report with the wrong secret, or for a machine we never made, is a 404.
+  const [m1] = fake.machines.keys();
+  const forged = await fetch(`${stack.url}/computer/report`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer nope",
+      "fly-machine-id": m1,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ disk: { used: 1, total: 2 } }),
+  });
+  check(
+    "a report needs the machine's own secret",
+    forged.status === 404 &&
+      (await computerPage(ottoNow)).includes("1.2 GB of 10.0 GB used"),
+    `answered ${forged.status}`,
+  );
+  // Six starts at once for one membership make one computer.
+  await Promise.all(
+    Array.from({ length: 6 }, () => computerAct("start", margeOwner)),
+  );
+  check(
+    "racing starts make one computer",
+    fake.machines.size === 2 &&
+      fake.volumes.size === volumesAtSignIn &&
+      /data-state="started"/.test(await computerPage(margeOwner)),
+    `${fake.machines.size} machines, ${fake.volumes.size} volumes`,
+  );
   check(
     "a person's name is one across orgs",
     (await page(ottoNow)).includes("Sign out, Otto L. Loaf"),
@@ -914,5 +1337,6 @@ try {
   failed ||= !(await smokeBrain(stack));
 } finally {
   await stack.stop();
+  fake.close();
 }
 process.exit(failed ? 1 : 0);

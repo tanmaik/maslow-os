@@ -17,8 +17,23 @@ export type Storage =
       bucket: string;
       accessKey: string;
       secretKey: string;
+      // Every key under this; previews each get their own, reaped with them.
+      prefix: string;
     }
   | { kind: "local"; dir: string }
+  | { kind: "none" };
+
+// Computers are Fly machines in one Fly app of ours, or nothing.
+export type Computers =
+  | {
+      kind: "fly";
+      token: string;
+      app: string;
+      region: string;
+      // The Machines API, and where machines report on themselves.
+      api: string;
+      report: string;
+    }
   | { kind: "none" };
 
 // Production is the live Vercel environment or any box that is not a
@@ -62,7 +77,15 @@ function storage(): Storage {
     STORAGE_SECRET_KEY: secretKey,
   } = process.env;
   if (endpoint && region && bucket && accessKey && secretKey)
-    return { kind: "s3", endpoint, region, bucket, accessKey, secretKey };
+    return {
+      kind: "s3",
+      endpoint,
+      region,
+      bucket,
+      accessKey,
+      secretKey,
+      prefix: process.env.STORAGE_PREFIX ?? "",
+    };
   if (production) {
     throw new Error(
       "No object storage: set STORAGE_ENDPOINT, STORAGE_REGION, STORAGE_BUCKET, STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY. Production has no fallback.",
@@ -70,6 +93,35 @@ function storage(): Storage {
   }
   if (process.env.VERCEL) return { kind: "none" };
   return { kind: "local", dir: process.env.UPLOADS_DIR ?? ".local/uploads" };
+}
+
+// A computer costs money, so previews never have them, and a production
+// that is only half told about Fly refuses to start rather than quietly
+// having none.
+function computers(): Computers {
+  const { FLY_API_TOKEN: token, FLY_COMPUTERS_APP: app } = process.env;
+  if (process.env.VERCEL && !production) return { kind: "none" };
+  if (!token && !app) return { kind: "none" };
+  if (!token || !app)
+    throw new Error(
+      "Computers need both FLY_API_TOKEN and FLY_COMPUTERS_APP, or neither.",
+    );
+  const site = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  const report =
+    process.env.FLY_REPORT_URL ??
+    (site ? `https://${site}/computer/report` : undefined);
+  if (!report)
+    throw new Error(
+      "Computers report to FLY_REPORT_URL, which is not set and cannot be guessed here.",
+    );
+  return {
+    kind: "fly",
+    token,
+    app,
+    region: process.env.FLY_REGION ?? "sjc",
+    api: process.env.FLY_API_HOST ?? "https://api.machines.dev",
+    report,
+  };
 }
 
 export const deployment = {
@@ -84,6 +136,7 @@ export const deployment = {
   // signed in as with one click.
   seededSignIn: !production,
   storage: storage(),
+  computers: computers(),
   https,
   identity: identityProvider(),
   mail: mail(),

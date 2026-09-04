@@ -12,8 +12,10 @@ Industries serves its stakeholders; the code is how.
 
 ## Stack
 
-Node 24 to develop on, 22.18 as the floor: where importing `.ts` arrived. pnpm. Monorepo under Turborepo. Next.js for the app. Vercel
-for hosting. Neon for the managed database. Fly for managed machines.
+Node 24 to develop on, 22.18 as the floor: where importing `.ts` arrived.
+pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for hosting. Neon
+for the managed database. Fly for managed machines, and Tigris through Fly
+for object storage.
 
 ## Local
 

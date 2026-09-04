@@ -86,7 +86,7 @@ const bucket = (
     const r = await s3(
       cfg,
       "PUT",
-      k,
+      cfg.prefix + k,
       bytes,
       `image/${ext === "jpg" ? "jpeg" : ext}`,
     );
@@ -110,7 +110,7 @@ export const storage: Storage =
 export async function read(k: string): Promise<Uint8Array | null> {
   const st = deployment.storage;
   if (st.kind === "s3") {
-    const r = await s3(st, "GET", k);
+    const r = await s3(st, "GET", st.prefix + k);
     return r.ok ? new Uint8Array(await r.arrayBuffer()) : null;
   }
   if (st.kind === "local") {

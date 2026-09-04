@@ -1,4 +1,5 @@
 import {
+  canPurge,
   Forbidden,
   handOver,
   purgeMember,
@@ -9,6 +10,8 @@ import {
 } from "@placeholder/db/settings";
 import { NextResponse } from "next/server";
 
+import { sweepMember } from "@/lib/meter";
+import { settle } from "@/lib/orphans";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
@@ -27,12 +30,27 @@ export async function POST(request: Request) {
 
   try {
     const userId = form.get("remove");
-    if (typeof userId === "string") return back(await removeMember(p, userId));
+    // A removal owes their compute a stop; a purge owes everything of
+    // theirs the vendors hold. Both are written with the rows, under the
+    // owner's lock, and paid right after; the sweep pays what refused.
+    if (typeof userId === "string") {
+      const outcome = await removeMember(p, userId);
+      if (outcome === "removed") await settle(p.orgId);
+      return back(outcome);
+    }
     const restore = form.get("restore");
     if (typeof restore === "string")
       return back(await restoreMember(p, restore));
     const purge = form.get("purge");
-    if (typeof purge === "string") return back(await purgeMember(p, purge));
+    // Nothing of theirs is destroyed until the owner and the past
+    // membership are checked; what they cost until now is written first.
+    if (typeof purge === "string") {
+      if (!(await canPurge(p, purge))) return back("gone");
+      await sweepMember(p.orgId, purge);
+      const outcome = await purgeMember(p, purge);
+      if (outcome === "purged") await settle(p.orgId);
+      return back(outcome);
+    }
     const handover = form.get("handover");
     if (typeof handover === "string") return back(await handOver(p, handover));
     const promote = form.get("promote");

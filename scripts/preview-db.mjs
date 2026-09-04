@@ -106,7 +106,9 @@ async function sql(uri, query) {
   return (await r.json()).rows ?? [];
 }
 
-const keys = ["DATABASE_URL", "DATABASE_OWNER_URL"];
+const keys = ["DATABASE_URL", "DATABASE_OWNER_URL", "STORAGE_PREFIX"];
+// Previews share the bucket under a prefix of their own, emptied with them.
+const prefixFor = (n) => `preview/pr-${n}/`;
 const branchNameFor = (n) => `preview/pr-${n}`;
 // A row is ours by its stamp — Vercel never returns an encrypted value for
 // reading. The stamp names the pull request and the Neon branch it points at.
@@ -166,6 +168,7 @@ async function up() {
   for (const [key, value] of [
     ["DATABASE_URL", app.toString()],
     ["DATABASE_OWNER_URL", owner],
+    ["STORAGE_PREFIX", prefixFor(pr)],
   ]) {
     await vercel("POST", `/v10/projects/${project}/env?upsert=true`, {
       key,
@@ -196,29 +199,92 @@ async function up() {
   console.log(`vercel: deployed ${opt.sha.slice(0, 7)} → https://${d.url}`);
 }
 
-// The pull request's preview deployments, however many pushes made them.
-async function deploymentsOf(prNumber) {
-  const all = [];
-  for (let until; ;) {
-    const page = await vercel(
-      "GET",
-      `/v6/deployments?projectId=${project}&target=preview&limit=100${until ? `&until=${until}` : ""}`,
+// Empties a prefix of the bucket, when this run holds the bucket's keys.
+async function emptyPrefix(prefix) {
+  const { STORAGE_ENDPOINT, STORAGE_REGION, STORAGE_BUCKET } = process.env;
+  const { STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY } = process.env;
+  if (!STORAGE_ACCESS_KEY || !STORAGE_SECRET_KEY)
+    throw new Error(
+      `bucket: no keys here, so ${prefix} cannot be emptied and the preview stays`,
     );
-    all.push(...page.deployments);
-    until = page.pagination?.next;
-    if (!until) break;
+  const cfg = {
+    endpoint: STORAGE_ENDPOINT,
+    region: STORAGE_REGION,
+    bucket: STORAGE_BUCKET,
+    accessKey: STORAGE_ACCESS_KEY,
+    secretKey: STORAGE_SECRET_KEY,
+  };
+  const { s3, unescapeXml } = await import("../apps/web/lib/s3.ts");
+  let removed = 0;
+  for (;;) {
+    const r = await s3(cfg, "GET", "", undefined, undefined, {
+      "list-type": "2",
+      prefix,
+      "max-keys": "1000",
+    });
+    if (!r.ok) throw new Error(`bucket list → ${r.status}`);
+    const found = [...(await r.text()).matchAll(/<Key>([^<]+)<\/Key>/g)].map(
+      (m) => unescapeXml(m[1]),
+    );
+    for (const key of found) {
+      const d = await s3(cfg, "DELETE", key);
+      if (!d.ok && d.status !== 404)
+        throw new Error(`bucket delete → ${d.status}`);
+      removed++;
+    }
+    if (found.length < 1000) break;
   }
-  return all.filter((d) => d.meta?.githubPrId === String(prNumber));
+  // Uploads begun and never finished under the prefix are billed too.
+  let markers = {};
+  for (;;) {
+    const u = await s3(cfg, "GET", "", undefined, undefined, {
+      uploads: "",
+      prefix,
+      ...markers,
+    });
+    if (!u.ok) throw new Error(`bucket uploads list → ${u.status}`);
+    const xml = await u.text();
+    for (const m of xml.matchAll(
+      /<Upload>[\s\S]*?<Key>([^<]+)<\/Key>[\s\S]*?<UploadId>([^<]+)<\/UploadId>[\s\S]*?<\/Upload>/g,
+    )) {
+      const a = await s3(
+        cfg,
+        "DELETE",
+        unescapeXml(m[1]),
+        undefined,
+        undefined,
+        {
+          uploadId: m[2],
+        },
+      );
+      if (!a.ok && a.status !== 404)
+        throw new Error(`bucket abort → ${a.status}`);
+      removed++;
+    }
+    if (!/<IsTruncated>true<\/IsTruncated>/.test(xml)) break;
+    markers = {
+      "key-marker": unescapeXml(
+        /<NextKeyMarker>([^<]*)<\/NextKeyMarker>/.exec(xml)?.[1] ?? "",
+      ),
+      "upload-id-marker":
+        /<NextUploadIdMarker>([^<]*)<\/NextUploadIdMarker>/.exec(xml)?.[1] ??
+        "",
+    };
+  }
+  console.log(
+    `bucket: ${removed} object${removed === 1 ? "" : "s"} under ${prefix} removed`,
+  );
 }
 
-// Removes the pull request's deployments and rows, then its branch if it
-// still exists.
+// Removes the pull request's rows and objects, then its branch if it still
+// exists.
 async function down(prNumber = pr, branch = undefined) {
   for (const d of await deploymentsOf(prNumber)) {
     await vercel("DELETE", `/v13/deployments/${d.uid}`);
     console.log(`vercel: deleted deployment ${d.url}`);
   }
   await removeRows((await envs()).filter(stampedFor(prNumber)));
+  await emptyPrefix(prefixFor(prNumber));
   const name = branchNameFor(prNumber);
   branch ??= (await branches()).find((b) => b.name === name);
   if (!branch) return;

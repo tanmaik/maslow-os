@@ -9,7 +9,10 @@
     "./seed": "./src/seed.ts",
     "./auth": "./src/auth.ts",
     "./throttle": "./src/throttle.ts",
-    "./settings": "./src/settings.ts"
+    "./settings": "./src/settings.ts",
+    "./computers": "./src/computers.ts",
+    "./files": "./src/files.ts",
+    "./usage": "./src/usage.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

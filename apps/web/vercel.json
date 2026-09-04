@@ -1,3 +1,9 @@
 {
-  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"production\" ] || [ -n \"$PREVIEW_DB\" ] || exit 0; exit 1"
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = \"production\" ] || [ -n \"$PREVIEW_DB\" ] || exit 0; exit 1",
+  "crons": [
+    {
+      "path": "/meter/sweep",
+      "schedule": "7 * * * *"
+    }
+  ]
 }
