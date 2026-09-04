@@ -15,8 +15,7 @@ export async function POST(request: Request) {
   if (deployment.identity.kind !== "workos")
     return new Response(null, { status: 404 });
   const flow = await pendingFlow();
-  if (!flow || !("email" in flow))
-    return new Response("No sign-in in progress.", { status: 400 });
+  if (!flow) return new Response("No sign-in in progress.", { status: 400 });
   const code = (await request.formData()).get("code");
   if (typeof code !== "string")
     return new Response("A code is required.", { status: 400 });

@@ -119,7 +119,7 @@ async function SignIn({ said }: { said: string | null }) {
 
   if (identity.kind === "workos") {
     const flow = await pendingFlow();
-    const email = flow && "email" in flow ? flow.email : null;
+    const email = flow?.email ?? null;
     return (
       <main className="space-y-4">
         <h1 className="text-2xl font-semibold">Sign in</h1>
