@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     await send({
       to: address,
       subject: `${code} is your sign-in code`,
-      text: `Enter ${code} at ${home} to sign in. It expires in ten minutes.`,
+      text: `${code} is your sign-in code. It expires in ten minutes.`,
     });
   }
   return continuing(home, { email: address });
