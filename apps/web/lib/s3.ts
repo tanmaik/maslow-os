@@ -98,6 +98,74 @@ export async function s3(
   return fetch(url, { method, headers, body: body && Buffer.from(body) });
 }
 
+// Deletes an object, or aborts an upload in progress when its id is given.
+// Already gone is fine; any other refusal is an error.
+export async function remove(
+  cfg: S3,
+  key: string,
+  uploadId?: string | null,
+): Promise<void> {
+  const r = uploadId
+    ? await s3(cfg, "DELETE", key, undefined, undefined, { uploadId })
+    : await s3(cfg, "DELETE", key);
+  if (!r.ok && r.status !== 404)
+    throw new Error(
+      `storage delete → ${r.status}: ${(await r.text()).slice(0, 200)}`,
+    );
+}
+
+// Opens a multipart upload and returns its id.
+export async function beginMultipart(
+  cfg: S3,
+  key: string,
+  contentType: string,
+): Promise<string> {
+  const r = await s3(cfg, "POST", key, undefined, contentType, {
+    uploads: "",
+  });
+  const text = await r.text();
+  if (!r.ok)
+    throw new Error(`multipart begin → ${r.status}: ${text.slice(0, 200)}`);
+  const id = text.match(/<UploadId>([^<]+)<\/UploadId>/)?.[1];
+  if (!id) throw new Error("multipart begin: no upload id");
+  return id;
+}
+
+// Closes a multipart upload with the parts that arrived and returns the
+// size the store confirms for the whole.
+export async function completeMultipart(
+  cfg: S3,
+  key: string,
+  uploadId: string,
+  parts: { partNumber: number; etag: string }[],
+): Promise<number> {
+  const xml = `<CompleteMultipartUpload>${[...parts]
+    .sort((a, b) => a.partNumber - b.partNumber)
+    .map(
+      (x) =>
+        `<Part><PartNumber>${x.partNumber}</PartNumber><ETag>${x.etag}</ETag></Part>`,
+    )
+    .join("")}</CompleteMultipartUpload>`;
+  const r = await s3(
+    cfg,
+    "POST",
+    key,
+    new TextEncoder().encode(xml),
+    "application/xml",
+    { uploadId },
+  );
+  const text = await r.text();
+  if (!r.ok || /<Error>/.test(text))
+    throw new Error(`multipart complete → ${r.status}: ${text.slice(0, 200)}`);
+  const head = await s3(cfg, "HEAD", key);
+  const length = head.headers.get("content-length");
+  if (!head.ok || length === null)
+    throw new Error(
+      `multipart complete: the object cannot be read back (${head.status})`,
+    );
+  return Number(length);
+}
+
 // A URL a browser can use once, for a while, without our credentials: the
 // signature is in the query, the payload unsigned.
 export function presign(

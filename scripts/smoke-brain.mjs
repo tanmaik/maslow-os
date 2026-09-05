@@ -288,7 +288,8 @@ export async function smokeBrain(stack) {
     });
     check(
       "a kind needs a description, and a field a type",
-      lift.refused instanceof Error && lift.badType instanceof brain.Invalid,
+      lift.refused instanceof brain.Invalid &&
+        lift.badType instanceof brain.Invalid,
       `${lift.refused ? "refused" : "accepted"}, ${lift.badType instanceof brain.Invalid ? "refused" : "accepted"}`,
     );
     check(
@@ -816,14 +817,17 @@ export async function smokeBrain(stack) {
     );
     const coOwner = await as(otto)(async (q) => {
       await brain.remove(q, "smoke", privateNote);
+      const [hidden] = await brain.get(q, [privateNote]);
       await brain.restore(q, "smoke", privateNote);
       const [r] = await brain.get(q, [privateNote]);
-      return r;
+      return { hidden, r };
     });
     check(
       "owner removes and restores",
-      coOwner?.access === "owner" && coOwner.deletedAt === null,
-      `access ${coOwner?.access}`,
+      coOwner.hidden?.deletedAt instanceof Date &&
+        coOwner.r?.access === "owner" &&
+        coOwner.r.deletedAt === null,
+      `removed at ${coOwner.hidden?.deletedAt?.toISOString()}, back as ${coOwner.r?.access}`,
     );
 
     // Groups: owners make them; a share to a group reaches its members.

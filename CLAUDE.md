@@ -41,6 +41,10 @@ independent stacks. A migration is created with `pnpm migration:new <name>`,
 which stamps the clock; the runner refuses two files with the same stamp, so
 parallel work cannot collide on a name.
 
+For database or Brain changes, `pnpm check:db` runs the pooled-identity and
+Brain checks on a fresh, temporary Postgres without Next or vendor keys.
+It is a fast iteration loop; `pnpm check` remains the full merge gate.
+
 ## Config
 
 Every secret a checkout needs lives in the repo, in `.env.development`,
@@ -324,8 +328,8 @@ not come.
 A pull request merges when nothing lingers behind it. The gate is mechanical
 where it can be, and Macroscope where it cannot.
 
-- `check` is green: typecheck, format, and the smoke, which migrates an empty
-  database and signs in as every seeded org.
+- `check` is green: typecheck, format, unused code, and the smoke, which
+  migrates an empty database and signs in as every seeded org.
 - The preview built and its database migrated. Both are required checks, so a
   change that fails `next build` or a migration never reaches main.
 - Macroscope read it. A finding is fixed or answered in its thread, and every

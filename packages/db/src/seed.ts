@@ -2,7 +2,7 @@ import pg from "pg";
 
 // Three orgs that could never be mistaken for one another, so a row showing up
 // under the wrong org is obvious at a glance. Otto is in two of them.
-export const people = [
+const people = [
   {
     id: "10000000-0000-4000-8000-000000000001",
     firstName: "Wile",

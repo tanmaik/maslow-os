@@ -6,6 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { ids } from "./ids.mjs";
+
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pulled = path.join(root, ".local", "env-pull");
 fs.mkdirSync(path.dirname(pulled), { recursive: true });
@@ -20,15 +22,15 @@ execFileSync(
     "development",
     "--yes",
     "--scope",
-    "maslowtech",
+    ids.VERCEL_TEAM_SLUG,
   ],
   {
     cwd: root,
     stdio: ["ignore", "ignore", "inherit"],
     env: {
       ...process.env,
-      VERCEL_PROJECT_ID: "prj_rAZ2iUe98KkFuLsvFc7uwqTh8ko0",
-      VERCEL_ORG_ID: "team_7NQXOFvUYkNy7L2ztTSnohQ8",
+      VERCEL_PROJECT_ID: ids.VERCEL_PROJECT_ID,
+      VERCEL_ORG_ID: ids.VERCEL_TEAM_ID,
     },
   },
 );
@@ -38,7 +40,7 @@ const key = fs
 fs.rmSync(pulled, { force: true });
 if (!key) {
   throw new Error(
-    "DOTENV_PRIVATE_KEY_DEVELOPMENT is not on Vercel's development target, or you are not on the maslowtech team. Run `vercel login` first.",
+    `DOTENV_PRIVATE_KEY_DEVELOPMENT is not on Vercel's development target, or you are not on the ${ids.VERCEL_TEAM_SLUG} team. Run \`vercel login\` first.`,
   );
 }
 fs.writeFileSync(

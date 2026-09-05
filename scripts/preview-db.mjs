@@ -5,8 +5,13 @@
 //   up   --pr N --branch REF --sha SHA
 //   down --pr N
 //   reap                       remove whatever no open pull request owns
+//   reap-dev                   remove what laptops made, with only the
+//                              Fly and storage keys
 import { createHmac } from "node:crypto";
 import { parseArgs } from "node:util";
+
+import { ids } from "./ids.mjs";
+import { destroyMachines, emptyPrefix as emptyIn } from "./purge.mjs";
 
 const {
   positionals: [command],
@@ -25,7 +30,7 @@ const usage = {
   up: Number.isInteger(pr) && ref && opt.sha,
   down: Number.isInteger(pr),
   reap: true,
-  "reap-dev": [],
+  "reap-dev": true,
 };
 if (!usage[command]) {
   throw new Error(
@@ -34,9 +39,10 @@ if (!usage[command]) {
 }
 
 // Each key is demanded the moment it is used, so a command that needs only
-// some of them runs with only those.
+// some of them runs with only those; the ones that are not secret are known.
 const need = (k) =>
   process.env[k] ||
+  ids[k] ||
   (() => {
     throw new Error(`${k} is not set`);
   })();
@@ -188,11 +194,10 @@ async function up() {
   app.username = "app";
   app.password = password;
   app.host = app.host.replace(/^(ep-[a-z0-9-]+?)\./, "$1-pooler.");
-  const {
-    name: projectName,
-    link,
-    accountId,
-  } = await vercel("GET", `/v9/projects/${project()}`);
+  const { name: projectName, link } = await vercel(
+    "GET",
+    `/v9/projects/${project()}`,
+  );
   // The team's slug is part of every branch URL; the preview token cannot
   // read the team, so the workflow says it.
   const teamSlug = need("VERCEL_TEAM_SLUG");
@@ -249,85 +254,29 @@ async function up() {
 
 // Empties a prefix of the bucket, when this run holds the bucket's keys.
 async function emptyPrefix(prefix) {
-  const { STORAGE_ENDPOINT, STORAGE_REGION, STORAGE_BUCKET } = process.env;
   const { STORAGE_ACCESS_KEY, STORAGE_SECRET_KEY } = process.env;
   if (!STORAGE_ACCESS_KEY || !STORAGE_SECRET_KEY)
     throw new Error(
       `bucket: no keys here, so ${prefix} cannot be emptied and the preview stays`,
     );
-  const cfg = {
-    endpoint: STORAGE_ENDPOINT,
-    region: STORAGE_REGION,
-    bucket: STORAGE_BUCKET,
-    accessKey: STORAGE_ACCESS_KEY,
-    secretKey: STORAGE_SECRET_KEY,
-  };
-  const { s3, unescapeXml } = await import("../apps/web/lib/s3.ts");
-  let removed = 0;
-  for (;;) {
-    const r = await s3(cfg, "GET", "", undefined, undefined, {
-      "list-type": "2",
-      prefix,
-      "max-keys": "1000",
-    });
-    if (!r.ok) throw new Error(`bucket list → ${r.status}`);
-    const found = [...(await r.text()).matchAll(/<Key>([^<]+)<\/Key>/g)].map(
-      (m) => unescapeXml(m[1]),
-    );
-    for (const key of found) {
-      const d = await s3(cfg, "DELETE", key);
-      if (!d.ok && d.status !== 404)
-        throw new Error(`bucket delete → ${d.status}`);
-      removed++;
-    }
-    if (found.length < 1000) break;
-  }
-  // Uploads begun and never finished under the prefix are billed too.
-  let markers = {};
-  for (;;) {
-    const u = await s3(cfg, "GET", "", undefined, undefined, {
-      uploads: "",
-      prefix,
-      ...markers,
-    });
-    if (!u.ok) throw new Error(`bucket uploads list → ${u.status}`);
-    const xml = await u.text();
-    for (const m of xml.matchAll(
-      /<Upload>[\s\S]*?<Key>([^<]+)<\/Key>[\s\S]*?<UploadId>([^<]+)<\/UploadId>[\s\S]*?<\/Upload>/g,
-    )) {
-      const a = await s3(
-        cfg,
-        "DELETE",
-        unescapeXml(m[1]),
-        undefined,
-        undefined,
-        {
-          uploadId: m[2],
-        },
-      );
-      if (!a.ok && a.status !== 404)
-        throw new Error(`bucket abort → ${a.status}`);
-      removed++;
-    }
-    if (!/<IsTruncated>true<\/IsTruncated>/.test(xml)) break;
-    markers = {
-      "key-marker": unescapeXml(
-        /<NextKeyMarker>([^<]*)<\/NextKeyMarker>/.exec(xml)?.[1] ?? "",
-      ),
-      "upload-id-marker":
-        /<NextUploadIdMarker>([^<]*)<\/NextUploadIdMarker>/.exec(xml)?.[1] ??
-        "",
-    };
-  }
+  const removed = await emptyIn(
+    {
+      endpoint: need("STORAGE_ENDPOINT"),
+      region: need("STORAGE_REGION"),
+      bucket: need("STORAGE_BUCKET"),
+      accessKey: STORAGE_ACCESS_KEY,
+      secretKey: STORAGE_SECRET_KEY,
+    },
+    prefix,
+  );
   console.log(
     `bucket: ${removed} object${removed === 1 ? "" : "s"} under ${prefix} removed`,
   );
 }
 
-// Destroys the pull request's machines, then its volumes, in the preview
-// Fly app, when this run holds that app's token.
 // Destroys every machine and volume named for a pull request, or for
-// whatever prefix is given.
+// whatever prefix is given, in the preview Fly app, when this run holds
+// that app's token.
 async function destroyComputers(prNumber, named = null) {
   const token = process.env.FLY_PREVIEW_TOKEN;
   if (!token) {
@@ -336,48 +285,10 @@ async function destroyComputers(prNumber, named = null) {
     );
     return;
   }
-  const prefix = named ?? flyNamePrefixFor(prNumber);
-  const api = async (method, path, allow404 = false) => {
-    const r = await fetch(
-      `https://api.machines.dev/v1/apps/${flyPreviewApp}${path}`,
-      { method, headers: { authorization: `Bearer ${token}` } },
-    );
-    if (r.status === 404 && allow404) return null;
-    if (!r.ok) throw new Error(`fly ${method} ${path} → ${r.status}`);
-    return r.json();
-  };
-  let gone = 0;
-  for (const m of (await api("GET", "/machines")).filter((m) =>
-    m.name.startsWith(prefix),
-  )) {
-    await api("DELETE", `/machines/${m.id}?force=true`, true);
-    let still;
-    for (let i = 0; i < 60; i++) {
-      still = await api("GET", `/machines/${m.id}`, true);
-      if (!still || still.state === "destroyed") break;
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    if (still && still.state !== "destroyed")
-      throw new Error(`fly: machine ${m.id} did not go within a minute`);
-    gone++;
-  }
-  for (const v of (await api("GET", "/volumes")).filter((v) =>
-    v.name.startsWith(prefix.replaceAll("-", "_")),
-  )) {
-    let last;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        await api("DELETE", `/volumes/${v.id}`, true);
-        last = null;
-        break;
-      } catch (err) {
-        last = err;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-    if (last) throw last;
-    gone++;
-  }
+  const gone = await destroyMachines(
+    { token, app: flyPreviewApp },
+    named ?? flyNamePrefixFor(prNumber),
+  );
   console.log(
     `fly: ${gone} of ${named ?? `pr${prNumber}`}'s machines and volumes destroyed`,
   );

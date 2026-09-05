@@ -3,17 +3,28 @@
 // own org, and that an invited email is admitted into the inviting org. This
 // is the merge gate.
 import fs from "node:fs/promises";
+import { createServer } from "node:http";
 import path from "node:path";
 
+import { sizeFor } from "../apps/web/lib/computer.ts";
+import { measure } from "../apps/web/lib/meter.ts";
+import { KINDS } from "../apps/web/lib/orphans.ts";
 import { LADDER, PRICES, sizeName } from "../apps/web/lib/prices.ts";
+import {
+  createSession,
+  membershipsOf,
+  signIn as admit,
+} from "../packages/db/src/auth.ts";
+import { asEmail, asOrg, asPerson } from "../packages/db/src/index.ts";
 import { orgs } from "../packages/db/src/seed.ts";
-import { createServer } from "node:http";
+import { allow } from "../packages/db/src/throttle.ts";
 
 import { startFakeFly } from "./fake-fly.mjs";
 import { smokeBrain } from "./smoke-brain.mjs";
 import { smokeConnections } from "./smoke-connections.mjs";
+import { smokeDb } from "./smoke-db.mjs";
 import { smokeMcp } from "./smoke-mcp.mjs";
-import { root, startStack } from "./stack.mjs";
+import { freePort, root, startStack } from "./stack.mjs";
 
 // The smoke carries no credentials: a checkout's pulled config must not reach
 // it. Next leaves a variable alone once it is set, even to nothing.
@@ -33,22 +44,25 @@ const noCredentials = Object.fromEntries(
   ].map((k) => [k, ""]),
 );
 
-// Fly is faked: computers are built and run against a server in this
-// process, on a scratch directory of the smoke's own that each run empties.
-const computersDir = path.join(root, ".local", "smoke-computers");
-await fs.rm(computersDir, { recursive: true, force: true });
-const fake = await startFakeFly({ dir: computersDir });
-const { freePort } = await import("./stack.mjs");
+// Everything this run writes — the database, the fake machines' disks, the
+// local store — lives in a directory of its own and dies with it, so a
+// checkout's own data, the last run's and a run beside it never reach it.
+await fs.mkdir(path.join(root, ".local"), { recursive: true });
+const scratch = await fs.mkdtemp(path.join(root, ".local", "smoke-"));
+
+// Fly is faked: computers are built and run against a server in this process.
+const fake = await startFakeFly({ dir: path.join(scratch, "computers") });
 const webPort = await freePort();
 const stack = await startStack({
   webPort,
   stdio: "ignore",
-  dataDir: path.join(root, ".local", "smoke"),
+  dataDir: path.join(scratch, "pg"),
   distDir: ".next-smoke",
   fresh: true,
   secrets: false,
   env: {
     ...noCredentials,
+    UPLOADS_DIR: path.join(scratch, "uploads"),
     FLY_API_TOKEN: "fake",
     FLY_COMPUTERS_APP: "fake",
     FLY_API_HOST: fake.url,
@@ -149,12 +163,20 @@ try {
     body: new URLSearchParams({ email: "hire@acme-rockets.test" }),
     redirect: "manual",
   });
-  check("invite", invited.status === 303, `answered ${invited.status}`);
-  const settingsHtml = async (cookie) =>
-    (await fetch(`${stack.url}/settings`, { headers: { cookie } })).text();
+  check(
+    "invite",
+    invited.headers.get("location")?.endsWith("/settings?invite=sent") === true,
+    `answered ${invited.status} → ${invited.headers.get("location")?.split("?")[1]}`,
+  );
+  const settingsPage = async (cookie) =>
+    (
+      await (
+        await fetch(`${stack.url}/settings`, { headers: { cookie } })
+      ).text()
+    ).replaceAll("<!-- -->", "");
   check(
     "invitation pending",
-    (await settingsHtml(wile)).includes("hire@acme-rockets.test"),
+    (await settingsPage(wile)).includes("hire@acme-rockets.test"),
     "listed",
   );
   const anonymous = await fetch(`${stack.url}/invite`, {
@@ -169,7 +191,6 @@ try {
   );
 
   process.env.DATABASE_URL = `postgres://app@127.0.0.1:${stack.pgPort}/postgres`;
-  const { signIn: admit } = await import("../packages/db/src/auth.ts");
   const hire = await admit({
     email: "hire@acme-rockets.test",
     firstName: "New",
@@ -181,7 +202,7 @@ try {
     hire.orgId === orgs[0].id &&
       /3 members?/.test(after) &&
       !/invited/.test(
-        (await settingsHtml(wile))
+        (await settingsPage(wile))
           .split("hire@acme-rockets.test")[1]
           ?.slice(0, 200) ?? "",
       ),
@@ -242,7 +263,6 @@ try {
 
   // Abuse limits: a key gets its limit of hits per window and no more, and
   // two first sign-ins racing for one email both land on one row.
-  const { allow } = await import("../packages/db/src/throttle.ts");
   const hits = [];
   for (let i = 0; i < 4; i++) hits.push(await allow("email:x@y.test", 3, 600));
   check(
@@ -280,12 +300,6 @@ try {
   );
   orgForm.set("logo", new File([png], "l.png", { type: "image/png" }));
   const renamed = await settings("/settings/org", orgForm);
-  const settingsPage = async (cookie) =>
-    (
-      await (
-        await fetch(`${stack.url}/settings`, { headers: { cookie } })
-      ).text()
-    ).replaceAll("<!-- -->", "");
   const afterRename = await settingsPage(margeOwner);
   check(
     "org renamed, logo stored",
@@ -376,7 +390,6 @@ try {
     !(await settingsPage(otto)).includes("Show 1 past member"),
     "no past members for Otto",
   );
-  const { asOrg, asPerson } = await import("../packages/db/src/index.ts");
   const bakery = orgs.find((o) => o.users.some((u) => u.id === pimId));
   const pimSeed = bakery.users.find((u) => u.id === pimId);
   // Read as the org naming the old membership, which no person can be now.
@@ -445,9 +458,7 @@ try {
     body: new URLSearchParams({ email: pimSeed.email }),
     redirect: "manual",
   });
-  const { signIn: readmit, membershipsOf: orgsOf } =
-    await import("../packages/db/src/auth.ts");
-  const pimBack = await readmit({
+  const pimBack = await admit({
     email: pimSeed.email,
     firstName: "Pim",
     lastName: null,
@@ -457,7 +468,7 @@ try {
     reinvite.headers.get("location")?.endsWith("invite=sent") &&
       pimBack.orgId === bakery.id &&
       pimBack.userId === pimId &&
-      (await orgsOf(pimBack)).some((m) => m.orgId === bakery.id) &&
+      (await membershipsOf(pimBack)).some((m) => m.orgId === bakery.id) &&
       (await pimNotes()) === 1,
     `${reinvite.headers.get("location")?.split("?")[1]}, same membership, 1 note`,
   );
@@ -536,7 +547,7 @@ try {
   );
   check(
     "removal stays in its org",
-    (await settingsHtml(wile)).includes("beep@acme-rockets.test"),
+    (await settingsPage(wile)).includes("beep@acme-rockets.test"),
     `Road Runner still in Acme (${acmeRemove.status})`,
   );
   await settings(
@@ -692,8 +703,7 @@ try {
     new URLSearchParams({ uninvite: "late@bluewhale.test" }),
     ottoNow,
   );
-  const { signIn: admitLate } = await import("../packages/db/src/auth.ts");
-  const late = await admitLate({
+  const late = await admit({
     email: "late@bluewhale.test",
     firstName: "Late",
     lastName: null,
@@ -734,7 +744,7 @@ try {
     "switching org yields that org",
     switched.status === 303 &&
       /<h1[^>]*>Chartreuse Observatory<\/h1>/.test(obsHome) &&
-      !/marge@|pim@/.test(await settingsHtml(ottoObs)),
+      !/marge@|pim@/.test(await settingsPage(ottoObs)),
     `${switched.status}, observatory, no bakery people`,
   );
   const notMine = await fetch(`${stack.url}/auth/switch`, {
@@ -763,7 +773,6 @@ try {
     firstName: "Wile",
     lastName: "Coyote",
   });
-  const { membershipsOf } = await import("../packages/db/src/auth.ts");
   const wileOrgs = (await membershipsOf(wileAgain))
     .map((m) => m.orgName)
     .sort();
@@ -916,9 +925,10 @@ try {
     await json("/files/complete", { id: begun.id, parts: etags }, ottoNow)
   ).json();
   const listed = await landedAt(ottoNow, "/", 'data-file="/notes.txt"');
-  const staged = await asOrg(
-    "00000000-0000-4000-8000-000000000002",
-    async (q) => {
+  // The file is on the disk before the machine has said so; the row goes
+  // when it has.
+  const stagedRow = () =>
+    asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
       await q.query("select set_config('app.meter', 'sweep', true)");
       return (
         await q.query(
@@ -926,8 +936,12 @@ try {
           [begun.id],
         )
       ).rows[0];
-    },
-  );
+    });
+  let staged = await stagedRow();
+  for (let i = 0; i < 40 && !staged?.gone; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    staged = await stagedRow();
+  }
   check(
     "a file arrives in parts, lands on the disk alone and leaves the store",
     closed.size === whole.length &&
@@ -972,7 +986,6 @@ try {
   );
   // The filesystem grows for bytes that arrived, never for a declared
   // size, and stops at Fly's limit.
-  const { sizeFor } = await import("../apps/web/lib/computer.ts");
   const archive = await (
     await json(
       "/files/begin",
@@ -1316,14 +1329,7 @@ try {
   const twinId = crypto.randomUUID();
   const twinKey = `orgs/00000000-0000-4000-8000-000000000002/members/${ottoId}/files/${twinId}`;
   await fs.writeFile(
-    path.join(
-      root,
-      "apps",
-      "web",
-      ".local",
-      "files",
-      twinKey.replaceAll("/", "_"),
-    ),
+    path.join(scratch, "files", twinKey.replaceAll("/", "_")),
     "world",
   );
   await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
@@ -1448,19 +1454,19 @@ try {
   );
   const rootFinal = await computerPage(ottoNow);
   check(
-    "a folder and a file are deleted",
+    "a folder is deleted with what it holds",
     folderGone.headers.get("location")?.includes("deleted=yes") &&
       fileGone.headers.get("location")?.includes("deleted=yes") &&
       !rootFinal.includes('data-folder="/photos"') &&
-      !rootFinal.includes('data-file="/dusk.txt"'),
-    "photos and dusk.txt gone",
+      (await download(ottoNow, "/photos/sunset.txt")).status === 404,
+    `photos gone, sunset.txt ${(await download(ottoNow, "/photos/sunset.txt")).status}`,
   );
   // A profile photo is bytes in the bucket: saving one raises the live
   // meter by exactly its size, the usage page names it with its size, and
   // replacing it removes the old object from the store. The org's logo is
   // on its principal's line, and the logo replaced earlier is gone.
   const bakeryId = "00000000-0000-4000-8000-000000000002";
-  const uploadsDir = path.join(root, "apps", "web", ".local", "uploads");
+  const uploadsDir = path.join(scratch, "uploads");
   const ottoPhoto = () =>
     asOrg(
       bakeryId,
@@ -1527,7 +1533,7 @@ try {
       owed === 0,
     `${firstPhoto.key} → ${secondPhoto.key}, ${owed} owed`,
   );
-  // A picture saved before keys were made per object may be shared: Marge
+  // A picture key held by two rows goes when the last lets it go: Marge
   // is given Otto's key, Otto replaces his, and Marge's still answers.
   const margePerson = await asOrg(
     bakeryId,
@@ -1620,14 +1626,18 @@ try {
   const liveMeter = await (
     await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
   ).json();
-  const summed = liveMeter.active.reduce((n, a) => n + a.ratePerHour, 0);
+  // Each rate is the price list's, not whatever the server added up.
+  const rateOf = (resource) =>
+    liveMeter.active.find((a) => a.resource === resource)?.ratePerHour ?? 0;
+  const near = (a, b) => Math.abs(a - b) < 1e-6;
   check(
     "the live meter's rate is everything ticking, added up",
     liveMeter.month > 0 &&
-      liveMeter.ratePerHour > 0 &&
-      Math.abs(liveMeter.ratePerHour - summed) < 1e-12 &&
-      liveMeter.active.some(
-        (a) => a.resource === "disk" && a.ratePerHour > 0,
+      near(rateOf("compute"), PRICES.compute["shared-cpu-1x:1024"] * 3600) &&
+      near(rateOf("disk"), 3 * PRICES.disk * 3600) &&
+      near(
+        liveMeter.ratePerHour,
+        liveMeter.active.reduce((n, a) => n + a.ratePerHour, 0),
       ) &&
       (await fetch(`${stack.url}/meter/live`)).status === 401,
     `$${liveMeter.month?.toFixed(8)} this month, $${liveMeter.ratePerHour?.toFixed(8)}/h, ${liveMeter.active?.map((a) => a.what).join(", ")}`,
@@ -1684,7 +1694,6 @@ try {
   );
   // Every debt the app can owe a vendor is a kind the database takes: a
   // migration that rewrote the list and dropped one would be found here.
-  const { KINDS } = await import("../apps/web/lib/orphans.ts");
   const refusedKinds = [];
   for (const kind of KINDS)
     await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
@@ -1984,7 +1993,6 @@ try {
   // Every second of compute is at the size that ran it, the image while
   // off spans both machines, the disk both sizes, and cutting the month
   // into sweeps changes nothing.
-  const { measure } = await import("../apps/web/lib/meter.ts");
   const T0 = Date.UTC(2026, 0, 1);
   const at = (secs) => new Date(T0 + secs * 1000);
   const [small, bigger] = LADDER;
@@ -2055,7 +2063,6 @@ try {
       (m) => m.resource === "rootfs",
     );
   });
-  const near = (x, y) => Math.abs(x - y) < 1e-6;
   const expected = {
     [small]: 3600 + 1800,
     [bigger]: 1000,
@@ -2136,14 +2143,17 @@ try {
   }
   for (const name of ["big-a.bin", "big-c.bin"])
     await asResized(`/fs?path=%2F${name}`, { method: "DELETE" });
-  // Six looks at once for one membership make one computer.
+  // Six looks at once for one membership make one computer: Marge has
+  // none going in, so the one after is theirs.
+  const margeHadNone = fake.machines.size === 1;
   await Promise.all(Array.from({ length: 6 }, () => computerPage(margeOwner)));
   check(
     "racing looks make one computer",
-    fake.machines.size === 2 &&
+    margeHadNone &&
+      fake.machines.size === 2 &&
       fake.volumes.size === volumesAtSignIn &&
       /data-state="started"/.test(await computerPage(margeOwner)),
-    `${fake.machines.size} machines, ${fake.volumes.size} volumes`,
+    `${margeHadNone ? "none before" : "one already"}, ${fake.machines.size} machines, ${fake.volumes.size} volumes`,
   );
   check(
     "a person's name is one across orgs",
@@ -2224,7 +2234,6 @@ try {
   // Deleting an org. Only its principal, and only by typing its name. Late
   // holds an org with a note in it, a member and a past member, and deletes
   // it; nothing of it is left, and Late is still a person.
-  const { createSession } = await import("../packages/db/src/auth.ts");
   const lateCookie = `session=${await createSession(late)}`;
   const lateNote = await fetch(`${stack.url}/brain/records`, {
     method: "POST",
@@ -2330,7 +2339,6 @@ try {
       records: (await q.query("select 1 from records")).rowCount,
     };
   });
-  const { asEmail } = await import("../packages/db/src/index.ts");
   const latePerson = await asEmail(
     "late@bluewhale.test",
     async (q) => (await q.query("select 1 from people")).rowCount,
@@ -2396,11 +2404,14 @@ try {
   });
   check(
     "settings need a session",
-    signedOutSettings.status === 307 || signedOutSettings.status === 303,
-    `answered ${signedOutSettings.status}`,
+    signedOutSettings.status === 307 &&
+      new URL(signedOutSettings.headers.get("location") ?? "", stack.url)
+        .pathname === "/",
+    `answered ${signedOutSettings.status} → ${signedOutSettings.headers.get("location")}`,
   );
 
   await globalThis.__pool?.end();
+  globalThis.__pool = undefined;
 
   const stale = await page(
     "session=00000000-0000-4000-8000-000000000001.00000000-0000-4000-8000-000000000009",
@@ -2412,10 +2423,15 @@ try {
   );
   // Every suite runs, whatever failed before it.
   failed = !(await smokeConnections(stack, signIn)) || failed;
+  failed = !(await smokeDb(stack)) || failed;
   failed = !(await smokeBrain(stack)) || failed;
   failed = !(await smokeMcp(stack, signIn)) || failed;
 } finally {
+  // The pool goes before the database does, so a crash above is the error
+  // that is shown, not the shutdown's.
+  await globalThis.__pool?.end();
   await stack.stop();
   fake.close();
+  await fs.rm(scratch, { recursive: true, force: true });
 }
 process.exit(failed ? 1 : 0);

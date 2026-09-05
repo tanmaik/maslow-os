@@ -1,28 +1,26 @@
 import { asMeter, asOrg, type Query } from "@placeholder/db";
 import {
-  clearMachineIn,
-  clearVolumeIn,
+  clearMachine,
+  clearVolume,
   knownComputers,
   computersIn,
   noteEventsIn,
-  noteStateIn,
+  noteState,
 } from "@placeholder/db/computers";
-import { picturesIn } from "@placeholder/db/usage";
+import { picturesIn, type Resource, type Unit } from "@placeholder/db/usage";
 
 import { deployment } from "./deployment.ts";
 import { sweepBackups } from "./backups.ts";
+import { unpaid } from "./computer.ts";
 import { expireUploads, landStaged } from "./files.ts";
 import { settle } from "./orphans.ts";
 import { fly, IMAGE } from "./fly.ts";
-import { PRICES, sizeName } from "./prices.ts";
+import { MONTH, PRICES, sizeName } from "./prices.ts";
 
 // The meter. One measuring function reads what a member's things did
 // between two moments, in each vendor's own unit; the hourly sweep prices
 // and appends that to usage, and the live meter reads the same function
 // for what is unbilled since the last sweep and for the last minute's rate.
-
-export type Resource = "compute" | "rootfs" | "disk" | "bucket" | "brain";
-export type Unit = "second" | "gb_second" | "byte_second";
 
 export type Measure = {
   resource: Resource;
@@ -343,7 +341,7 @@ async function reconcile(): Promise<void> {
   for (const [volumeId, { orgId, id }] of known.volumes)
     if (!have.has(volumeId)) {
       console.error(`Fly no longer has volume ${volumeId}; forgotten`);
-      await clearVolumeIn(orgId, id, volumeId);
+      await clearVolume(orgId, id, volumeId);
     }
 }
 
@@ -387,10 +385,10 @@ export async function sweep(now = new Date()): Promise<number> {
               m?.config?.image !== undefined && m.config.image !== IMAGE;
             if (stale) {
               console.log(`machine ${m.id} is on ${m.config!.image}; replaced`);
-              await fly.destroyMachine(m.id).catch(() => {});
+              await fly.destroyMachine(m.id).catch(unpaid("machine"));
             }
-            await noteStateIn(orgId, c, m && !stale ? m.state : "destroyed");
-            if (!m || stale) await clearMachineIn(orgId, c.id, c.machineId);
+            await noteState(orgId, c, m && !stale ? m.state : "destroyed");
+            if (!m || stale) await clearMachine(orgId, c.id, c.machineId);
           } catch (err) {
             console.error(`sweep ${c.machineId}: ${(err as Error).message}`);
           }
@@ -556,7 +554,6 @@ export const dollars = (n: number) =>
 
 // A quantity in a unit people read.
 export function amount(resource: string, unit: string, quantity: number) {
-  const MONTH = 730 * 3600;
   if (unit === "second") return `${(quantity / 3600).toFixed(2)} h`;
   if (unit === "gb_second") return `${(quantity / MONTH).toFixed(4)} GB·mo`;
   if (resource === "brain")

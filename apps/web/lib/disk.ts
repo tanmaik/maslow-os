@@ -1,14 +1,14 @@
 import type { Principal } from "@placeholder/db/auth";
 import {
   computerOf,
-  noteCause,
+  computersAllowed,
+  noteEvent,
   secretIn,
-  secretOf,
   type Computer,
 } from "@placeholder/db/computers";
 import { createHmac } from "node:crypto";
 
-import { build, computersOn } from "./computer.ts";
+import { build } from "./computer.ts";
 import { deployment } from "./deployment.ts";
 import { linkKeyOf } from "./fly.ts";
 
@@ -49,10 +49,16 @@ function config() {
   return c;
 }
 const host = () => config().host;
+// Where a machine reaches us: the origin its reports go to. Without
+// computers there is no machine to reach us, and the address is moot.
+export const site = () =>
+  deployment.computers.kind === "fly"
+    ? new URL(deployment.computers.report).origin
+    : "http://127.0.0.1";
 
 // The machine the disk is served by, made on the first touch.
 async function machineOf(p: Principal): Promise<Computer> {
-  if (!(await computersOn(p)))
+  if (!(await computersAllowed(p)))
     throw new DiskError(403, "Computers are off for this org.");
   let c = await computerOf(p);
   if (!c?.machineId || c.state === "failed") {
@@ -82,21 +88,34 @@ async function machineOf(p: Principal): Promise<Computer> {
   return c;
 }
 
+// A call to the person's machine, made if it does not exist yet.
 async function call<T>(
   p: Principal,
   method: string,
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const c = await machineOf(p);
-  const secret = await secretOf(p, c.id);
+  return callIn(p.orgId, await machineOf(p), method, path, body);
+}
+
+const q = (path: string) => `?path=${encodeURIComponent(path)}`;
+
+// A call to a machine by its row, for the sweep as much as for a person.
+export async function callIn<T>(
+  orgId: string,
+  c: Computer,
+  method: string,
+  path: string,
+  body?: unknown,
+): Promise<T> {
+  if (!c.machineId) throw new DiskError(503, "no machine");
   let res: Response;
   try {
     res = await fetch(`${host()}${path}`, {
       method,
       headers: {
-        authorization: `Bearer ${secret}`,
-        "fly-force-instance-id": c.machineId!,
+        authorization: `Bearer ${await secretIn(orgId, c.id)}`,
+        "fly-force-instance-id": c.machineId,
         "content-type": "application/json",
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -114,37 +133,6 @@ async function call<T>(
     throw new DiskError(
       res.status,
       error.error ?? `Your computer answered ${res.status}.`,
-    );
-  }
-  return (await res.json()) as T;
-}
-
-const q = (path: string) => `?path=${encodeURIComponent(path)}`;
-
-// For the sweep, which has no person: a call to a machine by its row.
-export async function callIn<T>(
-  orgId: string,
-  c: Computer,
-  method: string,
-  path: string,
-  body?: unknown,
-): Promise<T> {
-  if (!c.machineId) throw new DiskError(503, "no machine");
-  const res = await fetch(`${host()}${path}`, {
-    method,
-    headers: {
-      authorization: `Bearer ${await secretIn(orgId, c.id)}`,
-      "fly-force-instance-id": c.machineId,
-      "content-type": "application/json",
-    },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(90_000),
-  });
-  if (!res.ok) {
-    const error = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new DiskError(
-      res.status,
-      error.error ?? `The machine answered ${res.status}.`,
     );
   }
   return (await res.json()) as T;
@@ -247,7 +235,7 @@ async function link(
 ): Promise<string> {
   // Why the machine may be woken next: this link.
   const before = await computerOf(p);
-  if (before) await noteCause(p.orgId, before, `link-${kind}`);
+  if (before) await noteEvent(p.orgId, before, `link-${kind}`);
   const c = await machineOf(p);
   const expires = Date.now() + 600_000;
   const key = linkKeyOf(c.id);

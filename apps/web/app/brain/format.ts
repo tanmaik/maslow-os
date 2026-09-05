@@ -4,11 +4,10 @@ import { format } from "date-fns";
 // How the brain's values read on screen.
 
 // An instant, as a person reads it: 4 Sep 2026, 16:41.
-export const when = (d: Date | null) =>
-  d ? format(d, "d MMM yyyy, HH:mm") : "";
+const when = (d: Date | null) => (d ? format(d, "d MMM yyyy, HH:mm") : "");
 
 // A calendar day stored as 2026-09-04, read as 4 Sep 2026.
-export function day(s: string) {
+function day(s: string) {
   const d = new Date(`${s}T00:00:00`);
   return Number.isNaN(d.getTime()) ? s : format(d, "d MMM yyyy");
 }
@@ -28,11 +27,6 @@ export function cell(v: unknown, p?: Property): string {
 }
 
 export const recordHref = (id: string) => `/brain/records/${id}`;
-
-// Whether a path segment is shaped like an id at all, before the database
-// is asked about it.
-export const isId = (s: string) =>
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 
 // The table view of one kind, or of everything.
 export const kindHref = (kind?: string) =>

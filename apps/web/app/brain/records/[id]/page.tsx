@@ -12,7 +12,7 @@ import {
   type Event,
   type Verb,
 } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
+import { asPerson, isUuid } from "@placeholder/db";
 import { groupsOf } from "@placeholder/db/groups";
 import { notFound, redirect } from "next/navigation";
 
@@ -46,7 +46,6 @@ import { FieldInputs } from "../../fields";
 import {
   authorText,
   cell,
-  isId,
   percent,
   recordHref,
   sourceText,
@@ -69,7 +68,7 @@ export default async function Page({
   const p = await principal();
   if (!p) redirect("/");
   const { id } = await params;
-  if (!isId(id)) notFound();
+  if (!isUuid(id)) notFound();
   const found = await asPerson(p, async (db) => {
     const [record] = await get(db, [id]);
     if (!record) return null;

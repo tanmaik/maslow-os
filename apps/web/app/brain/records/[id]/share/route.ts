@@ -7,19 +7,19 @@ import {
   type Access,
   type Subject,
 } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
+import { asPerson, isUuid } from "@placeholder/db";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-import { isId, recordHref } from "../../../format";
+import { recordHref } from "../../../format";
 
 // A subject as the form names it: "everyone", "group:<id>" or "member:<id>".
 function subjectFrom(value: string): Subject | null {
   if (value === "everyone") return { kind: "everyone" };
   const [kind, id] = value.split(":");
-  if ((kind === "group" || kind === "member") && id && isId(id)) {
+  if ((kind === "group" || kind === "member") && id && isUuid(id)) {
     return { kind, id };
   }
   return null;
@@ -34,7 +34,7 @@ export async function POST(
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const { id } = await params;
-  if (!isId(id)) return new Response(null, { status: 404 });
+  if (!isUuid(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
   const subject = subjectFrom(String(form.get("subject") ?? ""));
   if (!subject) {

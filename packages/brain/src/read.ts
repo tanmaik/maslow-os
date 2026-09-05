@@ -3,7 +3,6 @@ import { accepts, expected, propertiesOf, sqlType } from "./properties.ts";
 import {
   edgeColumns,
   eventColumns,
-  recordColumns,
   recordSelect,
   toEdge,
   toEvent,

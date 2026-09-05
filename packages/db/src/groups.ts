@@ -12,7 +12,7 @@ export type Group = {
   members: { id: string; name: string }[];
 };
 
-export const EVERYONE = "everyone";
+const EVERYONE = "everyone";
 
 // Thrown when a group or member named in a request is no longer in the org.
 export class Missing extends Error {}

@@ -340,8 +340,8 @@ select chain.*, access_level(chain.id) as access
 from chain order by depth desc limit 1`;
 
 // Makes one record stand for another of the same kind and the same owner.
-// The loser is hidden
-// behind a pointer to the winner and nothing else is rewritten: what was
+// The loser is hidden behind a pointer to the winner and nothing else is
+// rewritten: what was
 // merged into the loser stays merged into it, and reads walk the chain.
 // Merging into an alias merges into what it stands for. Merging the same
 // pair twice changes nothing. Both rows are locked, in one order, so two

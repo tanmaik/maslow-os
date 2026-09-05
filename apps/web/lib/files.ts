@@ -18,7 +18,6 @@ import {
   staleUploads,
   unclaimJoin,
   unclaimStale,
-  uploadingFile,
   whole,
   type StoredFile,
 } from "@placeholder/db/files";
@@ -35,9 +34,9 @@ import path from "node:path";
 import type { Machine } from "./backups.ts";
 import { growFor, growIn } from "./computer.ts";
 import { deployment } from "./deployment.ts";
-import { callIn, disk, DiskError, type Pull } from "./disk.ts";
+import { callIn, disk, DiskError, site, type Pull } from "./disk.ts";
 import { MAX_DISK_GB } from "./fly.ts";
-import { presign, s3 } from "./s3.ts";
+import { beginMultipart, completeMultipart, presign, remove } from "./s3.ts";
 
 // A file goes from the browser to the store in parts, then from the store
 // onto the person's disk, so it can be as large as the disk allows and
@@ -45,7 +44,7 @@ import { presign, s3 } from "./s3.ts";
 // real machine; the file is staged there only until it has landed.
 export const PART_SIZE =
   Number(process.env.FILES_PART_SIZE) || 64 * 1024 * 1024;
-export const MAX_FILE = MAX_DISK_GB * 1e9;
+const MAX_FILE = MAX_DISK_GB * 1e9;
 
 export class FileRejected extends Error {}
 
@@ -126,30 +125,14 @@ export async function begin(
     throw new FileRejected(`Something named ${f.name} is already there.`);
   const id = randomUUID();
   const key = objectKey(p, id);
-  let uploadId: string | null = null;
-  if (deployment.storage.kind === "s3") {
-    const r = await s3(
-      deployment.storage,
-      "POST",
-      key,
-      undefined,
-      f.contentType,
-      {
-        uploads: "",
-      },
-    );
-    if (!r.ok)
-      throw new Error(`multipart begin → ${r.status}: ${await r.text()}`);
-    uploadId =
-      (await r.text()).match(/<UploadId>([^<]+)<\/UploadId>/)?.[1] ?? null;
-    if (!uploadId) throw new Error("multipart begin: no upload id");
-  }
+  const uploadId =
+    deployment.storage.kind === "s3"
+      ? await beginMultipart(deployment.storage, key, f.contentType)
+      : null;
   // What is declared counts against the cap at once.
   if (!(await beginFile(p, { id, key, uploadId, ...f }, MAX_FILE))) {
     if (deployment.storage.kind === "s3" && uploadId)
-      await s3(deployment.storage, "DELETE", key, undefined, undefined, {
-        uploadId,
-      });
+      await remove(deployment.storage, key, uploadId);
     // What is declared counts against the cap; uploads still arriving are
     // named, since abandoning one is the way out.
     const { declared, files } = await filesOf(p);
@@ -195,10 +178,7 @@ export async function partUrl(
 function stagedUrl(p: Principal, f: StoredFile): string {
   if (deployment.storage.kind === "s3")
     return presign(deployment.storage, "GET", f.key, {}, 86400);
-  const site = new URL(
-    deployment.computers.kind === "fly" ? deployment.computers.report : "/",
-  ).origin;
-  return `${site}/files/local/${localToken(f.key, 0, Date.now() + 86400_000, `${p.orgId}|${p.userId}|${f.id}`)}`;
+  return `${site()}/files/local/${localToken(f.key, 0, Date.now() + 86400_000, `${p.orgId}|${p.userId}|${f.id}`)}`;
 }
 
 // Closes the upload with the parts the browser sent, checks the size the
@@ -227,32 +207,12 @@ export async function complete(
   let size: number;
   try {
     if (deployment.storage.kind === "s3") {
-      const xml = `<CompleteMultipartUpload>${parts
-        .sort((a, b) => a.partNumber - b.partNumber)
-        .map(
-          (x) =>
-            `<Part><PartNumber>${x.partNumber}</PartNumber><ETag>${x.etag}</ETag></Part>`,
-        )
-        .join("")}</CompleteMultipartUpload>`;
-      const r = await s3(
+      size = await completeMultipart(
         deployment.storage,
-        "POST",
         f.key,
-        new TextEncoder().encode(xml),
-        "application/xml",
-        { uploadId: f.uploadId! },
+        f.uploadId!,
+        parts,
       );
-      if (!r.ok)
-        throw new Error(`multipart complete → ${r.status}: ${await r.text()}`);
-      if (/<Error>/.test(await r.text()))
-        throw new Error("multipart complete: the store answered with an error");
-      const head = await s3(deployment.storage, "HEAD", f.key);
-      const length = head.headers.get("content-length");
-      if (!head.ok || length === null)
-        throw new Error(
-          `multipart complete: the object cannot be read back (${head.status})`,
-        );
-      size = Number(length);
     } else {
       const tmp = `${localFilePath(f.key)}.joining`;
       const out = await fs.open(tmp, "w");
@@ -453,16 +413,11 @@ export async function dropBytes(f: {
   uploadId: string | null;
 }): Promise<void> {
   if (deployment.storage.kind === "s3") {
-    const r =
-      (f.state === "uploading" || f.state === "joining") && f.uploadId
-        ? await s3(deployment.storage, "DELETE", f.key, undefined, undefined, {
-            uploadId: f.uploadId,
-          })
-        : await s3(deployment.storage, "DELETE", f.key);
-    if (!r.ok && r.status !== 404)
-      throw new Error(
-        `storage delete → ${r.status}: ${(await r.text()).slice(0, 200)}`,
-      );
+    await remove(
+      deployment.storage,
+      f.key,
+      f.state === "uploading" || f.state === "joining" ? f.uploadId : null,
+    );
   } else if (deployment.storage.kind === "local") {
     await fs.rm(localFilePath(f.key), { force: true });
     const dir = localDir()!;
@@ -504,16 +459,6 @@ export async function expireUploads(orgId: string, now: Date): Promise<void> {
 }
 
 export { filesOf, whole };
-
-// Whether an upload a local part token names still exists and is still
-// uploading, so a token cannot bring back parts of a file that is gone.
-export function stillUploading(claim: {
-  orgId: string;
-  userId: string;
-  id: string;
-}) {
-  return uploadingFile(claim.orgId, claim.userId, claim.id);
-}
 
 // A path as the disk spells it: "/" or "/a/b", no empty or dotted
 // segments, nothing a shell would mind. Null when it is not one.

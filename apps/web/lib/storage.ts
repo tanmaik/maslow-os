@@ -3,7 +3,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { deployment } from "./deployment.ts";
-import { s3 } from "./s3.ts";
+import { remove, s3 } from "./s3.ts";
 
 // Where uploaded images live. One contract; production uses an S3-compatible
 // store, development uses a directory.
@@ -22,7 +22,7 @@ export class Rejected extends Error {}
 
 // The image type from its first bytes. The browser's declared type is never
 // trusted, and SVG is never accepted: it is a script container.
-export function sniff(bytes: Uint8Array): "png" | "jpg" | "webp" | null {
+function sniff(bytes: Uint8Array): "png" | "jpg" | "webp" | null {
   const b = bytes;
   if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47)
     return "png";
@@ -101,13 +101,7 @@ const bucket = (
       );
     return k;
   },
-  async delete(k) {
-    const r = await s3(cfg, "DELETE", cfg.prefix + k);
-    if (!r.ok && r.status !== 404)
-      throw new Error(
-        `storage delete → ${r.status}: ${(await r.text()).slice(0, 200)}`,
-      );
-  },
+  delete: (k) => remove(cfg, cfg.prefix + k),
   url: (k) => `/uploads/${k}`,
 });
 

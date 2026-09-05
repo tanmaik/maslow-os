@@ -14,8 +14,12 @@ export type Line = {
 };
 
 // Every line of the org's usage since a moment, by member and resource,
-// with the member's name where they are still one.
-export async function usageOfOrg(p: Principal, since: Date): Promise<Line[]> {
+// with the member's name where they are still one; or one member's lines.
+async function lines(
+  p: Principal,
+  since: Date,
+  userId: string | null,
+): Promise<Line[]> {
   return asOrg(
     p.orgId,
     async (q) =>
@@ -24,14 +28,18 @@ export async function usageOfOrg(p: Principal, since: Date): Promise<Line[]> {
           `select u.user_id as "userId", m.name, u.resource, u.unit,
                   sum(u.quantity)::float8 as quantity, sum(u.cost)::float8 as cost
              from usage u left join users m on m.id = u.user_id
-            where u.to_at > $1
+            where u.to_at > $1 and ($2::uuid is null or u.user_id = $2)
             group by u.user_id, m.name, u.resource, u.unit
             order by m.name nulls last, u.resource`,
-          [since],
+          [since, userId],
         )
       ).rows,
   );
 }
+
+export const usageOfOrg = (p: Principal, since: Date) => lines(p, since, null);
+export const usageOfMember = (p: Principal, since: Date) =>
+  lines(p, since, p.userId);
 
 // What the person's brain holds, by kind, biggest first: the bytes their
 // records and links occupy.
@@ -74,11 +82,3 @@ export async function picturesIn(q: Query, userId: string): Promise<Picture[]> {
 
 export const picturesOf = (p: Principal) =>
   asOrg(p.orgId, (q) => picturesIn(q, p.userId));
-
-// One person's lines since a moment.
-export async function usageOfMember(
-  p: Principal,
-  since: Date,
-): Promise<Line[]> {
-  return (await usageOfOrg(p, since)).filter((l) => l.userId === p.userId);
-}

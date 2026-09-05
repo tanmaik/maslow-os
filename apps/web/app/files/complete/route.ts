@@ -1,11 +1,10 @@
+import { isUuid } from "@placeholder/db";
 import { NextResponse } from "next/server";
 
 import { answer } from "@/lib/disk";
 
 import { complete, FileRejected } from "@/lib/files";
 import { principal } from "@/lib/session";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // Vercel gives this request this long.
 export const maxDuration = 60;
@@ -17,7 +16,7 @@ export async function POST(request: Request) {
   if (!p) return new Response(null, { status: 401 });
   const body = await request.json().catch(() => null);
   const id = String(body?.id ?? "");
-  if (!UUID.test(id)) return new Response(null, { status: 404 });
+  if (!isUuid(id)) return new Response(null, { status: 404 });
   const parts = Array.isArray(body?.parts)
     ? body.parts.map((x: { partNumber: unknown; etag: unknown }) => ({
         partNumber: Number(x.partNumber),

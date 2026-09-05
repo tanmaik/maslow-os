@@ -138,9 +138,11 @@ export default async function Settings({
   if (!p) redirect("/");
   const n = await searchParams;
   const said = (k: keyof Notice) => (n[k] ? NOTICES[`${k}=${n[k]}`] : null);
-  const { org, members, invited, past } = await orgOf(p);
-  const groups = await groupsOf(p);
-  const agents = await agentsOf(p);
+  const [{ org, members, invited, past }, groups, agents] = await Promise.all([
+    orgOf(p),
+    groupsOf(p),
+    agentsOf(p),
+  ]);
   const appsQuery = (n.apps ?? "").trim();
   // Live from the vendor; when it does not answer, the card says so rather
   // than showing nothing connected or nothing found.

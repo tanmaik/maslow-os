@@ -1320,11 +1320,10 @@ async function settle() {
   console.log("the operating system on the volume is up");
 }
 
-// The person's account in the operating system: `me`, uid 1000, at
-// /home/me. A system copied from an older image has the base image's
-// node user at that id and the person's files in root's home: the user
-// is renamed and the files moved, once. Root's own dotfiles that were
-// never touched stay behind, so the home keeps its own.
+// Makes sure the person's account exists in the operating system: `me`,
+// uid 1000, home at /home/me, with their files in it. A system that has
+// the base image's node user at that id, or the files in root's home,
+// is brought to that shape once.
 async function person() {
   const passwd = await fs.readFile(path.join(OS_ROOT, "etc/passwd"), "utf8");
   if (!new RegExp(`^${PERSON.name}:`, "m").test(passwd)) {

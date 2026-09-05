@@ -4,7 +4,7 @@ import { deployment } from "./deployment.ts";
 import { parseSize } from "./prices.ts";
 
 // The Fly Machines API, the part of it a computer needs. No SDK.
-export type MachineState =
+type MachineState =
   | "created"
   | "starting"
   | "started"
@@ -17,7 +17,7 @@ export type MachineState =
   | "destroyed";
 
 // What Fly remembers happening to a machine, newest last.
-export type MachineEvent = {
+type MachineEvent = {
   type: string;
   status: string;
   timestamp: number;
@@ -44,18 +44,17 @@ export const DISK_GB = 3;
 // Fly's limit for one volume.
 export const MAX_DISK_GB = 500;
 
-// Fly names carry our id, so a sweep can tell ours apart and match an
-// unrecorded one back to its row.
-
 function config() {
   const c = deployment.computers;
   if (c.kind !== "fly") throw new Error("Computers are not set up here.");
   return c;
 }
 
+// Fly names carry our id, so a sweep can tell ours apart and match an
+// unrecorded one back to its row.
 export const volumeName = (computerId: string) =>
   `${config().namePrefix.replaceAll("-", "_")}c_${computerId.replaceAll("-", "").slice(0, 16)}`;
-export const machineName = (computerId: string) =>
+const machineName = (computerId: string) =>
   `${config().namePrefix}c-${computerId.slice(0, 8)}`;
 
 // The key one machine's links are signed with: the deployment's key
@@ -176,10 +175,6 @@ export const fly = {
     if (!m || m.state === "created")
       throw new Error(`Fly machine ${id} was not placed within a minute.`);
     return m;
-  },
-
-  async start(id: string): Promise<void> {
-    await call("POST", `/machines/${id}/start`);
   },
 
   // Off until the proxy is asked for it again: a past member's machine.

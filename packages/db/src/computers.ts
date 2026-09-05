@@ -1,10 +1,10 @@
-import { asMachine, asOrg, asPerson } from "./index.ts";
+import { asMachine, asMeter, asOrg, asPerson } from "./index.ts";
 import type { Principal } from "./auth.ts";
 
 // What a machine last said it had and needed: its memory and the share of
 // it free at each of the last few reports, newest last; what the kernel
 // killed for want of memory since boot; the one-minute load over its cores.
-export type Need = {
+type Need = {
   at: string;
   memory?: { total: number; free: number[] };
   oom?: number;
@@ -129,39 +129,27 @@ export async function setMachine(
   );
 }
 
-// Remembers the state Fly reports. A change is an event; the same state
-// seen twice, by two readers at once, is one.
-export async function noteState(
-  p: Principal,
-  c: Computer,
-  state: string,
-): Promise<void> {
-  await asOrg(p.orgId, async (q) => {
-    const changed = await q.query(
-      "update computers set state = $1 where id = $2 and state is distinct from $1",
-      [state, c.id],
-    );
-    if (!changed.rowCount) return;
-    await q.query(
-      "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, $2, $3, $4)",
-      [c.id, state, c.size, c.diskGb],
-    );
-  });
-}
-
-// Records something we asked of the machine, at the time we asked.
-// Why a machine is about to be needed: the person opened their computer,
-// a link was made for a browser, the sweep asked for a backup. The next
-// start is that cause's.
-export async function noteCause(
+// Records something that happened to the machine at our hand, at the time
+// it did: why it is about to be needed — the person opened their computer,
+// a link was made for a browser, the sweep asked for a backup — or what we
+// asked of it. The next start is that cause's.
+export async function noteEvent(
   orgId: string,
   c: Computer,
-  cause: "opened" | "link-dl" | "link-term" | "link-p" | "backup",
+  kind:
+    | "opened"
+    | "link-dl"
+    | "link-term"
+    | "link-p"
+    | "backup"
+    | "start"
+    | "stop"
+    | "restart",
 ): Promise<void> {
   await asOrg(orgId, (q) =>
     q.query(
       "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, $2, $3, $4)",
-      [c.id, cause, c.size, c.diskGb],
+      [c.id, kind, c.size, c.diskGb],
     ),
   );
 }
@@ -184,19 +172,6 @@ export async function eventsOf(
           [p.userId, since],
         )
       ).rows,
-  );
-}
-
-export async function noteRequest(
-  p: Principal,
-  c: Computer,
-  kind: "start" | "stop" | "restart",
-): Promise<void> {
-  await asOrg(p.orgId, (q) =>
-    q.query(
-      "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, $2, $3, $4)",
-      [c.id, kind, c.size, c.diskGb],
-    ),
   );
 }
 
@@ -272,21 +247,6 @@ export async function lease(p: Principal, id: string): Promise<string | null> {
   );
 }
 
-// Lets go of the lease taken, and only that one: a request that outlived
-// its five minutes must not clear the lease a newer one holds.
-export async function release(
-  p: Principal,
-  id: string,
-  held: string,
-): Promise<void> {
-  await asOrg(p.orgId, (q) =>
-    q.query(
-      "update computers set busy_until = null where id = $1 and busy_until::text = $2",
-      [id, held],
-    ),
-  );
-}
-
 // The same for the sweep, which has no person.
 export async function leaseIn(
   orgId: string,
@@ -304,7 +264,9 @@ export async function leaseIn(
   );
 }
 
-export async function releaseIn(
+// Lets go of the lease taken, and only that one: a request that outlived
+// its five minutes must not clear the lease a newer one holds.
+export async function release(
   orgId: string,
   id: string,
   held: string,
@@ -354,22 +316,9 @@ export async function resize(
   });
 }
 
-// Forgets a machine Fly no longer has; the filesystem stays.
-export async function clearMachine(
-  p: Principal,
-  id: string,
-  machineId: string,
-): Promise<void> {
-  await asOrg(p.orgId, (q) =>
-    q.query(
-      "update computers set machine_id = null where id = $1 and machine_id = $2",
-      [id, machineId],
-    ),
-  );
-}
-
-// Remembers a state seen by the sweep rather than a person; same rule.
-export async function noteStateIn(
+// Remembers the state Fly reports. A change is an event; the same state
+// seen twice, by two readers at once, is one.
+export async function noteState(
   orgId: string,
   c: Computer,
   state: string,
@@ -408,20 +357,6 @@ export async function noteEventsIn(
   });
 }
 
-// Forgets a volume Fly no longer has, and the machine that was on it.
-export async function clearVolume(
-  p: Principal,
-  id: string,
-  volumeId: string,
-): Promise<void> {
-  await asOrg(p.orgId, (q) =>
-    q.query(
-      "update computers set volume_id = null, machine_id = null, state = 'building' where id = $1 and volume_id = $2",
-      [id, volumeId],
-    ),
-  );
-}
-
 // One computer of the org, by id, for the sweep.
 export async function computerOfIn(
   orgId: string,
@@ -442,10 +377,8 @@ export async function computerOfIn(
 // Every machine and volume any org's rows name, for the sweep.
 export async function knownComputers(): Promise<{
   machines: Set<string>;
-  byMachine: Map<string, { orgId: string; id: string }>;
   volumes: Map<string, { orgId: string; id: string }>;
 }> {
-  const { asMeter } = await import("./index.ts");
   return asMeter(async (q) => {
     await q.query("select set_config('app.meter', 'sweep', true)");
     const rows = (
@@ -460,13 +393,6 @@ export async function knownComputers(): Promise<{
       machines: new Set(
         rows.flatMap((r) => (r.machine_id ? [r.machine_id] : [])),
       ),
-      byMachine: new Map(
-        rows.flatMap((r) =>
-          r.machine_id
-            ? [[r.machine_id, { orgId: r.org_id, id: r.id }] as const]
-            : [],
-        ),
-      ),
       volumes: new Map(
         rows.flatMap((r) =>
           r.volume_id
@@ -478,8 +404,8 @@ export async function knownComputers(): Promise<{
   });
 }
 
-// Forgets a volume Fly no longer has, for the sweep.
-export async function clearVolumeIn(
+// Forgets a volume Fly no longer has, and the machine that was on it.
+export async function clearVolume(
   orgId: string,
   id: string,
   volumeId: string,
@@ -500,8 +426,8 @@ export async function computersIn(orgId: string): Promise<Computer[]> {
   );
 }
 
-// Forgets a machine the sweep found gone.
-export async function clearMachineIn(
+// Forgets a machine Fly no longer has; the filesystem stays.
+export async function clearMachine(
   orgId: string,
   id: string,
   machineId: string,

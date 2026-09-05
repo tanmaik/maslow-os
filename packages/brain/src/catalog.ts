@@ -8,7 +8,7 @@ import {
   type PropertyRow,
   type VerbRow,
 } from "./rows.ts";
-import type { Author, Kind, Query, Verb } from "./types.ts";
+import type { Author, Kind, Property, Query, Verb } from "./types.ts";
 
 // The org's vocabulary: every kind a record can be, with the fields each
 // declares, and every verb an edge can carry. The agent reads this before it
@@ -25,12 +25,16 @@ export async function catalog(
   const verbs = await q.query<VerbRow>(
     `select ${verbColumns} from edge_verbs order by name`,
   );
+  const fields = new Map<string, Property[]>();
+  for (const row of properties.rows) {
+    const kind = fields.get(row.kind) ?? [];
+    kind.push(toProperty(row));
+    fields.set(row.kind, kind);
+  }
   return {
     kinds: kinds.rows.map((k) => ({
       ...toVerb(k),
-      properties: properties.rows
-        .filter((p) => p.kind === k.name)
-        .map(toProperty),
+      properties: fields.get(k.name) ?? [],
     })),
     verbs: verbs.rows.map(toVerb),
   };

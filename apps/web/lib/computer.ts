@@ -7,14 +7,12 @@ import {
   computersAllowed,
   lease,
   leaseIn,
+  noteEvent,
   noteEventsIn,
-  noteRequest,
   noteState,
   release,
-  releaseIn,
   reserveComputer,
   resize,
-  secretIn,
   secretOf,
   setDiskGb,
   setMachine,
@@ -29,21 +27,19 @@ import { LADDER } from "./prices.ts";
 
 export type Built = "built" | "exists" | "off" | "not-allowed";
 
+// A Fly thing made and then not recorded, that Fly would not take back:
+// it is billed until the sweep's reconcile finds it, and that is said.
+export const unpaid = (what: "machine" | "volume") => (err: Error) =>
+  console.error(`fly: an unrecorded ${what} would not go: ${err.message}`);
+
 // A person has a filesystem from the moment they have an account: the
 // volume is the computer, and it is made at sign-in. Compute is a machine
 // attached to it on demand. The row is claimed first, so two requests at
 // once make one; each Fly id is written as soon as it exists; a step that
 // failed is resumed by the next look.
-// Whether this org has computers: its own switch in Settings says. An org
-// founded outside production starts with them on, so a preview or a
-// laptop shows the whole product; one founded in production starts off.
-export async function computersOn(p: Principal): Promise<boolean> {
-  return computersAllowed(p);
-}
-
 export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
   if (deployment.computers.kind === "none") return null;
-  if (!(await computersOn(p))) return null;
+  if (!(await computersAllowed(p))) return null;
   let c = await computerOf(p);
   if (!c) {
     await reserveComputer(p, {
@@ -67,14 +63,14 @@ export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
           await setVolume(p, c, volume.id, size);
         } catch (err) {
           // Unrecorded is unbilled by us and billed by Fly: it goes at once.
-          await fly.destroyVolume(volume.id).catch(() => {});
+          await fly.destroyVolume(volume.id).catch(unpaid("volume"));
           throw err;
         }
         c.volumeId = volume.id;
         c.diskGb = size;
       }
     } finally {
-      await release(p, c.id, held);
+      await release(p.orgId, c.id, held);
     }
   }
   return c;
@@ -112,9 +108,9 @@ export async function build(p: Principal): Promise<Built> {
     if (c.machineId && c.state !== "failed") return "exists";
     // A machine whose build failed is let go of, and a new one made.
     if (c.machineId) {
-      await fly.destroyMachine(c.machineId).catch(() => {});
-      await noteState(p, c, "destroyed");
-      await clearMachine(p, c.id, c.machineId);
+      await fly.destroyMachine(c.machineId).catch(unpaid("machine"));
+      await noteState(p.orgId, c, "destroyed");
+      await clearMachine(p.orgId, c.id, c.machineId);
       c.machineId = null;
     }
     if (!c.machineId) {
@@ -139,8 +135,8 @@ export async function build(p: Principal): Promise<Built> {
             (err as Error).message,
           )
         ) {
-          await noteState(p, c, "volume-gone");
-          await clearVolume(p, c.id, c.volumeId!);
+          await noteState(p.orgId, c, "volume-gone");
+          await clearVolume(p.orgId, c.id, c.volumeId!);
           return "exists";
         }
         throw err;
@@ -150,21 +146,22 @@ export async function build(p: Principal): Promise<Built> {
         recorded = await setMachine(p, c.id, machine.id);
       } finally {
         // Unrecorded is unbilled by us and billed by Fly: it goes at once.
-        if (!recorded) await fly.destroyMachine(machine.id).catch(() => {});
+        if (!recorded)
+          await fly.destroyMachine(machine.id).catch(unpaid("machine"));
       }
       if (!recorded) return "exists";
       c.machineId = machine.id;
     }
     const placed = await fly.placed(c.machineId);
-    await noteState(p, c, placed.state);
+    await noteState(p.orgId, c, placed.state);
     return "built";
   } catch (err) {
     // A machine that exists and failed is on the record as such, for the
     // meter and the next look; a build that made none leaves no state.
-    if (c.machineId) await noteState(p, c, "failed");
+    if (c.machineId) await noteState(p.orgId, c, "failed");
     throw err;
   } finally {
-    await release(p, c.id, held);
+    await release(p.orgId, c.id, held);
   }
 }
 
@@ -214,14 +211,14 @@ async function growStep(p: Principal, c: Computer): Promise<boolean> {
     if (needs_restart && fresh.machineId) {
       const m = await fly.machine(fresh.machineId);
       if (m?.state === "started") {
-        await noteRequest(p, fresh, "restart");
+        await noteEvent(p.orgId, fresh, "restart");
         await fly.restart(fresh.machineId);
       }
     }
     await setDiskGb(p, fresh, size);
     return true;
   } finally {
-    await releaseIn(p.orgId, c.id, held);
+    await release(p.orgId, c.id, held);
   }
 }
 
@@ -272,7 +269,7 @@ export async function status(p: Principal): Promise<Status | null> {
       const stale =
         machine?.config?.image !== undefined && machine.config.image !== IMAGE;
       if (machine && !outgrown && !stale)
-        await noteState(p, computer, machine.state);
+        await noteState(p.orgId, computer, machine.state);
       else {
         if (outgrown || stale) {
           await noteEventsIn(p.orgId, computer, machine?.events ?? []);
@@ -280,12 +277,12 @@ export async function status(p: Principal): Promise<Status | null> {
         }
         // Gone, behind our back or by our hand: the row forgets it and
         // compute can be attached again on the same filesystem.
-        await noteState(p, computer, "destroyed");
-        await clearMachine(p, computer.id, computer.machineId);
+        await noteState(p.orgId, computer, "destroyed");
+        await clearMachine(p.orgId, computer.id, computer.machineId);
         machine = null;
       }
     } finally {
-      await release(p, computer.id, held);
+      await release(p.orgId, computer.id, held);
     }
   }
   if (!machine)

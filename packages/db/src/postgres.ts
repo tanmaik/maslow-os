@@ -101,18 +101,21 @@ function layout(dataDir: string, fresh: boolean): Layout {
   };
 }
 
-const exited = (child: {
+// Whether a child process has ended, by exit or by signal.
+export const exited = (child: {
   exitCode: number | null;
   signalCode: string | null;
 }) => child.exitCode !== null || child.signalCode !== null;
 
 // Starts a Postgres cluster for this checkout on the given port, creating it
-// first if it is new or `fresh` was asked for. Trust auth on loopback only;
-// the socket lives inside the data directory so two checkouts never share one.
+// first if it is new or `fresh` was asked for. Trust auth on loopback only,
+// over TCP alone: a Unix socket's path is capped at 103 bytes, which a
+// worktree's scratch directory passes, and nothing of ours uses one. A
+// temporary cluster removes its data when stopped, also on a root box.
 export async function startPostgres(
   dataDir: string,
   port: number,
-  { fresh = false } = {},
+  { fresh = false, temporary = false } = {},
 ): Promise<Cluster> {
   const l = layout(path.resolve(dataDir), fresh);
   // Set on the child directly, never through /usr/bin/env: macOS strips DYLD_* there.
@@ -143,8 +146,8 @@ export async function startPostgres(
     l.dataDir,
     "-p",
     String(port),
-    "-k",
-    l.dataDir,
+    "-c",
+    "unix_socket_directories=",
     "-c",
     "listen_addresses=127.0.0.1",
   ]);
@@ -178,11 +181,13 @@ export async function startPostgres(
   return {
     url,
     stop: async () => {
-      if (exited(child)) return;
-      await new Promise<void>((resolve) => {
-        child.once("exit", () => resolve());
-        child.kill("SIGINT");
-      });
+      if (!exited(child)) {
+        await new Promise<void>((resolve) => {
+          child.once("exit", () => resolve());
+          child.kill("SIGINT");
+        });
+      }
+      if (temporary) fs.rmSync(l.dataDir, { recursive: true, force: true });
     },
   };
 }

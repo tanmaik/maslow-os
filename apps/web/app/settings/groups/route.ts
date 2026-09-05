@@ -1,3 +1,4 @@
+import { isUuid } from "@placeholder/db";
 import {
   addToGroup,
   defineGroup,
@@ -11,15 +12,13 @@ import { NextResponse } from "next/server";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
 // Makes or deletes a group, or puts a member in or out of one. Owners only.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const form = await request.formData();
   const text = (k: string) => String(form.get(k) ?? "").trim();
-  const id = (k: string) => (UUID.test(text(k)) ? text(k) : null);
+  const id = (k: string) => (isUuid(text(k)) ? text(k) : null);
   const back = (outcome: string) =>
     NextResponse.redirect(`${origin(request)}/settings?group=${outcome}`, 303);
 

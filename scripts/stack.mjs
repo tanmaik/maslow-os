@@ -9,7 +9,11 @@ import { fileURLToPath } from "node:url";
 import { config as decrypt } from "@dotenvx/dotenvx";
 
 import { migrate } from "../packages/db/src/migrate.ts";
-import { ensureAppRole, startPostgres } from "../packages/db/src/postgres.ts";
+import {
+  ensureAppRole,
+  exited,
+  startPostgres,
+} from "../packages/db/src/postgres.ts";
 import { orgs, seed } from "../packages/db/src/seed.ts";
 import { seedBrain } from "../packages/brain/src/seed.ts";
 
@@ -54,7 +58,7 @@ export function devSecrets() {
 
 // Which vendor each contract has, from the environment the app will read:
 // the vendor's name when it is real, null when the app will fake it.
-export function vendorsOf(env) {
+function vendorsOf(env) {
   const has = (...keys) => keys.every((k) => env[k]);
   return {
     identity: has("WORKOS_API_KEY", "WORKOS_CLIENT_ID") ? "WorkOS" : null,
@@ -72,8 +76,6 @@ export function vendorsOf(env) {
     connections: has("COMPOSIO_API_KEY") ? "Composio" : null,
   };
 }
-
-const exited = (child) => child.exitCode !== null || child.signalCode !== null;
 
 export async function startStack({
   webPort,

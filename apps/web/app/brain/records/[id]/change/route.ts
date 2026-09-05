@@ -11,13 +11,13 @@ import {
   unlink,
   unmerge,
 } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
+import { asPerson, isUuid } from "@placeholder/db";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-import { isId, recordHref } from "../../../format";
+import { recordHref } from "../../../format";
 import { confidenceFrom, instantFrom, propsFrom } from "../../../props";
 
 // Changes one record the way the form asked: edited from the version shown,
@@ -30,7 +30,7 @@ export async function POST(
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const { id } = await params;
-  if (!isId(id)) return new Response(null, { status: 404 });
+  if (!isUuid(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "edit");
   const author = `person:${p.userId}`;
@@ -42,7 +42,7 @@ export async function POST(
       if (intent === "unmerge") return unmerge(db, author, id);
       if (intent === "unlink") {
         const edge = String(form.get("edge") ?? "");
-        if (!isId(edge))
+        if (!isUuid(edge))
           throw new NotFound(`edge ${edge} is not in this brain`);
         return unlink(db, author, edge);
       }

@@ -32,11 +32,13 @@ import {
 import { Terminal } from "@/components/terminal";
 import { Uploader } from "@/components/uploader";
 import { backupsOf } from "@placeholder/db/backups";
-import { computerOf, noteCause } from "@placeholder/db/computers";
+import { computerOf, noteEvent } from "@placeholder/db/computers";
 
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
-import { computersOn, ensureFilesystem, status, wanted } from "@/lib/computer";
+import { computersAllowed } from "@placeholder/db/computers";
+
+import { ensureFilesystem, status, wanted } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
 import { cleanPath, filesOf, whole } from "@/lib/files";
@@ -93,7 +95,7 @@ export default async function Computer({
   if (!p) redirect("/");
   if (deployment.computers.kind === "none")
     return <Note>Computers are not set up on this deployment.</Note>;
-  if (!(await computersOn(p)))
+  if (!(await computersAllowed(p)))
     return (
       <Note>
         Computers are off for this org. An owner can turn them on in{" "}
@@ -110,12 +112,12 @@ export default async function Computer({
   after(() => sweepIfDue());
   // Why the machine may be woken next: this look.
   const before = await computerOf(p);
-  if (before) await noteCause(p.orgId, before, "opened");
+  if (before) await noteEvent(p.orgId, before, "opened");
   let s = await status(p);
   if (!s) {
     await ensureFilesystem(p);
     const made = await computerOf(p);
-    if (made) await noteCause(p.orgId, made, "opened");
+    if (made) await noteEvent(p.orgId, made, "opened");
     s = await status(p);
   }
   // The person opened their computer: the next start is theirs.

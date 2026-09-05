@@ -5,7 +5,7 @@ import { connections } from "./connections.ts";
 import { deployment } from "./deployment.ts";
 import { dropBytes } from "./files.ts";
 import { fly } from "./fly.ts";
-import { s3 } from "./s3.ts";
+import { remove } from "./s3.ts";
 import { storage } from "./storage.ts";
 
 // Pays what removals, purges and replacements owe the vendors: stops or
@@ -88,14 +88,7 @@ async function pay(orgId: string, o: Orphan): Promise<void> {
     case "object":
     case "upload": {
       if (st.kind === "s3") {
-        const r =
-          o.kind === "upload" && o.extra
-            ? await s3(st, "DELETE", o.ref, undefined, undefined, {
-                uploadId: o.extra,
-              })
-            : await s3(st, "DELETE", o.ref);
-        if (!r.ok && r.status !== 404)
-          throw new Error(`storage delete → ${r.status}`);
+        await remove(st, o.ref, o.kind === "upload" ? o.extra : null);
       } else if (st.kind === "local") {
         await dropBytes({
           key: o.ref,

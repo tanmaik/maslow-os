@@ -1,11 +1,11 @@
 import { Forbidden, Invalid, NotFound, write } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
+import { asPerson, isUuid } from "@placeholder/db";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-import { isId, recordHref } from "../../../format";
+import { recordHref } from "../../../format";
 import { confidenceFrom } from "../../../props";
 
 // Links this record to another, in the direction the form chose, as a link
@@ -18,12 +18,12 @@ export async function POST(
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const { id } = await params;
-  if (!isId(id)) return new Response(null, { status: 404 });
+  if (!isUuid(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
   const other = String(form.get("other") ?? "");
   const verb = String(form.get("verb") ?? "");
   const out = form.get("direction") !== "in";
-  if (!isId(other)) return new Response("Choose a record.", { status: 400 });
+  if (!isUuid(other)) return new Response("Choose a record.", { status: 400 });
 
   try {
     await asPerson(p, (db) =>

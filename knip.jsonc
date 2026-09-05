@@ -1,0 +1,27 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/*.mjs"],
+      "includeEntryExports": true,
+      // A human's own Vercel login, never installed here.
+      "ignoreBinaries": ["vercel"],
+    },
+    "apps/web": {
+      // The whole shadcn catalogue is installed, used or not: a component
+      // is taken from here, never written beside it.
+      "entry": ["components/ui/*.tsx", "hooks/use-mobile.ts"],
+      // Agentation's sync server, run by the developer's own MCP config.
+      "ignoreDependencies": ["agentation-mcp"],
+    },
+    "apps/computer": {
+      "entry": ["server.mjs"],
+      "includeEntryExports": true,
+    },
+    // A package's doors are entry files; what they export still has to be
+    // used by someone.
+    "packages/*": {
+      "includeEntryExports": true,
+    },
+  },
+}

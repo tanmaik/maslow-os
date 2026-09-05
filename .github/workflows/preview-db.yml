@@ -26,21 +26,14 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
+      # Only tokens; where things live is in scripts/ids.mjs.
       - env:
           NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          STORAGE_ENDPOINT: https://fly.storage.tigris.dev
-          STORAGE_REGION: auto
-          STORAGE_BUCKET: placeholder-uploads-dev
           STORAGE_ACCESS_KEY: ${{ secrets.STORAGE_ACCESS_KEY }}
           STORAGE_SECRET_KEY: ${{ secrets.STORAGE_SECRET_KEY }}
           FLY_PREVIEW_TOKEN: ${{ secrets.FLY_PREVIEW_TOKEN }}
           GITHUB_TOKEN: ${{ github.token }}
-          NEON_PROJECT_ID: quiet-wave-64485699
-          NEON_PARENT_BRANCH: preview-parent
-          VERCEL_TEAM_ID: team_7NQXOFvUYkNy7L2ztTSnohQ8
-          VERCEL_TEAM_SLUG: maslowtech
-          VERCEL_PROJECT_ID: prj_rAZ2iUe98KkFuLsvFc7uwqTh8ko0
           PR: ${{ github.event.pull_request.number }}
           REF: ${{ github.event.pull_request.head.ref }}
           SHA: ${{ github.event.pull_request.head.sha }}

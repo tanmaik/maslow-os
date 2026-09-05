@@ -18,6 +18,10 @@ function connection(): pg.Pool {
 
 export type Query = pg.PoolClient;
 
+// Whether a string is shaped like an id at all, before a table is asked.
+export const isUuid = (s: string) =>
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
+
 // Runs fn inside a transaction whose row-level policies read the given
 // settings. With none set the connection sees no rows at all.
 async function scoped<T>(
@@ -31,8 +35,11 @@ async function scoped<T>(
     // speak for it.
     await client.query("reset all");
     await client.query("begin");
-    for (const [name, value] of Object.entries(settings))
-      await client.query("select set_config($1, $2, true)", [name, value]);
+    await client.query(
+      `select set_config(name, value, true)
+       from unnest($1::text[], $2::text[]) as settings(name, value)`,
+      [Object.keys(settings), Object.values(settings)],
+    );
     const result = await fn(client);
     await client.query("commit");
     client.release();

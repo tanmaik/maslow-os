@@ -4,13 +4,14 @@ import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
+import { uploadingFile } from "@placeholder/db/files";
+
 import { deployment } from "@/lib/deployment";
 import {
   localClaim,
   localPartPath,
   localStagedStream,
   PART_SIZE,
-  stillUploading,
 } from "@/lib/files";
 
 // Stands in for the bucket on a real machine: takes one part of an upload,
@@ -42,7 +43,11 @@ export async function PUT(
   if (deployment.storage.kind !== "local")
     return new Response(null, { status: 404 });
   const claim = localClaim((await params).token);
-  if (!claim || claim.part < 1 || !(await stillUploading(claim)))
+  if (
+    !claim ||
+    claim.part < 1 ||
+    !(await uploadingFile(claim.orgId, claim.userId, claim.id))
+  )
     return new Response(null, { status: 403 });
   if (!request.body) return new Response(null, { status: 400 });
   const target = localPartPath(claim.key, claim.part);
@@ -65,7 +70,7 @@ export async function PUT(
     return new Response("A part is at most 64 MB.", { status: 413 });
   }
   // Checked again once written: an upload expired meanwhile leaves no part.
-  if (!(await stillUploading(claim))) {
+  if (!(await uploadingFile(claim.orgId, claim.userId, claim.id))) {
     await fs.rm(target, { force: true });
     return new Response(null, { status: 403 });
   }

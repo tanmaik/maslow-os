@@ -207,26 +207,6 @@ export async function backupsIn(orgId: string): Promise<{
   });
 }
 
-// Every finished backup's size and lifetime, for the meter.
-export async function backupBytes(
-  q: {
-    query: (
-      sql: string,
-      params: unknown[],
-    ) => Promise<{
-      rows: { size: string; finished_at: Date; deleted_at: Date | null }[];
-    }>;
-  },
-  userId: string,
-) {
-  return (
-    await q.query(
-      "select size, finished_at, deleted_at from backups where user_id = $1 and finished_at is not null",
-      [userId],
-    )
-  ).rows;
-}
-
 // Whether the machine's person is still a member: a removed member's
 // machine opens no backup. Asked as the org, since a machine sees no users.
 export async function memberLive(c: {

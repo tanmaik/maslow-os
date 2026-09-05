@@ -5,7 +5,7 @@ const RANK: Record<Access, number> = { view: 1, edit: 2, owner: 3 };
 
 // What the current member may do with a record, or null when they cannot
 // see it at all.
-export async function accessOf(q: Query, id: string): Promise<Access | null> {
+async function accessOf(q: Query, id: string): Promise<Access | null> {
   const { rows } = await q.query<{ access: Access | null }>(
     "select access_level($1) as access from records where id = $1",
     [id],

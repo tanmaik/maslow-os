@@ -1,4 +1,4 @@
-import { asOrg, asSelf, Gone, type Query } from "./index.ts";
+import { asOrg, asSelf, Gone, isUuid, type Query } from "./index.ts";
 import type { Principal, Role } from "./auth.ts";
 
 export type Org = {
@@ -65,10 +65,9 @@ async function asPrincipal<T>(
   });
 }
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 // Ids arrive from forms; only the canonical spelling is accepted, so a string
 // comparison and a uuid comparison agree.
-const canonical = (id: string) => (UUID.test(id) ? id : null);
+const canonical = (id: string) => (isUuid(id) ? id : null);
 
 // Shows the org's past memberships to the rest of the transaction.
 const seeingPast = (q: Query) =>
@@ -130,7 +129,8 @@ const owePicture = (q: Query, orgId: string, key: string) =>
   );
 
 // Whether a picture owed its deletion is still shown by anyone, in any
-// org; one saved before keys were made per object may be shared.
+// org: a key may be held by more than one row, and goes when the last
+// lets it go.
 export async function pictureInUse(
   orgId: string,
   key: string,

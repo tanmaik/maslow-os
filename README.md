@@ -6,9 +6,9 @@ pnpm dev
 ```
 
 That is the whole setup: a Postgres of your own, migrated and seeded, and the
-app on a free port. `pnpm check` is the merge gate — typecheck, format, and a
-smoke that boots a fresh stack and walks it. A migration starts with
-`pnpm migration:new <name>`. Read [CLAUDE.md](CLAUDE.md) before changing
+app on a free port. `pnpm check` is the merge gate — typecheck, format, unused
+code, and a smoke that boots a fresh stack and walks it. A migration starts
+with `pnpm migration:new <name>`. Read [CLAUDE.md](CLAUDE.md) before changing
 anything.
 
 Every pull request from this repository gets its own database and preview
@@ -57,12 +57,14 @@ tagged local, preview or production. One PostHog project serves all three,
 and its filter counts only production. Without the key nothing is reported
 and the pill says so.
 
-Production refuses to start without WorkOS, mail, storage, or analytics.
+Production refuses to start without WorkOS, mail, storage, analytics, or the
+sweep's `CRON_SECRET`; with computers, without `LINK_SECRET` too.
 
 ## Dev secrets
 
-`.env.development` holds the WorkOS pair, encrypted, in the repo. One private
-key decrypts it. On a laptop, being on the Vercel team is the access:
+`.env.development` holds every dev secret — WorkOS, Resend, the bucket, the
+preview Fly app, Composio — encrypted, in the repo. One private key decrypts
+it. On a laptop, being on the Vercel team is the access:
 
 ```
 vercel login && pnpm env:pull      # once per checkout; writes .env.keys
@@ -79,3 +81,21 @@ pnpm env:get                  # decrypt and print
 
 A new variable is also named in `turbo.json`'s `env` list, or Vercel's build
 never sees it and a production build that requires it fails.
+
+## Verifying
+
+Each command proves something, and says what it does not reach.
+
+```
+pnpm check        # the merge gate: typecheck, format, unused code, the smoke
+pnpm check:fast   # the same without the smoke, plus check:db; under a minute
+pnpm check:db     # a fresh Postgres, migrated and seeded; the pooled-identity
+                  # and brain suites as the app role. No Next, no vendors.
+pnpm smoke        # the whole product on a fresh stack, every vendor faked
+pnpm dev          # the stack for a browser; PORT=3999 pnpm dev picks the port
+```
+
+Every run owns its data under `.local`, so two at once and a run after a run
+do not touch each other. The smoke and `check:db` reach routes and tables;
+only a browser reaches the pill, the graph and the terminal, and only a real
+key reaches a vendor.
