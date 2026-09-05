@@ -144,14 +144,16 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   ];
   const param = (value: unknown) => `$${params.push(value)}`;
 
-  // Declared fields are read out of props and compared as their type.
+  // Declared fields are read out of props and compared as their type. The
+  // field's name is one parameter, whichever way it is read.
   let form: Map<string, Property> | null = null;
   const field = async (name: string) => {
     if (!opts.kind) throw new Invalid(`filtering by "${name}" needs a kind`);
     form ??= await propertiesOf(q, opts.kind);
     const p = form.get(name);
     if (!p) throw new Invalid(`${opts.kind} has no field "${name}"`);
-    return { p, expr: `(props ->> ${param(p.name)})::${sqlType[p.type]}` };
+    const key = param(p.name);
+    return { p, key, expr: `(props ->> ${key})::${sqlType[p.type]}` };
   };
   // A filter's value must be what the field says, so the database never
   // sees a cast it cannot make.
@@ -161,12 +163,12 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     }
   };
   for (const f of opts.where ?? []) {
-    const { p, expr } = await field(f.property);
+    const { p, key, expr } = await field(f.property);
     if (f.op === "contains") {
       if (p.type !== "list" || typeof f.value !== "string") {
         throw new Invalid(`contains needs a list field and a string`);
       }
-      where.push(`(props -> ${param(p.name)}) ? ${param(f.value)}::text`);
+      where.push(`(props -> ${key}) ? ${param(f.value)}::text`);
     } else if (f.op === "in") {
       if (!Array.isArray(f.value)) throw new Invalid(`in needs a list`);
       for (const v of f.value) fits(p, v);
@@ -186,7 +188,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   let direction: "asc" | "desc" = "desc";
   let keyOf = (r: RecordRow) => (r.occurred_at ?? r.created_at).toISOString();
   if (opts.orderBy) {
-    const { p, expr } = await field(opts.orderBy.property);
+    const { p, key, expr } = await field(opts.orderBy.property);
     if (p.type === "list") {
       throw new Invalid(`${opts.kind}.${p.name} is a list and has no order`);
     }
@@ -194,7 +196,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     if (!(wanted in DIRECTIONS)) {
       throw new Invalid(`"${String(wanted)}" is not a direction`);
     }
-    where.push(`props ->> ${param(p.name)} is not null`);
+    where.push(`props ->> ${key} is not null`);
     order = expr;
     orderType = sqlType[p.type];
     direction = DIRECTIONS[wanted];

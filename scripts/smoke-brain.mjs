@@ -364,6 +364,26 @@ export async function smokeBrain(stack) {
       }
       return { outcomes, heavy, ordered, unknown };
     });
+
+    // A list field is searched for one of its values; the person kind's
+    // emails are one.
+    const wile = await me(acme)((q) =>
+      brain.read(q, {
+        kind: "person",
+        where: [
+          {
+            property: "emails",
+            op: "contains",
+            value: "wile@acme-rockets.test",
+          },
+        ],
+      }),
+    );
+    check(
+      "a list field is searched by one value",
+      wile.records.length === 1 && wile.records[0].title === "Wile Coyote",
+      wile.records.map((r) => r.title).join(",") || "nothing",
+    );
     check(
       "a form refuses what does not fit",
       forms.outcomes.join(" ") === "refused refused refused refused accepted",
