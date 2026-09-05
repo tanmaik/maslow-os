@@ -10,6 +10,22 @@ adversarially against that — and against the experience of everyone it
 serves: the customer, the developer, the founder, the audience. Maslow
 Industries serves its stakeholders; the code is how.
 
+## Talking to the founder
+
+Speak plainly. No jargon, no acronym or vendor term without saying what it
+is the first time, no phrase whose point is its cleverness. The person
+reading is running the company, not the code: say what a change means for
+the customer, the org and the computer before saying how it is built.
+
+Teach as you go. When a term, a tool or a trade-off comes up, explain it
+in a sentence right there, in the words of the product, so the reader
+learns the system while the work happens rather than having to ask.
+
+Finish with a recap that stands alone. At the end of every piece of work,
+say in plain words what was done, what was found, what was checked and
+how, what was left undone and why, and what happens next. A reader who
+sees only that message has the whole picture.
+
 ## Stack
 
 Node 24 to develop on, 22.18 as the floor: where importing `.ts` arrived.
@@ -326,7 +342,8 @@ not come.
 ## Merging
 
 A pull request merges when nothing lingers behind it. The gate is mechanical
-where it can be, and Macroscope where it cannot.
+where it can be, and Macroscope where it cannot. What a reviewer walks by
+hand is `REVIEW.md`.
 
 - `check` is green: typecheck, format, unused code, and the smoke, which
   migrates an empty database and signs in as every seeded org.
@@ -339,6 +356,10 @@ where it can be, and Macroscope where it cannot.
   in the same commit.
 - A migration is a new file from `pnpm migration:new`. Docs changed with the
   code. Nothing in it points at a later pull request to finish it.
+- The title says what changed for the person using the product, in one
+  plain sentence. The description says what changed, why, what to check,
+  and what it does not do, each as a short list of facts. No cleverness,
+  no story, nothing a reader has to decode.
 - Squash-merged onto a linear main. The branch and its preview die with it.
 
 ## Comments

@@ -9,7 +9,7 @@ That is the whole setup: a Postgres of your own, migrated and seeded, and the
 app on a free port. `pnpm check` is the merge gate — typecheck, format, unused
 code, and a smoke that boots a fresh stack and walks it. A migration starts
 with `pnpm migration:new <name>`. Read [CLAUDE.md](CLAUDE.md) before changing
-anything.
+anything, and [REVIEW.md](REVIEW.md) before merging it.
 
 Every pull request from this repository gets its own database and preview
 with nothing to set up. A fork's pull request gets neither: the workflow
@@ -98,4 +98,5 @@ pnpm dev          # the stack for a browser; PORT=3999 pnpm dev picks the port
 Every run owns its data under `.local`, so two at once and a run after a run
 do not touch each other. The smoke and `check:db` reach routes and tables;
 only a browser reaches the pill, the graph and the terminal, and only a real
-key reaches a vendor.
+key reaches a vendor. What a reviewer still walks by hand is in
+[REVIEW.md](REVIEW.md).
