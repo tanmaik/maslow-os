@@ -200,7 +200,10 @@ production.
 ## The machine
 
 Breakage is made cheap rather than prevented — a machine you cannot break is a
-machine you cannot use. The agent gets root and full freedom because of three
+machine you cannot use. The person's home folder is their computer: every
+shell runs there as an ordinary user, with sudo for the package managers
+alone, and the system around the home can be reset from the image at any
+time, after a backup, with the home untouched. That is cheap because of three
 layers:
 
 - **The image** is only a bootstrap — enough to start and hand off. It almost
@@ -216,7 +219,7 @@ layers:
   auto-extend at a threshold and cap at 500GB.
 - **The memory snapshot** is what they were doing. Usually survives a suspend.
 
-A person's files are root's home in the operating system on the volume,
+A person's files are their home in the operating system on the volume,
 and nowhere else; every shell runs inside that operating system, so what
 is installed or signed into stays. The Computer page is that home, read
 from the machine. Opening the page wakes the machine, and

@@ -1164,35 +1164,110 @@ try {
       (await previewed.text()) === "served /hello/there",
     `port ${servedPort}, preview ${previewed.status}`,
   );
-  // Backups: the sweep asks the machine to back itself up, the archive
-  // lands in the store with a size, and an emptied disk gets it back.
-  await fetch(`${stack.url}/meter/sweep`, {
-    headers: { authorization: "Bearer smoke" },
-  });
-  const backedUp = await (async () => {
+  // Backups: the person asks for one and the bar says so; a second within
+  // the hour is refused plainly. A day on, the sweep asks the machine for
+  // its daily one; the archive lands in the store with a size, and an
+  // emptied disk gets it back.
+  const kept = async (n) => {
     for (let i = 0; i < 40; i++) {
       const page = await computerPage(ottoNow);
-      const m = page.match(/data-backups="(\d+)"/);
-      if (m && Number(m[1]) > 0) return page;
+      if (page.includes(`data-backups="${n}"`)) return page;
       await new Promise((r) => setTimeout(r, 500));
     }
     return await computerPage(ottoNow);
-  })();
+  };
+  const ottoId = "20000000-0000-4000-8000-000000000002";
+  const askedNow = await form("/computer/backup-now", { path: "/" }, ottoNow);
+  const backedUpNow = await kept(1);
+  const askedAgain = await form("/computer/backup-now", { path: "/" }, ottoNow);
+  const refusedFor = (res) =>
+    new URL(res.headers.get("location") ?? "", stack.url).searchParams.get(
+      "error",
+    ) ?? "";
+  check(
+    "a backup on demand is taken; a second within the hour is refused",
+    askedNow.headers.get("location")?.includes("backup=started") &&
+      backedUpNow.includes("backed up 0 min ago, 1 kept") &&
+      refusedFor(askedAgain).startsWith(
+        "The last backup was taken 0 min ago; one an hour is the limit.",
+      ),
+    `${askedNow.headers.get("location")?.split("?")[1]}; then: ${refusedFor(askedAgain)}`,
+  );
+  // A reset backs the home up before anything, and its outcome is on the
+  // page: refused with nothing changed when the backup could not be taken
+  // (one is on its way), and again, after a backup of its own once the
+  // last is old, because a laptop has no system to reset.
+  const withRow = (sql) =>
+    asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
+      await q.query("select set_config('app.meter', 'sweep', true)");
+      await q.query(sql, [ottoId]);
+    });
+  // Yesterday's, as far as the hour and the day are concerned.
+  const aged = () =>
+    withRow(
+      "update backups set started_at = started_at - interval '2 days', finished_at = finished_at - interval '2 days' where user_id = $1",
+    );
+  await withRow(
+    "insert into backups (user_id, key) values ($1, 'orgs/x/members/x/backups/on-its-way.tar.gz')",
+  );
+  const resetOutcome = async () => {
+    const started = await form("/computer/reset", { path: "/" }, ottoNow);
+    let page = "";
+    for (let i = 0; i < 40; i++) {
+      page = await (
+        await fetch(`${stack.url}/computer?path=%2F&reset=started`, {
+          headers: { cookie: ottoNow },
+        })
+      ).text();
+      if (!page.includes("is being reset")) break;
+      await new Promise((r) => setTimeout(r, 500));
+    }
+    return {
+      started: started.headers.get("location")?.includes("reset=started"),
+      said: page.match(/data-notice[^>]*>([^<]*)</)?.[1] ?? "",
+    };
+  };
+  const refusedReset = await resetOutcome();
+  await withRow(
+    "delete from backups where user_id = $1 and key like '%on-its-way%'",
+  );
+  await aged();
+  const laptopReset = await resetOutcome();
+  check(
+    "the page offers both actions; a refused reset says nothing was changed",
+    backedUpNow.includes("data-backup-now") &&
+      backedUpNow.includes("data-reset") &&
+      refusedReset.started &&
+      refusedReset.said.startsWith(
+        "The backup before the reset failed (backup begin answered 409), so nothing was changed.",
+      ) &&
+      laptopReset.started &&
+      laptopReset.said ===
+        "There is no system on this computer to reset: it has none of its own, so nothing was changed." &&
+      (await computerPage(ottoNow)).includes('data-backups="2"'),
+    `${refusedReset.said} | ${laptopReset.said}`,
+  );
+  await aged();
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  const backedUp = await kept(3);
   const backupRow = await asOrg(
     "00000000-0000-4000-8000-000000000002",
     async (q) => {
       await q.query("select set_config('app.meter', 'sweep', true)");
       return (
         await q.query(
-          "select size::int as size, finished_at is not null as finished from backups where user_id = '20000000-0000-4000-8000-000000000002' order by started_at desc limit 1",
+          "select size::int as size, finished_at is not null as finished from backups where user_id = $1 order by started_at desc limit 1",
+          [ottoId],
         )
       ).rows[0];
     },
   );
   check(
     "the sweep has the machine back its disk up into the store",
-    backedUp.includes('data-backups="1"') &&
-      backedUp.includes("backed up 0 min ago, 1 kept") &&
+    backedUp.includes('data-backups="3"') &&
+      backedUp.includes("backed up 0 min ago, 3 kept") &&
       backupRow?.finished === true &&
       backupRow.size > 0,
     `backup ${JSON.stringify(backupRow)}`,
@@ -1202,8 +1277,8 @@ try {
   });
   check(
     "a second sweep the same day makes no second backup",
-    (await computerPage(ottoNow)).includes('data-backups="1"'),
-    "still one",
+    (await computerPage(ottoNow)).includes('data-backups="3"'),
+    "still three",
   );
   await form("/files/delete", { path: "/", target: "/photos" }, ottoNow);
   await form("/files/delete", { path: "/", target: "/dusk.txt" }, ottoNow);

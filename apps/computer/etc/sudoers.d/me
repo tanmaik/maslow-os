@@ -1,0 +1,4 @@
+# The person may install and remove packages as root, without a password,
+# and nothing else.
+Defaults:me !authenticate
+me ALL=(root) NOPASSWD: /usr/bin/apt, /usr/bin/apt-get, /usr/bin/dpkg

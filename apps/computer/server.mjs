@@ -1,6 +1,6 @@
-// The computer's daemon: the volume at DATA_DIR served as a filesystem,
-// a shell on it over a WebSocket, and the ports on the machine reachable
-// from a browser. We list, make, move and delete under it with the
+// The computer's daemon: the person's home on the volume served as a
+// filesystem, a shell in it as them over a WebSocket, and the ports on
+// the machine reachable from a browser. We list, make, move and delete under it with the
 // machine's secret, put files on it from a URL, and hand a browser a
 // signed download, terminal or preview. Fly sets FLY_MACHINE_ID and
 // routes to us; a request that reached the wrong machine is replayed to
@@ -32,19 +32,23 @@ if (!COMPUTER_SECRET || !LINK_SECRET || !REPORT_URL || !FLY_MACHINE_ID) {
   process.exit(1);
 }
 // On a machine the volume holds the whole operating system at OS_ROOT,
-// copied there from the image on first boot; the person's files are
-// root's home inside it, and every shell runs inside it. On a laptop
-// there is no OS_ROOT: the directory is the disk and the shell is the
-// laptop's.
+// copied there from the image on first boot; the person is an ordinary
+// user in it, and their home is the disk served here and where every
+// shell opens, as them. On a laptop there is no OS_ROOT: the directory
+// is the disk and the shell is the laptop's.
 const OS_ROOT = process.env.OS_ROOT ? path.resolve(process.env.OS_ROOT) : null;
+const PERSON = { name: "me", uid: 1000, gid: 1000, home: "/home/me" };
 const ROOT = path.resolve(
-  process.env.DATA_DIR ?? (OS_ROOT ? path.join(OS_ROOT, "root") : "/data"),
+  process.env.DATA_DIR ?? (OS_ROOT ? path.join(OS_ROOT, PERSON.home) : "/data"),
 );
 const MOUNT =
   process.env.DISK_MOUNT ?? (OS_ROOT ? path.dirname(OS_ROOT) : ROOT);
+// Where a reset sets the old system aside.
+const OLD = OS_ROOT ? `${OS_ROOT}.old` : null;
 const PORT = Number(process.env.PORT) || 8080;
 const SHELL = process.env.SHELL_PATH ?? "/bin/bash";
-let ready = !OS_ROOT;
+// Why the disk cannot be served right now, or null.
+let busy = OS_ROOT ? "Your computer is being set up; a minute." : null;
 // Where a backup asks us for somewhere to put each part: beside the report.
 const BACKUP_URL = REPORT_URL.replace(/\/report$/, "/backup");
 const PART = 16 * 1024 * 1024;
@@ -276,10 +280,9 @@ async function backupCall(step, body) {
   return res.status === 204 ? {} : res.json();
 }
 
-// The whole disk as one compressed archive, streamed to the bucket in
+// The whole home as one compressed archive, streamed to the bucket in
 // parts; each part goes where the app says. A machine suspended midway
 // carries on when it wakes, since each part is signed afresh.
-let backingUp = null;
 async function backup() {
   const { id } = await backupCall("begin", {});
   const parts = [];
@@ -337,6 +340,19 @@ async function backup() {
   }
 }
 
+// A backup runs on its own once asked for; asking while one runs joins
+// the one running.
+let backingUp = null;
+function startBackup() {
+  if (!backingUp) {
+    backingUp = backup().finally(() => {
+      backingUp = null;
+    });
+    backingUp.catch((err) => console.error(`backup failed: ${err.message}`));
+  }
+  return backingUp;
+}
+
 // The disk from an archive, onto an empty disk only: nothing is written
 // over what is there. A shell's own dotfiles do not make a disk full, and
 // one the archive also has stays as it is. The archive unpacks into a folder of
@@ -352,6 +368,12 @@ const run = (cmd, args) =>
       code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)),
     );
   });
+// What the daemon makes in the home is the person's, never root's.
+const own = async (p, deep = false) => {
+  if (!OS_ROOT) return;
+  if (deep) await run("chown", ["-R", `${PERSON.uid}:${PERSON.gid}`, p]);
+  else await fs.lchown(p, PERSON.uid, PERSON.gid);
+};
 let restoring = null;
 let lastRestore = null;
 async function restore(url) {
@@ -376,6 +398,7 @@ async function restore(url) {
     await done;
     // A link in an archive could point anywhere; none is put back.
     await run("find", [dir, "-type", "l", "-delete"]);
+    await own(dir, true);
     await exclusive(async () => {
       const have = new Set(await fs.readdir(ROOT));
       if (visible([...have]).length)
@@ -494,6 +517,7 @@ async function pull(target, url, size) {
       createWriteStream(tmp),
     );
     if (got !== size) throw new Refused(400, `${got} of ${size} bytes`);
+    await own(tmp);
     // Into place only if nothing took the name meanwhile: a link refuses
     // to replace, where a rename would.
     try {
@@ -591,8 +615,10 @@ async function handle(req, res) {
   }
   if (!same(req.headers.authorization ?? "", `Bearer ${COMPUTER_SECRET}`))
     return json(401, { error: "no" });
-  if (!ready)
-    return json(503, { error: "Your computer is being set up; a minute." });
+  // How a reset is going is answerable while it goes.
+  if (url.pathname === "/fs/reset" && req.method === "GET")
+    return json(200, { running: Boolean(resetting), last: lastReset });
+  if (busy) return json(503, { error: busy });
 
   // What is on the disk, biggest first: every folder and file under the
   // root by what it holds, a couple of levels down, and where the
@@ -680,20 +706,35 @@ async function handle(req, res) {
     await report();
     return json(200, { ok: true });
   }
-  // A backup runs on its own once asked for; asking again while one runs
-  // is answered with the one running.
   if (url.pathname === "/fs/backup" && req.method === "POST") {
-    if (!backingUp) {
-      backingUp = backup().finally(() => {
-        backingUp = null;
-      });
-      backingUp.catch((err) => console.error(`backup failed: ${err.message}`));
-    }
-    const wait = url.searchParams.has("wait");
-    if (wait) {
-      const done = await backingUp.catch((err) => ({ error: err.message }));
-      return json(done.error ? 500 : 200, done);
-    }
+    const running = startBackup();
+    if (!url.searchParams.has("wait")) return json(202, { started: true });
+    const done = await running.catch((err) => ({ error: err.message }));
+    return json(done.error ? 500 : 200, done);
+  }
+  // A reset runs on its own once asked for: a backup of the home, then a
+  // fresh operating system around it; the page asks how it is going, and
+  // the last one's outcome is kept: done, refused with nothing changed,
+  // or stopped partway.
+  if (url.pathname === "/fs/reset" && req.method === "POST") {
+    const { backedUp } = await readJson(req);
+    if (!resetting)
+      resetting = reset(backedUp === true)
+        .then(() => {
+          lastReset = { ok: true, at: Date.now() };
+        })
+        .catch((err) => {
+          lastReset = {
+            ok: false,
+            at: Date.now(),
+            ...(err instanceof Refused
+              ? { refused: err.message }
+              : { error: err.message }),
+          };
+        })
+        .finally(() => {
+          resetting = null;
+        });
     return json(202, { started: true });
   }
   // A restore runs on its own once asked for; the page asks how it is
@@ -764,6 +805,7 @@ async function handle(req, res) {
       await fs.mkdir(abs).catch((err) => {
         if (err.code !== "EEXIST") throw err;
       });
+      await own(abs);
       return json(200, { ok: true });
     });
   }
@@ -778,7 +820,8 @@ async function handle(req, res) {
         return json(404, { error: "nothing there" });
       if (await fs.stat(to).catch(() => null))
         return json(409, { error: "something is there already" });
-      await fs.mkdir(path.dirname(to), { recursive: true });
+      const made = await fs.mkdir(path.dirname(to), { recursive: true });
+      if (made) await own(made, true);
       await fs.rename(from, to);
       return json(200, { ok: true });
     });
@@ -839,22 +882,42 @@ try {
 // A shell is a session: it lives on when its socket drops, keeps the last
 // of its screen, and a socket for the same session picks it up. One left
 // alone for half an hour is closed. The local shell gets a small
-// environment of its own, not the daemon's.
+// environment of its own, not the daemon's. Nothing said to a shell that
+// has exited, or to a socket that has closed, can bring the daemon down.
 const sessions = new Map();
+const quietly = (fn) => {
+  try {
+    fn();
+  } catch (err) {
+    console.error(`shell: ${err.message}`);
+  }
+};
 const SCROLLBACK = 200_000;
 function spawnShell() {
-  // Inside the operating system on the volume, at home, as root.
+  // Inside the operating system on the volume, at home, as the person.
   return OS_ROOT
     ? pty.spawn(
         "/usr/sbin/chroot",
-        [OS_ROOT, "/usr/bin/env", "-C", "/root", "HOME=/root", SHELL, "-l"],
+        [
+          `--userspec=${PERSON.uid}:${PERSON.gid}`,
+          OS_ROOT,
+          "/usr/bin/env",
+          "-C",
+          PERSON.home,
+          SHELL,
+          "-l",
+        ],
         {
           name: "xterm-256color",
           cols: 100,
           rows: 30,
           cwd: "/",
           env: {
-            PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            PATH: "/usr/local/bin:/usr/bin:/bin",
+            HOME: PERSON.home,
+            USER: PERSON.name,
+            LOGNAME: PERSON.name,
+            SHELL,
             TERM: "xterm-256color",
             LANG: "C.UTF-8",
           },
@@ -891,8 +954,9 @@ function attach(ws, id) {
         session.ws.send(data);
     });
     shell.onExit(() => {
+      session.gone = true;
       sessions.delete(id);
-      session.ws?.close(1000, "The shell exited.");
+      quietly(() => session.ws?.close(1000, "The shell exited."));
     });
   }
   if (session.idle) clearTimeout(session.idle);
@@ -901,7 +965,8 @@ function attach(ws, id) {
   session.ws = ws;
   if (session.screen) ws.send(session.screen);
   ws.on("message", (data, isBinary) => {
-    if (isBinary) return session.shell.write(data.toString());
+    if (session.gone) return;
+    if (isBinary) return quietly(() => session.shell.write(data.toString()));
     try {
       const { resize } = JSON.parse(data.toString());
       if (resize) session.shell.resize(resize[0], resize[1]);
@@ -911,7 +976,7 @@ function attach(ws, id) {
     if (session.ws !== ws) return;
     session.ws = null;
     session.idle = setTimeout(() => {
-      if (!session.ws) session.shell.kill();
+      if (!session.ws) quietly(() => session.shell.kill());
     }, 30 * 60_000);
   });
 }
@@ -949,7 +1014,7 @@ function upgrade(req, socket, head) {
     if (term.replay) return replay(term.replay);
     if (term.refused) return refuse(403, "Forbidden");
     if (!pty) return refuse(501, "No terminal on this machine");
-    if (!ready) return refuse(503, "Being set up");
+    if (busy) return refuse(503, "Not right now");
     return shells.handleUpgrade(req, socket, head, (ws) =>
       shells.emit("connection", ws, req),
     );
@@ -969,17 +1034,29 @@ function upgrade(req, socket, head) {
   target.on("error", () => refuse(502, "Bad Gateway"));
 }
 
-// First boot: the image's own root goes onto the volume, once; every
-// boot: the kernel's views are bound inside it and its DNS is ours, so
-// what runs in there is a whole machine.
+// The operating system on the volume, whole and entered, on every boot:
+// a reset that was cut off is finished, the image's own root goes onto
+// the volume once, the person's account is in it, and the kernel's views
+// and the deployment's few files are bound in, so what runs in there is
+// a whole machine.
 async function settle() {
   if (!OS_ROOT) return;
+  // A system set aside by a reset: its home comes over, the rest goes.
+  if (await fs.stat(OLD).catch(() => null)) {
+    const home = path.join(OLD, PERSON.home);
+    if (await fs.stat(home).catch(() => null)) {
+      await fs.rm(ROOT, { recursive: true, force: true });
+      await fs.mkdir(path.dirname(ROOT), { recursive: true });
+      await fs.rename(home, ROOT);
+    }
+    await run("rm", ["-rf", OLD]);
+  }
   // The marker sits beside the operating system, out of the shell's own
   // root, and a copy that was cut off is finished, never wiped: nothing a
   // person put there is deleted by a boot.
-  const done = path.join(path.dirname(OS_ROOT), ".os-ready");
+  const done = path.join(MOUNT, ".os-ready");
   if (!(await fs.stat(done).catch(() => null))) {
-    console.log("first boot: copying the operating system onto the volume");
+    console.log("copying the operating system onto the volume");
     await fs.mkdir(OS_ROOT, { recursive: true });
     // One copy, straight: the image's root minus the kernel's views, the
     // volume itself and the daemon.
@@ -996,34 +1073,141 @@ async function settle() {
     await fs.chmod(path.join(OS_ROOT, "tmp"), 0o1777);
     await fs.writeFile(done, new Date().toISOString());
   }
+  await person();
   for (const d of ["proc", "sys", "dev"])
     await run("mount", ["--rbind", `/${d}`, path.join(OS_ROOT, d)]);
-  await fs.copyFile("/etc/resolv.conf", path.join(OS_ROOT, "etc/resolv.conf"));
-  await fs.mkdir(ROOT, { recursive: true });
-  ready = true;
+  // The deployment's own: its DNS and hosts, the sudo rule, the profile
+  // and pip's setting, current from the image on every boot.
+  for (const [file, mode] of [
+    ["etc/resolv.conf", 0o644],
+    ["etc/hosts", 0o644],
+    ["etc/sudoers.d/me", 0o440],
+    ["etc/profile.d/me.sh", 0o644],
+    ["etc/pip.conf", 0o644],
+  ]) {
+    await fs.copyFile(`/${file}`, path.join(OS_ROOT, file));
+    await fs.chmod(path.join(OS_ROOT, file), mode);
+  }
+  busy = null;
   console.log("the operating system on the volume is up");
 }
 
-// A root that cannot be made is a machine that cannot serve: said now.
-await fs.mkdir(ROOT, { recursive: true });
-server.listen(PORT, "0.0.0.0", () =>
-  console.log(`serving ${ROOT} on ${PORT} as ${FLY_MACHINE_ID}`),
-);
+// The person's account in the operating system: `me`, uid 1000, at
+// /home/me. A system copied from an older image has the base image's
+// node user at that id and the person's files in root's home: the user
+// is renamed and the files moved, once. Root's own dotfiles that were
+// never touched stay behind, so the home keeps its own.
+async function person() {
+  const passwd = await fs.readFile(path.join(OS_ROOT, "etc/passwd"), "utf8");
+  if (!new RegExp(`^${PERSON.name}:`, "m").test(passwd)) {
+    const inside = (...args) => run("chroot", [OS_ROOT, ...args]);
+    const move = (await fs.stat(ROOT).catch(() => null)) ? [] : ["-m"];
+    if (/^node:/m.test(passwd)) {
+      await inside(
+        "usermod",
+        "-l",
+        PERSON.name,
+        "-d",
+        PERSON.home,
+        ...move,
+        "node",
+      );
+      await inside("groupmod", "-n", PERSON.name, "node");
+    } else
+      await inside(
+        "useradd",
+        "-U",
+        "-u",
+        String(PERSON.uid),
+        "-d",
+        PERSON.home,
+        ...move,
+        "-s",
+        "/bin/bash",
+        PERSON.name,
+      );
+    await fs.mkdir(ROOT, { recursive: true });
+    const root = path.join(OS_ROOT, "root");
+    const untouched = async (name) =>
+      fs
+        .readFile(path.join(root, name))
+        .then(async (a) => a.equals(await fs.readFile(`/root/${name}`)))
+        .catch(() => false);
+    for (const name of await fs.readdir(root).catch(() => [])) {
+      if (await untouched(name)) continue;
+      await fs.rm(path.join(ROOT, name), { recursive: true, force: true });
+      await fs.rename(path.join(root, name), path.join(ROOT, name));
+    }
+    console.log("the person's files moved from root's home to theirs");
+    await own(ROOT, true);
+  }
+  await fs.mkdir(ROOT, { recursive: true });
+  await own(ROOT);
+}
+
+// A fresh operating system from the image around the home as it is: the
+// home is backed up first and the reset waits for that, refusing if the
+// backup did not finish, unless the app says one from the last hour
+// stands; then every shell is closed, the kernel's views
+// let go of, the old system set aside, and the boot's own settling makes
+// the new one and brings the home over. Cut off anywhere, the next boot
+// finishes it. A laptop has no system to reset.
+let resetting = null;
+let lastReset = null;
+async function reset(backedUp) {
+  if (!backedUp)
+    await startBackup().catch((err) => {
+      throw new Refused(
+        409,
+        `The backup before the reset failed (${err.message})`,
+      );
+    });
+  if (!OS_ROOT)
+    throw new Refused(
+      409,
+      "There is no system on this computer to reset: it has none of its own",
+    );
+  busy = "Your computer's system is being reset; a minute.";
+  try {
+    for (const s of sessions.values()) quietly(() => s.shell.kill());
+    for (const d of ["dev", "sys", "proc"])
+      await run("umount", ["-l", "-R", path.join(OS_ROOT, d)]);
+    await fs.rm(path.join(MOUNT, ".os-ready"), { force: true });
+    await fs.rename(OS_ROOT, OLD);
+  } catch (err) {
+    busy = `The system could not be reset: ${err.message}. It is put right at the next boot.`;
+    throw err;
+  }
+  // A system that will not settle within a few tries is a failed reset,
+  // said as such; the next boot goes on trying.
+  await settleUntilDone(5).catch((err) => {
+    busy = `The system could not be reset: ${err.message}. It is put right at the next boot.`;
+    throw err;
+  });
+}
+
 // Tried until it works: a boot that cannot set the operating system up
 // says so and tries again in a minute, rather than dying and being
 // restarted into the same failure.
-(async () => {
-  for (;;) {
+async function settleUntilDone(tries = Infinity) {
+  for (let n = 1; ; n++) {
     try {
-      await settle();
-      return;
+      return await settle();
     } catch (err) {
       console.error(
         `the operating system could not be set up: ${err.message}; again in a minute`,
       );
+      if (n >= tries) throw err;
       await new Promise((r) => setTimeout(r, 60_000));
     }
   }
-})();
+}
+
+// A root that cannot be made is a machine that cannot serve: said now.
+if (!OS_ROOT) await fs.mkdir(ROOT, { recursive: true });
+server.listen(PORT, "0.0.0.0", () =>
+  console.log(`serving ${ROOT} on ${PORT} as ${FLY_MACHINE_ID}`),
+);
+settleUntilDone();
 await report();
 setInterval(report, 5 * 60 * 1000).unref();

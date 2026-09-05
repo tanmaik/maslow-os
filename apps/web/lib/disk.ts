@@ -202,6 +202,21 @@ export const disk = {
       running: boolean;
       last: { ok: boolean; error?: string; at: number } | null;
     }>(p, "GET", "/fs/restore"),
+  // A fresh operating system around the home as it is, after a backup of
+  // it unless one from the last hour stands; the machine carries on alone
+  // and says how it is going.
+  reset: (p: Principal, backedUp: boolean) =>
+    call<{ started: boolean }>(p, "POST", "/fs/reset", { backedUp }),
+  resetting: (p: Principal) =>
+    call<{
+      running: boolean;
+      last: {
+        ok: boolean;
+        refused?: string;
+        error?: string;
+        at: number;
+      } | null;
+    }>(p, "GET", "/fs/reset"),
   // Asks a machine to back itself up; it carries on alone. For the sweep,
   // which has no person.
   async backupIn(orgId: string, c: Computer): Promise<void> {

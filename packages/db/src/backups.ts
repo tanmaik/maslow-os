@@ -51,11 +51,12 @@ export async function beginBackup(
 ): Promise<string | null> {
   return asOrg(c.orgId, async (q) => {
     await q.query("select set_config('app.member_id', $1, true)", [c.userId]);
-    // One at a time per person: the check and the insert are one.
+    // One at a time per person, and none within an hour of the last: the
+    // check and the insert are one. One that never finished within a day
+    // is not on its way.
     await q.query("select pg_advisory_xact_lock(hashtext($1))", [c.userId]);
-    // One a day per person: one on its way, or one finished today, is it.
     const running = await q.query(
-      "select 1 from backups where user_id = $1 and deleted_at is null and (finished_at is null or finished_at > now() - interval '23 hours') and started_at > now() - interval '1 day'",
+      "select 1 from backups where user_id = $1 and deleted_at is null and ((finished_at is null and started_at > now() - interval '1 day') or finished_at > now() - interval '1 hour')",
       [c.userId],
     );
     if (running.rowCount) return null;
@@ -123,6 +124,19 @@ export async function backupsOf(p: Principal): Promise<Backup[]> {
           `select ${COLUMNS} from backups where finished_at is not null and deleted_at is null order by finished_at desc`,
         )
       ).rows,
+  );
+}
+
+// The person's latest backup, finished or on its way.
+export async function lastBackupOf(p: Principal): Promise<Backup | null> {
+  return asPerson(
+    p,
+    async (q) =>
+      (
+        await q.query<Backup>(
+          `select ${COLUMNS} from backups where deleted_at is null order by started_at desc limit 1`,
+        )
+      ).rows[0] ?? null,
   );
 }
 

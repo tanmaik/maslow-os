@@ -9,6 +9,7 @@ import {
 import { redirect } from "next/navigation";
 import { after } from "next/server";
 
+import { ComputerActions } from "@/components/computer-actions";
 import { FileActions } from "@/components/file-actions";
 import { NewFolder } from "@/components/new-folder";
 import {
@@ -111,6 +112,42 @@ export default async function Computer({
   // The person opened their computer: the next start is theirs.
   if (!s)
     return <Note>Your filesystem could not be made. Try again shortly.</Note>;
+  // A reset asked for: the page says so while it goes, and how it went —
+  // done, refused with nothing changed, stopped partway, or unreadable.
+  // Never nothing.
+  let resetSaid: React.ReactNode = null;
+  let resetWrong = false;
+  if (params.reset === "started") {
+    try {
+      const r = await disk.resetting(p);
+      // While it goes the disk is not served; nothing else is asked.
+      if (r.running)
+        return (
+          <Note>
+            <span data-resetting>
+              The system is being reset: a backup of your home first, then a
+              fresh system around it. Open this page again in a minute.
+            </span>
+          </Note>
+        );
+      if (r.last?.ok)
+        resetSaid = (
+          <>
+            System reset at <LocalTime at={new Date(r.last.at)} />; your files
+            are as they were.
+          </>
+        );
+      else if (r.last?.refused)
+        resetSaid = `${r.last.refused}, so nothing was changed.`;
+      else if (r.last)
+        resetSaid = `The reset stopped partway: ${r.last.error}. The next boot finishes it.`;
+      resetWrong = Boolean(r.last && !r.last.ok);
+    } catch (err) {
+      if (!(err instanceof DiskError)) throw err;
+      resetSaid = `How the reset went could not be read: ${err.message}`;
+      resetWrong = true;
+    }
+  }
   let listing: Awaited<ReturnType<typeof disk.list>>;
   let tree: Tree;
   let ports: number[];
@@ -146,7 +183,7 @@ export default async function Computer({
   const backups = await backupsOf(p);
   const latest = backups[0];
   const restoring = entries.length === 0 ? await disk.restoring(p) : null;
-  const notice = said(params);
+  const notice = resetSaid ?? said(params);
   const ago = (d: Date) => {
     const m = Math.round((Date.now() - d.getTime()) / 60000);
     return m < 60
@@ -207,12 +244,15 @@ export default async function Computer({
                   })}
                 </BreadcrumbList>
               </Breadcrumb>
-              <NewFolder at={at} />
+              <span className="flex items-center gap-2">
+                <NewFolder at={at} />
+                <ComputerActions at={at} />
+              </span>
             </div>
 
             {notice && (
               <p
-                className={`mt-3 text-sm ${params.error ? "text-destructive" : "text-muted-foreground"}`}
+                className={`mt-3 text-sm ${params.error || resetWrong ? "text-destructive" : "text-muted-foreground"}`}
                 data-notice
               >
                 {notice}
@@ -478,6 +518,8 @@ function said(params: Record<string, string | undefined>): string | null {
     "deleted=gone": "That was already gone.",
     "restored=gone": "That backup is gone.",
     "restored=started": "The backup is being put back.",
+    "backup=started":
+      "A backup is being taken. The bar below says when it is done.",
   };
   for (const [k, v] of Object.entries(params))
     if (v && table[`${k}=${v}`]) return table[`${k}=${v}`]!;

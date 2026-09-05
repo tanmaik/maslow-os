@@ -9,7 +9,11 @@ import {
   finishBackup,
   memberLive,
 } from "@placeholder/db/backups";
-import { computersIn, noteCause } from "@placeholder/db/computers";
+import {
+  computersIn,
+  noteCause,
+  type Computer,
+} from "@placeholder/db/computers";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -193,6 +197,13 @@ export async function abort(m: Machine, id: string): Promise<void> {
   if (b) await drop(m.orgId, b);
 }
 
+// Has this computer back itself up now, and notes that as why the
+// machine is awake; the machine carries on alone.
+export async function backUp(orgId: string, c: Computer): Promise<void> {
+  await noteCause(orgId, c, "backup");
+  await disk.backupIn(orgId, c);
+}
+
 // The sweep's part: every machine backs up once a day, the eighth and
 // older go, and one that never finished within a day goes too.
 export async function sweepBackups(orgId: string, now: Date): Promise<void> {
@@ -207,12 +218,9 @@ export async function sweepBackups(orgId: string, now: Date): Promise<void> {
     if (!c.machineId || running.has(c.userId)) continue;
     const last = lastFinished.get(c.userId);
     if (last && now.getTime() - last.getTime() < 86400_000) continue;
-    try {
-      await noteCause(orgId, c, "backup");
-      await disk.backupIn(orgId, c);
-    } catch (err) {
-      console.error(`backup ${c.machineId}: ${(err as Error).message}`);
-    }
+    await backUp(orgId, c).catch((err) =>
+      console.error(`backup ${c.machineId}: ${(err as Error).message}`),
+    );
   }
 }
 
