@@ -1,10 +1,11 @@
 "use client";
 
-import { ChevronsUpDown, UserRound } from "lucide-react";
+import { ChevronsUpDown, MessageSquarePlus, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { deployment } from "@/lib/deployment";
 
+import { Annotations } from "@/components/annotations";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -35,9 +36,13 @@ type Props = {
 const onPill =
   "text-primary-foreground/85 hover:bg-primary-foreground/12 hover:text-primary-foreground aria-expanded:bg-primary-foreground/12 aria-expanded:text-primary-foreground";
 
+// Whether the page is being annotated, remembered across page loads.
+const ANNOTATING = "dev:annotating";
+
 // A pill in the corner: closed, it is who you are, with a count of what is
-// faked; open, it says where this is, what each vendor is, and lets you be
-// someone else on the page you are looking at.
+// faked; open, it says where this is, what each vendor is, lets you be
+// someone else on the page you are looking at, and turns annotating on
+// and off.
 export function DevPill({
   where,
   vendors,
@@ -48,7 +53,16 @@ export function DevPill({
 }: Props) {
   const [open, setOpen] = useState(false);
   const [here, setHere] = useState("");
-  useEffect(() => setHere(location.pathname + location.search), []);
+  const [annotating, setAnnotating] = useState(false);
+  useEffect(() => {
+    setHere(location.pathname + location.search);
+    setAnnotating(localStorage.getItem(ANNOTATING) === "yes");
+  }, []);
+  const toggleAnnotating = () => {
+    const next = !annotating;
+    localStorage.setItem(ANNOTATING, next ? "yes" : "no");
+    setAnnotating(next);
+  };
   const faked = Object.entries(vendors).filter(([, v]) => v === null);
   const fakedSaid =
     faked.length > 0 ? `${faked.map(([k]) => k).join(", ")} faked` : null;
@@ -140,8 +154,28 @@ export function DevPill({
               )}
             </PopoverContent>
           </Popover>
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-pressed={annotating}
+            title={
+              annotating
+                ? "Stop annotating the page"
+                : "Annotate the page for the agent"
+            }
+            onClick={toggleAnnotating}
+            className={cn(
+              onPill,
+              "rounded-full",
+              annotating && "bg-primary-foreground/12 text-primary-foreground",
+            )}
+          >
+            <MessageSquarePlus />
+            Annotate
+          </Button>
         </div>
       </div>
+      {annotating && <Annotations />}
       <Button
         variant="ghost"
         size="icon"
