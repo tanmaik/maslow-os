@@ -60,6 +60,23 @@ and the pill says so.
 Production refuses to start without WorkOS, mail, storage, analytics, or the
 sweep's `CRON_SECRET`; with computers, without `LINK_SECRET` too.
 
+## The machine image
+
+Every computer boots from the image `IMAGE` names in `apps/web/lib/fly.ts`.
+When the daemon in `apps/computer` changes, the label goes up by one and the
+image is built and pushed from a laptop with your own Fly login, since the
+dev token reaches only the preview app and no production credential leaves
+production:
+
+```
+cd apps/computer && fly deploy --build-only --push --remote-only --image-label vN
+```
+
+`vN` is one more than the label `IMAGE` names today. Machines are made
+through the Machines API, never by `fly deploy`; the push and the change to
+`IMAGE` land in the same pull request, the push first, so no machine is ever
+made from an image that does not exist.
+
 ## Dev secrets
 
 `.env.development` holds every dev secret — WorkOS, Resend, the bucket, the

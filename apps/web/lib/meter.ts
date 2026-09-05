@@ -42,13 +42,31 @@ const later = (a: Date, b: Date) => (a > b ? a : b);
 const RUNNING = new Set(["started", "reported", "start"]);
 const OFF = new Set(["stopped", "suspended", "stop", "failed", "destroyed"]);
 
+// The bytes the member's brain rows hold now: a point sample, since the
+// rows have no size history of their own, and the one scan of the brain
+// the meter makes.
+async function brainBytes(q: Query, userId: string): Promise<number> {
+  return Number(
+    (
+      await q.query<{ bytes: string }>(
+        `select coalesce((select sum(pg_column_size(r.*)) from records r), 0)
+              + coalesce((select sum(pg_column_size(e.*)) from edges e), 0)
+              + coalesce((select sum(pg_column_size(v.*)) from events v where v.person_id = $1), 0) as bytes`,
+        [userId],
+      )
+    ).rows[0]!.bytes,
+  );
+}
+
 // Everything a member consumed between from and to, from what the rows
-// say. Runs inside an org scope with app.member_id set to the member.
+// say. Runs inside an org scope with app.member_id set to the member. The
+// brain's bytes are taken as given when the caller has them already.
 export async function measure(
   q: Query,
   userId: string,
   from: Date,
   to: Date,
+  brain?: number,
 ): Promise<Measure[]> {
   const out: Measure[] = [];
   const c = (
@@ -232,18 +250,8 @@ export async function measure(
       to,
     });
   }
-  // Brain: the bytes the member's rows hold now, for the window. A point
-  // sample; the rows have no size history of their own.
-  const bytes = Number(
-    (
-      await q.query<{ bytes: string }>(
-        `select coalesce((select sum(pg_column_size(r.*)) from records r), 0)
-              + coalesce((select sum(pg_column_size(e.*)) from edges e), 0)
-              + coalesce((select sum(pg_column_size(v.*)) from events v where v.person_id = $1), 0) as bytes`,
-        [userId],
-      )
-    ).rows[0]!.bytes,
-  );
+  // Brain: what the rows hold now, for the window.
+  const bytes = brain ?? (await brainBytes(q, userId));
   if (bytes > 0)
     out.push({
       resource: "brain",
@@ -485,9 +493,11 @@ export async function live(
         )
       ).rows.map((r) => [r.resource, r.last.getTime()]),
     );
+    // The brain is scanned once for every window below.
+    const brain = await brainBytes(q, p.userId);
     let unbilled = 0;
     for (const t of new Set([monthStart.getTime(), ...lasts.values()]))
-      unbilled += (await measure(q, p.userId, new Date(t), now))
+      unbilled += (await measure(q, p.userId, new Date(t), now, brain))
         .filter((m) => (lasts.get(m.resource) ?? monthStart.getTime()) === t)
         .reduce((n, m) => n + m.quantity * m.price, 0);
     // What each resource is doing at this instant, from a short window: a
@@ -498,6 +508,7 @@ export async function live(
       p.userId,
       new Date(now.getTime() - 60_000),
       now,
+      brain,
     );
     const active = minute
       .filter((m) => m.live > 0)

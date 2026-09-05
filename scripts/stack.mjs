@@ -4,7 +4,6 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { config as decrypt } from "@dotenvx/dotenvx";
 
@@ -17,7 +16,8 @@ import {
 import { orgs, seed } from "../packages/db/src/seed.ts";
 import { seedBrain } from "../packages/brain/src/seed.ts";
 
-export const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+import { root } from "./root.mjs";
+export { root };
 
 export function freePort() {
   return new Promise((resolve, reject) => {

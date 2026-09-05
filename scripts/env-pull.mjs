@@ -4,11 +4,10 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 
 import { ids } from "./ids.mjs";
+import { root } from "./root.mjs";
 
-const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const pulled = path.join(root, ".local", "env-pull");
 fs.mkdirSync(path.dirname(pulled), { recursive: true });
 
