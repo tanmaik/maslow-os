@@ -7,6 +7,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { dollars, rate, SOURCE } from "@/lib/prices";
 
 type Live = {
   at: string;
@@ -22,15 +23,11 @@ const projected = (month: number, ratePerHour: number) => {
   return month + (ratePerHour * (end - now.getTime())) / 3600_000;
 };
 
-const dollars = (n: number) =>
-  n < 0.01 && n > 0 ? `$${n.toFixed(6)}` : `$${n.toFixed(4)}`;
-
-// The cost of being here, ticking. Reads the meter every ten seconds and
-// advances between reads at the rate the last minute showed; hover for
-// what is ticking and how fast.
+// The cost of being here, as one figure: the month at this rate. Reads
+// the meter every ten seconds; hover for the month so far, the rate, and
+// the top three sources.
 export function LiveMeter() {
   const [live, setLive] = useState<Live | null>(null);
-  const [shown, setShown] = useState(0);
 
   useEffect(() => {
     let stop = false;
@@ -41,10 +38,7 @@ export function LiveMeter() {
       if (r.status === 401 || !r.ok) return;
       const l = (await r.json()) as Live;
       // Only the newest read may speak; a slow one is ignored.
-      if (!stop && mine === reads) {
-        setLive(l);
-        setShown(l.month);
-      }
+      if (!stop && mine === reads) setLive(l);
     };
     void read();
     const poll = setInterval(read, 10_000);
@@ -54,20 +48,17 @@ export function LiveMeter() {
     };
   }, []);
 
-  useEffect(() => {
-    if (!live) return;
-    const tick = setInterval(
-      () => setShown((s) => s + live.ratePerHour / 3600),
-      1000,
-    );
-    return () => clearInterval(tick);
-  }, [live]);
-
   if (!live) return null;
   const estimate = projected(live.month, live.ratePerHour);
   const top = [...live.active]
     .sort((x, y) => y.ratePerHour - x.ratePerHour)
-    .slice(0, 4);
+    .slice(0, 3);
+  const row = (label: string, value: string) => (
+    <li key={label} className="flex justify-between gap-4">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="font-mono tabular-nums">{value}</span>
+    </li>
+  );
   return (
     <HoverCard>
       <HoverCardTrigger
@@ -80,28 +71,21 @@ export function LiveMeter() {
           />
         }
       >
-        {dollars(shown)} / ≈{dollars(estimate)} a month
+        {estimate < 0.005
+          ? "under 1¢ / month"
+          : `≈ ${dollars(estimate)} / month`}
       </HoverCardTrigger>
-      <HoverCardContent align="end" className="w-72 text-sm">
-        <p className="mb-2 font-medium">Top sources of burn</p>
-        {top.length === 0 ? (
-          <p className="text-muted-foreground">Nothing is ticking.</p>
-        ) : (
-          <ul className="space-y-1">
-            {top.map((a) => (
-              <li key={a.resource} className="flex justify-between gap-2">
-                <span>{a.what}</span>
-                <span className="text-muted-foreground font-mono tabular-nums">
-                  {dollars(a.ratePerHour)}/h
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-        <p className="text-muted-foreground mt-2 text-xs">
-          This month so far, then the month at this rate. Everything is on the
-          usage page.
-        </p>
+      <HoverCardContent align="end" className="w-64 text-sm">
+        <ul className="space-y-1">
+          {row("So far this month", dollars(live.month))}
+          {row("Right now", rate(live.ratePerHour))}
+          {top.map((a) =>
+            row(
+              SOURCE[a.resource as keyof typeof SOURCE] ?? a.resource,
+              rate(a.ratePerHour),
+            ),
+          )}
+        </ul>
       </HoverCardContent>
     </HoverCard>
   );

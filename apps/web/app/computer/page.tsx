@@ -32,18 +32,21 @@ import {
 import { Terminal } from "@/components/terminal";
 import { Uploader } from "@/components/uploader";
 import { backupsOf } from "@placeholder/db/backups";
-import { computerOf, noteEvent } from "@placeholder/db/computers";
+import {
+  computerOf,
+  computersAllowed,
+  lastResizeIn,
+  noteEvent,
+} from "@placeholder/db/computers";
 
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
-import { computersAllowed } from "@placeholder/db/computers";
-
-import { ensureFilesystem, status, wanted } from "@/lib/computer";
+import { ensureFilesystem, sizing, status } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
 import { cleanPath, filesOf, whole } from "@/lib/files";
-import { dollars, live, sweepIfDue } from "@/lib/meter";
-import { LADDER, sizeName } from "@/lib/prices";
+import { live, sweepIfDue } from "@/lib/meter";
+import { dollars, parseSize, sizeName } from "@/lib/prices";
 import { principal } from "@/lib/session";
 
 const gb = (n: number) =>
@@ -57,15 +60,16 @@ const gb = (n: number) =>
 
 const STATES: Record<string, string> = {
   started: "Running",
-  stopped: "Off",
-  suspended: "Asleep",
+  stopped: "Stopped",
+  suspended: "Stopped",
   starting: "Starting",
   stopping: "Stopping",
-  suspending: "Falling asleep",
+  suspending: "Stopping",
   created: "Built, not yet started",
   building: "Being built",
   failed: "The build failed",
-  "no-compute": "Off",
+  "no-compute": "Stopped",
+  "powered-off": "Powered off",
   unknown: "Fly is not answering",
 };
 
@@ -85,7 +89,9 @@ export const maxDuration = 60;
 // The person's computer, laid out as an editor lays out a project: every
 // folder down the left, the one being looked at in the middle, a shell on
 // the disk and the ports the machine serves below it, and what the
-// machine is doing along the bottom. Opening the page wakes the machine.
+// machine is doing along the bottom. The machine was made at sign-in and
+// runs until the person powers it off; the page reaches it, which starts
+// it if Fly ever stopped it.
 export default async function Computer({
   searchParams,
 }: {
@@ -98,7 +104,8 @@ export default async function Computer({
   if (!(await computersAllowed(p)))
     return (
       <Note>
-        Computers are off for this org. An owner can turn them on in{" "}
+        Computers are off for this org: an owner turned them off. An owner can
+        turn them on again in{" "}
         <a href="/settings" className="underline">
           Settings
         </a>
@@ -120,9 +127,25 @@ export default async function Computer({
     if (made) await noteEvent(p.orgId, made, "opened");
     s = await status(p);
   }
-  // The person opened their computer: the next start is theirs.
   if (!s)
     return <Note>Your filesystem could not be made. Try again shortly.</Note>;
+  // Powered off by the person: the disk is kept and nothing is read from
+  // it; one button powers it on.
+  if (s.computer.offAt)
+    return (
+      <Note>
+        <span data-state="powered-off">
+          Your computer is powered off. Its disk and files are kept; only the
+          disk is charged.
+        </span>
+        <form action="/computer/on" method="post" className="mt-4">
+          <input type="hidden" name="path" value="/" />
+          <Button type="submit" data-power-on>
+            Power on
+          </Button>
+        </form>
+      </Note>
+    );
   // A reset asked for: the page says so while it goes, and how it went —
   // done, refused with nothing changed, stopped partway, or unreadable.
   // Never nothing.
@@ -180,10 +203,22 @@ export default async function Computer({
   }
   const entries = listing.entries.filter((e) => shown(e.name));
   const space = listing.disk;
-  // The row as it is now that the machine has answered: a look that let an
-  // outgrown machine go has made one at the size wanted since.
+  // The row as it is now that the machine has answered, and the ladder's
+  // word on it.
   const computer = (await computerOf(p)) ?? s.computer;
-  const wants = wanted(computer);
+  const lastResize = await lastResizeIn(p.orgId, computer.id);
+  const size = sizing(computer, lastResize?.at ?? null);
+  const load = computer.need?.load?.at(-1);
+  const free = computer.need?.memory?.free.at(-1);
+  const gbOf = (s: string) => `${parseSize(s).memoryMb / 1024} GB`;
+  // A size-up in the last day is said, so nothing ran out unnoticed; a
+  // size-down is quiet.
+  const sizedUp =
+    lastResize &&
+    lastResize.why !== "room-to-spare" &&
+    Date.now() - lastResize.at.getTime() < 24 * 3600_000
+      ? lastResize
+      : null;
   // Files still on their way to this folder, shown in it until they land.
   const arriving = (await filesOf(p)).files.filter((f) => f.path === at);
   // The machine is awake now, having just answered.
@@ -449,13 +484,43 @@ export default async function Computer({
         data-month-total={month}
       >
         <span>{STATES[state] ?? state}</span>
-        <span data-size={computer.size} data-wants={wants}>
+        <span
+          data-size={computer.size}
+          data-wants={size.up}
+          data-cpu={load === undefined ? undefined : Math.round(load * 100)}
+          data-memory={
+            free === undefined ? undefined : Math.round((1 - free) * 100)
+          }
+        >
           {sizeName(computer.size)}
-          {computer.size !== LADDER[0] &&
-            " — sized up from what you needed; waking from sleep is quick up to 2 GB of memory and slower above it"}
-          {wants &&
-            ` — short of memory; next time it is off it comes back as ${sizeName(wants)}`}
+          {load !== undefined &&
+            ` · CPU ${Math.round(Math.min(load, 1) * 100)}%`}
+          {free !== undefined &&
+            ` · memory ${Math.round((1 - free) * 100)}% used`}
         </span>
+        {size.up ? (
+          <form
+            action="/computer/bigger"
+            method="post"
+            className="flex items-center gap-2"
+            data-pending="up"
+          >
+            <input type="hidden" name="path" value={at} />
+            <span>more memory is on its way</span>
+            <Button type="submit" size="sm" variant="outline">
+              Restart with more memory now
+            </Button>
+          </form>
+        ) : (
+          sizedUp && (
+            <span data-sized-up={sizedUp.size}>
+              sized up to {gbOf(sizedUp.size)} at <LocalTime at={sizedUp.at} />
+              {sizedUp.why === "asked-bigger"
+                ? ", as you asked"
+                : " so nothing ran out"}
+            </span>
+          )
+        )}
         <span>{`${gb(space.used)} of ${gb(space.total)} used`}</span>
         <span>{place(computer.region)}</span>
         <span data-backups={backups.length}>
@@ -535,6 +600,9 @@ function said(params: Record<string, string | undefined>): string | null {
     "restored=started": "The backup is being put back.",
     "backup=started":
       "A backup is being taken. The bar below says when it is done.",
+    "computer=on": "Your computer is powered on.",
+    "bigger=done": "Restarted with more memory.",
+    "bigger=top": "It is already at the biggest size there is.",
   };
   for (const [k, v] of Object.entries(params))
     if (v && table[`${k}=${v}`]) return table[`${k}=${v}`]!;

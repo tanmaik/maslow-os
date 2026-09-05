@@ -12,6 +12,9 @@ import {
 } from "@/lib/session";
 import { redeemCode, WorkOSError } from "@/lib/workos";
 
+// Vercel gives this request this long: the computer is built behind it.
+export const maxDuration = 120;
+
 // Guesses one address gets before its sign-in is abandoned.
 const GUESSES = 5;
 const WINDOW = 10 * 60;
@@ -34,11 +37,7 @@ export async function POST(request: Request) {
   try {
     const identity = await redeemCode(flow.email, code.trim());
     await clear(key);
-    // An org founded here starts with computers on outside production.
-    return signedIn(
-      await signIn({ ...identity, computers: !deployment.production }),
-      to,
-    );
+    return signedIn(await signIn(identity), to);
   } catch (err) {
     if (err instanceof WorkOSError && /one_time_code/.test(err.code))
       return Response.redirect(noticed(to, "code=wrong"), 303);

@@ -5,10 +5,10 @@ import {
   type Principal,
 } from "@placeholder/db/auth";
 import { cookies } from "next/headers";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { cache } from "react";
 
-import { filesystemAtSignIn } from "./computer.ts";
+import { computerAtSignIn } from "./computer.ts";
 import { cookie, FLOW, SESSION, SESSION_LIFETIME } from "./cookie.ts";
 
 // What a sign-in remembers between its two legs: the email a code was sent
@@ -36,15 +36,11 @@ export const principal = cache(async (): Promise<Principal | null> =>
 
 // Opens a session for p and sends the browser to `to` holding it. If the
 // membership was removed in the meantime, the browser goes there as it was.
+// Their computer is made and started behind the response, so the first
+// look finds it ready or on its way.
 export async function signedIn(p: Principal, to: string): Promise<Response> {
   const token = await createSession(p);
-  // A few seconds for the filesystem; Fly being slow never keeps anyone
-  // out, and the next look tries again.
-  if (token)
-    await Promise.race([
-      filesystemAtSignIn(p),
-      new Promise((r) => setTimeout(r, 8000)),
-    ]);
+  if (token) after(() => computerAtSignIn(p));
   const response = NextResponse.redirect(to, 303);
   if (token) response.cookies.set(SESSION, token, cookie(SESSION_LIFETIME));
   response.cookies.delete(FLOW);

@@ -229,7 +229,7 @@ Breakage is made cheap rather than prevented — a machine you cannot break is a
 machine you cannot use. The person's home folder is their computer: every
 shell runs there as an ordinary user, with sudo for the package managers
 alone, and the system around the home can be reset from the image at any
-time, after a backup, with the home untouched. That is cheap because of three
+time, after a backup, with the home untouched. That is cheap because of two
 layers:
 
 - **The image** is only a bootstrap — enough to start and hand off. It almost
@@ -243,13 +243,11 @@ layers:
   it into the bucket once a day, seven are kept, and an empty disk can be
   put back from one. Volumes
   auto-extend at a threshold and cap at 500GB.
-- **The memory snapshot** is what they were doing. Usually survives a suspend.
 
 A person's files are their home in the operating system on the volume,
 and nowhere else; every shell runs inside that operating system, so what
 is installed or signed into stays. The Computer page is that home, read
-from the machine. Opening the page wakes the machine, and
-Fly's proxy suspends it once nothing has asked for it. An upload is staged
+from the machine. An upload is staged
 in the bucket only until the machine has pulled it onto the disk. The page
 has a shell on the disk, and every port the machine listens on is a
 preview a browser can open; both come from the machine itself, by links
@@ -262,26 +260,24 @@ Every machine and volume on Fly is recorded in our database with the org and
 person it belongs to, at creation, before it is used. A sweep reconciles Fly's
 inventory against ours; anything Fly has that we do not is an incident.
 
-Nobody chooses a size. One is chosen at wake from what they have needed before.
-Outgrowing it is a cold boot at a new size — a memory image is exact to the
-machine that made it — so it is made rare, and happens at a step boundary the
-agent chooses, never mid-execution. Downloads never force it: disk grows live.
+A person's computer is provisioned and powered on at their first sign-in,
+runs until they power it off — or an owner turns the org's computers off —
+and powers back on when they ask; nothing puts it to sleep. Powered off,
+the disk alone is kept and charged, and the hourly sweep finishes a
+power-off that failed partway. A machine on an image that is not the image
+is replaced whatever it is doing, on the same disk.
 
-Machines suspend within minutes of going idle — nobody signed in, no agent
-running, nobody reaching their files or the ports they serve — and wake on the
-first sign of return, before anything needs them. A colleague opening a shared
-file at 3am is a wake. The window is short because resume is cheap; it is not
-zero because suspending writes memory to disk, and a tab closed and reopened
-should not thrash. The exact number comes from the meter.
+Nobody chooses a size. The machine reports what it has and needs, and the
+ladder goes both ways from that: up aggressively, at the next quiet moment
+or at once after a kill; down conservatively, after three hours of room to
+spare. A change of size is a cold boot on the same disk, so it waits for a
+quiet moment — no terminal open, load low — and the person can ask for
+more memory now. Downloads never force it: disk grows live.
 
-**Resume is usual, never guaranteed.** No platform promises a snapshot can be
-restored. So the machine must be correct when it comes back cold. On any boot,
-warm or cold, the daemon brings back everything that was up — agents, servers,
-jobs — from its record of what was running, and agents continue from their
-transcripts. Nothing the user started stays down. Fast resume is pure upside.
-
-Suspend is only fast at 2GB and below. Sizing up trades resume speed for room,
-and the user sees that trade.
+**A machine must be correct when it comes back cold.** On any boot the
+daemon brings back everything that was up — agents, servers, jobs — from its
+record of what was running, and agents continue from their transcripts.
+Nothing the user started stays down.
 
 ## Agents
 

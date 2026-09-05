@@ -70,7 +70,8 @@ export const orgs = [
     id: "00000000-0000-4000-8000-000000000002",
     slug: "blue-whale-bakery",
     name: "Blue Whale Bakery",
-    // The bakery stands in for the house org: it may have computers.
+    // Only the bakery has computers on, so both sides of the switch are
+    // seen; an org founded by a sign-in starts on.
     computers: true,
     users: [
       {

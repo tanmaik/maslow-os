@@ -4,7 +4,10 @@
 // volume, so the disk it serves is a disk. As on Fly, a new machine is
 // "created" until asked about again and refuses to start before that;
 // a request through the proxy wakes the machine it names, and a reply
-// asking for another machine is replayed there. Nothing here costs money.
+// asking for another machine is replayed there; a machine whose service
+// autostops is stopped or suspended once nothing has asked for it for a
+// moment, and one whose service does not is left running. Nothing here
+// costs money.
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
@@ -22,11 +25,26 @@ const freePort = () =>
     });
   });
 
+// How long the proxy leaves an autostopping machine alone before it
+// stops it: Fly's is about a minute, the fake's a second.
+export const IDLE_MS = 1000;
+
 export async function startFakeFly({ dir = ".local/computers" } = {}) {
   const volumes = new Map();
   const machines = new Map();
   let n = 0;
   const at = () => Date.now();
+
+  // The proxy's autostop: a started machine whose service asks for it,
+  // untouched for IDLE_MS, is stopped or suspended as the service says.
+  const idler = setInterval(() => {
+    for (const mc of machines.values()) {
+      const autostop = mc.services?.[0]?.autostop;
+      if (!autostop || autostop === "off") continue;
+      if (mc.state === "started" && at() - mc.touched >= IDLE_MS)
+        halt(mc, autostop === "stop" ? "stopped" : "suspended");
+    }
+  }, 200).unref();
 
   // Runs the daemon for a machine until it is stopped, as Fly boots the
   // image on the volume.
@@ -96,7 +114,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     name: mc.name,
     region: mc.region,
     state: mc.state,
-    config: { image: mc.image, guest: mc.guest },
+    config: { image: mc.image, guest: mc.guest, services: mc.services },
     events: mc.events.slice(-20),
   });
 
@@ -132,6 +150,8 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
         state: "created",
         image: input.config?.image,
         guest: input.config?.guest,
+        services: input.config?.services ?? [],
+        touched: at(),
         env: input.config?.env ?? {},
         volume: input.config?.mounts?.[0]?.volume,
         child: null,
@@ -199,6 +219,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     if (!mc) throw new Error("no machines");
     if (mc.booting) await mc.booting;
     if (mc.state !== "started") await boot(mc);
+    mc.touched = at();
     return mc;
   }
 
@@ -312,6 +333,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     machines,
     volumes,
     close: () => {
+      clearInterval(idler);
       for (const mc of machines.values()) mc.child?.kill();
       server.close();
     },

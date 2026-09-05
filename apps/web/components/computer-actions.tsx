@@ -20,10 +20,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-// What can be done to the computer as a whole: back the home up now, or
-// reset the system around it. A reset asks first, and says what stays.
+// What can be done to the computer as a whole: back the home up now, reset
+// the system around it, or power it off. A reset and a power-off ask first,
+// and say what stays.
 export function ComputerActions({ at }: { at: string }) {
-  const [asking, setAsking] = useState(false);
+  const [asking, setAsking] = useState<"reset" | "off" | null>(null);
   return (
     <>
       <DropdownMenu>
@@ -38,9 +39,12 @@ export function ComputerActions({ at }: { at: string }) {
             Back up now
           </DropdownMenuItem>
           <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setAsking("off")}>
+            Power off…
+          </DropdownMenuItem>
           <DropdownMenuItem
             variant="destructive"
-            onClick={() => setAsking(true)}
+            onClick={() => setAsking("reset")}
           >
             Reset the system…
           </DropdownMenuItem>
@@ -64,8 +68,44 @@ export function ComputerActions({ at }: { at: string }) {
       >
         <input type="hidden" name="path" value={at} />
       </form>
+      <form
+        id="power-off"
+        action="/computer/off"
+        method="post"
+        className="hidden"
+        data-power-off
+      >
+        <input type="hidden" name="path" value={at} />
+      </form>
 
-      <Dialog open={asking} onOpenChange={setAsking}>
+      <Dialog
+        open={asking === "off"}
+        onOpenChange={(open) => setAsking(open ? "off" : null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Power off your computer?</DialogTitle>
+            <DialogDescription>
+              Every shell closes and whatever is running stops. Your disk and
+              files are kept, and nothing but the disk is charged while it is
+              off. Power it on again any time; it takes a minute.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAsking(null)}>
+              Keep it running
+            </Button>
+            <Button type="submit" form="power-off">
+              Power off
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={asking === "reset"}
+        onOpenChange={(open) => setAsking(open ? "reset" : null)}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset the system?</DialogTitle>
@@ -78,7 +118,7 @@ export function ComputerActions({ at }: { at: string }) {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setAsking(false)}>
+            <Button variant="outline" onClick={() => setAsking(null)}>
               Keep it
             </Button>
             <Button variant="destructive" type="submit" form="reset-system">

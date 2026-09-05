@@ -7,8 +7,6 @@ export type Identity = {
   email: string;
   firstName: string;
   lastName: string | null;
-  // Whether an org this sign-in founds starts with computers on.
-  computers?: boolean;
 };
 
 // A person's name in full.
@@ -154,8 +152,8 @@ async function admit(identity: Identity): Promise<Principal> {
         role: m.role,
       };
     await q.query(
-      "insert into orgs (id, slug, name, principal_id, computers) values ($1, $2, $3, $4, $5)",
-      [orgId, orgId, fullName(person), userId, identity.computers ?? false],
+      "insert into orgs (id, slug, name, principal_id) values ($1, $2, $3, $4)",
+      [orgId, orgId, fullName(person), userId],
     );
     await q.query(
       "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, $7, 'owner')",

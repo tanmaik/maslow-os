@@ -1,20 +1,18 @@
 import { asMeter, asOrg, type Query } from "@placeholder/db";
 import {
-  clearMachine,
   clearVolume,
-  knownComputers,
+  computersAllowedIn,
   computersIn,
-  noteEventsIn,
-  noteState,
+  knownComputers,
 } from "@placeholder/db/computers";
 import { picturesIn, type Resource, type Unit } from "@placeholder/db/usage";
 
 import { deployment } from "./deployment.ts";
 import { sweepBackups } from "./backups.ts";
-import { unpaid } from "./computer.ts";
+import { upholdIn } from "./computer.ts";
 import { expireUploads, landStaged } from "./files.ts";
 import { settle } from "./orphans.ts";
-import { fly, IMAGE } from "./fly.ts";
+import { fly } from "./fly.ts";
 import { MONTH, PRICES, sizeName } from "./prices.ts";
 
 // The meter. One measuring function reads what a member's things did
@@ -346,8 +344,9 @@ async function reconcile(): Promise<void> {
 }
 
 // The hourly sweep: every org, every member, since their last row. First
-// it asks Fly what each machine is doing, so a state nobody looked at is
-// still an event, and lets go of uploads nobody finished.
+// it upholds each computer — what Fly did to it is on the record, one that
+// should be running is, one that should not is stopped — and lets go of
+// uploads nobody finished.
 export async function sweep(now = new Date()): Promise<number> {
   await reconcile().catch((err) =>
     console.error(`reconcile: ${(err as Error).message}`),
@@ -368,31 +367,15 @@ export async function sweep(now = new Date()): Promise<number> {
   for (const orgId of new Set([...orgs, ...owing])) {
     // One org, or one machine, failing does not stop the rest.
     try {
-      if (deployment.computers.kind !== "none")
-        for (const c of await computersIn(orgId)) {
-          if (!c.machineId) continue;
+      if (deployment.computers.kind !== "none" && orgs.includes(orgId)) {
+        const on = await computersAllowedIn(orgId);
+        for (const c of await computersIn(orgId))
           try {
-            const m = await fly.machine(c.machineId);
-            // What Fly's proxy did to it since: exact starts and stops.
-            if (m?.events) await noteEventsIn(orgId, c, m.events);
-            // A machine on an image that is not the image is let go of
-            // whatever it is doing: it signs its links with the key the
-            // image it was made from was given, so it answers none of
-            // ours until it is replaced. The next look makes one on the
-            // same volume, which holds everything. That is how machines
-            // are updated.
-            const stale =
-              m?.config?.image !== undefined && m.config.image !== IMAGE;
-            if (stale) {
-              console.log(`machine ${m.id} is on ${m.config!.image}; replaced`);
-              await fly.destroyMachine(m.id).catch(unpaid("machine"));
-            }
-            await noteState(orgId, c, m && !stale ? m.state : "destroyed");
-            if (!m || stale) await clearMachine(orgId, c.id, c.machineId);
+            await upholdIn(orgId, c, on);
           } catch (err) {
-            console.error(`sweep ${c.machineId}: ${(err as Error).message}`);
+            console.error(`sweep ${c.id}: ${(err as Error).message}`);
           }
-        }
+      }
       await expireUploads(orgId, now);
       await landStaged(orgId, now);
       await sweepBackups(orgId, now);
@@ -509,7 +492,7 @@ export async function live(
         .reduce((n, m) => n + m.quantity * m.price, 0);
     // What each resource is doing at this instant, from a short window: a
     // rate is what it costs to keep going, never the average of a minute
-    // in which it was asleep for part.
+    // in which it was off for part.
     const minute = await measure(
       q,
       p.userId,
@@ -547,10 +530,6 @@ const human = (bytes: number) =>
     : bytes < 1e9
       ? `${(bytes / 1e6).toFixed(1)} MB`
       : `${(bytes / 1e9).toFixed(2)} GB`;
-
-// Dollars to the fraction of a cent, as the owner asked to see them.
-export const dollars = (n: number) =>
-  n < 0.01 && n > 0 ? `$${n.toFixed(6)}` : `$${n.toFixed(4)}`;
 
 // A quantity in a unit people read.
 export function amount(resource: string, unit: string, quantity: number) {

@@ -21,8 +21,18 @@ import {
 } from "@/components/ui/table";
 import { disk, DiskError } from "@/lib/disk";
 import { filesOf, whole } from "@/lib/files";
-import { dollars, live } from "@/lib/meter";
-import { LADDER, MONTH, PRICES } from "@/lib/prices";
+import { live } from "@/lib/meter";
+import {
+  dollars,
+  exact,
+  LADDER,
+  MONTH,
+  monthly,
+  parseSize,
+  PRICES,
+  SOURCE,
+  rate,
+} from "@/lib/prices";
 import { principal } from "@/lib/session";
 
 // A stretch of time, in the unit a person would say it.
@@ -66,6 +76,11 @@ const CAUSE: Record<string, string> = {
   backup: "the daily backup",
   start: "we started it",
   restart: "the disk grew and it booted again",
+  "powered-on": "you powered it on",
+  "out-of-memory": "it ran out of memory and came back bigger",
+  "short-of-memory": "it was short of memory and came back bigger",
+  "room-to-spare": "it had room to spare and came back smaller",
+  "asked-bigger": "you restarted it with more memory",
 };
 
 // Every run of the machine this month: when it started, how long, what it
@@ -127,6 +142,16 @@ const WHAT: Record<Resource, string> = {
   brain: "Brain",
 };
 
+// One figure in a strip: what it is, then how much.
+function Cell({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="text-sm">
+      <span className="text-muted-foreground">{label}</span>{" "}
+      <span className="font-mono tabular-nums">{value}</span>
+    </span>
+  );
+}
+
 // Exactly what this member, and for an owner the whole org, has used this
 // month, what makes up each line, what is ticking now, and what the month
 // will come to at this rate. Nobody is billed yet.
@@ -174,14 +199,14 @@ export default async function Usage() {
   const machine: Detail[] = computer
     ? [
         {
-          key: "sleep",
-          what: "Your machine goes to sleep about a minute after the last request reaches it — 74 seconds, when we timed it — and wakes on the next one in a few seconds; a terminal you leave open keeps it awake. Asleep it costs only its disk and its stopped image.",
+          key: "always-on",
+          what: `Runs until you power it off; ≈ ${dollars(monthly(size))} a month at ${parseSize(size).memoryMb / 1024} GB.`,
         },
         ...(runs.length
           ? runs.map((r) => ({
               key: r.at.toISOString(),
               what: `${when(r.at)}, ${spell(r.seconds)}, ${r.cause}`,
-              cost: dollars(r.cost),
+              cost: exact(r.cost),
               attr: { "data-session": r.at.toISOString() },
             }))
           : [{ key: "none", what: "It has not run this month." }]),
@@ -193,8 +218,8 @@ export default async function Usage() {
     : !onDisk
       ? [
           {
-            key: "asleep",
-            what: `A ${computer.diskGb} GB disk. Your machine is asleep, so what is on it is not read from it; open your computer and this fills in.`,
+            key: "not-running",
+            what: `A ${computer.diskGb} GB disk; what is on it shows while the machine runs.`,
           },
         ]
       : "problem" in onDisk
@@ -266,7 +291,7 @@ export default async function Usage() {
       ? [
           {
             key: "rootfs",
-            what: "The machine's own image, kept while it is off so it comes back as you left it. Under a gigabyte.",
+            what: "Its image while off; under a gigabyte.",
           },
         ]
       : [],
@@ -319,24 +344,23 @@ export default async function Usage() {
     <main className="space-y-6">
       <h1 className="text-2xl font-semibold">Usage</h1>
 
-      <p className="text-sm" data-projection={projected}>
-        <span className="font-mono tabular-nums">
-          {dollars(ticking.ratePerHour)}/h
-        </span>{" "}
-        right now
-        {ticking.active.length > 0 && (
-          <>
-            {" — "}
-            {ticking.active.map((a, i) => (
-              <span key={a.resource} data-ticking={a.resource}>
-                {i > 0 && ", "}
-                {a.what} at {dollars(a.ratePerHour)}/h
-              </span>
-            ))}
-          </>
-        )}
-        {`. ${dollars(ticking.month)} since ${monthStart.toISOString().slice(0, 10)}, and about ${dollars(projected)} by the end of the month at this rate.`}
-      </p>
+      <div
+        className="flex flex-wrap gap-x-8 gap-y-2"
+        data-projection={projected}
+      >
+        <Cell label="So far this month" value={dollars(ticking.month)} />
+        <Cell label="Right now" value={rate(ticking.ratePerHour)} />
+        <Cell label="By month end" value={`≈ ${dollars(projected)}`} />
+      </div>
+      {ticking.active.length > 0 && (
+        <p className="text-muted-foreground flex flex-wrap gap-x-4 text-xs">
+          {ticking.active.map((a) => (
+            <span key={a.resource} data-ticking={a.resource}>
+              {SOURCE[a.resource]} {rate(a.ratePerHour)}
+            </span>
+          ))}
+        </p>
+      )}
 
       <Table>
         <TableHeader>
@@ -366,7 +390,7 @@ export default async function Usage() {
                   {PRICE[resource]}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {line ? dollars(line.cost) : "—"}
+                  {line ? exact(line.cost) : "—"}
                 </TableCell>
               </TableRow>
               {detail.map(row)}
@@ -378,7 +402,7 @@ export default async function Usage() {
                 Together, this month
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
-                {dollars(mine.reduce((n, l) => n + l.cost, 0))}
+                {exact(mine.reduce((n, l) => n + l.cost, 0))}
               </TableCell>
             </TableRow>
           )}
@@ -386,8 +410,7 @@ export default async function Usage() {
       </Table>
 
       <p className="text-muted-foreground text-sm">
-        Not metered yet, and not in any figure above: Neon&rsquo;s compute,
-        Tigris requests and the bytes leaving it, Vercel, mail, and sign-in.
+        Not counted yet: Neon compute, Tigris requests, Vercel, mail, sign-in.
       </p>
 
       {org && (
@@ -406,7 +429,7 @@ export default async function Usage() {
                   <TableCell className="font-medium">{m.name}</TableCell>
                   <TableCell />
                   <TableCell className="text-right font-mono tabular-nums">
-                    {dollars(m.lines.reduce((n, l) => n + l.cost, 0))}
+                    {exact(m.lines.reduce((n, l) => n + l.cost, 0))}
                   </TableCell>
                 </TableRow>
                 {m.lines.map((l) => (
@@ -418,7 +441,7 @@ export default async function Usage() {
                       {amount(l.unit, l.quantity)}
                     </TableCell>
                     <TableCell className="text-muted-foreground text-right font-mono tabular-nums">
-                      {dollars(l.cost)}
+                      {exact(l.cost)}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -429,7 +452,7 @@ export default async function Usage() {
                 Everyone, this month
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
-                {dollars(org.reduce((n, l) => n + l.cost, 0))}
+                {exact(org.reduce((n, l) => n + l.cost, 0))}
               </TableCell>
             </TableRow>
           </TableBody>

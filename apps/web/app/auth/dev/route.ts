@@ -5,6 +5,9 @@ import { deployment } from "@/lib/deployment";
 import { origin } from "@/lib/origin";
 import { destination, signedIn } from "@/lib/session";
 
+// Vercel gives this request this long: the computer is built behind it.
+export const maxDuration = 120;
+
 // Signs in as a seeded person, and returns to the page it was picked from.
 // Never in production.
 export async function POST(request: Request) {

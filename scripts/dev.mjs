@@ -32,12 +32,16 @@ const stack = await startStack({
         FLY_API_HOST: fake.url,
         FLY_MACHINES_HOST: fake.url,
         LINK_SECRET: "fake-link",
-        FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
+        FLY_REPORT_URL:
+          effective.FLY_REPORT_URL ??
+          `http://127.0.0.1:${webPort}/computer/report`,
       }
     : {
         FLY_NAME_PREFIX: `dev-${checkout}-`,
         STORAGE_PREFIX: `dev/${checkout}/`,
-        FLY_REPORT_URL: `http://127.0.0.1:${webPort}/computer/report`,
+        FLY_REPORT_URL:
+          effective.FLY_REPORT_URL ??
+          `http://127.0.0.1:${webPort}/computer/report`,
       },
 });
 console.log(`postgres  127.0.0.1:${stack.pgPort}`);

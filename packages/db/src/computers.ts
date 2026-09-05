@@ -2,13 +2,15 @@ import { asMachine, asMeter, asOrg, asPerson } from "./index.ts";
 import type { Principal } from "./auth.ts";
 
 // What a machine last said it had and needed: its memory and the share of
-// it free at each of the last few reports, newest last; what the kernel
-// killed for want of memory since boot; the one-minute load over its cores.
+// it free at each of the last three hours' reports, newest last; what the
+// kernel killed for want of memory since boot; the one-minute load over its
+// cores at each of those reports; how many terminals were open at the last.
 type Need = {
   at: string;
   memory?: { total: number; free: number[] };
   oom?: number;
-  load?: number;
+  load?: number[];
+  terminals?: number;
 };
 
 // What a machine says of itself in one report.
@@ -17,7 +19,11 @@ export type Said = {
   memory?: { total: number; available: number };
   oom?: number;
   load?: number;
+  terminals?: number;
 };
+
+// Thirty-six reports, five minutes apart, is three hours.
+export const KEPT = 36;
 
 export type Computer = {
   id: string;
@@ -32,19 +38,60 @@ export type Computer = {
   diskUsed: number | null;
   diskTotal: number | null;
   need: Need | null;
+  // When the person powered it off; null while it is on.
+  offAt: Date | null;
   createdAt: Date;
 };
 
 const COLUMNS =
-  'id, user_id as "userId", region, size, disk_gb as "diskGb", volume_id as "volumeId", machine_id as "machineId", state, seen_at as "seenAt", disk_used::float8 as "diskUsed", disk_total::float8 as "diskTotal", need, created_at as "createdAt"';
+  'id, user_id as "userId", region, size, disk_gb as "diskGb", volume_id as "volumeId", machine_id as "machineId", state, seen_at as "seenAt", disk_used::float8 as "diskUsed", disk_total::float8 as "diskTotal", need, off_at as "offAt", created_at as "createdAt"';
 
-// Whether this org may have computers at all.
+// Whether this org has computers: the owner's switch in Settings.
 export async function computersAllowed(p: Principal): Promise<boolean> {
+  return computersAllowedIn(p.orgId);
+}
+
+export async function computersAllowedIn(orgId: string): Promise<boolean> {
   return asOrg(
-    p.orgId,
+    orgId,
     async (q) =>
       (await q.query<{ computers: boolean }>("select computers from orgs"))
         .rows[0]?.computers ?? false,
+  );
+}
+
+// The member behind a computer, for the sweep to act as: null once the
+// membership has ended, said outright though the policy hides the past.
+export async function principalIn(
+  orgId: string,
+  userId: string,
+): Promise<Principal | null> {
+  const row = await asOrg(
+    orgId,
+    async (q) =>
+      (
+        await q.query<{ person_id: string; role: Principal["role"] }>(
+          "select person_id, role from users where id = $1 and removed_at is null",
+          [userId],
+        )
+      ).rows[0],
+  );
+  return row
+    ? { personId: row.person_id, orgId, userId, role: row.role }
+    : null;
+}
+
+// The person powered their computer off, or on again.
+export async function setOff(
+  p: Principal,
+  id: string,
+  off: boolean,
+): Promise<void> {
+  await asOrg(p.orgId, (q) =>
+    q.query("update computers set off_at = $2 where id = $1", [
+      id,
+      off ? new Date() : null,
+    ]),
   );
 }
 
@@ -129,22 +176,34 @@ export async function setMachine(
   );
 }
 
+// Why a machine is about to start, or about to be made again: the person
+// opened their computer or turned it on, a link was made for a browser,
+// the sweep asked for a backup, or it is being sized. The next start, or
+// the next size, is that cause's.
+export type Cause =
+  | "opened"
+  | "link-dl"
+  | "link-term"
+  | "link-p"
+  | "backup"
+  | "powered-on"
+  | "powered-off"
+  | "out-of-memory"
+  | "short-of-memory"
+  | "room-to-spare"
+  | "asked-bigger";
+const CAUSES_OF_SIZE: Cause[] = [
+  "out-of-memory",
+  "short-of-memory",
+  "room-to-spare",
+  "asked-bigger",
+];
 // Records something that happened to the machine at our hand, at the time
-// it did: why it is about to be needed — the person opened their computer,
-// a link was made for a browser, the sweep asked for a backup — or what we
-// asked of it. The next start is that cause's.
+// it did: a cause, or what we asked of it.
 export async function noteEvent(
   orgId: string,
   c: Computer,
-  kind:
-    | "opened"
-    | "link-dl"
-    | "link-term"
-    | "link-p"
-    | "backup"
-    | "start"
-    | "stop"
-    | "restart",
+  kind: Cause | "start" | "stop" | "restart",
 ): Promise<void> {
   await asOrg(orgId, (q) =>
     q.query(
@@ -176,40 +235,47 @@ export async function eventsOf(
 }
 
 // What a machine says of itself, kept if the secret is its own: its disk
-// as of now, and its need folded onto the last few reports'. The row is
+// as of now, and its need folded onto the last three hours' reports'. The row is
 // held while that is worked out, and written only if it still names the
 // machine, so a late report from one let go of says nothing of the next.
-// False when no machine matches, which is the only answer a stranger gets.
+// Null when no machine matches, which is the only answer a stranger gets;
+// else whose computer spoke, for the sizing that follows.
 export async function report(
   machineId: string,
   secret: string,
   said: Said,
-): Promise<boolean> {
+): Promise<{ orgId: string; id: string } | null> {
   return asMachine(machineId, secret, async (q) => {
     const c = (
       await q.query<{
         id: string;
+        org_id: string;
         size: string;
         disk_gb: number;
         need: Need | null;
       }>(
-        "select id, size, disk_gb, need from computers where machine_id = $1 for update",
+        "select id, org_id, size, disk_gb, need from computers where machine_id = $1 for update",
         [machineId],
       )
     ).rows[0];
-    if (!c) return false;
+    if (!c) return null;
+    // A metric the report leaves out keeps the history it had.
     const need: Need = {
       at: new Date().toISOString(),
-      oom: said.oom,
-      load: said.load,
+      oom: said.oom ?? c.need?.oom,
+      terminals: said.terminals ?? c.need?.terminals,
+      load: c.need?.load,
+      memory: c.need?.memory,
     };
+    if (said.load !== undefined)
+      need.load = [...(c.need?.load ?? []), said.load].slice(-KEPT);
     if (said.memory)
       need.memory = {
         total: said.memory.total,
         free: [
           ...(c.need?.memory?.free ?? []),
           Math.round((said.memory.available / said.memory.total) * 1000) / 1000,
-        ].slice(-4),
+        ].slice(-KEPT),
       };
     const kept = await q.query(
       "update computers set seen_at = now(), disk_used = $1, disk_total = $2, need = $3 where id = $4 and machine_id = $5",
@@ -221,14 +287,38 @@ export async function report(
         machineId,
       ],
     );
-    if (!kept.rowCount) return false;
+    if (!kept.rowCount) return null;
     // A report is proof the machine was running at that moment, for the
     // meter, whether or not anyone looked.
     await q.query(
       "insert into computer_events (org_id, computer_id, kind, size, disk_gb) select org_id, id, 'reported', $2, $3 from computers where id = $1",
       [c.id, c.size, c.disk_gb],
     );
-    return true;
+    return { orgId: c.org_id, id: c.id };
+  });
+}
+
+// The last change of size: when, to what, and why — the cause noted just
+// before it. Null for a computer never resized.
+export async function lastResizeIn(
+  orgId: string,
+  id: string,
+): Promise<{ at: Date; size: string; why: Cause | null } | null> {
+  return asOrg(orgId, async (q) => {
+    const r = (
+      await q.query<{ at: Date; size: string }>(
+        "select at, size from computer_events where computer_id = $1 and kind = 'resized' order by at desc limit 1",
+        [id],
+      )
+    ).rows[0];
+    if (!r) return null;
+    const why = (
+      await q.query<{ kind: Cause }>(
+        "select kind from computer_events where computer_id = $1 and at <= $2 and kind = any($3) order by at desc limit 1",
+        [id, r.at, CAUSES_OF_SIZE],
+      )
+    ).rows[0];
+    return { at: r.at, size: r.size, why: why?.kind ?? null };
   });
 }
 

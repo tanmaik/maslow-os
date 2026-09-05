@@ -90,14 +90,22 @@ async function disk() {
 
 // What the machine has and needs, each where the kernel says it, left out
 // where it does not: memory in bytes and how much is available, how many
-// processes were killed for want of it since boot, and the one-minute
-// load over its cores. A laptop's kernel speaks for the laptop, not the
-// machine it stands in for, which says memory is nearly gone once told to.
-let pressed = false;
+// processes were killed for want of it since boot, the one-minute load
+// over its cores, and how many terminals are open on it. A laptop's kernel
+// speaks for the laptop, not the machine it stands in for, which says what
+// it is told to.
+let pretend = null;
 async function need() {
-  const out = { load: os.loadavg()[0] / os.availableParallelism() };
+  const out = {
+    load: os.loadavg()[0] / os.availableParallelism(),
+    terminals: [...sessions.values()].filter((s) => s.ws).length,
+  };
   if (DISK_GB) {
-    if (pressed) out.memory = { total: 2 ** 30, available: 2 ** 25 };
+    if (pretend) {
+      out.memory = { total: 2 ** 30, available: pretend.free * 2 ** 30 };
+      out.load = pretend.load;
+      out.oom = pretend.oom;
+    }
     return out;
   }
   const meminfo = await fs.readFile("/proc/meminfo", "utf8").catch(() => "");
@@ -881,10 +889,12 @@ async function handle(req, res) {
   }
   if (url.pathname === "/fs/ports" && req.method === "GET")
     return json(200, { ports: await listening() });
-  // A laptop's machine told to be short of memory from now on, and to say
-  // so at once.
+  // A laptop's machine told what to say of its memory, load and kills
+  // from now on — the share of memory free, the load over its cores, the
+  // count killed — and to say it at once.
   if (url.pathname === "/fs/pressure" && req.method === "POST" && DISK_GB) {
-    pressed = true;
+    const { free = 0.03, load = 0.1, oom = 0 } = await readJson(req);
+    pretend = { free, load, oom };
     await report();
     return json(200, { ok: true });
   }

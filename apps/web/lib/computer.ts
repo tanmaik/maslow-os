@@ -5,36 +5,48 @@ import {
   computerOf,
   computerOfIn,
   computersAllowed,
+  KEPT,
+  lastResizeIn,
   lease,
   leaseIn,
   noteEvent,
   noteEventsIn,
   noteState,
+  principalIn,
   release,
   reserveComputer,
   resize,
   secretOf,
   setDiskGb,
   setMachine,
+  setOff,
   setVolume,
+  type Cause,
   type Computer,
 } from "@placeholder/db/computers";
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import { DISK_GB, fly, IMAGE, MAX_DISK_GB, volumeName } from "./fly.ts";
+import {
+  autostops,
+  DISK_GB,
+  fly,
+  IMAGE,
+  MAX_DISK_GB,
+  volumeName,
+  type Machine,
+} from "./fly.ts";
 import { LADDER } from "./prices.ts";
 
-export type Built = "built" | "exists" | "off" | "not-allowed";
+export type Built = "built" | "exists" | "off" | "not-allowed" | "powered-off";
 
 // A Fly thing made and then not recorded, that Fly would not take back:
 // it is billed until the sweep's reconcile finds it, and that is said.
-export const unpaid = (what: "machine" | "volume") => (err: Error) =>
+const unpaid = (what: "machine" | "volume") => (err: Error) =>
   console.error(`fly: an unrecorded ${what} would not go: ${err.message}`);
 
 // A person has a filesystem from the moment they have an account: the
-// volume is the computer, and it is made at sign-in. Compute is a machine
-// attached to it on demand. The row is claimed first, so two requests at
+// volume is the computer. The row is claimed first, so two requests at
 // once make one; each Fly id is written as soon as it exists; a step that
 // failed is resumed by the next look.
 export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
@@ -76,84 +88,65 @@ export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
   return c;
 }
 
-// The size a computer wants: the rung above its own when memory has been
-// short at each of the last three reports or anything was killed for want
-// of it, null when what it has is enough or there is no rung above.
-const SHORT = 0.15;
-const REPORTS = 3;
-export function wanted(c: Pick<Computer, "size" | "need">): string | null {
-  const free = c.need?.memory?.free ?? [];
-  const short =
-    free.length >= REPORTS && free.slice(-REPORTS).every((f) => f < SHORT);
-  if (!short && !((c.need?.oom ?? 0) > 0)) return null;
-  const rung = LADDER.indexOf(c.size);
-  return rung < 0 ? null : (LADDER[rung + 1] ?? null);
-}
-
-// Attaches compute to the filesystem: a machine on the volume, recorded
-// and placed, at the size wanted if the last one was outgrown. Fly's proxy
-// starts it at the first request that names it. The first look at the
-// computer is the first need; looks that race wait for the one that holds
-// the lease.
+// Attaches compute to the filesystem and starts it: a machine on the
+// volume at the row's size, recorded, placed, then started, since a
+// person's machine runs from the moment it is made until they power it
+// off. Looks that race wait for the one that holds the lease.
 export async function build(p: Principal): Promise<Built> {
   if (deployment.computers.kind === "none") return "off";
   let c = await ensureFilesystem(p);
   if (!c) return "not-allowed";
+  if (c.offAt) return "powered-off";
   if (!c.volumeId) return "exists";
   if (c.machineId && c.state !== "failed") return "exists";
   const held = await lease(p, c.id);
   if (!held) return "exists";
   try {
     c = (await computerOf(p))!;
+    if (c.offAt) return "powered-off";
     if (c.machineId && c.state !== "failed") return "exists";
-    // A machine whose build failed is let go of, and a new one made.
+    // A machine whose build failed is let go of, and a new one made; one
+    // that will not go stays on the row, and the next look tries again.
     if (c.machineId) {
-      await fly.destroyMachine(c.machineId).catch(unpaid("machine"));
+      await fly.destroyMachine(c.machineId);
       await noteState(p.orgId, c, "destroyed");
       await clearMachine(p.orgId, c.id, c.machineId);
       c.machineId = null;
     }
-    if (!c.machineId) {
-      const size = wanted(c);
-      if (size) {
-        await resize(p, c, size);
-        c.size = size;
+    let machine;
+    try {
+      machine = await fly.createMachine(
+        c.id,
+        c.volumeId!,
+        await secretOf(p, c.id),
+        c.size,
+      );
+    } catch (err) {
+      // A volume Fly no longer has: the row forgets it, and the next
+      // look makes a new filesystem. A laptop's is purged every night.
+      if (
+        /volume[^"]*(not found|does not exist|no such)/i.test(
+          (err as Error).message,
+        )
+      ) {
+        await noteState(p.orgId, c, "volume-gone");
+        await clearVolume(p.orgId, c.id, c.volumeId!);
+        return "exists";
       }
-      let machine;
-      try {
-        machine = await fly.createMachine(
-          c.id,
-          c.volumeId!,
-          await secretOf(p, c.id),
-          c.size,
-        );
-      } catch (err) {
-        // A volume Fly no longer has: the row forgets it, and the next
-        // look makes a new filesystem. A laptop's is purged every night.
-        if (
-          /volume[^"]*(not found|does not exist|no such)/i.test(
-            (err as Error).message,
-          )
-        ) {
-          await noteState(p.orgId, c, "volume-gone");
-          await clearVolume(p.orgId, c.id, c.volumeId!);
-          return "exists";
-        }
-        throw err;
-      }
-      let recorded = false;
-      try {
-        recorded = await setMachine(p, c.id, machine.id);
-      } finally {
-        // Unrecorded is unbilled by us and billed by Fly: it goes at once.
-        if (!recorded)
-          await fly.destroyMachine(machine.id).catch(unpaid("machine"));
-      }
-      if (!recorded) return "exists";
-      c.machineId = machine.id;
+      throw err;
     }
-    const placed = await fly.placed(c.machineId);
-    await noteState(p.orgId, c, placed.state);
+    let recorded = false;
+    try {
+      recorded = await setMachine(p, c.id, machine.id);
+    } finally {
+      // Unrecorded is unbilled by us and billed by Fly: it goes at once.
+      if (!recorded)
+        await fly.destroyMachine(machine.id).catch(unpaid("machine"));
+    }
+    if (!recorded) return "exists";
+    c.machineId = machine.id;
+    await fly.placed(c.machineId);
+    await start(p, c);
     return "built";
   } catch (err) {
     // A machine that exists and failed is on the record as such, for the
@@ -162,6 +155,263 @@ export async function build(p: Principal): Promise<Built> {
     throw err;
   } finally {
     await release(p.orgId, c.id, held);
+  }
+}
+
+// At sign-in, behind the response: the filesystem and a running machine,
+// where this deployment and org have computers and the person has not
+// powered theirs off; one Fly stopped is started. Fly being down never
+// keeps anyone out; the next look tries again.
+export async function computerAtSignIn(p: Principal): Promise<void> {
+  try {
+    if ((await build(p)) !== "exists") return;
+    const c = await computerOf(p);
+    if (!c?.machineId || c.offAt) return;
+    const m = await fly.machine(c.machineId);
+    if (m && isOff(m)) await start(p, c);
+  } catch (err) {
+    console.error(`computer at sign-in: ${(err as Error).message}`);
+  }
+}
+
+// A machine that is not running and could be started: made and never
+// started, stopped, or suspended.
+const isOff = (m: Machine) =>
+  m.state === "created" || m.state === "stopped" || m.state === "suspended";
+
+// Starts a machine Fly stopped, the ask on the record first.
+async function start(p: Principal, c: Computer): Promise<void> {
+  await noteEvent(p.orgId, c, "start");
+  await fly.start(c.machineId!);
+  await noteState(
+    p.orgId,
+    c,
+    (await fly.machine(c.machineId!))?.state ?? "started",
+  );
+}
+
+// Powers the person's computer off: the machine goes, at once and for as
+// long as they like, and the disk stays. Busy when a build or a resize
+// holds the row; asked again in a moment, it goes.
+export async function powerOff(p: Principal): Promise<"off" | "busy"> {
+  let c = await computerOf(p);
+  if (!c) return "off";
+  const held = await lease(p, c.id);
+  if (!held) return "busy";
+  try {
+    c = (await computerOf(p))!;
+    await noteEvent(p.orgId, c, "powered-off");
+    await setOff(p, c.id, true);
+    if (c.machineId) await letGo(p.orgId, c);
+  } finally {
+    await release(p.orgId, c.id, held);
+  }
+  return "off";
+}
+
+// Powers it on again: compute on the same disk, running.
+export async function powerOn(p: Principal): Promise<Built> {
+  const c = await computerOf(p);
+  const held = c?.offAt ? await lease(p, c.id) : null;
+  if (c && held) {
+    try {
+      const fresh = (await computerOf(p))!;
+      if (fresh.offAt) {
+        await noteEvent(p.orgId, fresh, "powered-on");
+        await setOff(p, fresh.id, false);
+      }
+    } finally {
+      await release(p.orgId, c.id, held);
+    }
+  }
+  return build(p);
+}
+
+// The machine goes, its stops on the record at Fly's own time first, so
+// the meter stops where it stopped. Under the lease.
+async function letGo(orgId: string, c: Computer): Promise<void> {
+  const m = await fly.machine(c.machineId!);
+  if (m?.events) await noteEventsIn(orgId, c, m.events);
+  await fly.destroyMachine(c.machineId!);
+  await noteState(orgId, c, "destroyed");
+  await clearMachine(orgId, c.id, c.machineId!);
+  c.machineId = null;
+}
+
+// The ladder's word on a machine, from its last reports. Up is aggressive:
+// one report with under a quarter of memory free, or load over the cores
+// at two in a row, or anything killed for want of memory, wants the next
+// rung — two rungs when under a tenth was free — at the next quiet moment,
+// and at once after a kill. Down is conservative: three hours in which
+// every report had over seven tenths free and load under a fifth, none of
+// them within three hours of the last change of size, allows the rung
+// below, one at a time, never below the first. A quiet moment is a fresh
+// report with no terminal open and load under a half for its minute.
+export type Sizing = {
+  up: string | null;
+  down: string | null;
+  urgent: boolean;
+  quiet: boolean;
+};
+const SHORT = 0.25;
+const STARVED = 0.1;
+const BUSY = 1;
+const SPARE = 0.7;
+const IDLE = 0.2;
+const QUIET = 0.5;
+const SETTLED = 3 * 3600_000;
+const FRESH = 10 * 60_000;
+export function sizing(
+  c: Pick<Computer, "size" | "need" | "seenAt">,
+  lastResizeAt: Date | null,
+  now = new Date(),
+): Sizing {
+  const rung = LADDER.indexOf(c.size);
+  const free = c.need?.memory?.free ?? [];
+  const load = c.need?.load ?? [];
+  const lastFree = free.at(-1) ?? 1;
+  const urgent = (c.need?.oom ?? 0) > 0;
+  const short =
+    urgent || lastFree < SHORT || (load.at(-1)! > BUSY && load.at(-2)! > BUSY);
+  const up =
+    rung >= 0 && rung < LADDER.length - 1 && short
+      ? LADDER[
+          Math.min(rung + (lastFree < STARVED ? 2 : 1), LADDER.length - 1)
+        ]!
+      : null;
+  const settled =
+    !lastResizeAt || now.getTime() - lastResizeAt.getTime() >= SETTLED;
+  const spare =
+    free.length >= KEPT &&
+    free.every((f) => f > SPARE) &&
+    load.length >= KEPT &&
+    load.every((l) => l < IDLE);
+  const down = rung > 0 && settled && spare ? LADDER[rung - 1]! : null;
+  const fresh = c.seenAt !== null && now.getTime() - c.seenAt.getTime() < FRESH;
+  const quiet =
+    fresh && (c.need?.terminals ?? 0) === 0 && (load.at(-1) ?? 0) < QUIET;
+  return { up, down, urgent, quiet };
+}
+
+// Acts on the ladder's word after a report, or for the sweep: up at a
+// quiet moment or at once after a kill, down at a quiet moment.
+export async function sizeIn(orgId: string, c: Computer): Promise<void> {
+  if (deployment.computers.kind === "none" || !c.machineId || c.offAt) return;
+  const last = await lastResizeIn(orgId, c.id);
+  const s = sizing(c, last?.at ?? null);
+  const size = s.up ?? s.down;
+  if (!size || !(s.urgent || s.quiet)) return;
+  const p = await principalIn(orgId, c.userId);
+  if (!p) return;
+  await replace(
+    p,
+    c,
+    size,
+    s.up ? (s.urgent ? "out-of-memory" : "short-of-memory") : "room-to-spare",
+  );
+}
+
+// The person asked for more memory now: the next rung, at once.
+export async function askBigger(p: Principal): Promise<Built | "top"> {
+  const c = await computerOf(p);
+  if (!c) return "exists";
+  const rung = LADDER.indexOf(c.size);
+  const size = LADDER[rung + 1];
+  if (!size) return "top";
+  return replace(p, c, size, "asked-bigger");
+}
+
+// A cold boot at another size on the same disk: the reason on the record,
+// the machine let go of with its stops at Fly's own time, the new size
+// written, then a machine made at it and started. Never while the org's
+// computers are off or the person's is powered off.
+async function replace(
+  p: Principal,
+  c: Computer,
+  size: string,
+  why: Cause,
+): Promise<Built> {
+  if (!(await computersAllowed(p))) return "not-allowed";
+  const held = await lease(p, c.id);
+  if (!held) return "exists";
+  try {
+    c = (await computerOf(p))!;
+    if (c.offAt) return "powered-off";
+    if (c.size === size) return "exists";
+    await noteEvent(p.orgId, c, why);
+    if (c.machineId) await letGo(p.orgId, c);
+    await resize(p, c, size);
+  } finally {
+    await release(p.orgId, c.id, held);
+  }
+  return build(p);
+}
+
+// The sweep's word on one computer. What Fly did to the machine since goes
+// on the record, and one Fly no longer has is forgotten. One that should
+// be running — the org's computers on, the person's not powered off, the
+// membership live — is made if it is missing, replaced if it is on an old
+// image or, once off, if it would stop itself for idleness, started if Fly
+// stopped it, and sized if its reports say so. One that should not be
+// running is stopped, and one powered off is let go of.
+export async function upholdIn(
+  orgId: string,
+  c: Computer,
+  orgOn: boolean,
+): Promise<void> {
+  let m = c.machineId ? await fly.machine(c.machineId) : null;
+  if (m?.events) await noteEventsIn(orgId, c, m.events);
+  if (c.machineId && !m) {
+    await noteState(orgId, c, "destroyed");
+    await clearMachine(orgId, c.id, c.machineId);
+    c.machineId = null;
+  }
+  const p = await principalIn(orgId, c.userId);
+  if (!(orgOn && !c.offAt && p)) {
+    // Powered off by the person, yet a machine still stands: a power-off
+    // that failed partway finishes here.
+    if (m && c.offAt) {
+      const held = await leaseIn(orgId, c.id);
+      if (!held) return;
+      try {
+        await letGo(orgId, c);
+      } finally {
+        await release(orgId, c.id, held);
+      }
+      return;
+    }
+    if (m && (m.state === "started" || m.state === "starting")) {
+      await fly.stop(m.id);
+      m = await fly.machine(m.id);
+      if (m?.events) await noteEventsIn(orgId, c, m.events);
+    }
+    if (m) await noteState(orgId, c, m.state);
+    return;
+  }
+  const off = m !== null && isOff(m);
+  // One on an image that is not the image answers no link of ours, so it
+  // goes whatever it is doing; one that would stop itself for idleness
+  // goes once it has. One that will not go stays on the row, and the next
+  // sweep tries again.
+  const stale =
+    m !== null &&
+    ((m.config?.image !== undefined && m.config.image !== IMAGE) ||
+      (autostops(m) && off));
+  if (m && stale) {
+    console.log(`machine ${m.id} is on ${m.config?.image}; replaced`);
+    await fly.destroyMachine(m.id);
+    await noteState(orgId, c, "destroyed");
+    await clearMachine(orgId, c.id, m.id);
+    m = null;
+    c.machineId = null;
+  }
+  if (!m) {
+    await build(p);
+  } else if (off) {
+    await start(p, c);
+  } else {
+    await noteState(orgId, c, m.state);
+    await sizeIn(orgId, c);
   }
 }
 
@@ -222,16 +472,6 @@ async function growStep(p: Principal, c: Computer): Promise<boolean> {
   }
 }
 
-// At sign-in: the filesystem, if this deployment and org have computers.
-// Fly being down never keeps anyone out; the next look tries again.
-export async function filesystemAtSignIn(p: Principal): Promise<void> {
-  try {
-    await ensureFilesystem(p);
-  } catch (err) {
-    console.error(`filesystem at sign-in: ${(err as Error).message}`);
-  }
-}
-
 export type Status = { computer: Computer; state: string };
 
 // The computer as Fly sees it right now, remembered if it changed.
@@ -239,7 +479,14 @@ export async function status(p: Principal): Promise<Status | null> {
   const computer = await computerOf(p);
   if (!computer) return null;
   if (!computer.machineId)
-    return { computer, state: computer.volumeId ? "no-compute" : "building" };
+    return {
+      computer,
+      state: computer.offAt
+        ? "powered-off"
+        : computer.volumeId
+          ? "no-compute"
+          : "building",
+    };
   let machine;
   try {
     machine = await fly.machine(computer.machineId);
@@ -253,26 +500,18 @@ export async function status(p: Principal): Promise<Status | null> {
   const held = await lease(p, computer.id);
   if (held) {
     try {
-      // One that is off and has been outgrown is let go of here, and a
-      // running one waits for its next stop; the next attach makes one at
-      // the size wanted, on the same filesystem. Its stop goes on the
-      // record first, at Fly's own time, so the meter stops there; one
-      // that will not go stays on the row, and the next look tries again.
-      const outgrown =
-        (machine?.state === "stopped" || machine?.state === "suspended") &&
-        wanted(computer) !== null;
       // One on an image that is not the image goes whatever it is doing,
       // and here rather than at the next sweep: it answers no link of
       // ours, so the first look after a deploy is the one that replaces
-      // it, and the attach below makes one from the image on the same
-      // filesystem.
+      // it, and the build below makes one from the image on the same
+      // filesystem. Its stops go on the record first, at Fly's own time,
+      // so the meter stops there.
       const stale =
         machine?.config?.image !== undefined && machine.config.image !== IMAGE;
-      if (machine && !outgrown && !stale)
-        await noteState(p.orgId, computer, machine.state);
+      if (machine && !stale) await noteState(p.orgId, computer, machine.state);
       else {
-        if (outgrown || stale) {
-          await noteEventsIn(p.orgId, computer, machine?.events ?? []);
+        if (machine) {
+          await noteEventsIn(p.orgId, computer, machine.events ?? []);
           await fly.destroyMachine(computer.machineId);
         }
         // Gone, behind our back or by our hand: the row forgets it and

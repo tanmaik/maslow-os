@@ -11,8 +11,10 @@ import {
   memberLive,
 } from "@placeholder/db/backups";
 import {
+  computersAllowedIn,
   computersIn,
   noteEvent,
+  principalIn,
   type Computer,
 } from "@placeholder/db/computers";
 import fs from "node:fs/promises";
@@ -154,8 +156,10 @@ export async function backUp(orgId: string, c: Computer): Promise<void> {
   await disk.backupIn(orgId, c);
 }
 
-// The sweep's part: every machine backs up once a day, the eighth and
-// older go, and one that never finished within a day goes too.
+// The sweep's part: every running member's machine backs up once a day,
+// the eighth and older go, and one that never finished within a day goes
+// too. A machine that should be off — the org's computers off, the
+// membership ended — is not woken for it.
 export async function sweepBackups(orgId: string, now: Date): Promise<void> {
   if (deployment.storage.kind === "none" || deployment.computers.kind !== "fly")
     return;
@@ -164,8 +168,10 @@ export async function sweepBackups(orgId: string, now: Date): Promise<void> {
     await drop(orgId, b).catch((err) =>
       console.error(`backup ${b.id}: ${(err as Error).message}`),
     );
+  if (!(await computersAllowedIn(orgId))) return;
   for (const c of await computersIn(orgId)) {
-    if (!c.machineId || running.has(c.userId)) continue;
+    if (!c.machineId || c.offAt || running.has(c.userId)) continue;
+    if (!(await principalIn(orgId, c.userId))) continue;
     const last = lastFinished.get(c.userId);
     if (last && now.getTime() - last.getTime() < 86400_000) continue;
     await backUp(orgId, c).catch((err) =>

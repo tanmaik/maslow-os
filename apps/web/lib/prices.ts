@@ -1,3 +1,5 @@
+import type { Resource } from "@placeholder/db/usage";
+
 // What each vendor charges us, in dollars, in the unit we measure. Every
 // figure is the vendor's list price; the meter multiplies, nothing else.
 // A month is 730 hours, as the vendors' monthly prices assume.
@@ -12,6 +14,15 @@ export const LADDER = [
   "shared-cpu-4x:4096",
   "performance-2x:8192",
 ];
+
+// A source of cost in one word.
+export const SOURCE: Record<Resource, string> = {
+  compute: "Machine",
+  disk: "Disk",
+  rootfs: "Image",
+  bucket: "Bucket",
+  brain: "Brain",
+};
 
 export const PRICES = {
   // Fly machine, per second while started, each rung of the ladder on
@@ -35,6 +46,27 @@ export const PRICES = {
   // person's brain holds. Compute is shared and not yet apportioned.
   brain: 0.35 / MONTH / 1e9,
 };
+
+// What a size costs running all month.
+export const monthly = (size: string) => (PRICES.compute[size] ?? 0) * MONTH;
+
+// Dollars as a person reads them: whole dollars from a dollar up, cents
+// below, and "under 1¢" for what would round to nothing.
+export const dollars = (n: number) =>
+  n >= 1
+    ? `$${Math.round(n)}`
+    : n >= 0.005
+      ? `$${n.toFixed(2)}`
+      : n > 0
+        ? "under 1¢"
+        : "$0";
+
+// A rate an hour, with a digit more than a price since rates are small.
+export const rate = (n: number) =>
+  `$${n >= 1 ? n.toFixed(2) : n.toFixed(3)} / h`;
+
+// A cost as the ledger holds it, for a table's cost column: four decimals.
+export const exact = (n: number) => `$${n.toFixed(4)}`;
 
 // A size taken apart: "shared-cpu-2x:2048" is two shared CPUs and 2048 MB,
 // "performance-2x:8192" two performance CPUs and 8192 MB.

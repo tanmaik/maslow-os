@@ -31,13 +31,22 @@ export type Machine = {
   config?: {
     image?: string;
     guest?: { cpu_kind: string; cpus: number; memory_mb: number };
+    services?: { autostop?: "off" | "stop" | "suspend" | boolean }[];
   };
 };
+
+// Whether Fly's proxy would stop this machine for idleness: a machine made
+// before machines ran until powered off.
+export const autostops = (m: Machine) =>
+  (m.config?.services ?? []).some(
+    (s) =>
+      s.autostop !== undefined && s.autostop !== "off" && s.autostop !== false,
+  );
 
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, and the person's account in it, copied onto the
 // volume on first boot.
-export const IMAGE = "registry.fly.io/placeholder-computers:v14";
+export const IMAGE = "registry.fly.io/placeholder-computers:v15";
 // Every disk starts here; the operating system takes about a gigabyte of
 // it, and it doubles when it fills, to the cap.
 export const DISK_GB = 3;
@@ -106,8 +115,9 @@ export const fly = {
   },
 
   // A machine on its volume at a size, made stopped: it is recorded before
-  // it runs. Fly's proxy fronts it: a request naming it wakes it, and it
-  // is suspended again once nothing has asked for it for a while.
+  // it runs. Fly's proxy fronts it: a request naming it starts it if it is
+  // ever off, and never stops it — a machine runs until its person turns
+  // it off.
   async createMachine(
     computerId: string,
     volumeId: string,
@@ -140,7 +150,7 @@ export const fly = {
             protocol: "tcp",
             internal_port: 8080,
             autostart: true,
-            autostop: "suspend",
+            autostop: "off",
             min_machines_running: 0,
             ports: [{ port: 443, handlers: ["tls", "http"] }],
           },
@@ -175,6 +185,10 @@ export const fly = {
     if (!m || m.state === "created")
       throw new Error(`Fly machine ${id} was not placed within a minute.`);
     return m;
+  },
+
+  async start(id: string): Promise<void> {
+    await call("POST", `/machines/${id}/start`);
   },
 
   // Off until the proxy is asked for it again: a past member's machine.

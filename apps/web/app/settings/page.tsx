@@ -47,7 +47,8 @@ import { Groups } from "@/app/settings/groups";
 import { connections } from "@/lib/connections";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
-import { amount, dollars } from "@/lib/meter";
+import { amount } from "@/lib/meter";
+import { dollars, exact } from "@/lib/prices";
 import { principal } from "@/lib/session";
 import { usageOfOrg } from "@placeholder/db/usage";
 import { storage } from "@/lib/storage";
@@ -70,6 +71,7 @@ type Notice = {
     | "member"
     | "gone";
   invite?: "sent" | "pending" | "member";
+  computers?: "on" | "off";
   group?: "saved" | "deleted" | "gone";
   connection?: "connected" | "failed" | "disconnected" | "gone" | "unanswered";
   agent?: "disconnected" | "gone";
@@ -79,9 +81,10 @@ type Notice = {
 
 const NOTICES: Record<string, string> = {
   "org=saved": "Saved.",
-  "computers=on": "Computers are on. Everyone in the org can open theirs.",
+  "computers=on":
+    "Computers are on. Everyone in the org gets theirs, running, the next time they sign in or the sweep comes round.",
   "computers=off":
-    "Computers are off. What exists stays until a member is purged.",
+    "Computers are off. Every machine in the org stops within the hour and none is made; disks are kept until a member is purged.",
   "org=name": "The org needs a name of up to 80 characters.",
   "org=image":
     "That file can't be the logo. A PNG, JPEG or WebP under 2 MB always works.",
@@ -231,8 +234,8 @@ export default async function Settings({
                 <CardTitle>Computers</CardTitle>
                 <CardDescription>
                   {org.computers
-                    ? "Every member gets a computer: a disk, a machine that wakes when they open it, a terminal, backups. It costs while it exists."
-                    : "Off. Nobody in this org has a computer."}
+                    ? "Every member gets a computer the first time they sign in: a disk, a machine that runs until they power it off, a terminal, backups. It costs while it runs, and the disk costs while it exists."
+                    : "Off. No machine runs or is made for anyone in this org; disks are kept."}
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -250,6 +253,11 @@ export default async function Settings({
                     {org.computers ? "Turn computers off" : "Turn computers on"}
                   </Button>
                 </form>
+                {said("computers") && (
+                  <p className="text-muted-foreground mt-3 text-sm" data-notice>
+                    {said("computers")}
+                  </p>
+                )}
               </CardContent>
             </Card>
           )}
@@ -622,7 +630,7 @@ export default async function Settings({
                     <TableCell>
                       {amount(l.resource, l.unit, l.quantity)}
                     </TableCell>
-                    <TableCell>{dollars(l.cost)}</TableCell>
+                    <TableCell>{exact(l.cost)}</TableCell>
                   </TableRow>
                 ))}
                 {usage.length === 0 && (

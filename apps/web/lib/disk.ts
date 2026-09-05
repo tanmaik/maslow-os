@@ -13,8 +13,8 @@ import { deployment } from "./deployment.ts";
 import { linkKeyOf } from "./fly.ts";
 
 // The person's disk, as the daemon on their machine serves it. Every call
-// goes through Fly's proxy to the machine by id, which wakes it if it is
-// asleep: opening the computer is what turns it on.
+// goes through Fly's proxy to the machine by id, which starts it if Fly
+// ever stopped it; a machine powered off by its person is not reached.
 export type Entry = {
   name: string;
   kind: "file" | "folder";
@@ -61,6 +61,11 @@ async function machineOf(p: Principal): Promise<Computer> {
   if (!(await computersAllowed(p)))
     throw new DiskError(403, "Computers are off for this org.");
   let c = await computerOf(p);
+  if (c?.offAt)
+    throw new DiskError(
+      409,
+      "Your computer is powered off. Power it on to reach it.",
+    );
   if (!c?.machineId || c.state === "failed") {
     let built;
     try {
@@ -73,6 +78,11 @@ async function machineOf(p: Principal): Promise<Computer> {
     }
     if (built === "off" || built === "not-allowed")
       throw new DiskError(503, "Computers are not available here.");
+    if (built === "powered-off")
+      throw new DiskError(
+        409,
+        "Your computer is powered off. Power it on to reach it.",
+      );
     c = await computerOf(p);
     // Another request may hold the build; it is done within a minute.
     for (let i = 0; i < 60 && !c?.machineId; i++) {
