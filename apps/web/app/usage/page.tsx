@@ -2,6 +2,7 @@ import { backupsOf } from "@placeholder/db/backups";
 import { computerOf, eventsOf } from "@placeholder/db/computers";
 import {
   brainByKind,
+  picturesOf,
   usageOfMember,
   usageOfOrg,
   type Line,
@@ -138,7 +139,7 @@ export default async function Usage() {
   );
   const monthEnd = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
   const computer = await computerOf(p);
-  const [mine, org, ticking, events, backups, staged, kinds, onDisk] =
+  const [mine, org, ticking, events, backups, staged, pictures, kinds, onDisk] =
     await Promise.all([
       usageOfMember(p, monthStart),
       p.role === "owner" ? usageOfOrg(p, monthStart) : null,
@@ -146,6 +147,7 @@ export default async function Usage() {
       eventsOf(p, monthStart),
       backupsOf(p),
       filesOf(p),
+      picturesOf(p),
       brainByKind(p),
       // Read from the machine only if it is up; asking would wake it.
       computer?.machineId && computer.state === "started"
@@ -241,6 +243,12 @@ export default async function Usage() {
       what: `${f.name}, ${f.state === "ready" ? "landing on your disk" : "still arriving"}`,
       much: bytes(f.size),
       attr: { "data-bucket-upload": f.id },
+    })),
+    ...pictures.map((x) => ({
+      key: `picture:${x.kind}`,
+      what: x.kind === "photo" ? "your profile photo" : "the org's logo",
+      much: bytes(x.size),
+      attr: { "data-bucket-picture": x.kind },
     })),
   ];
 

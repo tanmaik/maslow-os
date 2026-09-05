@@ -1,4 +1,4 @@
-import { asOrg, asPerson } from "./index.ts";
+import { asOrg, asPerson, type Query } from "./index.ts";
 import type { Principal } from "./auth.ts";
 
 export type Resource = "compute" | "rootfs" | "disk" | "bucket" | "brain";
@@ -49,6 +49,31 @@ export async function brainByKind(
       ).rows,
   );
 }
+
+export type Picture = {
+  kind: "photo" | "logo";
+  size: number;
+  createdAt: Date;
+};
+
+// The bucket objects a member is charged for: their profile photo, and
+// the org's logo while they are its principal, since the owner pays for
+// the org. Read inside an org scope.
+export async function picturesIn(q: Query, userId: string): Promise<Picture[]> {
+  return (
+    await q.query<Picture>(
+      `select 'photo' as kind, avatar_bytes::float8 as size, avatar_at as "createdAt"
+         from users where id = $1 and avatar_bytes is not null
+       union all
+       select 'logo', logo_bytes::float8, logo_at
+         from orgs where principal_id = $1 and logo_bytes is not null`,
+      [userId],
+    )
+  ).rows;
+}
+
+export const picturesOf = (p: Principal) =>
+  asOrg(p.orgId, (q) => picturesIn(q, p.userId));
 
 // One person's lines since a moment.
 export async function usageOfMember(

@@ -121,8 +121,47 @@ export async function renameOrg(p: Principal, name: string): Promise<void> {
   await asOwner(p, (q) => q.query("update orgs set name = $1", [name]));
 }
 
-export async function setOrgLogo(p: Principal, key: string): Promise<void> {
-  await asOwner(p, (q) => q.query("update orgs set logo_key = $1", [key]));
+// A picture replaced or orphaned is owed its deletion from the bucket, in
+// the transaction that forgot its key.
+const owePicture = (q: Query, orgId: string, key: string) =>
+  q.query(
+    "insert into orphans (org_id, kind, ref) values ($1, 'picture', $2)",
+    [orgId, key],
+  );
+
+// Whether a picture owed its deletion is still shown by anyone, in any
+// org; one saved before keys were made per object may be shared.
+export async function pictureInUse(
+  orgId: string,
+  key: string,
+): Promise<boolean> {
+  return asOrg(
+    orgId,
+    async (q) =>
+      (
+        await q.query<{ used: boolean }>("select picture_in_use($1) as used", [
+          key,
+        ])
+      ).rows[0]!.used,
+  );
+}
+
+// Replaces the org's logo with one of so many bytes. Owners only.
+export async function setOrgLogo(
+  p: Principal,
+  key: string,
+  bytes: number,
+): Promise<void> {
+  await asOwner(p, async (q) => {
+    const was = (
+      await q.query<{ logo_key: string | null }>("select logo_key from orgs")
+    ).rows[0]!.logo_key;
+    await q.query(
+      "update orgs set logo_key = $1, logo_bytes = $2, logo_at = now()",
+      [key, bytes],
+    );
+    if (was) await owePicture(q, p.orgId, was);
+  });
 }
 
 // A person's name and avatar live on people, and every membership carries a
@@ -132,16 +171,18 @@ export async function setOrgLogo(p: Principal, key: string): Promise<void> {
 async function setProfile(
   p: Principal,
   fields:
-    { first_name: string; last_name: string | null } | { avatar_key: string },
+    | { first_name: string; last_name: string | null }
+    | { avatar_key: string; avatar_bytes: number },
 ): Promise<void> {
   const values = Object.values(fields);
   const set = Object.keys(fields)
     .map((c, i) => `${c} = $${i + 2}`)
+    .concat("avatar_key" in fields ? ["avatar_at = now()"] : [])
     .join(", ");
   await asPerson(p, async (q) => {
     const person = (
-      await q.query<{ email: string }>(
-        "select email from people where id = $1 for update",
+      await q.query<{ email: string; avatar_key: string | null }>(
+        "select email, avatar_key from people where id = $1 for update",
         [p.personId],
       )
     ).rows[0];
@@ -150,6 +191,8 @@ async function setProfile(
       p.personId,
       ...values,
     ]);
+    if ("avatar_key" in fields && person.avatar_key)
+      await owePicture(q, p.orgId, person.avatar_key);
     await q.query("select set_config('app.email', $1, true)", [person.email]);
     const orgIds = (
       await q.query<{ org_id: string }>(
@@ -175,8 +218,13 @@ export async function renameSelf(
   await setProfile(p, { first_name: firstName, last_name: lastName });
 }
 
-export async function setAvatar(p: Principal, key: string): Promise<void> {
-  await setProfile(p, { avatar_key: key });
+// Replaces the person's profile photo with one of so many bytes.
+export async function setAvatar(
+  p: Principal,
+  key: string,
+  bytes: number,
+): Promise<void> {
+  await setProfile(p, { avatar_key: key, avatar_bytes: bytes });
 }
 
 // Ends a membership: its sessions, its invitation, and its accounts in
@@ -268,7 +316,9 @@ export async function deleteOrg(
       `insert into orphans (org_id, kind, ref)
          select org_id, 'machine', machine_id from computers where machine_id is not null
        union all
-         select org_id, 'volume', volume_id from computers where volume_id is not null`,
+         select org_id, 'volume', volume_id from computers where volume_id is not null
+       union all
+         select id, 'picture', logo_key from orgs where logo_key is not null`,
     );
     await q.query("select set_config('app.meter', 'sweep', true)");
     await q.query(
@@ -300,8 +350,8 @@ export async function restoreMember(
   return asOwner(p, async (q) => {
     await seeingPast(q);
     const past = (
-      await q.query<{ email: string }>(
-        "select email from users where id = $1 and removed_at is not null",
+      await q.query<{ email: string; avatar_key: string | null }>(
+        "select email, avatar_key from users where id = $1 and removed_at is not null",
         [id],
       )
     ).rows[0];
@@ -312,14 +362,26 @@ export async function restoreMember(
         first_name: string;
         last_name: string | null;
         avatar_key: string | null;
+        avatar_bytes: number | null;
+        avatar_at: Date | null;
       }>(
-        "select first_name, last_name, avatar_key from people where email = $1",
+        "select first_name, last_name, avatar_key, avatar_bytes, avatar_at from people where email = $1",
         [past.email],
       )
     ).rows[0]!;
+    // The photo the hidden copy held, replaced meanwhile, is let go of.
+    if (past.avatar_key && past.avatar_key !== person.avatar_key)
+      await owePicture(q, p.orgId, past.avatar_key);
     await q.query(
-      "update users set removed_at = null, first_name = $2, last_name = $3, avatar_key = $4 where id = $1",
-      [id, person.first_name, person.last_name, person.avatar_key],
+      "update users set removed_at = null, first_name = $2, last_name = $3, avatar_key = $4, avatar_bytes = $5, avatar_at = $6 where id = $1",
+      [
+        id,
+        person.first_name,
+        person.last_name,
+        person.avatar_key,
+        person.avatar_bytes,
+        person.avatar_at,
+      ],
     );
     await q.query(
       "delete from orphans where kind = 'stop' and ref in (select machine_id from computers where user_id = $1)",

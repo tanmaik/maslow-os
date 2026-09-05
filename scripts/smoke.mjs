@@ -2,6 +2,7 @@
 // each org through the development sign-in, checks that each sees only their
 // own org, and that an invited email is admitted into the inviting org. This
 // is the merge gate.
+import fs from "node:fs/promises";
 import path from "node:path";
 
 import { LADDER, PRICES, sizeName } from "../apps/web/lib/prices.ts";
@@ -1336,6 +1337,118 @@ try {
       !rootFinal.includes('data-file="/dusk.txt"'),
     "photos and dusk.txt gone",
   );
+  // A profile photo is bytes in the bucket: saving one raises the live
+  // meter by exactly its size, the usage page names it with its size, and
+  // replacing it removes the old object from the store. The org's logo is
+  // on its principal's line, and the logo replaced earlier is gone.
+  const bakeryId = "00000000-0000-4000-8000-000000000002";
+  const uploadsDir = path.join(root, "apps", "web", ".local", "uploads");
+  const ottoPhoto = () =>
+    asOrg(
+      bakeryId,
+      async (q) =>
+        (
+          await q.query(
+            "select avatar_key as key, avatar_bytes::int as bytes from users where id = $1",
+            [ottoId],
+          )
+        ).rows[0],
+    );
+  const bucketRate = async () =>
+    (
+      await (
+        await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
+      ).json()
+    ).active.find((a) => a.resource === "bucket")?.ratePerHour ?? 0;
+  const usageOf = async (cookie) =>
+    (await fetch(`${stack.url}/usage`, { headers: { cookie } })).text();
+  const rateBefore = await bucketRate();
+  const photoForm = new FormData();
+  photoForm.set("first_name", "Otto");
+  photoForm.set("last_name", "L. Loaf");
+  photoForm.set("avatar", new File([png], "me.png", { type: "image/png" }));
+  const photoSaved = await settings("/settings/profile", photoForm, ottoNow);
+  const firstPhoto = await ottoPhoto();
+  const rateAfter = await bucketRate();
+  const perByteHour = (0.02 / (730 * 3600) / 1e9) * 3600;
+  const [ottoPhotoUsage, margeLogoUsage] = await Promise.all([
+    usageOf(ottoNow),
+    usageOf(margeOwner),
+  ]);
+  check(
+    "a profile photo is metered in the bucket the moment it is saved",
+    photoSaved.headers.get("location")?.endsWith("profile=saved") &&
+      firstPhoto?.bytes === png.length &&
+      Math.abs(rateAfter - rateBefore - png.length * perByteHour) < 1e-15 &&
+      new RegExp(
+        `data-bucket-picture="photo"[^]*?your profile photo[^]*?${png.length} B`,
+      ).test(ottoPhotoUsage) &&
+      !/data-bucket-picture="logo"/.test(ottoPhotoUsage) &&
+      /data-bucket-picture="logo"/.test(margeLogoUsage) &&
+      (await fetch(`${stack.url}${logoUrl}`)).status === 404,
+    `${png.length} bytes, +$${(rateAfter - rateBefore).toExponential(3)}/h; the logo on Marge's line, the first logo gone`,
+  );
+  photoForm.set("avatar", new File([png], "again.png", { type: "image/png" }));
+  await settings("/settings/profile", photoForm, ottoNow);
+  const secondPhoto = await ottoPhoto();
+  const stored = await fs.readdir(uploadsDir);
+  const owed = await asOrg(
+    bakeryId,
+    async (q) =>
+      (
+        await q.query(
+          "select count(*)::int as n from orphans where kind = 'picture'",
+        )
+      ).rows[0].n,
+  );
+  check(
+    "replacing the photo removes the old object from the store",
+    secondPhoto.key !== firstPhoto.key &&
+      stored.includes(secondPhoto.key) &&
+      !stored.includes(firstPhoto.key) &&
+      owed === 0,
+    `${firstPhoto.key} → ${secondPhoto.key}, ${owed} owed`,
+  );
+  // A picture saved before keys were made per object may be shared: Marge
+  // is given Otto's key, Otto replaces his, and Marge's still answers.
+  const margePerson = await asOrg(
+    bakeryId,
+    async (q) =>
+      (await q.query("select person_id from users where id = $1", [margeId]))
+        .rows[0].person_id,
+  );
+  await asPerson(
+    { orgId: bakeryId, personId: margePerson, userId: margeId },
+    async (q) => {
+      await q.query("update people set avatar_key = $1 where id = $2", [
+        secondPhoto.key,
+        margePerson,
+      ]);
+      await q.query("update users set avatar_key = $1 where id = $2", [
+        secondPhoto.key,
+        margeId,
+      ]);
+    },
+  );
+  photoForm.set("avatar", new File([png], "third.png", { type: "image/png" }));
+  await settings("/settings/profile", photoForm, ottoNow);
+  const shared = await fetch(`${stack.url}/uploads/${secondPhoto.key}`);
+  const sharedOwed = await asOrg(
+    bakeryId,
+    async (q) =>
+      (
+        await q.query(
+          "select count(*)::int as n from orphans where kind = 'picture'",
+        )
+      ).rows[0].n,
+  );
+  check(
+    "a shared picture stays until the last to show it lets it go",
+    (await ottoPhoto()).key !== secondPhoto.key &&
+      shared.status === 200 &&
+      sharedOwed === 0,
+    `Marge's copy answers ${shared.status}, ${sharedOwed} owed`,
+  );
   // The meter: a sweep turns what happened into priced usage, per person,
   // and a second sweep only adds the time since.
   const sweepOnce = () =>
@@ -1367,13 +1480,14 @@ try {
   const by = Object.fromEntries(ottoMetered.map((r) => [r.resource, r]));
   const margeBrain = margeMetered.find((r) => r.resource === "brain");
   check(
-    "the meter prices compute, disk and brain per person",
+    "the meter prices compute, disk, bucket and brain per person",
     swept.appended > 0 &&
       by.compute?.unit === "second" &&
       by.compute.q > 0 &&
       by.disk?.unit === "gb_second" &&
       by.disk.q > 0 &&
-      (by.bucket === undefined || by.bucket.unit === "byte_second") &&
+      by.bucket?.unit === "byte_second" &&
+      by.bucket.q > 0 &&
       margeBrain?.unit === "byte_second" &&
       margeBrain.q > 0 &&
       [...ottoMetered, ...margeMetered].every((r) => r.n >= 2 && r.cost >= 0),
@@ -1859,6 +1973,48 @@ try {
       (await page(lateCookie)).includes("Pick a person from the pill") &&
       (await page(mateCookie)).includes("Pick a person from the pill"),
     `note ${lateNote.status}; ${leftOfLate.orgs} orgs, ${leftOfLate.users} users, ${leftOfLate.records} records, ${latePerson} person, Mate signed out`,
+  );
+
+  // A membership restored carries the person's photo of today; the one
+  // its hidden copy held, replaced meanwhile from another org, is paid
+  // off at the restore.
+  const beforeRemoval = await ottoPhoto();
+  await settings(
+    "/settings/members",
+    new URLSearchParams({ remove: ottoId }),
+    margeOwner,
+  );
+  photoForm.set(
+    "avatar",
+    new File([png], "elsewhere.png", { type: "image/png" }),
+  );
+  await settings("/settings/profile", photoForm, ottoObs);
+  const heldWhileGone = await fs.readdir(uploadsDir);
+  const ottoRestored = await settings(
+    "/settings/members",
+    new URLSearchParams({ restore: ottoId }),
+    margeOwner,
+  );
+  const afterRestore = await ottoPhoto();
+  const afterRestoreStore = await fs.readdir(uploadsDir);
+  const restoreOwed = await asOrg(
+    bakeryId,
+    async (q) =>
+      (
+        await q.query(
+          "select count(*)::int as n from orphans where kind = 'picture'",
+        )
+      ).rows[0].n,
+  );
+  check(
+    "a restored membership's old photo is paid off",
+    ottoRestored.headers.get("location")?.endsWith("member=restored") &&
+      heldWhileGone.includes(beforeRemoval.key) &&
+      afterRestore?.key !== beforeRemoval.key &&
+      afterRestoreStore.includes(afterRestore?.key) &&
+      !afterRestoreStore.includes(beforeRemoval.key) &&
+      restoreOwed === 0,
+    `${beforeRemoval.key} held while Otto was out, gone after the restore; ${restoreOwed} owed`,
   );
 
   const signedOutSettings = await fetch(`${stack.url}/settings`, {

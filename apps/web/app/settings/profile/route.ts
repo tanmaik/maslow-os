@@ -1,7 +1,9 @@
 import { renameSelf, setAvatar } from "@placeholder/db/settings";
 import { NextResponse } from "next/server";
 
+import { sweepMember } from "@/lib/meter";
 import { origin } from "@/lib/origin";
+import { settle } from "@/lib/orphans";
 import { principal } from "@/lib/session";
 import { bounded, imageOrThrow, Rejected, storage } from "@/lib/storage";
 
@@ -41,7 +43,12 @@ export async function POST(request: Request) {
       const why = /object storage/.test(err.message) ? "storage" : "image";
       return NextResponse.redirect(`${home}/settings?profile=${why}`, 303);
     }
-    await setAvatar(p, await storage.put(image.bytes, image.ext));
+    // The photo it replaces is metered to this moment, then owed its
+    // deletion, which is paid at once.
+    await sweepMember(p.orgId, p.userId);
+    const key = await storage.put(image.bytes, image.ext);
+    await setAvatar(p, key, image.bytes.length);
+    await settle(p.orgId);
   }
   return NextResponse.redirect(`${home}/settings?profile=saved`, 303);
 }

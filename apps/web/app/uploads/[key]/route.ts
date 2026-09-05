@@ -6,8 +6,9 @@ const TYPE: Record<string, string> = {
   webp: "image/webp",
 };
 
-// Serves an uploaded image. Keys are content hashes, so a key is only ever
-// known to whoever was shown it, and the response can be cached forever.
+// Serves an uploaded image. A key is unguessable and its bytes never
+// change, so it is only ever known to whoever was shown it, and the
+// response can be cached forever.
 export async function GET(
   _: Request,
   { params }: { params: Promise<{ key: string }> },

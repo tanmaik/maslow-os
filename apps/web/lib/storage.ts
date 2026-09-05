@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -9,6 +9,8 @@ import { s3 } from "./s3.ts";
 // store, development uses a directory.
 export type Storage = {
   put(bytes: Uint8Array, ext: string): Promise<string>;
+  // Already gone is fine.
+  delete(key: string): Promise<void>;
   url(key: string): string;
 };
 
@@ -55,17 +57,19 @@ export async function imageOrThrow(
   return { bytes, ext };
 }
 
-const key = (bytes: Uint8Array, ext: string) =>
-  `${createHash("sha256").update(bytes).digest("hex").slice(0, 32)}.${ext}`;
+// A key of its own for every object put, so deleting one never takes
+// another owner's copy of the same bytes with it.
+const key = (ext: string) => `${randomBytes(16).toString("hex")}.${ext}`;
 
 // A directory under .local, served by /uploads/[key].
 const local = (dir: string): Storage => ({
   async put(bytes, ext) {
-    const k = key(bytes, ext);
+    const k = key(ext);
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(path.join(dir, k), bytes);
     return k;
   },
+  delete: (k) => fs.rm(path.join(dir, k), { force: true }),
   url: (k) => `/uploads/${k}`,
 });
 
@@ -73,6 +77,7 @@ const none: Storage = {
   put: async () => {
     throw new Rejected("Images need object storage, which is not set up yet.");
   },
+  delete: async () => {},
   url: (k) => `/uploads/${k}`,
 };
 
@@ -82,7 +87,7 @@ const bucket = (
   cfg: Extract<typeof deployment.storage, { kind: "s3" }>,
 ): Storage => ({
   async put(bytes, ext) {
-    const k = key(bytes, ext);
+    const k = key(ext);
     const r = await s3(
       cfg,
       "PUT",
@@ -95,6 +100,13 @@ const bucket = (
         `storage put → ${r.status}: ${(await r.text()).slice(0, 200)}`,
       );
     return k;
+  },
+  async delete(k) {
+    const r = await s3(cfg, "DELETE", cfg.prefix + k);
+    if (!r.ok && r.status !== 404)
+      throw new Error(
+        `storage delete → ${r.status}: ${(await r.text()).slice(0, 200)}`,
+      );
   },
   url: (k) => `/uploads/${k}`,
 });

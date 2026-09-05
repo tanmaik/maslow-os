@@ -39,8 +39,11 @@ export async function POST(request: Request) {
       return back(outcome);
     }
     const restore = form.get("restore");
-    if (typeof restore === "string")
-      return back(await restoreMember(p, restore));
+    if (typeof restore === "string") {
+      const outcome = await restoreMember(p, restore);
+      if (outcome === "restored") await settle(p.orgId);
+      return back(outcome);
+    }
     const purge = form.get("purge");
     // Nothing of theirs is destroyed until the owner and the past
     // membership are checked; what they cost until now is written first.

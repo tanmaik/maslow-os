@@ -1,16 +1,18 @@
 import { asOrg } from "@placeholder/db";
+import { pictureInUse } from "@placeholder/db/settings";
 
 import { connections } from "./connections.ts";
 import { deployment } from "./deployment.ts";
 import { dropBytes } from "./files.ts";
 import { fly } from "./fly.ts";
 import { s3 } from "./s3.ts";
+import { storage } from "./storage.ts";
 
-// Pays what removals and purges owe the vendors: stops or destroys
-// machines, destroys volumes, deletes objects and unfinished uploads,
-// deletes an ended membership's accounts at Composio. Each
-// debt is forgotten only once it is paid; one that refuses is tried again
-// by the next call, and the sweep calls for every org every hour.
+// Pays what removals, purges and replacements owe the vendors: stops or
+// destroys machines, destroys volumes, deletes objects, pictures and
+// unfinished uploads, deletes an ended membership's accounts at Composio.
+// Each debt is forgotten only once it is paid; one that refuses is tried
+// again by the next call, and the sweep calls for every org every hour.
 type Orphan = { id: string; kind: string; ref: string; extra: string | null };
 
 export async function settle(orgId: string): Promise<number> {
@@ -38,7 +40,7 @@ export async function settle(orgId: string): Promise<number> {
     );
     if (!claimed) continue;
     try {
-      await pay(o);
+      await pay(orgId, o);
       await asOrg(orgId, (q) =>
         q.query("delete from orphans where id = $1", [o.id]),
       );
@@ -50,7 +52,7 @@ export async function settle(orgId: string): Promise<number> {
   return paid;
 }
 
-async function pay(o: Orphan): Promise<void> {
+async function pay(orgId: string, o: Orphan): Promise<void> {
   const st = deployment.storage;
   switch (o.kind) {
     case "stop":
@@ -67,6 +69,10 @@ async function pay(o: Orphan): Promise<void> {
       return;
     case "accounts":
       await connections.forgetMember(o.ref);
+      return;
+    case "picture":
+      // A shared picture stays until the last to show it lets it go.
+      if (!(await pictureInUse(orgId, o.ref))) await storage.delete(o.ref);
       return;
     case "object":
     case "upload": {

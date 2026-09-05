@@ -7,6 +7,7 @@ import {
   noteEventsIn,
   noteStateIn,
 } from "@placeholder/db/computers";
+import { picturesIn } from "@placeholder/db/usage";
 
 import { deployment } from "./deployment.ts";
 import { sweepBackups } from "./backups.ts";
@@ -195,6 +196,14 @@ export async function measure(
     )
   ).rows;
   files.push(...backups);
+  // So are the member's profile photo and, on the principal's line, the
+  // org's logo.
+  for (const x of await picturesIn(q, userId))
+    files.push({
+      size: String(x.size),
+      created_at: x.createdAt,
+      deleted_at: null,
+    });
   if (files.length) {
     let byteSeconds = 0;
     let liveBytes = 0;

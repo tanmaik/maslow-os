@@ -1,7 +1,14 @@
-import { Forbidden, renameOrg, setOrgLogo } from "@placeholder/db/settings";
+import {
+  Forbidden,
+  orgOf,
+  renameOrg,
+  setOrgLogo,
+} from "@placeholder/db/settings";
 import { NextResponse } from "next/server";
 
+import { sweepMember } from "@/lib/meter";
 import { origin } from "@/lib/origin";
+import { settle } from "@/lib/orphans";
 import { principal } from "@/lib/session";
 import { bounded, imageOrThrow, Rejected, storage } from "@/lib/storage";
 
@@ -39,7 +46,12 @@ export async function POST(request: Request) {
       const why = /object storage/.test(err.message) ? "storage" : "image";
       return NextResponse.redirect(`${home}/settings?org=${why}`, 303);
     }
-    await setOrgLogo(p, await storage.put(image.bytes, image.ext));
+    // The logo is on the principal's line: what it replaces is metered to
+    // this moment, then owed its deletion, which is paid at once.
+    await sweepMember(p.orgId, (await orgOf(p)).org.principalId);
+    const key = await storage.put(image.bytes, image.ext);
+    await setOrgLogo(p, key, image.bytes.length);
+    await settle(p.orgId);
   }
   return NextResponse.redirect(`${home}/settings?org=saved`, 303);
 }
