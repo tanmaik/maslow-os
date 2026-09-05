@@ -9,16 +9,20 @@ import { principal } from "@/lib/session";
 export async function AppHeader() {
   const p = await principal();
   if (!p) return null;
-  const { orgName, me } = await asOrg(p.orgId, async (q) => ({
-    orgName: (await q.query<{ name: string }>("select name from orgs")).rows[0]
-      ?.name,
-    me: (
-      await q.query<{ name: string }>("select name from users where id = $1", [
-        p.userId,
-      ])
-    ).rows[0]?.name,
-  }));
-  const others = (await membershipsOf(p)).filter((m) => m.userId !== p.userId);
+  const [{ orgName, me }, memberships] = await Promise.all([
+    asOrg(p.orgId, async (q) => ({
+      orgName: (await q.query<{ name: string }>("select name from orgs"))
+        .rows[0]?.name,
+      me: (
+        await q.query<{ name: string }>(
+          "select name from users where id = $1",
+          [p.userId],
+        )
+      ).rows[0]?.name,
+    })),
+    membershipsOf(p),
+  ]);
+  const others = memberships.filter((m) => m.userId !== p.userId);
 
   return (
     <header className="mb-6 flex h-8 items-center justify-between gap-2 overflow-x-auto whitespace-nowrap">

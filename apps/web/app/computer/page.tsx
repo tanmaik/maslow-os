@@ -203,10 +203,19 @@ export default async function Computer({
   }
   const entries = listing.entries.filter((e) => shown(e.name));
   const space = listing.disk;
-  // The row as it is now that the machine has answered, and the ladder's
-  // word on it.
-  const computer = (await computerOf(p)) ?? s.computer;
-  const lastResize = await lastResizeIn(p.orgId, computer.id);
+  // The rest of what the page shows, read at once: the row as it is now
+  // that the machine has answered, the ladder's word on it, the files on
+  // their way, the backups, a restore under way, and the month's meter.
+  const [row, lastResize, uploads, backups, restoring, meter] =
+    await Promise.all([
+      computerOf(p),
+      lastResizeIn(p.orgId, s.computer.id),
+      filesOf(p),
+      backupsOf(p),
+      entries.length === 0 ? disk.restoring(p) : null,
+      live(p),
+    ]);
+  const computer = row ?? s.computer;
   const size = sizing(computer, lastResize?.at ?? null);
   const load = computer.need?.load?.at(-1);
   const free = computer.need?.memory?.free.at(-1);
@@ -220,16 +229,14 @@ export default async function Computer({
       ? lastResize
       : null;
   // Files still on their way to this folder, shown in it until they land.
-  const arriving = (await filesOf(p)).files.filter((f) => f.path === at);
+  const arriving = uploads.files.filter((f) => f.path === at);
   // The machine is awake now, having just answered.
   const state =
     s.state === "no-compute" || s.state === "created" || s.state === "stopped"
       ? "started"
       : s.state;
-  const backups = await backupsOf(p);
   const latest = backups[0];
-  const restoring = entries.length === 0 ? await disk.restoring(p) : null;
-  const month = (await live(p)).month;
+  const month = meter.month;
   const notice = resetSaid ?? said(params);
   const ago = (d: Date) => {
     const m = Math.round((Date.now() - d.getTime()) / 60000);
