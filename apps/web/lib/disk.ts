@@ -232,5 +232,9 @@ async function link(
   const sig = createHmac("sha256", linkKey())
     .update(`${kind}|${c.machineId}|${expires}|${what}`)
     .digest("base64url");
-  return `${host()}/${kind}/${c.machineId}/${expires}/${sig}${tail}`;
+  // On the machine's own origin when the deployment has a domain for it.
+  const base = config().domain
+    ? `https://${c.machineId}.${config().domain}`
+    : host();
+  return `${base}/${kind}/${c.machineId}/${expires}/${sig}${tail}`;
 }

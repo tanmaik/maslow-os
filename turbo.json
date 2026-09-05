@@ -27,7 +27,8 @@
         "CRON_SECRET",
         "FLY_NAME_PREFIX",
         "VERCEL_AUTOMATION_BYPASS_SECRET",
-        "LINK_SECRET"
+        "LINK_SECRET",
+        "FLY_MACHINES_DOMAIN"
       ]
     },
     "typecheck": {

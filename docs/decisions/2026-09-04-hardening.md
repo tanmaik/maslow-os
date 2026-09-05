@@ -57,7 +57,12 @@ backup can be restored, and a restore runs on its own with the page saying
 so. The footer names the size and the place in words and shows the same
 figure as the meter.
 
-**Still open, by design or by domain:** every user's previews share one
-origin until a wildcard domain of ours routes one hostname per machine; a
-removed member's disk is kept until purged; there is no reconciliation
-against invoices yet.
+**Every machine has its own origin** (2026-09-05): `*.computers.maslow.tech`
+and `*.computers-preview.maslow.tech` point at the two Fly apps with
+wildcard certificates, and every link a browser follows goes to
+`<machine>.<domain>`. A previewed app's cookies, storage and service
+workers are its machine's alone. A link or cookie that names a machine
+other than its origin's is refused.
+
+**Still open:** a removed member's disk is kept until purged; there is no
+reconciliation against invoices yet.

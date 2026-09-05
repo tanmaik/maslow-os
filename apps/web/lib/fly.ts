@@ -30,7 +30,7 @@ export type Machine = {
 
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, copied onto the volume on first boot.
-export const IMAGE = "registry.fly.io/placeholder-computers:v7";
+export const IMAGE = "registry.fly.io/placeholder-computers:v8";
 export const SIZE = "shared-cpu-1x:1024";
 // Every disk starts here; the operating system takes about a gigabyte of
 // it, and it doubles when it fills, to the cap.
@@ -116,6 +116,8 @@ export const fly = {
           REPORT_URL: config().report,
           // The operating system lives here on the volume.
           OS_ROOT: "/data/os",
+          // The domain each machine has an origin under, when there is one.
+          ...(config().domain ? { MACHINE_DOMAIN: config().domain } : {}),
         },
         guest: {
           cpu_kind: cpuKind,

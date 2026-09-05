@@ -36,6 +36,10 @@ export type Computers =
       api: string;
       report: string;
       host: string;
+      // A domain of ours with a wildcard certificate on the app: every
+      // machine gets its own origin, <machine>.<domain>, so what one
+      // person's preview runs cannot reach another's downloads or shell.
+      domain: string | null;
       // Signs the links a browser follows to a machine; every machine of
       // the deployment holds it too, to check a link before waking anyone.
       linkSecret: string | null;
@@ -142,6 +146,7 @@ function computers(): Computers {
     api: process.env.FLY_API_HOST ?? "https://api.machines.dev",
     report,
     host: process.env.FLY_MACHINES_HOST ?? `https://${app}.fly.dev`,
+    domain: process.env.FLY_MACHINES_DOMAIN ?? null,
     linkSecret: linkSecret ?? null,
     // A preview must name its machines for the pull request, or they land
     // among production's and nothing can tell them apart.

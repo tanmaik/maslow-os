@@ -138,7 +138,27 @@ const sign = (s) =>
 // all under the deployment's key, so any machine checks it before a word
 // is said to the machine it names; only then is a link for another
 // machine replayed there. A stale or forged link wakes nobody.
-function signed(url, kind) {
+// The machine a request's hostname names, when the deployment gives each
+// machine an origin of its own: <machine>.<domain>. Where there is such a
+// domain, a browser is only ever answered on a machine's own origin: a
+// link or cookie arriving on the app's shared hostname, or naming another
+// machine than the origin does, is refused.
+const MACHINE_DOMAIN = process.env.MACHINE_DOMAIN || null;
+function hostMachine(req) {
+  const host = (req.headers.host ?? "").toLowerCase();
+  if (!MACHINE_DOMAIN) return null;
+  const m = new RegExp(
+    `^([a-z0-9]+)\\.${MACHINE_DOMAIN.replaceAll(".", "\\.")}(?::\\d+)?$`,
+  ).exec(host);
+  return m ? m[1] : "";
+}
+// Whether a browser's request for a machine belongs on this origin.
+const bound = (req, machine) => {
+  const origin = hostMachine(req);
+  return origin === null || origin === machine;
+};
+
+function signed(url, kind, req) {
   const m = url.pathname.match(
     /^\/(dl|term|p)\/([^/]+)\/(\d+)\/([^/]+)(?:\/(\d+))?$/,
   );
@@ -155,6 +175,7 @@ function signed(url, kind) {
     !same(sign(`${kind}|${machine}|${expires}|${what}`), sig)
   )
     return { refused: true };
+  if (req && !bound(req, machine)) return { refused: true };
   if (machine !== FLY_MACHINE_ID) return { replay: machine };
   // Ourselves and Fly's own way in are not previews.
   if (kind === "p" && (Number(port) === PORT || Number(port) === 22))
@@ -198,6 +219,7 @@ function previewCookie(req) {
   if (!m) return null;
   const [machine, expires, port, sig] = m[1].split(".");
   if (!machine || !expires || !port || !sig) return null;
+  if (!bound(req, machine)) return null;
   if (
     Number(expires) < Date.now() ||
     !same(sign(`cookie|${machine}|${expires}|${port}`), sig)
@@ -487,7 +509,7 @@ async function handle(req, res) {
 
   // A browser's download, by a signed link; a range of it, for a download
   // that picks up where it stopped.
-  const dl = signed(url, "dl");
+  const dl = signed(url, "dl", req);
   if (dl) {
     if (dl.replay) return replay(dl.replay);
     if (dl.refused) return say(403, STALE);
@@ -522,7 +544,7 @@ async function handle(req, res) {
   // A browser's preview of a port: the signed link sets the cookie and
   // sends the browser to the root, and everything with the cookie that is
   // not ours goes to that port.
-  const pv = signed(url, "p");
+  const pv = signed(url, "p", req);
   if (pv) {
     if (pv.replay) return replay(pv.replay);
     if (pv.refused) return say(403, STALE);
@@ -806,7 +828,7 @@ function upgrade(req, socket, head) {
     );
     socket.destroy();
   };
-  const term = signed(url, "term");
+  const term = signed(url, "term", req);
   if (term) {
     if (term.replay) return replay(term.replay);
     if (term.refused) return refuse(403, "Forbidden");
