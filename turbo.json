@@ -13,6 +13,7 @@
         "WORKOS_CLIENT_ID",
         "RESEND_API_KEY",
         "MAIL_FROM",
+        "POSTHOG_KEY",
         "STORAGE_ENDPOINT",
         "STORAGE_REGION",
         "STORAGE_BUCKET",

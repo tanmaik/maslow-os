@@ -61,3 +61,6 @@ decrypted; without it, it says vendors are faked.
 pnpm env:set SOME_KEY value   # encrypt; commit the file
 pnpm env:get                  # decrypt and print
 ```
+
+A new variable is also named in `turbo.json`'s `env` list, or Vercel's build
+never sees it and a production build that requires it fails.
