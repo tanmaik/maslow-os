@@ -887,7 +887,8 @@ function attach(ws, id) {
     sessions.set(id, session);
     shell.onData((data) => {
       session.screen = (session.screen + data).slice(-SCROLLBACK);
-      if (session.ws?.readyState === session.ws?.OPEN) session.ws.send(data);
+      if (session.ws && session.ws.readyState === session.ws.OPEN)
+        session.ws.send(data);
     });
     shell.onExit(() => {
       sessions.delete(id);
