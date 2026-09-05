@@ -1310,10 +1310,12 @@ try {
   const liveMeter = await (
     await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
   ).json();
+  const summed = liveMeter.active.reduce((n, a) => n + a.ratePerHour, 0);
   check(
-    "the live meter ticks with a rate from the last minute",
+    "the live meter's rate is everything ticking, added up",
     liveMeter.month > 0 &&
       liveMeter.ratePerHour > 0 &&
+      Math.abs(liveMeter.ratePerHour - summed) < 1e-12 &&
       liveMeter.active.some(
         (a) => a.resource === "disk" && a.ratePerHour > 0,
       ) &&
@@ -1332,6 +1334,33 @@ try {
       (await fetch(`${stack.url}/usage`, { redirect: "manual" })).status ===
         307,
     "ticking, projected, listed, per member; signed out is sent home",
+  );
+  // Otto makes a folder and writes a note, then the usage page names the
+  // folder, the machine's runs, the backup in the bucket and the note's kind.
+  await form("/files/folder", { path: "/", name: "ledgers" }, ottoNow);
+  await fetch(`${stack.url}/brain/records`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({
+      kind: "note",
+      title: "Q3",
+      body: "Closed.",
+    }),
+    redirect: "manual",
+  });
+  const ottoUsage = await (
+    await fetch(`${stack.url}/usage`, { headers: { cookie: ottoNow } })
+  ).text();
+  const detail = [
+    /data-disk-entry="\/ledgers"/.test(ottoUsage),
+    /data-session=/.test(ottoUsage),
+    /data-bucket-backup=/.test(ottoUsage),
+    /data-brain-kind="note"/.test(ottoUsage),
+  ];
+  check(
+    "the usage page breaks the disk, the runs, the bucket and the brain down",
+    detail.every(Boolean),
+    `disk, runs, bucket, brain: ${detail.map(Number).join("")}`,
   );
   const settingsUsage = await settingsPage(margeOwner);
   const ottoMonth = await computerPage(ottoNow);

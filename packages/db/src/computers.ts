@@ -131,6 +131,43 @@ export async function noteState(
 }
 
 // Records something we asked of the machine, at the time we asked.
+// Why a machine is about to be needed: the person opened their computer,
+// a link was made for a browser, the sweep asked for a backup. The next
+// start is that cause's.
+export async function noteCause(
+  orgId: string,
+  c: Computer,
+  cause: "opened" | "link-dl" | "link-term" | "link-p" | "backup",
+): Promise<void> {
+  await asOrg(orgId, (q) =>
+    q.query(
+      "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, $2, $3, $4)",
+      [c.id, cause, c.size, c.diskGb],
+    ),
+  );
+}
+
+// Every event of the member's computer since a moment, oldest first.
+export async function eventsOf(
+  p: Principal,
+  since: Date,
+): Promise<{ kind: string; at: Date; size: string }[]> {
+  return asPerson(
+    p,
+    async (q) =>
+      (
+        await q.query<{ kind: string; at: Date; size: string }>(
+          `select e.kind, e.at, e.size from computer_events e join computers c on c.id = e.computer_id
+           where c.user_id = $1 and (e.at > $2 or e.at = (
+             select max(at) from computer_events where computer_id = c.id and at <= $2
+               and kind in ('started', 'stopped', 'suspended', 'destroyed', 'failed')))
+           order by e.at`,
+          [p.userId, since],
+        )
+      ).rows,
+  );
+}
+
 export async function noteRequest(
   p: Principal,
   c: Computer,

@@ -9,7 +9,7 @@ import {
   finishBackup,
   memberLive,
 } from "@placeholder/db/backups";
-import { computersIn } from "@placeholder/db/computers";
+import { computersIn, noteCause } from "@placeholder/db/computers";
 import fs from "node:fs/promises";
 import path from "node:path";
 
@@ -208,6 +208,7 @@ export async function sweepBackups(orgId: string, now: Date): Promise<void> {
     const last = lastFinished.get(c.userId);
     if (last && now.getTime() - last.getTime() < 86400_000) continue;
     try {
+      await noteCause(orgId, c, "backup");
       await disk.backupIn(orgId, c);
     } catch (err) {
       console.error(`backup ${c.machineId}: ${(err as Error).message}`);

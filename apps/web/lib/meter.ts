@@ -185,7 +185,8 @@ export async function measure(
       const a = later(f.created_at, from);
       const b = f.deleted_at && f.deleted_at < to ? f.deleted_at : to;
       if (b > a) byteSeconds += Number(f.size) * seconds(a, b);
-      if (!f.deleted_at || f.deleted_at > to) liveBytes += Number(f.size);
+      if (f.created_at <= to && (!f.deleted_at || f.deleted_at > to))
+        liveBytes += Number(f.size);
     }
     out.push({
       resource: "bucket",
@@ -432,7 +433,7 @@ export type Live = {
   at: string;
   // Billed this month plus what is unbilled since the last sweep.
   month: number;
-  // Dollars per hour, from the last sixty seconds.
+  // Dollars per hour: what everything ticking costs at this moment.
   ratePerHour: number;
   active: { resource: Resource; what: string; ratePerHour: number }[];
 };
@@ -470,14 +471,15 @@ export async function live(
       unbilled += (await measure(q, p.userId, new Date(t), now))
         .filter((m) => (lasts.get(m.resource) ?? monthStart.getTime()) === t)
         .reduce((n, m) => n + m.quantity * m.price, 0);
+    // What each resource is doing at this instant, from a short window: a
+    // rate is what it costs to keep going, never the average of a minute
+    // in which it was asleep for part.
     const minute = await measure(
       q,
       p.userId,
       new Date(now.getTime() - 60_000),
       now,
     );
-    const ratePerHour =
-      minute.reduce((n, m) => n + m.quantity * m.price, 0) * 60;
     const active = minute
       .filter((m) => m.live > 0)
       .map((m) => ({
@@ -497,7 +499,7 @@ export async function live(
     return {
       at: now.toISOString(),
       month: billed + unbilled,
-      ratePerHour,
+      ratePerHour: active.reduce((n, a) => n + a.ratePerHour, 0),
       active,
     };
   });

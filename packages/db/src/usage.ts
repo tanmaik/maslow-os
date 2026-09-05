@@ -1,4 +1,4 @@
-import { asOrg } from "./index.ts";
+import { asOrg, asPerson } from "./index.ts";
 import type { Principal } from "./auth.ts";
 
 export type Resource = "compute" | "rootfs" | "disk" | "bucket" | "brain";
@@ -28,6 +28,23 @@ export async function usageOfOrg(p: Principal, since: Date): Promise<Line[]> {
             group by u.user_id, m.name, u.resource, u.unit
             order by m.name nulls last, u.resource`,
           [since],
+        )
+      ).rows,
+  );
+}
+
+// What the person's brain holds, by kind, biggest first: the bytes their
+// records and links occupy.
+export async function brainByKind(
+  p: Principal,
+): Promise<{ kind: string; records: number; bytes: number }[]> {
+  return asPerson(
+    p,
+    async (q) =>
+      (
+        await q.query<{ kind: string; records: number; bytes: number }>(
+          `select kind, count(*)::int as records, sum(pg_column_size(r.*))::float8 as bytes
+             from records r where person_id = current_member() group by kind order by bytes desc limit 20`,
         )
       ).rows,
   );

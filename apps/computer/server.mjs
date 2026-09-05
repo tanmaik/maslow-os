@@ -563,6 +563,83 @@ async function handle(req, res) {
   if (!ready)
     return json(503, { error: "Your computer is being set up; a minute." });
 
+  // What is on the disk, biggest first: every folder and file under the
+  // root by what it holds, a couple of levels down, and where the
+  // operating system lives, what it and its installs take.
+  if (url.pathname === "/fs/du" && req.method === "GET") {
+    const sizes = new Map();
+    let budget = 200_000;
+    const walk = async (dir) => {
+      let total = 0;
+      for (const e of await fs
+        .readdir(dir, { withFileTypes: true })
+        .catch(() => [])) {
+        if (budget-- <= 0)
+          throw new Refused(413, "The disk holds more than can be sized here.");
+        const p = path.join(dir, e.name);
+        if (e.isSymbolicLink()) continue;
+        if (e.isDirectory()) total += await walk(p);
+        else total += (await fs.lstat(p).catch(() => ({ size: 0 }))).size;
+      }
+      const rel = path.relative(ROOT, dir);
+      if (
+        rel.split(path.sep).filter(Boolean).length <= 2 &&
+        !rel.startsWith("..")
+      )
+        sizes.set("/" + rel.split(path.sep).join("/"), total);
+      return total;
+    };
+    const home = await walk(ROOT);
+    // The biggest files, wherever they are, up to two levels down.
+    const files = [];
+    const findFiles = async (dir, depth) => {
+      for (const e of await fs
+        .readdir(dir, { withFileTypes: true })
+        .catch(() => [])) {
+        const p = path.join(dir, e.name);
+        if (e.isFile())
+          files.push({
+            path: "/" + path.relative(ROOT, p).split(path.sep).join("/"),
+            size: (await fs.lstat(p).catch(() => ({ size: 0 }))).size,
+          });
+        else if (e.isDirectory() && depth < 3) await findFiles(p, depth + 1);
+      }
+    };
+    await findFiles(ROOT, 0);
+    let os = 0;
+    if (OS_ROOT) {
+      const walkOs = async (dir) => {
+        let total = 0;
+        for (const e of await fs
+          .readdir(dir, { withFileTypes: true })
+          .catch(() => [])) {
+          const p = path.join(dir, e.name);
+          if (
+            p === ROOT ||
+            e.isSymbolicLink() ||
+            (["proc", "sys", "dev", "run", "tmp"].includes(e.name) &&
+              dir === OS_ROOT)
+          )
+            continue;
+          if (e.isDirectory()) total += await walkOs(p);
+          else total += (await fs.lstat(p).catch(() => ({ size: 0 }))).size;
+        }
+        return total;
+      };
+      os = await walkOs(OS_ROOT);
+    }
+    return json(200, {
+      home,
+      os,
+      folders: [...sizes.entries()]
+        .filter(([p]) => p !== "/")
+        .map(([path, size]) => ({ path, size }))
+        .sort((a, b) => b.size - a.size)
+        .slice(0, 20),
+      files: files.sort((a, b) => b.size - a.size).slice(0, 20),
+      disk: await disk(),
+    });
+  }
   if (url.pathname === "/fs/ports" && req.method === "GET")
     return json(200, { ports: await listening() });
   // A backup runs on its own once asked for; asking again while one runs

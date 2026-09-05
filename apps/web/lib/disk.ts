@@ -1,6 +1,7 @@
 import type { Principal } from "@placeholder/db/auth";
 import {
   computerOf,
+  noteCause,
   secretIn,
   secretOf,
   type Computer,
@@ -183,6 +184,15 @@ export const disk = {
     call<{ disk: Space }>(p, "POST", "/fs/pull", { path, url, size }),
 
   ports: (p: Principal) => call<{ ports: number[] }>(p, "GET", "/fs/ports"),
+  // What is on the disk, biggest first, and what the operating system takes.
+  du: (p: Principal) =>
+    call<{
+      home: number;
+      os: number;
+      folders: { path: string; size: number }[];
+      files: { path: string; size: number }[];
+      disk: Space;
+    }>(p, "GET", "/fs/du"),
   // The disk back from an archive, onto an empty one; the machine carries
   // on alone and says how it is going.
   restore: (p: Principal, url: string) =>
@@ -227,6 +237,9 @@ async function link(
   what: string,
   tail = "",
 ): Promise<string> {
+  // Why the machine may be woken next: this link.
+  const before = await computerOf(p);
+  if (before) await noteCause(p.orgId, before, `link-${kind}`);
   const c = await machineOf(p);
   const expires = Date.now() + 600_000;
   const sig = createHmac("sha256", linkKey())

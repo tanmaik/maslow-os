@@ -30,6 +30,7 @@ import {
 import { Terminal } from "@/components/terminal";
 import { Uploader } from "@/components/uploader";
 import { backupsOf } from "@placeholder/db/backups";
+import { computerOf, noteCause } from "@placeholder/db/computers";
 
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
@@ -96,11 +97,17 @@ export default async function Computer({
   // A look at the computer is when the meter, the backups and the
   // stragglers catch up, wherever this runs.
   after(() => sweepIfDue());
+  // Why the machine may be woken next: this look.
+  const before = await computerOf(p);
+  if (before) await noteCause(p.orgId, before, "opened");
   let s = await status(p);
   if (!s) {
     await ensureFilesystem(p);
+    const made = await computerOf(p);
+    if (made) await noteCause(p.orgId, made, "opened");
     s = await status(p);
   }
+  // The person opened their computer: the next start is theirs.
   if (!s)
     return <Note>Your filesystem could not be made. Try again shortly.</Note>;
   let listing: Awaited<ReturnType<typeof disk.list>>;

@@ -15,7 +15,9 @@ browser a signed download. It answers to the machine's own secret.
 service with autostart and autostop-to-suspend. The app reaches a machine by
 id through the app's hostname (`fly-force-instance-id`), which starts it if
 it is off; opening the Computer page is what turns the computer on. Nothing
-has asked for it for a while, it is suspended. Nobody starts or stops a
+has asked for it for about a minute — 74 seconds, when we timed it — and it
+is suspended; the next request wakes it in a few seconds, and a terminal held
+open keeps it awake. Nobody starts or stops a
 machine by hand; there are no such controls. The sweep reads Fly's own event
 log for each machine so a start or suspend the proxy made is metered to the
 second.
