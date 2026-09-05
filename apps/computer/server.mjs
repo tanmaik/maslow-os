@@ -5,13 +5,14 @@
 // signed download, terminal or preview. Fly sets FLY_MACHINE_ID and
 // routes to us; a request that reached the wrong machine is replayed to
 // the right one. It also reports on itself to us on boot and every five
-// minutes: how full the disk is.
+// minutes: how full the disk is, and what it has and needs.
 import { execFile, spawn } from "node:child_process";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createWriteStream } from "node:fs";
 import fs from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
+import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -50,8 +51,9 @@ const PART = 16 * 1024 * 1024;
 
 // The disk's fullness. A laptop's directory stands in for a volume of
 // DISK_GB, measured as what it holds.
+const DISK_GB = process.env.DISK_GB;
 async function disk() {
-  if (process.env.DISK_GB) {
+  if (DISK_GB) {
     let used = 0;
     const walk = async (dir) => {
       for (const e of await fs
@@ -64,12 +66,41 @@ async function disk() {
       }
     };
     await walk(ROOT);
-    return { used, total: Number(process.env.DISK_GB) * 1e9 };
+    return { used, total: Number(DISK_GB) * 1e9 };
   }
   const s = await fs.statfs(MOUNT).catch(() => null);
   return s
     ? { used: (s.blocks - s.bfree) * s.bsize, total: s.blocks * s.bsize }
     : { used: 0, total: 0 };
+}
+
+// What the machine has and needs, each where the kernel says it, left out
+// where it does not: memory in bytes and how much is available, how many
+// processes were killed for want of it since boot, and the one-minute
+// load over its cores. A laptop's kernel speaks for the laptop, not the
+// machine it stands in for, which says memory is nearly gone once told to.
+let pressed = false;
+async function need() {
+  const out = { load: os.loadavg()[0] / os.availableParallelism() };
+  if (DISK_GB) {
+    if (pressed) out.memory = { total: 2 ** 30, available: 2 ** 25 };
+    return out;
+  }
+  const meminfo = await fs.readFile("/proc/meminfo", "utf8").catch(() => "");
+  const kb = (key) =>
+    Number(new RegExp(`^${key}:\\s+(\\d+)`, "m").exec(meminfo)?.[1]) * 1024;
+  if (meminfo)
+    out.memory = { total: kb("MemTotal"), available: kb("MemAvailable") };
+  for (const file of ["/proc/vmstat", "/sys/fs/cgroup/memory.events"]) {
+    const m = /^oom_kill (\d+)/m.exec(
+      await fs.readFile(file, "utf8").catch(() => ""),
+    );
+    if (m) {
+      out.oom = Number(m[1]);
+      break;
+    }
+  }
+  return out;
 }
 
 async function report() {
@@ -81,7 +112,7 @@ async function report() {
         "fly-machine-id": FLY_MACHINE_ID,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ disk: await disk() }),
+      body: JSON.stringify({ disk: await disk(), ...(await need()) }),
       signal: AbortSignal.timeout(10000),
     });
     if (!res.ok) console.error(`report answered ${res.status}`);
@@ -642,6 +673,13 @@ async function handle(req, res) {
   }
   if (url.pathname === "/fs/ports" && req.method === "GET")
     return json(200, { ports: await listening() });
+  // A laptop's machine told to be short of memory from now on, and to say
+  // so at once.
+  if (url.pathname === "/fs/pressure" && req.method === "POST" && DISK_GB) {
+    pressed = true;
+    await report();
+    return json(200, { ok: true });
+  }
   // A backup runs on its own once asked for; asking again while one runs
   // is answered with the one running.
   if (url.pathname === "/fs/backup" && req.method === "POST") {

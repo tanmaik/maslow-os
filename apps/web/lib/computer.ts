@@ -7,11 +7,13 @@ import {
   computersAllowed,
   lease,
   leaseIn,
+  noteEventsIn,
   noteRequest,
   noteState,
   release,
   releaseIn,
   reserveComputer,
+  resize,
   secretIn,
   secretOf,
   setDiskGb,
@@ -22,14 +24,8 @@ import {
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import {
-  DISK_GB,
-  fly,
-  machineName,
-  MAX_DISK_GB,
-  SIZE,
-  volumeName,
-} from "./fly.ts";
+import { DISK_GB, fly, machineName, MAX_DISK_GB, volumeName } from "./fly.ts";
+import { LADDER } from "./prices.ts";
 
 export type Built = "built" | "exists" | "off" | "not-allowed";
 
@@ -53,7 +49,7 @@ export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
     await reserveComputer(p, {
       id: randomUUID(),
       region: deployment.computers.region,
-      size: SIZE,
+      size: LADDER[0]!,
       diskGb: DISK_GB,
       secret: randomBytes(24).toString("base64url"),
     });
@@ -84,10 +80,25 @@ export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
   return c;
 }
 
+// The size a computer wants: the rung above its own when memory has been
+// short at each of the last three reports or anything was killed for want
+// of it, null when what it has is enough or there is no rung above.
+const SHORT = 0.15;
+const REPORTS = 3;
+export function wanted(c: Pick<Computer, "size" | "need">): string | null {
+  const free = c.need?.memory?.free ?? [];
+  const short =
+    free.length >= REPORTS && free.slice(-REPORTS).every((f) => f < SHORT);
+  if (!short && !((c.need?.oom ?? 0) > 0)) return null;
+  const rung = LADDER.indexOf(c.size);
+  return rung < 0 ? null : (LADDER[rung + 1] ?? null);
+}
+
 // Attaches compute to the filesystem: a machine on the volume, recorded
-// and placed. Fly's proxy starts it at the first request that names it.
-// The first look at the computer is the first need; looks that race wait
-// for the one that holds the lease.
+// and placed, at the size wanted if the last one was outgrown. Fly's proxy
+// starts it at the first request that names it. The first look at the
+// computer is the first need; looks that race wait for the one that holds
+// the lease.
 export async function build(p: Principal): Promise<Built> {
   if (deployment.computers.kind === "none") return "off";
   let c = await ensureFilesystem(p);
@@ -107,12 +118,18 @@ export async function build(p: Principal): Promise<Built> {
       c.machineId = null;
     }
     if (!c.machineId) {
+      const size = wanted(c);
+      if (size) {
+        await resize(p, c, size);
+        c.size = size;
+      }
       let machine;
       try {
         machine = await fly.createMachine(
           machineName(c.id),
           c.volumeId!,
           await secretOf(p, c.id),
+          c.size,
         );
       } catch (err) {
         // A volume Fly no longer has: the row forgets it, and the next
@@ -237,12 +254,26 @@ export async function status(p: Principal): Promise<Status | null> {
   const held = await lease(p, computer.id);
   if (held) {
     try {
-      if (!machine) {
-        // Gone behind our back: the row forgets it and compute can be
-        // attached again on the same filesystem.
+      // One that is off and has been outgrown is let go of here, at a
+      // step boundary and never while it runs; the next attach makes one
+      // at the size wanted, on the same filesystem. Its stop goes on the
+      // record first, at Fly's own time, so the meter stops there; one
+      // that will not go stays on the row, and the next look tries again.
+      const outgrown =
+        (machine?.state === "stopped" || machine?.state === "suspended") &&
+        wanted(computer) !== null;
+      if (machine && !outgrown) await noteState(p, computer, machine.state);
+      else {
+        if (outgrown) {
+          await noteEventsIn(p.orgId, computer, machine?.events ?? []);
+          await fly.destroyMachine(computer.machineId);
+        }
+        // Gone, behind our back or by our hand: the row forgets it and
+        // compute can be attached again on the same filesystem.
         await noteState(p, computer, "destroyed");
         await clearMachine(p, computer.id, computer.machineId);
-      } else await noteState(p, computer, machine.state);
+        machine = null;
+      }
     } finally {
       await release(p, computer.id, held);
     }

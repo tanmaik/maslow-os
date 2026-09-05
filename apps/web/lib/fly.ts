@@ -1,4 +1,5 @@
 import { deployment } from "./deployment.ts";
+import { parseSize } from "./prices.ts";
 
 // The Fly Machines API, the part of it a computer needs. No SDK.
 export type MachineState =
@@ -25,13 +26,15 @@ export type Machine = {
   state: MachineState;
   region: string;
   events?: MachineEvent[];
-  config?: { image?: string };
+  config?: {
+    image?: string;
+    guest?: { cpu_kind: string; cpus: number; memory_mb: number };
+  };
 };
 
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, copied onto the volume on first boot.
 export const IMAGE = "registry.fly.io/placeholder-computers:v8";
-export const SIZE = "shared-cpu-1x:1024";
 // Every disk starts here; the operating system takes about a gigabyte of
 // it, and it doubles when it fills, to the cap.
 export const DISK_GB = 3;
@@ -87,16 +90,16 @@ export const fly = {
     });
   },
 
-  // A machine on its volume, made stopped: it is recorded before it runs.
-  // Fly's proxy fronts it: a request naming it wakes it, and it is
-  // suspended again once nothing has asked for it for a while.
+  // A machine on its volume at a size, made stopped: it is recorded before
+  // it runs. Fly's proxy fronts it: a request naming it wakes it, and it
+  // is suspended again once nothing has asked for it for a while.
   async createMachine(
     name: string,
     volumeId: string,
     secret: string,
+    size: string,
   ): Promise<Machine> {
-    const [cpuKind, rest] = SIZE.split("-cpu-");
-    const [cpus, memoryMb] = rest!.split("x:");
+    const { kind, cpus, memoryMb } = parseSize(size);
     return call("POST", "/machines", {
       name,
       region: config().region,
@@ -119,11 +122,7 @@ export const fly = {
           // The domain each machine has an origin under, when there is one.
           ...(config().domain ? { MACHINE_DOMAIN: config().domain } : {}),
         },
-        guest: {
-          cpu_kind: cpuKind,
-          cpus: Number(cpus),
-          memory_mb: Number(memoryMb),
-        },
+        guest: { cpu_kind: kind, cpus, memory_mb: memoryMb },
         mounts: [{ volume: volumeId, path: "/data" }],
         services: [
           {

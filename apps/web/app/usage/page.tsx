@@ -21,7 +21,7 @@ import {
 import { disk, DiskError } from "@/lib/disk";
 import { filesOf } from "@/lib/files";
 import { dollars, live } from "@/lib/meter";
-import { MONTH, PRICES } from "@/lib/prices";
+import { LADDER, MONTH, PRICES } from "@/lib/prices";
 import { principal } from "@/lib/session";
 
 // A stretch of time, in the unit a person would say it.
@@ -155,7 +155,7 @@ export default async function Usage() {
           })
         : Promise.resolve(null),
     ]);
-  const size = computer?.size ?? "shared-cpu-1x:1024";
+  const size = computer?.size ?? LADDER[0]!;
   const runs = sessions(events, monthStart, now, (s) => PRICES.compute[s] ?? 0);
   const projected =
     ticking.month +

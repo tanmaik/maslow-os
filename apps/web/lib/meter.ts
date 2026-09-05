@@ -13,7 +13,7 @@ import { sweepBackups } from "./backups.ts";
 import { expireUploads, landStaged } from "./files.ts";
 import { settle } from "./orphans.ts";
 import { fly, IMAGE } from "./fly.ts";
-import { PRICES } from "./prices.ts";
+import { PRICES, sizeName } from "./prices.ts";
 
 // The meter. One measuring function reads what a member's things did
 // between two moments, in each vendor's own unit; the hourly sweep prices
@@ -63,18 +63,24 @@ export async function measure(
   ).rows[0];
   if (c) {
     const events = (
-      await q.query<{ kind: string; disk_gb: number; at: Date }>(
-        "select kind, disk_gb, at from computer_events where computer_id = $1 order by at, kind",
+      await q.query<{ kind: string; size: string; disk_gb: number; at: Date }>(
+        "select kind, size, disk_gb, at from computer_events where computer_id = $1 order by at, kind",
         [c.id],
       )
     ).rows;
-    const price = PRICES.compute[c.size];
-    if (price === undefined) throw new Error(`no price for ${c.size}`);
     // Compute: seconds in "started", replaying states across the window.
+    // Each stretch is priced at the size of the event that began it, so a
+    // window that spans a resize is one measure per size.
     const start = later(from, c.created_at);
+    const stretches = new Map<string, { from: Date; secs: number }>();
+    const add = (size: string, since: Date, until: Date) => {
+      const s = stretches.get(size) ?? { from: since, secs: 0 };
+      s.secs += seconds(since, until);
+      stretches.set(size, s);
+    };
     let on = false;
     let onSince = start;
-    let secs = 0;
+    let onSize = c.size;
     for (const e of events) {
       // What we asked counts from the moment we asked; what Fly or the daemon
       // reported confirms it.
@@ -89,24 +95,35 @@ export async function measure(
       if (!running && !off) continue;
       if (e.at <= start) {
         on = running;
+        onSize = e.size;
         continue;
       }
       if (e.at > to) break;
-      if (on && !running) secs += seconds(onSince, e.at);
-      if (!on && running) onSince = e.at;
+      if (on && !running) add(onSize, onSince, e.at);
+      if (!on && running) {
+        onSince = e.at;
+        onSize = e.size;
+      }
       on = running;
     }
-    if (on) secs += seconds(onSince, to);
-    out.push({
-      resource: "compute",
-      unit: "second",
-      quantity: secs,
-      price,
-      live: on ? 1 : 0,
-      liveUnit: c.size,
-      from: start,
-      to,
-    });
+    if (on) add(onSize, onSince, to);
+    if (!stretches.size) stretches.set(c.size, { from: start, secs: 0 });
+    let secs = 0;
+    for (const [size, stretch] of stretches) {
+      const price = PRICES.compute[size];
+      if (price === undefined) throw new Error(`no price for ${size}`);
+      secs += stretch.secs;
+      out.push({
+        resource: "compute",
+        unit: "second",
+        quantity: stretch.secs,
+        price,
+        live: on && size === onSize ? 1 : 0,
+        liveUnit: size,
+        from: stretch.from,
+        to,
+      });
+    }
     // Root filesystem: Fly charges it while a machine exists and is stopped,
     // one GB at most for ours. A machine exists from its placement until it
     // is destroyed; a filesystem with no machine has none.
@@ -486,7 +503,7 @@ export async function live(
         resource: m.resource,
         what:
           m.resource === "compute"
-            ? `${m.liveUnit} running`
+            ? `${sizeName(m.liveUnit)} running`
             : m.resource === "rootfs"
               ? `stopped machine's ${m.live} GB image`
               : m.resource === "disk"

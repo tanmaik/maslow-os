@@ -1,6 +1,24 @@
 import { asMachine, asOrg, asPerson } from "./index.ts";
 import type { Principal } from "./auth.ts";
 
+// What a machine last said it had and needed: its memory and the share of
+// it free at each of the last few reports, newest last; what the kernel
+// killed for want of memory since boot; the one-minute load over its cores.
+export type Need = {
+  at: string;
+  memory?: { total: number; free: number[] };
+  oom?: number;
+  load?: number;
+};
+
+// What a machine says of itself in one report.
+export type Said = {
+  disk: { used: number; total: number };
+  memory?: { total: number; available: number };
+  oom?: number;
+  load?: number;
+};
+
 export type Computer = {
   id: string;
   userId: string;
@@ -13,11 +31,12 @@ export type Computer = {
   seenAt: Date | null;
   diskUsed: number | null;
   diskTotal: number | null;
+  need: Need | null;
   createdAt: Date;
 };
 
 const COLUMNS =
-  'id, user_id as "userId", region, size, disk_gb as "diskGb", volume_id as "volumeId", machine_id as "machineId", state, seen_at as "seenAt", disk_used::float8 as "diskUsed", disk_total::float8 as "diskTotal", created_at as "createdAt"';
+  'id, user_id as "userId", region, size, disk_gb as "diskGb", volume_id as "volumeId", machine_id as "machineId", state, seen_at as "seenAt", disk_used::float8 as "diskUsed", disk_total::float8 as "diskTotal", need, created_at as "createdAt"';
 
 // Whether this org may have computers at all.
 export async function computersAllowed(p: Principal): Promise<boolean> {
@@ -181,20 +200,53 @@ export async function noteRequest(
   );
 }
 
-// What a machine says of itself, kept if the secret is its own. False when
-// no machine matches, which is the only answer a stranger gets.
+// What a machine says of itself, kept if the secret is its own: its disk
+// as of now, and its need folded onto the last few reports'. The row is
+// held while that is worked out, and written only if it still names the
+// machine, so a late report from one let go of says nothing of the next.
+// False when no machine matches, which is the only answer a stranger gets.
 export async function report(
   machineId: string,
   secret: string,
-  disk: { used: number; total: number },
+  said: Said,
 ): Promise<boolean> {
   return asMachine(machineId, secret, async (q) => {
-    const seen = await q.query<{ id: string; size: string; disk_gb: number }>(
-      "update computers set seen_at = now(), disk_used = $1, disk_total = $2 where machine_id = $3 returning id, size, disk_gb",
-      [Math.round(disk.used), Math.round(disk.total), machineId],
-    );
-    const c = seen.rows[0];
+    const c = (
+      await q.query<{
+        id: string;
+        size: string;
+        disk_gb: number;
+        need: Need | null;
+      }>(
+        "select id, size, disk_gb, need from computers where machine_id = $1 for update",
+        [machineId],
+      )
+    ).rows[0];
     if (!c) return false;
+    const need: Need = {
+      at: new Date().toISOString(),
+      oom: said.oom,
+      load: said.load,
+    };
+    if (said.memory)
+      need.memory = {
+        total: said.memory.total,
+        free: [
+          ...(c.need?.memory?.free ?? []),
+          Math.round((said.memory.available / said.memory.total) * 1000) / 1000,
+        ].slice(-4),
+      };
+    const kept = await q.query(
+      "update computers set seen_at = now(), disk_used = $1, disk_total = $2, need = $3 where id = $4 and machine_id = $5",
+      [
+        Math.round(said.disk.used),
+        Math.round(said.disk.total),
+        JSON.stringify(need),
+        c.id,
+        machineId,
+      ],
+    );
+    if (!kept.rowCount) return false;
     // A report is proof the machine was running at that moment, for the
     // meter, whether or not anyone looked.
     await q.query(
@@ -279,6 +331,25 @@ export async function setDiskGb(
     await q.query(
       "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, 'extended', $2, $3)",
       [c.id, c.size, diskGb],
+    );
+  });
+}
+
+// The size the next machine is made at, from this moment. What the old
+// one reported of its need no longer speaks for it.
+export async function resize(
+  p: Principal,
+  c: Computer,
+  size: string,
+): Promise<void> {
+  await asOrg(p.orgId, async (q) => {
+    await q.query("update computers set size = $1, need = null where id = $2", [
+      size,
+      c.id,
+    ]);
+    await q.query(
+      "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, 'resized', $2, $3)",
+      [c.id, size, c.diskGb],
     );
   });
 }

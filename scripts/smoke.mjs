@@ -4,6 +4,7 @@
 // is the merge gate.
 import path from "node:path";
 
+import { LADDER, PRICES, sizeName } from "../apps/web/lib/prices.ts";
 import { orgs } from "../packages/db/src/seed.ts";
 import { createServer } from "node:http";
 
@@ -1430,6 +1431,157 @@ try {
     "a report needs the machine's own secret",
     forged.status === 404,
     `answered ${forged.status}`,
+  );
+  // A machine with nothing killed says so with a zero, and is heard.
+  const honest = await fetch(`${stack.url}/computer/report`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${fake.machines.get(m1).env.COMPUTER_SECRET}`,
+      "fly-machine-id": m1,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      disk: { used: 1, total: 2 },
+      memory: { total: 2 ** 30, available: 2 ** 29 },
+      oom: 0,
+      load: 0.5,
+    }),
+  });
+  check(
+    "a report of nothing killed and memory to spare is taken",
+    honest.status === 204,
+    `answered ${honest.status}`,
+  );
+  check(
+    "every rung of the ladder has a price and a name",
+    LADDER.every(
+      (s) =>
+        PRICES.compute[s] > 0 &&
+        /^\d+ (shared|performance) CPUs?, \d+ GB memory$/.test(sizeName(s)),
+    ) && sizeName("performance-2x:8192") === "2 performance CPUs, 8 GB memory",
+    LADDER.map(sizeName).join("; "),
+  );
+  // The machine sizes itself up from what the person needed: memory short
+  // at three reports in a row wants the next rung; a running machine is
+  // never replaced; one that is off comes back at the size wanted, on the
+  // same disk, and the meter prices the new stretch at the new price.
+  const [pressedId, pressedMachine] = [...fake.machines.entries()][0];
+  const press = () =>
+    fetch(`http://127.0.0.1:${pressedMachine.port}/fs/pressure`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${pressedMachine.env.COMPUTER_SECRET}`,
+      },
+    });
+  await press();
+  const oneShort = await computerPage(ottoNow);
+  await press();
+  await press();
+  const threeShort = await computerPage(ottoNow);
+  check(
+    "memory short three reports running wants the next size, running on",
+    !/data-wants=/.test(oneShort) &&
+      /data-wants="shared-cpu-2x:2048"/.test(threeShort) &&
+      /data-size="shared-cpu-1x:1024"/.test(threeShort) &&
+      threeShort.includes("comes back as 2 shared CPUs, 2 GB memory") &&
+      fake.machines.has(pressedId) &&
+      pressedMachine.state === "started",
+    `wants ${threeShort.match(/data-wants="([^"]*)"/)?.[1] ?? "nothing"}, ${pressedMachine.state}`,
+  );
+  // A sweep first, so the window the ledger prices next begins with the
+  // machine running; then it sleeps for a while before the look.
+  await new Promise((r) => setTimeout(r, 1100));
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  await fetch(`${fake.url}/v1/apps/x/machines/${pressedId}/suspend`, {
+    method: "POST",
+    headers: { authorization: "Bearer fake" },
+  });
+  const suspendedAt = pressedMachine.events.findLast(
+    (e) => e.status === "suspended",
+  ).timestamp;
+  await new Promise((r) => setTimeout(r, 3000));
+  const resized = await computerPage(ottoNow);
+  const [resizedMachine] = [...fake.machines.values()];
+  const resizedEvents = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) =>
+      (
+        await q.query(
+          "select e.kind, e.size from computer_events e join computers c on c.id = e.computer_id where c.user_id = '20000000-0000-4000-8000-000000000002' and e.kind = 'resized'",
+        )
+      ).rows,
+  );
+  check(
+    "off and outgrown, it comes back bigger on the same disk",
+    !fake.machines.has(pressedId) &&
+      fake.machines.size === 1 &&
+      resizedMachine.guest?.memory_mb === 2048 &&
+      resizedMachine.volume === pressedMachine.volume &&
+      /data-state="started"/.test(resized) &&
+      /data-size="shared-cpu-2x:2048"/.test(resized) &&
+      !/data-wants=/.test(resized) &&
+      resized.includes(
+        "sized up from what you needed; waking from sleep is quick up to 2 GB of memory and slower above it",
+      ) &&
+      resizedEvents.length === 1 &&
+      resizedEvents[0].size === "shared-cpu-2x:2048",
+    `${fake.machines.size} machine at ${resizedMachine?.guest?.memory_mb} MB, ${resizedEvents.length} resized event`,
+  );
+  await new Promise((r) => setTimeout(r, 1100));
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  const computePrices = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) =>
+      (
+        await q.query(
+          "select distinct price::float8 as price from usage where user_id = '20000000-0000-4000-8000-000000000002' and resource = 'compute' and quantity > 0",
+        )
+      ).rows.map((r) => r.price),
+  );
+  const nowBigger = await (
+    await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
+  ).json();
+  check(
+    "the ledger prices each stretch at its own size",
+    computePrices.includes(PRICES.compute["shared-cpu-1x:1024"]) &&
+      computePrices.includes(PRICES.compute["shared-cpu-2x:2048"]) &&
+      nowBigger.active.some(
+        (a) => a.what === "2 shared CPUs, 2 GB memory running",
+      ),
+    `prices ${computePrices.join(", ")}; ${nowBigger.active.map((a) => a.what).join("; ")}`,
+  );
+  // The old machine's sleep is on the record at Fly's own time, before it
+  // was let go of, and the old size's last stretch ends there, not at the
+  // look that replaced it.
+  const { ending, lastOld } = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) => ({
+      ending: (
+        await q.query(
+          "select e.kind, extract(epoch from e.at) * 1000 as at from computer_events e join computers c on c.id = e.computer_id where c.user_id = '20000000-0000-4000-8000-000000000002' and e.kind in ('suspended', 'destroyed', 'resized') and e.at >= to_timestamp($1 / 1000.0) order by e.at",
+          [suspendedAt],
+        )
+      ).rows,
+      lastOld: (
+        await q.query(
+          "select quantity::float8 as quantity, extract(epoch from from_at) * 1000 as from_ms from usage where user_id = '20000000-0000-4000-8000-000000000002' and resource = 'compute' and price = $1 order by from_at desc limit 1",
+          [PRICES.compute["shared-cpu-1x:1024"]],
+        )
+      ).rows[0],
+    }),
+  );
+  const ran = lastOld ? (suspendedAt - Number(lastOld.from_ms)) / 1000 : NaN;
+  check(
+    "the meter stops at the sleep before the replacement, at Fly's time",
+    ending.map((e) => e.kind).join(",") === "suspended,destroyed,resized" &&
+      Math.abs(Number(ending[0].at) - suspendedAt) < 1 &&
+      Number(ending[1].at) - suspendedAt >= 2500 &&
+      Math.abs(lastOld.quantity - ran) < 1,
+    `${ending.map((e) => `${e.kind} +${Math.round(Number(e.at) - suspendedAt)}ms`).join(", ")}; ${lastOld?.quantity.toFixed(2)} s billed of ${ran.toFixed(2)} s run`,
   );
   // Six looks at once for one membership make one computer.
   await Promise.all(Array.from({ length: 6 }, () => computerPage(margeOwner)));

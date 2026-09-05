@@ -34,11 +34,12 @@ import { computerOf, noteCause } from "@placeholder/db/computers";
 
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
-import { computersOn, ensureFilesystem, status } from "@/lib/computer";
+import { computersOn, ensureFilesystem, status, wanted } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
 import { cleanPath, filesOf } from "@/lib/files";
 import { dollars, live, sweepIfDue } from "@/lib/meter";
+import { LADDER, sizeName } from "@/lib/prices";
 import { principal } from "@/lib/session";
 
 const gb = (n: number) =>
@@ -131,6 +132,10 @@ export default async function Computer({
     );
   }
   const { entries, disk: space } = listing;
+  // The row as it is now that the machine has answered: a look that let an
+  // outgrown machine go has made one at the size wanted since.
+  const computer = (await computerOf(p)) ?? s.computer;
+  const wants = wanted(computer);
   // Files still on their way to this folder, shown in it until they land.
   const arriving = (await filesOf(p)).files.filter((f) => f.path === at);
   // The machine is awake now, having just answered.
@@ -387,9 +392,15 @@ export default async function Computer({
         data-month-total={(await live(p)).month}
       >
         <span>{STATES[state] ?? state}</span>
-        <span>{plain(s.computer.size)}</span>
+        <span data-size={computer.size} data-wants={wants}>
+          {sizeName(computer.size)}
+          {computer.size !== LADDER[0] &&
+            " — sized up from what you needed; waking from sleep is quick up to 2 GB of memory and slower above it"}
+          {wants &&
+            ` — short of memory; next time it is off it comes back as ${sizeName(wants)}`}
+        </span>
         <span>{`${gb(space.used)} of ${gb(space.total)} used`}</span>
-        <span>{place(s.computer.region)}</span>
+        <span>{place(computer.region)}</span>
         <span data-backups={backups.length}>
           {latest
             ? `backed up ${ago(latest.finishedAt!)}, ${backups.length} kept`
@@ -473,12 +484,7 @@ function said(params: Record<string, string | undefined>): string | null {
   return null;
 }
 
-// A machine size and a region as a person would say them.
-const plain = (size: string) => {
-  const m = /^(shared|performance)-cpu-(\d+)x:(\d+)$/.exec(size);
-  if (!m) return size;
-  return `${m[2]} ${m[1]} CPU${m[2] === "1" ? "" : "s"}, ${Number(m[3]) / 1024} GB memory`;
-};
+// A region as a person would say it.
 const place = (region: string) =>
   ({
     sjc: "San Jose",
