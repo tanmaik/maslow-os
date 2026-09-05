@@ -24,10 +24,13 @@ everything and the next look makes the machine on it.
 link it does not hold the key for, so a link naming another machine goes
 there and is answered there. A forged link therefore costs a wake and buys
 nothing; that is the price of the key not being shared, and it is worth it.
-The wake is metered to the owner of the machine the link names, so what
-forged links can cost them is bounded: a link past its expiry is refused
-where it lands and never replayed, and a machine replays no more than ten
-links a minute to any one other machine, answering the rest 429.
+The wake is metered to the owner of the machine the link names. A link
+past its expiry is refused where it lands and never replayed; a fresh forged
+one wakes the machine, as any request to that machine's hostname would,
+and the proxy suspends it again once it is idle. A rate limit on replays
+would bound nothing, since the hostname wakes it too, and would refuse real
+traffic on a deployment without a domain per machine, where every request
+for one machine may land on another first.
 
 **A terminal link names its session.** The session is inside the signature,
 so one link opens the one shell it was made for, and the tab that owns a

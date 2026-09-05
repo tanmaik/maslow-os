@@ -199,30 +199,10 @@ const sign = (s) =>
 // A signed link names the machine, when it expires, and what it is for,
 // under that machine's own key. Only the machine a link names can tell a
 // real one from a forged one, so a link for another machine is replayed
-// there unread and answered where it belongs: a forged link costs a wake
-// and buys nothing. What forged links can cost that machine's owner is
-// bounded: one past its expiry is refused where it lands, no more than
-// REPLAYS a minute are replayed to any one machine, and no more than
-// TARGETS machines are remembered at once, so a flood of made-up names
-// costs nothing but the refusals.
-const REPLAYS = 10;
-const TARGETS = 1000;
-const replayed = new Map();
-function replayTo(machine) {
-  const now = Date.now();
-  const recent = (replayed.get(machine) ?? []).filter((t) => now - t < 60_000);
-  if (recent.length >= REPLAYS) return { refused: 429 };
-  if (!replayed.has(machine) && replayed.size >= TARGETS)
-    return { refused: 429 };
-  recent.push(now);
-  replayed.set(machine, recent);
-  return { replay: machine };
-}
-setInterval(() => {
-  const now = Date.now();
-  for (const [machine, times] of replayed)
-    if (now - times.at(-1) >= 60_000) replayed.delete(machine);
-}, 60_000).unref();
+// there unread and answered where it belongs. One past its expiry is
+// refused where it lands and never replayed; a fresh forged one wakes the
+// machine it names, as any request to that machine's hostname would, and
+// buys nothing.
 const expired = (expires) => !(Number(expires) >= Date.now());
 // The machine a request's hostname names, when the deployment gives each
 // machine an origin of its own: <machine>.<domain>. Where there is such a
@@ -258,13 +238,13 @@ function signed(url, kind, req) {
         ? port
         : (url.searchParams.get("session") ?? "");
   if ((req && !bound(req, machine)) || expired(expires))
-    return { refused: 403 };
-  if (machine !== FLY_MACHINE_ID) return replayTo(machine);
+    return { refused: true };
+  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   if (!same(sign(`${kind}|${machine}|${expires}|${what}`), sig))
-    return { refused: 403 };
+    return { refused: true };
   // Ourselves and Fly's own way in are not previews.
   if (kind === "p" && (Number(port) === PORT || Number(port) === 22))
-    return { refused: 403 };
+    return { refused: true };
   return { what, port: Number(port) };
 }
 
@@ -305,7 +285,7 @@ function previewCookie(req) {
   const [machine, expires, port, sig] = m[1].split(".");
   if (!machine || !expires || !port || !sig) return null;
   if (!bound(req, machine) || expired(expires)) return null;
-  if (machine !== FLY_MACHINE_ID) return replayTo(machine);
+  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   if (!same(sign(`cookie|${machine}|${expires}|${port}`), sig)) return null;
   return { port: Number(port) };
 }
@@ -752,17 +732,14 @@ async function handle(req, res) {
     res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
     res.end(text);
   };
-  const REFUSED = {
-    403: "This link has expired or is not one of ours. Open it again from your computer.",
-    429: "That computer has been asked for too often just now. Try again in a minute.",
-  };
+  const STALE =
+    "This link has expired or is not one of ours. Open it again from your computer.";
   // A browser living at a previewed port sees that port, not us; only
   // signed links and the disk's own routes are kept back.
   const ours = /^\/(fs|dl|term|p)(\/|$)/.test(url.pathname);
   if (!ours) {
     const cookie = previewCookie(req);
     if (cookie?.replay) return replay(cookie.replay);
-    if (cookie?.refused) return say(cookie.refused, REFUSED[cookie.refused]);
     if (cookie) return forward(req, res, cookie.port);
   }
   if (url.pathname === "/health") return json(200, { ok: true });
@@ -772,7 +749,7 @@ async function handle(req, res) {
   const dl = signed(url, "dl", req);
   if (dl) {
     if (dl.replay) return replay(dl.replay);
-    if (dl.refused) return say(dl.refused, REFUSED[dl.refused]);
+    if (dl.refused) return say(403, STALE);
     const abs = await real(dl.what);
     const s = await fs.stat(abs).catch(() => null);
     if (!s?.isFile()) return say(404, "There is no such file on your disk.");
@@ -807,7 +784,7 @@ async function handle(req, res) {
   const pv = signed(url, "p", req);
   if (pv) {
     if (pv.replay) return replay(pv.replay);
-    if (pv.refused) return say(pv.refused, REFUSED[pv.refused]);
+    if (pv.refused) return say(403, STALE);
     const day = Date.now() + 86400_000;
     const cookieSig = sign(`cookie|${FLY_MACHINE_ID}|${day}|${pv.port}`);
     const secure =
@@ -1258,11 +1235,7 @@ function upgrade(req, socket, head) {
   const term = signed(url, "term", req);
   if (term) {
     if (term.replay) return replay(term.replay);
-    if (term.refused)
-      return refuse(
-        term.refused,
-        term.refused === 429 ? "Too Many Requests" : "Forbidden",
-      );
+    if (term.refused) return refuse(403, "Forbidden");
     if (!pty) return refuse(501, "No terminal on this machine");
     if (busy) return refuse(503, "Not right now");
     return shells.handleUpgrade(req, socket, head, (ws) =>
@@ -1272,7 +1245,6 @@ function upgrade(req, socket, head) {
   // A previewed app's own sockets, live reload and the like.
   const cookie = previewCookie(req);
   if (cookie?.replay) return replay(cookie.replay);
-  if (cookie?.refused) return refuse(429, "Too Many Requests");
   if (!cookie) return refuse(404, "Not Found");
   const target = connect(cookie.port, "127.0.0.1", () => {
     const headers = Object.entries(req.headers)

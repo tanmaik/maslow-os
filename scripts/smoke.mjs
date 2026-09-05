@@ -2379,9 +2379,8 @@ try {
       (await forgedLink.text()).includes("not one of ours"),
     `${forgedLink.status}, ${someMachine.id} ${someMachine.state}`,
   );
-  // A link past its expiry is refused where it lands and never replayed,
-  // and a machine replays no more than ten links a minute to any one
-  // other machine: a forged link costs its owner only so many wakes.
+  // A link past its expiry is refused where it lands and never replayed;
+  // a fresh one for another machine is replayed there unread.
   const running = [...fake.machines.values()].find(
     (m) => m.state === "started",
   );
@@ -2391,17 +2390,13 @@ try {
       `http://127.0.0.1:${running.port}/dl/${nobody}/${expires}/forged?path=%2Fx`,
     );
   const expiredLink = await direct(1);
-  const sent = [];
-  for (let i = 0; i < 11; i++) sent.push(await direct(9999999999999));
+  const freshLink = await direct(9999999999999);
   check(
-    "an expired link is refused unread; ten replays a minute to one machine",
+    "an expired link is refused unread; a fresh one is replayed unread",
     expiredLink.status === 403 &&
       !expiredLink.headers.has("fly-replay") &&
-      sent
-        .slice(0, 10)
-        .every((r) => r.headers.get("fly-replay") === `instance=${nobody}`) &&
-      sent[10].status === 429,
-    `expired ${expiredLink.status}${expiredLink.headers.has("fly-replay") ? " and replayed" : ""}; then ${sent.map((r) => r.status).join(" ")}`,
+      freshLink.headers.get("fly-replay") === `instance=${nobody}`,
+    `expired ${expiredLink.status}${expiredLink.headers.has("fly-replay") ? " and replayed" : ""}; fresh ${freshLink.headers.get("fly-replay") ?? freshLink.status}`,
   );
   // Late's org may have computers; Late opens theirs, so the org has a
   // volume and a machine on Fly when it is deleted.
