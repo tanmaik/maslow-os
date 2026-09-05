@@ -21,8 +21,8 @@ export async function AppHeader() {
   const others = (await membershipsOf(p)).filter((m) => m.userId !== p.userId);
 
   return (
-    <header className="mb-6 flex flex-wrap items-center justify-between gap-2">
-      <div className="flex flex-wrap items-center gap-1">
+    <header className="mb-6 flex h-8 items-center justify-between gap-2 overflow-x-auto whitespace-nowrap">
+      <div className="flex items-center gap-1">
         <a href="/" className="px-2 text-base font-semibold">
           {orgName}
         </a>
@@ -44,7 +44,7 @@ export async function AppHeader() {
           </form>
         )}
       </div>
-      <nav className="flex flex-wrap items-center gap-1">
+      <nav className="flex items-center gap-1">
         <Button
           variant="ghost"
           size="sm"

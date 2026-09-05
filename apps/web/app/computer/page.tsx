@@ -146,7 +146,7 @@ export default async function Computer({
   const crumbs = at.split("/").filter(Boolean);
 
   return (
-    <main className="bg-background fixed inset-x-0 top-8 bottom-0 flex flex-col">
+    <main className="bg-background fixed inset-x-0 top-14 bottom-0 flex flex-col border-t">
       <div className="flex min-h-0 flex-1">
         <nav
           className="bg-muted/30 w-64 shrink-0 overflow-y-auto border-r p-2 text-sm"
