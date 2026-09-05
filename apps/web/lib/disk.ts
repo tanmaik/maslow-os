@@ -1,14 +1,13 @@
 import type { Principal } from "@placeholder/db/auth";
 import {
   computerOf,
-  computersAllowed,
   secretIn,
   secretOf,
   type Computer,
 } from "@placeholder/db/computers";
 import { createHmac } from "node:crypto";
 
-import { build } from "./computer.ts";
+import { build, computersOn } from "./computer.ts";
 import { deployment } from "./deployment.ts";
 
 // The person's disk, as the daemon on their machine serves it. Every call
@@ -56,8 +55,8 @@ const host = () => config().host;
 
 // The machine the disk is served by, made on the first touch.
 async function machineOf(p: Principal): Promise<Computer> {
-  if (!(await computersAllowed(p)))
-    throw new DiskError(403, "Computers are not available for this org.");
+  if (!(await computersOn(p)))
+    throw new DiskError(403, "Computers are off for this org.");
   let c = await computerOf(p);
   if (!c?.machineId || c.state === "failed") {
     let built;

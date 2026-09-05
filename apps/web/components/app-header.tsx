@@ -69,6 +69,14 @@ export async function AppHeader() {
         >
           Settings
         </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          nativeButton={false}
+          render={<a href="/usage" />}
+        >
+          Usage
+        </Button>
         <form action="/auth/sign-out" method="post">
           <Button variant="ghost" size="sm" type="submit">
             Sign out, {me}

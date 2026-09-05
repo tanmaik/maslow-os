@@ -71,6 +71,9 @@ type Notice = {
 
 const NOTICES: Record<string, string> = {
   "org=saved": "Saved.",
+  "computers=on": "Computers are on. Everyone in the org can open theirs.",
+  "computers=off":
+    "Computers are off. What exists stays until a member is purged.",
   "org=name": "The org needs a name of up to 80 characters.",
   "org=image":
     "That file can't be the logo. A PNG, JPEG or WebP under 2 MB always works.",
@@ -136,57 +139,89 @@ export default async function Settings({
       <h1 className="text-2xl font-semibold">Settings</h1>
 
       {owner && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Org</CardTitle>
-            <CardDescription>What everyone in it sees.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              action="/settings/org"
-              method="post"
-              encType="multipart/form-data"
-              className="space-y-4"
-            >
-              <div className="flex items-center gap-4">
-                <Avatar className="size-16 rounded-md">
-                  {org.logoKey && (
-                    <AvatarImage src={storage.url(org.logoKey)} alt="" />
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Org</CardTitle>
+              <CardDescription>What everyone in it sees.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <form
+                action="/settings/org"
+                method="post"
+                encType="multipart/form-data"
+                className="space-y-4"
+              >
+                <div className="flex items-center gap-4">
+                  <Avatar className="size-16 rounded-md">
+                    {org.logoKey && (
+                      <AvatarImage src={storage.url(org.logoKey)} alt="" />
+                    )}
+                    <AvatarFallback className="rounded-md">
+                      {initials(org.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  {uploads ? (
+                    <div className="space-y-2">
+                      <Label htmlFor="logo">Logo</Label>
+                      <ImageInput id="logo" name="logo" />
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground text-sm">
+                      Logos need object storage, which is not set up yet.
+                    </p>
                   )}
-                  <AvatarFallback className="rounded-md">
-                    {initials(org.name)}
-                  </AvatarFallback>
-                </Avatar>
-                {uploads ? (
-                  <div className="space-y-2">
-                    <Label htmlFor="logo">Logo</Label>
-                    <ImageInput id="logo" name="logo" />
-                  </div>
-                ) : (
-                  <p className="text-muted-foreground text-sm">
-                    Logos need object storage, which is not set up yet.
-                  </p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="org-name">Name</Label>
-                <Input
-                  id="org-name"
-                  name="name"
-                  defaultValue={org.name}
-                  required
-                  maxLength={80}
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <Button type="submit">Save</Button>
-                {said("org") && (
-                  <p className="text-muted-foreground text-sm">{said("org")}</p>
-                )}
-              </div>
-            </form>
-          </CardContent>
-        </Card>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="org-name">Name</Label>
+                  <Input
+                    id="org-name"
+                    name="name"
+                    defaultValue={org.name}
+                    required
+                    maxLength={80}
+                  />
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button type="submit">Save</Button>
+                  {said("org") && (
+                    <p className="text-muted-foreground text-sm">
+                      {said("org")}
+                    </p>
+                  )}
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+          {deployment.computers.kind !== "none" && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Computers</CardTitle>
+                <CardDescription>
+                  {org.computers
+                    ? "Every member gets a computer: a disk, a machine that wakes when they open it, a terminal, backups. It costs while it exists."
+                    : "Off. Nobody in this org has a computer."}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form action="/settings/computers" method="post">
+                  <input
+                    type="hidden"
+                    name="on"
+                    value={org.computers ? "no" : "yes"}
+                  />
+                  <Button
+                    type="submit"
+                    variant={org.computers ? "outline" : "default"}
+                    data-computers={org.computers ? "on" : "off"}
+                  >
+                    {org.computers ? "Turn computers off" : "Turn computers on"}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+        </>
       )}
 
       <Card>

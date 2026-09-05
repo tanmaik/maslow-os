@@ -15,6 +15,13 @@ type Live = {
   active: { resource: string; what: string; ratePerHour: number }[];
 };
 
+// What the month comes to if the rate of the last minute holds.
+const projected = (month: number, ratePerHour: number) => {
+  const now = new Date();
+  const end = Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1);
+  return month + (ratePerHour * (end - now.getTime())) / 3600_000;
+};
+
 const dollars = (n: number) =>
   n < 0.01 && n > 0 ? `$${n.toFixed(6)}` : `$${n.toFixed(4)}`;
 
@@ -57,37 +64,43 @@ export function LiveMeter() {
   }, [live]);
 
   if (!live) return null;
+  const estimate = projected(live.month, live.ratePerHour);
+  const top = [...live.active]
+    .sort((x, y) => y.ratePerHour - x.ratePerHour)
+    .slice(0, 4);
   return (
     <HoverCard>
       <HoverCardTrigger
         render={
-          <div
-            className="text-muted-foreground fixed top-2 right-3 z-50 cursor-default font-mono text-xs tabular-nums"
+          <a
+            href="/usage"
+            className="text-muted-foreground hover:text-foreground fixed top-2 right-3 z-50 font-mono text-xs tabular-nums"
             data-live-meter={live.month}
+            data-estimate={estimate}
           />
         }
       >
-        {dollars(shown)} this month · {dollars(live.ratePerHour)}/h
+        {dollars(shown)} / ≈{dollars(estimate)} a month
       </HoverCardTrigger>
-      <HoverCardContent align="end" className="w-80 text-sm">
-        <p className="mb-2 font-medium">
-          What your computer costs us right now
-        </p>
-        {live.active.length === 0 && (
-          <p className="text-muted-foreground">Nothing.</p>
+      <HoverCardContent align="end" className="w-72 text-sm">
+        <p className="mb-2 font-medium">Top sources of burn</p>
+        {top.length === 0 ? (
+          <p className="text-muted-foreground">Nothing is ticking.</p>
+        ) : (
+          <ul className="space-y-1">
+            {top.map((a) => (
+              <li key={a.resource} className="flex justify-between gap-2">
+                <span>{a.what}</span>
+                <span className="text-muted-foreground font-mono tabular-nums">
+                  {dollars(a.ratePerHour)}/h
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
-        <ul className="space-y-1">
-          {live.active.map((a) => (
-            <li key={a.resource} className="flex justify-between gap-2">
-              <span>{a.what}</span>
-              <span className="text-muted-foreground font-mono tabular-nums">
-                {dollars(a.ratePerHour)}/h
-              </span>
-            </li>
-          ))}
-        </ul>
         <p className="text-muted-foreground mt-2 text-xs">
-          Nobody is billed yet.
+          This month so far, then the month at this rate. Everything is on the
+          usage page.
         </p>
       </HoverCardContent>
     </HoverCard>

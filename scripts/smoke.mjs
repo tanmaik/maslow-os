@@ -780,9 +780,41 @@ try {
       })
     ).text();
   check(
-    "computers are gated by org",
-    (await computerPage(wile)).includes("not available for this org"),
-    "Acme told no",
+    "computers are gated by org, and the page says where the switch is",
+    /Computers are off for this org[\s\S]*href="\/settings"/.test(
+      await computerPage(wile),
+    ),
+    "Acme told no, and pointed to Settings",
+  );
+  const switchedOn = await fetch(`${stack.url}/settings/computers`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ on: "yes" }),
+    redirect: "manual",
+  });
+  const settingsOn = await settingsPage(wile);
+  const memberSwitch = await fetch(`${stack.url}/settings/computers`, {
+    method: "POST",
+    headers: {
+      cookie: await signIn("10000000-0000-4000-8000-000000000002"),
+    },
+    body: new URLSearchParams({ on: "no" }),
+    redirect: "manual",
+  });
+  const switchedOff = await fetch(`${stack.url}/settings/computers`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ on: "no" }),
+    redirect: "manual",
+  });
+  check(
+    "an owner switches computers on and off; a member cannot",
+    switchedOn.headers.get("location")?.endsWith("computers=on") &&
+      settingsOn.includes('data-computers="on"') &&
+      memberSwitch.status === 403 &&
+      switchedOff.headers.get("location")?.endsWith("computers=off") &&
+      (await computerPage(wile)).includes("Computers are off for this org"),
+    `on ${switchedOn.status}, member ${memberSwitch.status}, off ${switchedOff.status}`,
   );
   check(
     "signing in makes the filesystem, not compute",
@@ -1287,6 +1319,19 @@ try {
       ) &&
       (await fetch(`${stack.url}/meter/live`)).status === 401,
     `$${liveMeter.month?.toFixed(8)} this month, $${liveMeter.ratePerHour?.toFixed(8)}/h, ${liveMeter.active?.map((a) => a.what).join(", ")}`,
+  );
+  const usagePage = await (
+    await fetch(`${stack.url}/usage`, { headers: { cookie: margeOwner } })
+  ).text();
+  check(
+    "the usage page says what is ticking, what the month holds, and everyone's total",
+    /data-ticking="disk"/.test(usagePage) &&
+      /data-projection="[0-9.e-]+"/.test(usagePage) &&
+      /data-usage="disk"/.test(usagePage) &&
+      /data-member-usage=/.test(usagePage) &&
+      (await fetch(`${stack.url}/usage`, { redirect: "manual" })).status ===
+        307,
+    "ticking, projected, listed, per member; signed out is sent home",
   );
   const settingsUsage = await settingsPage(margeOwner);
   const ottoMonth = await computerPage(ottoNow);

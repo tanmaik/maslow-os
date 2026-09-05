@@ -38,9 +38,16 @@ export type Built = "built" | "exists" | "off" | "not-allowed";
 // attached to it on demand. The row is claimed first, so two requests at
 // once make one; each Fly id is written as soon as it exists; a step that
 // failed is resumed by the next look.
+// Whether this org has computers: its own switch in Settings says. An org
+// founded outside production starts with them on, so a preview or a
+// laptop shows the whole product; one founded in production starts off.
+export async function computersOn(p: Principal): Promise<boolean> {
+  return computersAllowed(p);
+}
+
 export async function ensureFilesystem(p: Principal): Promise<Computer | null> {
   if (deployment.computers.kind === "none") return null;
-  if (!(await computersAllowed(p))) return null;
+  if (!(await computersOn(p))) return null;
   let c = await computerOf(p);
   if (!c) {
     await reserveComputer(p, {

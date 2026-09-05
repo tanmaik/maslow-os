@@ -28,7 +28,11 @@ export async function POST(request: Request) {
   try {
     const identity = await redeemCode(flow.email, code.trim());
     await clear(key);
-    return signedIn(await signIn(identity), home);
+    // An org founded here starts with computers on outside production.
+    return signedIn(
+      await signIn({ ...identity, computers: !deployment.production }),
+      home,
+    );
   } catch (err) {
     if (err instanceof WorkOSError && /one_time_code/.test(err.code))
       return Response.redirect(`${home}/?code=wrong`, 303);

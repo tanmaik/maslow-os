@@ -1,7 +1,7 @@
 // What each vendor charges us, in dollars, in the unit we measure. Every
 // figure is the vendor's list price; the meter multiplies, nothing else.
 // A month is 730 hours, as the vendors' monthly prices assume.
-const MONTH = 730 * 3600;
+export const MONTH = 730 * 3600;
 
 export const PRICES = {
   // Fly machine, per second while started: shared-cpu-1x with 1 GB is

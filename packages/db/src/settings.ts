@@ -6,6 +6,8 @@ export type Org = {
   name: string;
   logoKey: string | null;
   principalId: string;
+  // Whether members get computers, in production; an owner's switch.
+  computers: boolean;
 };
 export type Member = {
   id: string;
@@ -83,7 +85,7 @@ export async function orgOf(p: Principal): Promise<{
   return asOrg(p.orgId, async (q) => {
     const org = (
       await q.query<Org>(
-        'select id, name, logo_key as "logoKey", principal_id as "principalId" from orgs',
+        'select id, name, logo_key as "logoKey", principal_id as "principalId", computers from orgs',
       )
     ).rows[0]!;
     const members = (
@@ -108,6 +110,11 @@ export async function orgOf(p: Principal): Promise<{
       : [];
     return { org, members, invited, past };
   });
+}
+
+// Switches the org's computers on or off. Owners only.
+export async function setComputers(p: Principal, on: boolean): Promise<void> {
+  await asOwner(p, (q) => q.query("update orgs set computers = $1", [on]));
 }
 
 export async function renameOrg(p: Principal, name: string): Promise<void> {

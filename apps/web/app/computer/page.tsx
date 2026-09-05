@@ -1,4 +1,3 @@
-import { computersAllowed } from "@placeholder/db/computers";
 import {
   ChevronDown,
   ChevronRight,
@@ -34,7 +33,7 @@ import { backupsOf } from "@placeholder/db/backups";
 
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
-import { ensureFilesystem, status } from "@/lib/computer";
+import { computersOn, ensureFilesystem, status } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
 import { cleanPath, filesOf } from "@/lib/files";
@@ -82,8 +81,16 @@ export default async function Computer({
   if (!p) redirect("/");
   if (deployment.computers.kind === "none")
     return <Note>Computers are not set up on this deployment.</Note>;
-  if (!(await computersAllowed(p)))
-    return <Note>Computers are not available for this org yet.</Note>;
+  if (!(await computersOn(p)))
+    return (
+      <Note>
+        Computers are off for this org. An owner can turn them on in{" "}
+        <a href="/settings" className="underline">
+          Settings
+        </a>
+        .
+      </Note>
+    );
   const params = await searchParams;
   const at = cleanPath(params.path ?? "/") ?? "/";
   // A look at the computer is when the meter, the backups and the
