@@ -632,6 +632,7 @@ async function pull(id, target, url, size, landing = { landed: false }) {
     await noteLanded(id, { target, tmp, landed: true });
     await fs.rm(tmp, { force: true });
   } catch (err) {
+    await fs.rm(tmp, { force: true }).catch(() => {});
     await forgetLanded(id);
     if (err.code === "ENOSPC") throw new Refused(507, "the disk is full");
     throw err;

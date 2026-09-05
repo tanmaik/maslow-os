@@ -44,7 +44,11 @@ sized.
 **A path is confined by its parent, not by its name.** The folder a path
 sits in is resolved before the name is put back on it, so a symlink made in
 the shell reaches nothing outside the home even when the name it points at
-is not there yet.
+is not there yet. This is a check followed by a write, since Node has no way
+to open a path one component at a time: a shell that swaps a folder for a
+link in the instant between the two can make the daemon write outside the
+home. Only the person's own shell can do that, on their own machine, where
+they are root already; it is defence in depth, not a boundary.
 
 **The daemon survives its clients.** Its death is the machine's — every
 shell, server and job goes with it — so every socket and every spawned

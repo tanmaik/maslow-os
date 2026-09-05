@@ -2331,7 +2331,6 @@ try {
       await new Promise((r) => setTimeout(r, 250));
   }
   const third = await pullTo("big-c.bin", 300_000);
-  source.close();
   check(
     "pulls accepted together cannot overrun the disk; the room comes back",
     first.status === 202 &&
@@ -2340,13 +2339,41 @@ try {
       third.status === 202,
     `first ${first.status}, second ${second.status}, a ${landedA?.size} bytes, then ${third.status}`,
   );
+  // The third was promised less than its source sends, so it is cut off
+  // short of landing: its hidden copy goes with it, and once the app has
+  // been told, the name is free for the next pull.
+  await asResized("/fs?path=%2Fbig-a.bin", { method: "DELETE" });
+  const fourthId = crypto.randomUUID();
+  let fourth = 409;
+  for (let i = 0; i < 40 && fourth === 409; i++) {
+    await new Promise((r) => setTimeout(r, 250));
+    fourth = (
+      await asResized("/fs/pull", {
+        method: "POST",
+        body: JSON.stringify({
+          id: fourthId,
+          path: "/big-c.bin",
+          url: sourceUrl,
+          size: bytes.length,
+        }),
+      })
+    ).status;
+  }
   for (let i = 0; i < 40; i++) {
     const c = await (await asResized("/fs/stat?path=%2Fbig-c.bin")).json();
-    if (c?.size === 300_000) break;
+    if (c?.size === bytes.length) break;
     await new Promise((r) => setTimeout(r, 250));
   }
-  for (const name of ["big-a.bin", "big-c.bin"])
-    await asResized(`/fs?path=%2F${name}`, { method: "DELETE" });
+  source.close();
+  const hidden = (
+    await fs.readdir(path.join(scratch, "computers", resizedMachine.volume))
+  ).filter((n) => n.startsWith(".landing-") && n !== `.landing-${fourthId}`);
+  check(
+    "a pull cut short leaves no hidden copy, and its name is free again",
+    fourth === 202 && hidden.length === 0,
+    `then ${fourth}, hidden ${hidden.join(", ") || "none"}`,
+  );
+  await asResized("/fs?path=%2Fbig-c.bin", { method: "DELETE" });
   // A landing is claimed before anything about it is checked, so two
   // pulls arriving together cannot both start: the same id and path is
   // one pull, joined; another id for the path, or the path's id for

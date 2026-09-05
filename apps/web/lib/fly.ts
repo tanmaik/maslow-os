@@ -46,7 +46,7 @@ export const autostops = (m: Machine) =>
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, and the person's account in it, copied onto the
 // volume on first boot.
-export const IMAGE = "registry.fly.io/placeholder-computers:v15";
+export const IMAGE = "registry.fly.io/placeholder-computers:v16";
 // Every disk starts here; the operating system takes about a gigabyte of
 // it, and it doubles when it fills, to the cap.
 export const DISK_GB = 3;
