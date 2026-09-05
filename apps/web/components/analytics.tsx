@@ -31,7 +31,9 @@ export function Analytics({ config, where, person }: Props) {
         api_host: "/ingest",
         ui_host: "https://us.posthog.com",
         defaults: "2026-08-30",
-        capture_exceptions: true,
+        // An issue is work for someone; a laptop's or a preview's errors
+        // are not, and would sit in the queue beside production's.
+        capture_exceptions: where === "production",
         capture_dead_clicks: true,
         capture_heatmaps: true,
         session_recording: { maskAllInputs: true, maskTextSelector: "*" },

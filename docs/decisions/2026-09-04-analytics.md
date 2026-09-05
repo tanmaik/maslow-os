@@ -32,7 +32,9 @@ to chance.
 
 **Only production counts.** The project's internal-and-test-users filter
 keeps events whose `deployment` is `production`, on by default for every
-insight, so a laptop or a preview never moves a number.
+insight, so a laptop or a preview never moves a number. Errors are
+captured in production alone: an issue is work for someone, and a
+laptop's would sit in the queue beside production's.
 
 **Missing outside production, faked; missing in production, refused.** As
 every vendor: the pill says analytics is faked, and production does not
