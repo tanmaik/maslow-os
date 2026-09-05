@@ -74,8 +74,10 @@ async function disk() {
         .catch(() => [])) {
         const p = path.join(dir, e.name);
         if (e.isDirectory()) await walk(p);
-        // The link itself, never what it points at.
-        else used += (await fs.lstat(p).catch(() => ({ size: 0 }))).size;
+        // A file still landing is held whole, so its bytes so far are not
+        // counted again; otherwise the link itself, never what it points at.
+        else if (!landingTmps().has(p))
+          used += (await fs.lstat(p).catch(() => ({ size: 0 }))).size;
       }
     };
     await walk(ROOT);
@@ -559,9 +561,10 @@ async function forgetLanded(id) {
 // on record, then linked into place, which refuses to replace whatever
 // took the name meanwhile. A copy left by a pull of the same id cut off
 // goes first.
-async function pull(id, target, url, size, landing = { got: 0 }) {
+async function pull(id, target, url, size, landing = { landed: false }) {
   if (await fs.stat(target).catch(() => null)) throw new Refused(409, "exists");
   const tmp = path.join(path.dirname(target), `.landing-${id}`);
+  landing.tmp = tmp;
   await fs.rm(tmp, { force: true });
   const res = await fetch(url, { signal: AbortSignal.timeout(6 * 3600_000) });
   if (!res.ok || !res.body)
@@ -574,7 +577,6 @@ async function pull(id, target, url, size, landing = { got: 0 }) {
         for await (const chunk of source) {
           got += chunk.length;
           if (got > size) throw new Refused(400, "more than promised");
-          landing.got = got;
           yield chunk;
         }
       },
@@ -589,6 +591,7 @@ async function pull(id, target, url, size, landing = { got: 0 }) {
       if (err.code === "EEXIST") throw new Refused(409, "exists");
       throw err;
     }
+    landing.landed = true;
     await noteLanded(id, { target, tmp, landed: true });
     await fs.rm(tmp, { force: true });
   } catch (err) {
@@ -600,14 +603,18 @@ async function pull(id, target, url, size, landing = { got: 0 }) {
 
 // A pull that carries on alone, goes on the record once the file is in
 // place, and says to the app how it went by the id the app gave the
-// file; a path already landing is joined, not pulled twice. What each
-// has still to write is held against the disk's room until it ends,
-// landed or not, so pulls accepted together cannot together overrun it.
+// file; a path already landing is joined, not pulled twice. A landing's
+// whole size is held against the disk's room until the file is in place,
+// so pulls accepted together cannot together overrun it; on a real disk
+// the bytes written so far count twice until then, which errs safe.
 const landings = new Map();
 const held = () =>
-  [...landings.values()].reduce((n, l) => n + (l.size - l.got), 0);
+  [...landings.values()].reduce((n, l) => n + (l.landed ? 0 : l.size), 0);
+// The temp files of the landings under way, and no other file.
+const landingTmps = () =>
+  new Set([...landings.values()].map((l) => l.tmp).filter(Boolean));
 function land(id, target, url, size) {
-  const landing = { size, got: 0 };
+  const landing = { size, landed: false, tmp: null };
   landings.set(target, landing);
   pull(id, target, url, size, landing)
     .then(
