@@ -1357,6 +1357,35 @@ try {
       !fake.machines.has(goneId),
     `${fake.machines.size} machines now`,
   );
+  // A machine on an old image is let go of by the sweep while it is off,
+  // and its stop is on the record, so the meter stops with it; the next
+  // look makes one on the same disk.
+  const onOld = await (
+    await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
+  ).json();
+  for (const [id, mc] of fake.machines) {
+    mc.image = "registry.fly.io/placeholder-computers:v0";
+    await fetch(`${fake.url}/v1/apps/x/machines/${id}/suspend`, {
+      method: "POST",
+      headers: { authorization: "Bearer fake" },
+    });
+  }
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  const offOld = await (
+    await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
+  ).json();
+  const machinesAfterOld = fake.machines.size;
+  check(
+    "a machine on an old image is replaced by the sweep, and the meter stops",
+    onOld.active.some((a) => a.resource === "compute") &&
+      machinesAfterOld === 0 &&
+      !offOld.active.some((a) => a.resource === "compute") &&
+      /data-state="started"/.test(await computerPage(ottoNow)) &&
+      fake.machines.size === 1,
+    `compute ${onOld.active.some((a) => a.resource === "compute") ? "on" : "off"} before, ${machinesAfterOld} machines after the sweep, compute ${offOld.active.some((a) => a.resource === "compute") ? "on" : "off"}, ${fake.machines.size} after the look`,
+  );
   // A report with the wrong secret, or for a machine we never made, is a 404.
   const [m1] = fake.machines.keys();
   const forged = await fetch(`${stack.url}/computer/report`, {

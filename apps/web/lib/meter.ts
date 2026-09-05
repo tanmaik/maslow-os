@@ -301,21 +301,6 @@ async function reconcile(): Promise<void> {
       !known.volumes.has(v.id)
     )
       console.error(`incident: Fly volume ${v.id} (${v.name}) is unrecorded`);
-  // A machine on an image that is not the image is let go of while it is
-  // off; the next look makes one on the same volume, which holds
-  // everything. That is how machines are updated.
-  for (const m of machines)
-    if (
-      known.machines.has(m.id) &&
-      m.config?.image &&
-      m.config.image !== IMAGE &&
-      (m.state === "stopped" || m.state === "suspended")
-    ) {
-      const row = known.byMachine.get(m.id)!;
-      console.log(`machine ${m.id} is on ${m.config.image}; replaced`);
-      await fly.destroyMachine(m.id).catch(() => {});
-      await clearMachineIn(row.orgId, row.id, m.id);
-    }
   const have = new Set(volumes.map((v) => v.id));
   for (const [volumeId, { orgId, id }] of known.volumes)
     if (!have.has(volumeId)) {
@@ -354,8 +339,19 @@ export async function sweep(now = new Date()): Promise<number> {
             const m = await fly.machine(c.machineId);
             // What Fly's proxy did to it since: exact starts and stops.
             if (m?.events) await noteEventsIn(orgId, c, m.events);
-            await noteStateIn(orgId, c, m ? m.state : "destroyed");
-            if (!m) await clearMachineIn(orgId, c.id, c.machineId);
+            // A machine on an image that is not the image is let go of
+            // while it is off; the next look makes one on the same volume,
+            // which holds everything. That is how machines are updated.
+            const stale =
+              m?.config?.image !== undefined &&
+              m.config.image !== IMAGE &&
+              (m.state === "stopped" || m.state === "suspended");
+            if (stale) {
+              console.log(`machine ${m.id} is on ${m.config!.image}; replaced`);
+              await fly.destroyMachine(m.id).catch(() => {});
+            }
+            await noteStateIn(orgId, c, m && !stale ? m.state : "destroyed");
+            if (!m || stale) await clearMachineIn(orgId, c.id, c.machineId);
           } catch (err) {
             console.error(`sweep ${c.machineId}: ${(err as Error).message}`);
           }

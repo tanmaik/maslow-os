@@ -96,6 +96,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
     name: mc.name,
     region: mc.region,
     state: mc.state,
+    config: { image: mc.image },
     events: mc.events.slice(-20),
   });
 
@@ -129,6 +130,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
         name: input.name,
         region: input.region,
         state: "created",
+        image: input.config?.image,
         env: input.config?.env ?? {},
         volume: input.config?.mounts?.[0]?.volume,
         child: null,
