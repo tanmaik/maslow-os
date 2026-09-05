@@ -3,6 +3,7 @@ import {
   backupInProgress,
   backupOf,
   backupsIn,
+  backupsOpen,
   beginBackup,
   computerByMachine,
   dropBackup,
@@ -192,9 +193,13 @@ export async function drop(
   await dropBackup(orgId, b.id);
 }
 
+// A machine giving up on a backup; or, named none, on every one it had
+// on its way, as a machine that boots has.
 export async function abort(m: Machine, id: string): Promise<void> {
-  const b = await backupInProgress(m, id);
-  if (b) await drop(m.orgId, b);
+  const open = id
+    ? [await backupInProgress(m, id)].filter((b) => b !== null)
+    : await backupsOpen(m);
+  for (const b of open) await drop(m.orgId, b);
 }
 
 // Has this computer back itself up now, and notes that as why the

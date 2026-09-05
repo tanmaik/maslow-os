@@ -35,7 +35,19 @@ nothing there to back up.
 one, said plainly when refused. The sweep still asks daily; seven are kept
 whoever asked. One backup at a time per person, and none within an hour of
 the last, is the database's rule; the daily cadence is the sweep's, and a
-backup on demand counts as the day's.
+backup on demand counts as the day's. A backup is a stream from the daemon
+that started it: a daemon that boots had none on its way, and says so, so
+the row it left open is let go of and another can be taken.
+
+**The Finder hides what a Mac hides.** A name beginning with a dot —
+`.bashrc`, `.cache`, `.local` — is on the disk, in the shell and in the
+daemon's listing for the tools, and not on the Computer page.
+
+**The package lists are the system's own.** The image carries none, so a
+boot brings the system's up to date in the background, and the first
+`sudo apt-get install` on a fresh machine finds its package. The last
+reset's outcome is kept beside the operating system, so a boot that
+finished a reset cut off can still say it was done.
 
 **Disks from before.** A system copied from an older image has the base
 image's `node` user at uid 1000 and the person's files in root's home. On

@@ -867,10 +867,20 @@ try {
     ),
     events.join(","),
   );
-  // Files go to the store in parts, then land on the disk. Here the store
-  // is a directory behind our own PUT and the disk is a daemon process.
-  // Three parts make one file, listed from the disk with its size, fetched
-  // back whole from the machine, unseen on anyone else's disk, and deleted.
+  // Files go to the store in parts, then land on the disk: the machine
+  // pulls them alone and says when they are there. Here the store is a
+  // directory behind our own PUT and the disk is a daemon process. Three
+  // parts make one file, listed from the disk with its size, fetched back
+  // whole from the machine, unseen on anyone else's disk, and deleted.
+  const landedAt = async (cookie, path, marker) => {
+    let page = "";
+    for (let i = 0; i < 60; i++) {
+      page = await computerPage(cookie, path);
+      if (page.includes(marker)) break;
+      await new Promise((r) => setTimeout(r, 250));
+    }
+    return page;
+  };
   const json = (path, body, cookie) =>
     fetch(`${stack.url}${path}`, {
       method: "POST",
@@ -900,7 +910,7 @@ try {
   const closed = await (
     await json("/files/complete", { id: begun.id, parts: etags }, ottoNow)
   ).json();
-  const listed = await computerPage(ottoNow);
+  const listed = await landedAt(ottoNow, "/", 'data-file="/notes.txt"');
   const staged = await asOrg(
     "00000000-0000-4000-8000-000000000002",
     async (q) => {
@@ -914,11 +924,12 @@ try {
     },
   );
   check(
-    "a file arrives in parts, lands on the disk and leaves the store",
+    "a file arrives in parts, lands on the disk alone and leaves the store",
     closed.size === whole.length &&
+      closed.state === "landing" &&
       listed.includes('data-file="/notes.txt"') &&
       staged?.gone === true,
-    `${closed.size} bytes, staged row ${JSON.stringify(staged)}`,
+    `${closed.size} bytes, answered ${closed.state}, staged row ${JSON.stringify(staged)}`,
   );
   const download = async (cookie, path) => {
     const sent = await fetch(
@@ -1051,8 +1062,12 @@ try {
     { id: photo.id, parts: [{ partNumber: 1, etag: "x" }] },
     ottoNow,
   );
+  const photosView = await landedAt(
+    ottoNow,
+    "/photos",
+    'data-file="/photos/sunset.txt"',
+  );
   const rootView = await computerPage(ottoNow);
-  const photosView = await computerPage(ottoNow, "/photos");
   check(
     "a file uploaded into a folder is there and not at the root",
     photosView.includes('data-file="/photos/sunset.txt"') &&
@@ -1281,6 +1296,95 @@ try {
     (await computerPage(ottoNow)).includes('data-backups="3"'),
     "still three",
   );
+  // A staged file whose landing was never heard of is landed by the
+  // sweep, and a file of the person's own with the same name and size is
+  // never taken for it: the upload lands beside it, under the next name.
+  const twinId = crypto.randomUUID();
+  const twinKey = `orgs/00000000-0000-4000-8000-000000000002/members/${ottoId}/files/${twinId}`;
+  await fs.writeFile(
+    path.join(
+      root,
+      "apps",
+      "web",
+      ".local",
+      "files",
+      twinKey.replaceAll("/", "_"),
+    ),
+    "world",
+  );
+  await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [ottoId]);
+    await q.query(
+      "insert into files (id, org_id, user_id, name, size, content_type, key, path, state, created_at, ready_at) values ($1, $2, $3, 'dusk.txt', 5, 'text/plain', $4, '/', 'ready', now() - interval '3 minutes', now() - interval '3 minutes')",
+      [twinId, "00000000-0000-4000-8000-000000000002", ottoId, twinKey],
+    );
+  });
+  // And one whose bytes are gone from the store cannot land: the machine
+  // says why, the row is staged again with the reason, and the page and
+  // the uploader's look say it.
+  const ghostId = crypto.randomUUID();
+  await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [ottoId]);
+    await q.query(
+      "insert into files (id, org_id, user_id, name, size, content_type, key, path, state, created_at, ready_at) values ($1, $2, $3, 'ghost.txt', 5, 'text/plain', $4, '/', 'ready', now() - interval '3 minutes', now() - interval '3 minutes')",
+      [
+        ghostId,
+        "00000000-0000-4000-8000-000000000002",
+        ottoId,
+        `orgs/00000000-0000-4000-8000-000000000002/members/${ottoId}/files/${ghostId}`,
+      ],
+    );
+  });
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  const beside = await landedAt(ottoNow, "/", 'data-file="/dusk (2).txt"');
+  let ghost;
+  for (let i = 0; i < 40 && !ghost?.said; i++) {
+    ghost = (
+      await (
+        await fetch(`${stack.url}/files/landing`, {
+          headers: { cookie: ottoNow },
+        })
+      ).json()
+    ).files.find((f) => f.id === ghostId);
+    if (!ghost?.said) await new Promise((r) => setTimeout(r, 250));
+  }
+  const ghostPage = await computerPage(ottoNow);
+  check(
+    "a landing that failed is staged again with why, and the page says so",
+    ghost?.state === "ready" &&
+      ghost.said === "the source answered 404" &&
+      ghostPage.includes("could not land: the source answered 404"),
+    `${JSON.stringify(ghost)}`,
+  );
+  await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [ottoId]);
+    await q.query("update files set deleted_at = now() where id = $1", [
+      ghostId,
+    ]);
+  });
+  const twinRow = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) => {
+      await q.query("select set_config('app.meter', 'sweep', true)");
+      return (
+        await q.query(
+          "select state, deleted_at is not null as gone from files where id = $1",
+          [twinId],
+        )
+      ).rows[0];
+    },
+  );
+  check(
+    "the sweep lands a straggler beside a file of the same name, never in its place",
+    beside.includes('data-file="/dusk (2).txt"') &&
+      (await download(ottoNow, "/dusk (2).txt")).body === "world" &&
+      (await download(ottoNow, "/dusk.txt")).body === "hello" &&
+      twinRow?.gone === true,
+    `dusk.txt still hello; dusk (2).txt ${(await download(ottoNow, "/dusk (2).txt")).body}; row ${JSON.stringify(twinRow)}`,
+  );
+  await form("/files/delete", { path: "/", target: "/dusk (2).txt" }, ottoNow);
   await form("/files/delete", { path: "/", target: "/photos" }, ottoNow);
   await form("/files/delete", { path: "/", target: "/dusk.txt" }, ottoNow);
   const emptied = await computerPage(ottoNow);
@@ -1564,6 +1668,28 @@ try {
       !/data-usage-total="0"/.test(settingsUsage),
     `settings total ${settingsUsage.match(/data-usage-total="([^"]+)"/)?.[1]}`,
   );
+  // Every debt the app can owe a vendor is a kind the database takes: a
+  // migration that rewrote the list and dropped one would be found here.
+  const { KINDS } = await import("../apps/web/lib/orphans.ts");
+  const refusedKinds = [];
+  for (const kind of KINDS)
+    await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
+      await q.query("savepoint kind");
+      await q
+        .query("insert into orphans (org_id, kind, ref) values ($1, $2, 'x')", [
+          "00000000-0000-4000-8000-000000000002",
+          kind,
+        ])
+        .catch(() => refusedKinds.push(kind));
+      await q.query("rollback to savepoint kind");
+    });
+  check(
+    "every orphan kind the app pays is one the database takes",
+    KINDS.length > 0 && refusedKinds.length === 0,
+    refusedKinds.length
+      ? `refused: ${refusedKinds.join(", ")}`
+      : KINDS.join(", "),
+  );
   // A machine gone behind our back is forgotten by the row, and the next
   // look makes a new one on the same filesystem.
   const machinesBeforeGone = fake.machines.size;
@@ -1669,6 +1795,29 @@ try {
   await press();
   await press();
   const threeShort = await computerPage(ottoNow);
+  // The Finder hides what a Mac hides: a dotfolder is on the disk, in the
+  // daemon's listing for the shell and the tools, and not on the page.
+  const asMachine = (path, init) =>
+    fetch(`http://127.0.0.1:${pressedMachine.port}${path}`, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${pressedMachine.env.COMPUTER_SECRET}`,
+        "content-type": "application/json",
+      },
+    });
+  await asMachine("/fs/folder", {
+    method: "POST",
+    body: JSON.stringify({ path: "/.cache" }),
+  });
+  const daemonSees = (await (await asMachine("/fs?path=%2F")).json()).entries;
+  const finderShows = await computerPage(ottoNow);
+  check(
+    "the Finder hides dotfiles; the daemon lists them",
+    daemonSees.some((e) => e.name === ".cache") &&
+      !finderShows.includes('data-folder="/.cache"') &&
+      !finderShows.includes('data-tree="/.cache"'),
+    `${daemonSees.map((e) => e.name).join(", ")} on the disk`,
+  );
   check(
     "memory short three reports running wants the next size, running on",
     !/data-wants=/.test(oneShort) &&
@@ -1693,7 +1842,35 @@ try {
     (e) => e.status === "suspended",
   ).timestamp;
   await new Promise((r) => setTimeout(r, 3000));
+  // The machine made next boots on a disk of one megabyte, for the pulls
+  // below.
+  fake.volumes.get(pressedMachine.volume).size_gb = 0.001;
+  // A backup on its way when the machine went down died with it: the
+  // machine that boots next says so, and the row is let go of.
+  await withRow(
+    "insert into backups (user_id, key) values ($1, 'orgs/x/members/x/backups/died-with-the-machine.tar.gz')",
+  );
   const resized = await computerPage(ottoNow);
+  let diedWith;
+  for (let i = 0; i < 40 && !diedWith?.gone; i++) {
+    diedWith = await asOrg(
+      "00000000-0000-4000-8000-000000000002",
+      async (q) => {
+        await q.query("select set_config('app.meter', 'sweep', true)");
+        return (
+          await q.query(
+            "select deleted_at is not null as gone from backups where key like '%died-with-the-machine%'",
+          )
+        ).rows[0];
+      },
+    );
+    if (!diedWith?.gone) await new Promise((r) => setTimeout(r, 250));
+  }
+  check(
+    "a backup on its way dies with the machine, and the next boot says so",
+    diedWith?.gone === true,
+    `row ${JSON.stringify(diedWith)}`,
+  );
   const [resizedMachine] = [...fake.machines.values()];
   const resizedEvents = await asOrg(
     "00000000-0000-4000-8000-000000000002",
@@ -1774,6 +1951,165 @@ try {
       Math.abs(lastOld.quantity - ran) < 1,
     `${ending.map((e) => `${e.kind} +${Math.round(Number(e.at) - suspendedAt)}ms`).join(", ")}; ${lastOld?.quantity.toFixed(2)} s billed of ${ran.toFixed(2)} s run`,
   );
+  // A month of a computer's life, priced from its events alone: made, a
+  // first machine that failed and went, placed, run, asleep, run again,
+  // replaced at a bigger size on the same disk, the disk grown, asleep
+  // again; a reset is nothing to the meter.
+  // Every second of compute is at the size that ran it, the image while
+  // off spans both machines, the disk both sizes, and cutting the month
+  // into sweeps changes nothing.
+  const { measure } = await import("../apps/web/lib/meter.ts");
+  const T0 = Date.UTC(2026, 0, 1);
+  const at = (secs) => new Date(T0 + secs * 1000);
+  const [small, bigger] = LADDER;
+  const life = [
+    [0, "created", small, 3],
+    [10, "volume", small, 3],
+    [12, "failed", small, 3],
+    [15, "destroyed", small, 3],
+    [20, "stopped", small, 3],
+    [60, "started", small, 3],
+    [3660, "suspended", small, 3],
+    [7200, "started", small, 3],
+    [9000, "stopped", small, 3],
+    [9100, "destroyed", small, 3],
+    [9100, "resized", bigger, 3],
+    [9200, "stopped", bigger, 3],
+    [9300, "started", bigger, 3],
+    [10000, "extended", bigger, 6],
+    [10300, "suspended", bigger, 6],
+  ];
+  const lifeId = crypto.randomUUID();
+  await asOrg(stranger.orgId, async (q) => {
+    await q.query(
+      "insert into computers (id, org_id, user_id, region, size, disk_gb, volume_id, machine_id, state, created_at) values ($1, $2, $3, 'sjc', $4, 6, 'vol_life', 'm_life', 'suspended', $5)",
+      [lifeId, stranger.orgId, stranger.userId, bigger, at(0)],
+    );
+    for (const [secs, kind, size, gb] of life)
+      await q.query(
+        "insert into computer_events (computer_id, kind, size, disk_gb, at) values ($1, $2, $3, $4, $5)",
+        [lifeId, kind, size, gb, at(secs)],
+      );
+  });
+  const priced = async (from, to) => {
+    const out = { compute: {}, rootfs: 0, disk: 0 };
+    await asOrg(stranger.orgId, async (q) => {
+      await q.query("select set_config('app.member_id', $1, true)", [
+        stranger.userId,
+      ]);
+      for (const m of await measure(q, stranger.userId, at(from), at(to)))
+        if (m.resource === "compute")
+          out.compute[m.liveUnit] = (out.compute[m.liveUnit] ?? 0) + m.quantity;
+        else out[m.resource] = (out[m.resource] ?? 0) + m.quantity;
+    });
+    return out;
+  };
+  const month = await priced(0, 20000);
+  const cuts = [0, 2000, 9150, 9250, 20000];
+  const pieces = await Promise.all(
+    cuts.slice(1).map((to, i) => priced(cuts[i], to)),
+  );
+  const sweeps = pieces.reduce(
+    (a, b) => ({
+      compute: Object.fromEntries(
+        LADDER.map((s) => [s, (a.compute[s] ?? 0) + (b.compute[s] ?? 0)]),
+      ),
+      rootfs: a.rootfs + b.rootfs,
+      disk: a.disk + b.disk,
+    }),
+    { compute: {}, rootfs: 0, disk: 0 },
+  );
+  // A window the machine is up at the start of and destroyed inside:
+  // the image's row begins where the window does.
+  const cutShort = await asOrg(stranger.orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [
+      stranger.userId,
+    ]);
+    return (await measure(q, stranger.userId, at(7300), at(9150))).find(
+      (m) => m.resource === "rootfs",
+    );
+  });
+  const near = (x, y) => Math.abs(x - y) < 1e-6;
+  const expected = {
+    [small]: 3600 + 1800,
+    [bigger]: 1000,
+    rootfs: 3 + 9080 + 10800 - 6400,
+    disk: 3 * 9990 + 6 * 10000,
+  };
+  check(
+    "a month of runs, sleeps, a resize and a growth is priced exactly from events",
+    near(month.compute[small], expected[small]) &&
+      near(month.compute[bigger], expected[bigger]) &&
+      near(month.rootfs, expected.rootfs) &&
+      near(month.disk, expected.disk) &&
+      near(sweeps.compute[small], expected[small]) &&
+      near(sweeps.compute[bigger], expected[bigger]) &&
+      near(sweeps.rootfs, expected.rootfs) &&
+      near(sweeps.disk, expected.disk) &&
+      cutShort?.from.getTime() === at(7300).getTime() &&
+      near(cutShort.quantity, 1800 - 1700),
+    `${small} ${month.compute[small]} s, ${bigger} ${month.compute[bigger]} s, image off ${month.rootfs} GB·s, disk ${month.disk} GB·s; in four sweeps ${sweeps.rootfs} and ${sweeps.disk}; destroyed mid-window: ${cutShort?.quantity} GB·s from ${cutShort?.from?.toISOString()}`,
+  );
+  await asOrg(stranger.orgId, async (q) => {
+    await q.query("delete from computer_events where computer_id = $1", [
+      lifeId,
+    ]);
+    await q.query("delete from computers where id = $1", [lifeId]);
+  });
+  // Pulls accepted together cannot together overrun the disk: what each
+  // has still to write is held against the room until it ends. Two
+  // declared bigger than the megabyte together: the second is refused
+  // on the spot, the first lands, and the room is free again after.
+  const bytes = Buffer.alloc(600_000, 120);
+  const source = createServer((req, res) => {
+    res.writeHead(200, { "content-length": bytes.length });
+    res.end(bytes);
+  });
+  await new Promise((r) => source.listen(0, "127.0.0.1", r));
+  const sourceUrl = `http://127.0.0.1:${source.address().port}/big`;
+  const asResized = (path, init) =>
+    fetch(`http://127.0.0.1:${resizedMachine.port}${path}`, {
+      ...init,
+      headers: {
+        authorization: `Bearer ${resizedMachine.env.COMPUTER_SECRET}`,
+        "content-type": "application/json",
+      },
+    });
+  const pullTo = (name, size) =>
+    asResized("/fs/pull", {
+      method: "POST",
+      body: JSON.stringify({
+        id: crypto.randomUUID(),
+        path: `/${name}`,
+        url: sourceUrl,
+        size,
+      }),
+    });
+  const first = await pullTo("big-a.bin", bytes.length);
+  const second = await pullTo("big-b.bin", bytes.length);
+  let landedA = null;
+  for (let i = 0; i < 40 && landedA?.size !== bytes.length; i++) {
+    landedA = await (await asResized("/fs/stat?path=%2Fbig-a.bin")).json();
+    if (landedA?.size !== bytes.length)
+      await new Promise((r) => setTimeout(r, 250));
+  }
+  const third = await pullTo("big-c.bin", 300_000);
+  source.close();
+  check(
+    "pulls accepted together cannot overrun the disk; the room comes back",
+    first.status === 202 &&
+      second.status === 507 &&
+      landedA?.size === bytes.length &&
+      third.status === 202,
+    `first ${first.status}, second ${second.status}, a ${landedA?.size} bytes, then ${third.status}`,
+  );
+  for (let i = 0; i < 40; i++) {
+    const c = await (await asResized("/fs/stat?path=%2Fbig-c.bin")).json();
+    if (c?.size === 300_000) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  for (const name of ["big-a.bin", "big-c.bin"])
+    await asResized(`/fs?path=%2F${name}`, { method: "DELETE" });
   // Six looks at once for one membership make one computer.
   await Promise.all(Array.from({ length: 6 }, () => computerPage(margeOwner)));
   check(
@@ -1788,8 +2124,9 @@ try {
     (await page(ottoNow)).includes("Sign out, Otto L. Loaf"),
     "renamed in the observatory, seen in the bakery",
   );
-  // Renames racing from both orgs end with every org agreeing on one name.
-  await Promise.all(
+  // Renames racing from both orgs all land, none deadlocks, and every org
+  // agrees on one name.
+  const renames = await Promise.all(
     ["Otto A", "Otto B", "Otto C", "Otto D", "Otto E", "Otto F"].map(
       (name, i) => {
         const f = new FormData();
@@ -1802,10 +2139,22 @@ try {
   const seen = [await page(ottoNow), await page(ottoObs)].map(
     (h) => h.match(/Sign out, (Otto [A-F])</)?.[1],
   );
+  const deadlocks = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) =>
+      (
+        await q.query(
+          "select deadlocks::int as n from pg_stat_database where datname = current_database()",
+        )
+      ).rows[0].n,
+  );
   check(
-    "racing renames leave every org agreeing",
-    seen[0] !== undefined && seen[0] === seen[1],
-    seen.join(" vs "),
+    "racing renames all land, and every org agrees",
+    renames.every((r) => r.status === 303) &&
+      deadlocks === 0 &&
+      seen[0] !== undefined &&
+      seen[0] === seen[1],
+    `${renames.map((r) => r.status).join(" ")}, ${deadlocks} deadlocks, ${seen.join(" vs ")}`,
   );
   await settings("/settings/profile", rename, ottoObs);
 

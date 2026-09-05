@@ -8,9 +8,10 @@ import { principal } from "@/lib/session";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // Vercel gives this request this long.
-export const maxDuration = 300;
+export const maxDuration = 60;
 
-// Closes an upload with the parts the browser sent.
+// Closes an upload with the parts the browser sent; the machine then lands
+// it on the disk alone.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   try {
     const file = await complete(p, id, parts);
     return file
-      ? NextResponse.json({ id: file.id, size: file.size })
+      ? NextResponse.json({ id: file.id, size: file.size, state: file.state })
       : new Response(null, { status: 404 });
   } catch (err) {
     if (err instanceof FileRejected)

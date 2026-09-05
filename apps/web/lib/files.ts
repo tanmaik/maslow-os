@@ -8,14 +8,18 @@ import {
   filesOf,
   forgetFile,
   forgetFileIn,
+  landingFile,
+  landingIn,
   readyFile,
   rejectFile,
+  stagedAgain,
   stagedFile,
   stagedIn,
   staleUploads,
   unclaimJoin,
   unclaimStale,
   uploadingFile,
+  whole,
   type StoredFile,
 } from "@placeholder/db/files";
 import {
@@ -28,9 +32,10 @@ import fs from "node:fs/promises";
 import { Readable } from "node:stream";
 import path from "node:path";
 
+import type { Machine } from "./backups.ts";
 import { growFor, growIn } from "./computer.ts";
 import { deployment } from "./deployment.ts";
-import { callIn, disk, DiskError } from "./disk.ts";
+import { callIn, disk, DiskError, type Pull } from "./disk.ts";
 import { MAX_DISK_GB } from "./fly.ts";
 import { presign, s3 } from "./s3.ts";
 
@@ -197,8 +202,9 @@ function stagedUrl(p: Principal, f: StoredFile): string {
 }
 
 // Closes the upload with the parts the browser sent, checks the size the
-// store confirms, then lands the file on the disk and lets the staged copy
-// go. A file that will not land is refused, not kept.
+// store confirms, then has the machine land the file on the disk; it
+// carries on alone and says when the file is there, and the staged copy
+// goes then. A file that cannot land is refused, not kept.
 export async function complete(
   p: Principal,
   id: string,
@@ -284,25 +290,22 @@ export async function complete(
       );
     return null;
   }
-  // Onto the disk; a disk that is full is grown one step and tried once
+  // Onto the disk; a disk that is full is grown one step and asked once
   // more.
+  await landingFile(p.orgId, p.userId, id);
+  const pull: Pull = {
+    id,
+    path: joined(f.path, f.name),
+    url: stagedUrl(p, { ...f, size }),
+    size,
+  };
   try {
     try {
-      await disk.pull(
-        p,
-        joined(f.path, f.name),
-        stagedUrl(p, { ...f, size }),
-        size,
-      );
+      await disk.pull(p, pull);
     } catch (err) {
       if (!(err instanceof DiskError && err.status === 507)) throw err;
       if (!(await growFor(p))) throw err;
-      await disk.pull(
-        p,
-        joined(f.path, f.name),
-        stagedUrl(p, { ...f, size }),
-        size,
-      );
+      await disk.pull(p, pull);
     }
   } catch (err) {
     await dropBytes(staged);
@@ -313,32 +316,43 @@ export async function complete(
       );
     throw err;
   }
-  await landed(p, f, staged);
-  return { ...f, state: "ready", size };
+  return { ...f, state: "landing", size };
 }
 
-// Once on the disk, the staged copy is let go of and then the row closed.
-// A copy that will not go leaves the row open, so the sweep tries again;
-// the file is on the disk already, and a second landing finds it there.
-async function landed(
-  p: Principal,
-  f: { id: string },
-  staged: { key: string; state: string; uploadId: string | null },
-) {
+// How a landing went, from the machine that did it. On the disk: the
+// staged copy goes and the row closes; a copy that will not go leaves the
+// row open, so the sweep tries again and finds the file there. Not on the
+// disk: the file is staged again, for the sweep.
+// True once the row is closed.
+export async function landedOn(
+  m: Machine,
+  id: string,
+  outcome: { ok: boolean; error?: string },
+): Promise<boolean> {
+  const f = await landingIn(m.orgId, m.userId, id);
+  if (!f) return false;
+  if (!outcome.ok) {
+    console.error(`landing ${id}: ${outcome.error}`);
+    await stagedAgain(m.orgId, m.userId, id, outcome.error ?? "no reason");
+    return false;
+  }
   try {
-    await dropBytes(staged);
+    await dropBytes({ key: f.key, state: "ready", uploadId: null });
   } catch (err) {
     console.error(`staged copy stays: ${(err as Error).message}`);
-    return;
+    return false;
   }
-  await forgetFile(p, f.id);
+  await forgetFileIn(m.orgId, m.userId, id);
+  return true;
 }
 
-// Files the store holds whole that never reached a disk, landed by the
-// sweep: a landing interrupted midway is not lost. The disk is grown for
-// them as for any upload; a name taken by something else is stepped
-// past, and one taken by this very file is a landing already done. Per
-// org.
+// Files the store holds whole that are not yet off it, seen to by the
+// sweep: a landing interrupted midway, or whose word never reached us,
+// is not lost. The machine is asked whether it landed the file, by id —
+// nothing on the disk is taken for it by name — and if so the file is
+// closed here and the machine told; if not it is asked for again, the
+// disk grown for it as for any upload, and a name taken by something
+// else stepped past. Per org.
 export async function landStaged(orgId: string, now: Date): Promise<void> {
   const stragglers = await stagedIn(orgId, new Date(now.getTime() - 120_000));
   if (stragglers.length === 0) return;
@@ -350,48 +364,57 @@ export async function landStaged(orgId: string, now: Date): Promise<void> {
     if (!c?.machineId) continue;
     const p = { orgId, userId: f.userId } as Principal;
     try {
+      const { landed } = await callIn<{ landed: boolean }>(
+        orgId,
+        c,
+        "GET",
+        `/fs/landed?id=${f.id}`,
+      );
+      if (landed) {
+        // The machine's record of it goes only once the row is closed.
+        await landingFile(orgId, f.userId, f.id);
+        if (await landedOn({ ...c, orgId }, f.id, { ok: true }))
+          await callIn(orgId, c, "DELETE", `/fs/landed?id=${f.id}`);
+        continue;
+      }
       let name = f.name;
       for (let n = 2; n < 12; n++) {
-        const there = await callIn<{ kind: string; size: number }>(
+        const taken = await callIn(
           orgId,
           c,
           "GET",
           `/fs/stat?path=${encodeURIComponent(joined(f.path, name))}`,
-        ).catch((err) => {
-          if (err instanceof DiskError && err.status === 404) return null;
-          throw err;
-        });
-        if (!there) {
-          const pull = () =>
-            callIn(orgId, c, "POST", "/fs/pull", {
-              path: joined(f.path, name),
-              url: stagedUrl(p, f),
-              size: f.size,
-            });
-          try {
-            await pull();
-          } catch (err) {
-            if (!(err instanceof DiskError && err.status === 507)) throw err;
-            if (!(await growIn(orgId, c))) throw err;
-            await pull();
-          }
-          break;
+        ).then(
+          () => true,
+          (err) => {
+            if (err instanceof DiskError && err.status === 404) return false;
+            throw err;
+          },
+        );
+        if (taken) {
+          name = f.name.replace(/(\.[^.]*)?$/, ` (${n})$1`);
+          continue;
         }
-        if (there.kind === "file" && there.size === f.size) break;
-        name = f.name.replace(/(\.[^.]*)?$/, ` (${n})$1`);
+        await landingFile(orgId, f.userId, f.id);
+        const pull = () =>
+          callIn(orgId, c, "POST", "/fs/pull", {
+            id: f.id,
+            path: joined(f.path, name),
+            url: stagedUrl(p, f),
+            size: f.size,
+          } satisfies Pull);
+        try {
+          await pull();
+        } catch (err) {
+          if (!(err instanceof DiskError && err.status === 507)) throw err;
+          if (!(await growIn(orgId, c))) throw err;
+          await pull();
+        }
+        break;
       }
     } catch (err) {
       console.error(`landing ${f.id}: ${(err as Error).message}`);
-      continue;
     }
-    try {
-      await dropBytes({ key: f.key, state: "ready", uploadId: null });
-    } catch (err) {
-      // The row stays open, so the copy is tried again next sweep.
-      console.error(`staged copy stays: ${(err as Error).message}`);
-      continue;
-    }
-    await forgetFileIn(orgId, f.userId, f.id);
   }
 }
 
@@ -455,7 +478,7 @@ export async function dropBytes(f: {
 // land.
 export async function abandon(p: Principal, id: string): Promise<boolean> {
   const f = await fileOf(p, id);
-  if (!f || f.state === "ready") return false;
+  if (!f || whole(f)) return false;
   await dropBytes(f);
   await forgetFile(p, id);
   return true;
@@ -480,7 +503,7 @@ export async function expireUploads(orgId: string, now: Date): Promise<void> {
     }
 }
 
-export { filesOf };
+export { filesOf, whole };
 
 // Whether an upload a local part token names still exists and is still
 // uploading, so a token cannot bring back parts of a file that is gone.

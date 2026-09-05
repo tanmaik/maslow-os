@@ -1,0 +1,19 @@
+import { machineFrom } from "@/lib/backups";
+import { landedOn } from "@/lib/files";
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+// A machine saying how a landing went, by the id it was given with the
+// file. A stranger gets the same 404 as a machine we never made.
+export async function POST(request: Request) {
+  const m = await machineFrom(request);
+  if (!m) return new Response(null, { status: 404 });
+  const body = await request.json().catch(() => null);
+  const id = String(body?.id ?? "");
+  if (!UUID.test(id)) return new Response(null, { status: 400 });
+  await landedOn(m, id, {
+    ok: body?.ok === true,
+    error: String(body?.error ?? "no reason given"),
+  });
+  return new Response(null, { status: 204 });
+}

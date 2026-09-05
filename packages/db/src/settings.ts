@@ -1,4 +1,4 @@
-import { asOrg, asPerson, Gone, type Query } from "./index.ts";
+import { asOrg, asSelf, Gone, type Query } from "./index.ts";
 import type { Principal, Role } from "./auth.ts";
 
 export type Org = {
@@ -167,7 +167,7 @@ export async function setOrgLogo(
 // A person's name and avatar live on people, and every membership carries a
 // copy. One transaction holds the person's row while it writes each
 // membership inside its own org, so two writes racing cannot leave the orgs
-// disagreeing.
+// disagreeing, and cannot wait on each other.
 async function setProfile(
   p: Principal,
   fields:
@@ -179,10 +179,10 @@ async function setProfile(
     .map((c, i) => `${c} = $${i + 2}`)
     .concat("avatar_key" in fields ? ["avatar_at = now()"] : [])
     .join(", ");
-  await asPerson(p, async (q) => {
+  await asSelf(p, async (q) => {
     const person = (
       await q.query<{ email: string; avatar_key: string | null }>(
-        "select email, avatar_key from people where id = $1 for update",
+        "select email, avatar_key from people where id = $1",
         [p.personId],
       )
     ).rows[0];

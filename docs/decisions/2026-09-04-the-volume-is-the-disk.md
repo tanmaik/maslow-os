@@ -29,10 +29,15 @@ passes through Vercel.
 
 **Uploads stage in the bucket, then land.** A browser cannot push 50 GB
 through a serverless function, so a file still goes to Tigris in parts,
-exactly as before; then the machine pulls it onto the disk and the staged
-copy is deleted. The files table now holds only what is on its way. Tigris
-is a staging lane and, next, the backup target for the volume; it is not
-where files live.
+exactly as before; then the machine pulls it onto the disk, alone — a
+function on Vercel cannot wait the minutes a big file takes — and says so,
+as itself, when it has landed; the staged copy is deleted then. A file the
+machine refuses on the spot — no such folder, the name taken, no room even
+after the disk grows — is refused to the browser; one whose word never
+arrives, or that a cut-off machine never finished, is found on the disk or
+asked for again by the hourly sweep. The files table holds only what is on
+its way: arriving, whole in the bucket, or landing. Tigris is a staging
+lane and the backup target for the volume; it is not where files live.
 
 **Development runs real daemons.** The fake Fly boots a daemon process per
 machine on a scratch directory per volume, and plays the proxy: force by

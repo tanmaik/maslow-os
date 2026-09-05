@@ -280,6 +280,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
           socket.destroy();
           resolve(null);
         });
+        socket.on("error", () => out.destroy());
       });
       if (!replayed) return;
       id = replayed;

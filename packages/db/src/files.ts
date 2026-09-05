@@ -9,14 +9,22 @@ export type StoredFile = {
   // The folder on the disk it lands in: "/" or "/a/b".
   path: string;
   key: string;
-  state: "uploading" | "joining" | "ready";
+  // Arriving in parts; being joined; whole in the store; being pulled
+  // onto the disk by the machine.
+  state: "uploading" | "joining" | "ready" | "landing";
+  // Why the machine could not land it, when it could not.
+  said: string | null;
   uploadId: string | null;
   createdAt: Date;
   readyAt: Date | null;
 };
 
 const COLUMNS =
-  'id, name, size::float8 as size, content_type as "contentType", path, key, state, upload_id as "uploadId", created_at as "createdAt", ready_at as "readyAt"';
+  'id, name, size::float8 as size, content_type as "contentType", path, key, state, said, upload_id as "uploadId", created_at as "createdAt", ready_at as "readyAt"';
+
+// Whether the store holds all of a file: staged, or on its way to the disk.
+export const whole = (f: Pick<StoredFile, "state">) =>
+  f.state === "ready" || f.state === "landing";
 
 // The person's files that exist, newest first; how much the whole ones
 // hold, and how much they all claim once every upload lands.
@@ -31,7 +39,7 @@ export async function filesOf(
     ).rows;
     return {
       files,
-      bytes: files.reduce((n, f) => n + (f.state === "ready" ? f.size : 0), 0),
+      bytes: files.reduce((n, f) => n + (whole(f) ? f.size : 0), 0),
       declared: files.reduce((n, f) => n + f.size, 0),
     };
   });
@@ -235,8 +243,8 @@ export async function uploadingFile(
   });
 }
 
-// A staged file's state for the machine fetching it: ready and not gone,
-// or not.
+// A staged file's key for the machine fetching it: whole and not gone,
+// or nothing.
 export async function stagedFile(
   orgId: string,
   userId: string,
@@ -247,7 +255,7 @@ export async function stagedFile(
     return (
       (
         await q.query<{ key: string }>(
-          "select key from files where id = $1 and state = 'ready' and deleted_at is null",
+          "select key from files where id = $1 and state in ('ready', 'landing') and deleted_at is null",
           [id],
         )
       ).rows[0] ?? null
@@ -255,8 +263,66 @@ export async function stagedFile(
   });
 }
 
-// Files ready in the store but not yet on a disk, older than a moment: a
-// landing that was interrupted, to be tried again by the sweep.
+// Marks a whole file as being pulled onto the disk by the machine. False
+// when it is not whole, or gone.
+export async function landingFile(
+  orgId: string,
+  userId: string,
+  id: string,
+): Promise<boolean> {
+  return asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [userId]);
+    return (
+      (
+        await q.query(
+          "update files set state = 'landing', said = null where id = $1 and state in ('ready', 'landing') and deleted_at is null",
+          [id],
+        )
+      ).rowCount === 1
+    );
+  });
+}
+
+// A file the machine was pulling, as it said how that went: still on its
+// way, or nothing.
+export async function landingIn(
+  orgId: string,
+  userId: string,
+  id: string,
+): Promise<StoredFile | null> {
+  return asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [userId]);
+    return (
+      (
+        await q.query<StoredFile>(
+          `select ${COLUMNS} from files where id = $1 and state = 'landing' and deleted_at is null`,
+          [id],
+        )
+      ).rows[0] ?? null
+    );
+  });
+}
+
+// Puts a file the machine could not land back to staged, for the sweep,
+// with why in the machine's words.
+export async function stagedAgain(
+  orgId: string,
+  userId: string,
+  id: string,
+  said: string,
+): Promise<void> {
+  await asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [userId]);
+    await q.query(
+      "update files set state = 'ready', said = $2 where id = $1 and state = 'landing'",
+      [id, said],
+    );
+  });
+}
+
+// Files whole in the store and not yet off it, older than a moment: a
+// landing that was interrupted, or one whose word never arrived, to be
+// tried again by the sweep.
 export async function stagedIn(
   orgId: string,
   before: Date,
@@ -265,7 +331,7 @@ export async function stagedIn(
     await q.query("select set_config('app.meter', 'sweep', true)");
     return (
       await q.query<StoredFile & { userId: string }>(
-        `select ${COLUMNS}, user_id as "userId" from files where state = 'ready' and deleted_at is null and ready_at < $1`,
+        `select ${COLUMNS}, user_id as "userId" from files where state in ('ready', 'landing') and deleted_at is null and ready_at < $1`,
         [before],
       )
     ).rows;

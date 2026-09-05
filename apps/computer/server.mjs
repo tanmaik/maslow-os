@@ -1,11 +1,12 @@
 // The computer's daemon: the person's home on the volume served as a
 // filesystem, a shell in it as them over a WebSocket, and the ports on
-// the machine reachable from a browser. We list, make, move and delete under it with the
-// machine's secret, put files on it from a URL, and hand a browser a
-// signed download, terminal or preview. Fly sets FLY_MACHINE_ID and
-// routes to us; a request that reached the wrong machine is replayed to
-// the right one. It also reports on itself to us on boot and every five
-// minutes: how full the disk is, and what it has and needs.
+// the machine reachable from a browser. We list, make, move and delete
+// under it with the machine's secret, land files on it from a URL, and
+// hand a browser a signed download, terminal or preview. Fly sets
+// FLY_MACHINE_ID and routes to us; a request that reached the wrong
+// machine is replayed to the right one. It also reports on itself to us
+// on boot and every five minutes: how full the disk is, and what it has
+// and needs.
 import { execFile, spawn } from "node:child_process";
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createWriteStream } from "node:fs";
@@ -49,9 +50,17 @@ const PORT = Number(process.env.PORT) || 8080;
 const SHELL = process.env.SHELL_PATH ?? "/bin/bash";
 // Why the disk cannot be served right now, or null.
 let busy = OS_ROOT ? "Your computer is being set up; a minute." : null;
-// Where a backup asks us for somewhere to put each part: beside the report.
+// Where a backup asks us for somewhere to put each part, and where a
+// landing says how it went: beside the report.
 const BACKUP_URL = REPORT_URL.replace(/\/report$/, "/backup");
+const LANDED_URL = REPORT_URL.replace(/\/report$/, "/landed");
 const PART = 16 * 1024 * 1024;
+// How we speak to the app: as this machine, with its secret.
+const AS_ME = {
+  authorization: `Bearer ${COMPUTER_SECRET}`,
+  "fly-machine-id": FLY_MACHINE_ID,
+  "content-type": "application/json",
+};
 
 // The disk's fullness. A laptop's directory stands in for a volume of
 // DISK_GB, measured as what it holds.
@@ -111,11 +120,7 @@ async function report() {
   try {
     const res = await fetch(REPORT_URL, {
       method: "POST",
-      headers: {
-        authorization: `Bearer ${COMPUTER_SECRET}`,
-        "fly-machine-id": FLY_MACHINE_ID,
-        "content-type": "application/json",
-      },
+      headers: AS_ME,
       body: JSON.stringify({ disk: await disk(), ...(await need()) }),
       signal: AbortSignal.timeout(10000),
     });
@@ -268,11 +273,7 @@ function previewCookie(req) {
 async function backupCall(step, body) {
   const res = await fetch(`${BACKUP_URL}/${step}`, {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${COMPUTER_SECRET}`,
-      "fly-machine-id": FLY_MACHINE_ID,
-      "content-type": "application/json",
-    },
+    headers: AS_ME,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(60_000),
   });
@@ -476,7 +477,7 @@ async function list(dir) {
   });
   const entries = [];
   for (const d of names) {
-    if (d.name === "lost+found" || d.name.startsWith(".restoring-")) continue;
+    if (d.name === "lost+found" || SCRATCH.test(d.name)) continue;
     const s = await fs.stat(path.join(dir, d.name)).catch(() => null);
     if (!s) continue;
     entries.push({
@@ -494,12 +495,74 @@ async function list(dir) {
   return entries;
 }
 
-// Fetches a URL onto the disk, whole or not at all: a temporary name in
-// the same folder, checked against the size promised, then renamed into
-// place.
-async function pull(target, url, size) {
+// What the daemon makes for itself on the disk, which no listing shows.
+const SCRATCH = /^\.(restoring-|landing-|landed|reset)/;
+
+// A small record of the daemon's own, beside the operating system: whole
+// or absent, never half-written, and nothing when it cannot be read.
+async function recall(file) {
+  try {
+    return JSON.parse(await fs.readFile(file, "utf8"));
+  } catch (err) {
+    if (err.code !== "ENOENT") console.error(`${file}: ${err.message}`);
+    return null;
+  }
+}
+async function keep(file, value) {
+  const tmp = `${file}.${randomBytes(4).toString("hex")}`;
+  await fs.writeFile(tmp, JSON.stringify(value));
+  await fs.rename(tmp, file);
+}
+
+// The files this daemon is landing or has landed, by the id the app gave
+// each: where each goes and its hidden copy, then that it is in place,
+// until the app has heard. A landing whose word was lost is still on
+// record here, and nothing else on the disk is taken for it.
+const LANDED = path.join(MOUNT, ".landed");
+const landedIds = (await recall(LANDED)) ?? {};
+// One change to the record at a time; a write that fails is said, and
+// the record in memory stays right for the next.
+let ledger = Promise.resolve();
+const noteLanded = (id, entry) =>
+  (ledger = ledger
+    .then(async () => {
+      if (entry) landedIds[id] = entry;
+      else delete landedIds[id];
+      await keep(LANDED, landedIds);
+    })
+    .catch((err) => console.error(`the landed record: ${err.message}`)));
+// Whether the file an id names is in place: on record as landed, or
+// linked there by a pull cut off before it could say so, which its
+// hidden copy and the file being one and the same shows.
+async function isLanded(id) {
+  const entry = landedIds[id];
+  if (!entry) return false;
+  if (entry.landed) return true;
+  const [copy, file] = await Promise.all([
+    fs.stat(entry.tmp).catch(() => null),
+    fs.stat(entry.target).catch(() => null),
+  ]);
+  if (!copy || !file || copy.ino !== file.ino) return false;
+  await noteLanded(id, { ...entry, landed: true });
+  await fs.rm(entry.tmp, { force: true });
+  return true;
+}
+// Off the record, with its hidden copy if one is left.
+async function forgetLanded(id) {
+  const entry = landedIds[id];
+  if (entry?.tmp) await fs.rm(entry.tmp, { force: true });
+  await noteLanded(id, null);
+}
+
+// Fetches a URL onto the disk, whole or not at all: a hidden copy named
+// for the id in the same folder, checked against the size promised, put
+// on record, then linked into place, which refuses to replace whatever
+// took the name meanwhile. A copy left by a pull of the same id cut off
+// goes first.
+async function pull(id, target, url, size, landing = { got: 0 }) {
   if (await fs.stat(target).catch(() => null)) throw new Refused(409, "exists");
-  const tmp = `${target}.${randomBytes(6).toString("hex")}.landing`;
+  const tmp = path.join(path.dirname(target), `.landing-${id}`);
+  await fs.rm(tmp, { force: true });
   const res = await fetch(url, { signal: AbortSignal.timeout(6 * 3600_000) });
   if (!res.ok || !res.body)
     throw new Refused(502, `the source answered ${res.status}`);
@@ -511,6 +574,7 @@ async function pull(target, url, size) {
         for await (const chunk of source) {
           got += chunk.length;
           if (got > size) throw new Refused(400, "more than promised");
+          landing.got = got;
           yield chunk;
         }
       },
@@ -518,20 +582,64 @@ async function pull(target, url, size) {
     );
     if (got !== size) throw new Refused(400, `${got} of ${size} bytes`);
     await own(tmp);
-    // Into place only if nothing took the name meanwhile: a link refuses
-    // to replace, where a rename would.
+    await noteLanded(id, { target, tmp });
     try {
       await fs.link(tmp, target);
     } catch (err) {
       if (err.code === "EEXIST") throw new Refused(409, "exists");
       throw err;
     }
+    await noteLanded(id, { target, tmp, landed: true });
     await fs.rm(tmp, { force: true });
   } catch (err) {
-    await fs.rm(tmp, { force: true });
+    await forgetLanded(id);
     if (err.code === "ENOSPC") throw new Refused(507, "the disk is full");
     throw err;
   }
+}
+
+// A pull that carries on alone, goes on the record once the file is in
+// place, and says to the app how it went by the id the app gave the
+// file; a path already landing is joined, not pulled twice. What each
+// has still to write is held against the disk's room until it ends,
+// landed or not, so pulls accepted together cannot together overrun it.
+const landings = new Map();
+const held = () =>
+  [...landings.values()].reduce((n, l) => n + (l.size - l.got), 0);
+function land(id, target, url, size) {
+  const landing = { size, got: 0 };
+  landings.set(target, landing);
+  pull(id, target, url, size, landing)
+    .then(
+      async () => {
+        if (await landed({ id, ok: true })) await forgetLanded(id);
+      },
+      (err) => landed({ id, ok: false, error: err.message }),
+    )
+    .catch((err) => console.error(`landing ${id}: ${err.message}`))
+    .finally(() => landings.delete(target));
+}
+
+// Tells the app how a landing went, a few times if it must, and whether
+// the app heard; a machine that cannot reach the app leaves it to the
+// sweep, which asks what was landed.
+async function landed(body) {
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch(LANDED_URL, {
+        method: "POST",
+        headers: AS_ME,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
+      if (res.status < 500) return res.ok;
+      console.error(`landed answered ${res.status}`);
+    } catch (err) {
+      console.error(`landed failed: ${err.message}`);
+    }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  return false;
 }
 
 async function handle(req, res) {
@@ -720,18 +828,16 @@ async function handle(req, res) {
     const { backedUp } = await readJson(req);
     if (!resetting)
       resetting = reset(backedUp === true)
-        .then(() => {
-          lastReset = { ok: true, at: Date.now() };
-        })
-        .catch((err) => {
-          lastReset = {
+        .then(() => resetEnded({ ok: true, at: Date.now() }))
+        .catch((err) =>
+          resetEnded({
             ok: false,
             at: Date.now(),
             ...(err instanceof Refused
               ? { refused: err.message }
               : { error: err.message }),
-          };
-        })
+          }),
+        )
         .finally(() => {
           resetting = null;
         });
@@ -836,15 +942,37 @@ async function handle(req, res) {
       return json(200, { ok: true });
     });
   }
+  // Whether a file the app names was landed by this machine and never
+  // heard of; and the app having heard, it goes off the record.
+  if (url.pathname === "/fs/landed" && req.method === "GET")
+    return json(200, {
+      landed: await isLanded(url.searchParams.get("id") ?? ""),
+    });
+  if (url.pathname === "/fs/landed" && req.method === "DELETE") {
+    await forgetLanded(url.searchParams.get("id") ?? "");
+    return json(200, { ok: true });
+  }
+  // A file onto the disk from where it is staged: refused now if it
+  // cannot land, else landed alone and reported when it has.
   if (url.pathname === "/fs/pull" && req.method === "POST") {
     const b = await readJson(req);
     const abs = await real(b.path);
-    if (typeof b.url !== "string" || !(b.size >= 0))
-      return json(400, { error: "a url and a size" });
+    if (
+      !/^[A-Za-z0-9-]{1,64}$/.test(b.id ?? "") ||
+      typeof b.url !== "string" ||
+      !(b.size >= 0)
+    )
+      return json(400, { error: "an id, a url and a size" });
     if (!(await fs.stat(path.dirname(abs)).catch(() => null))?.isDirectory())
       return json(404, { error: "no such folder" });
-    await pull(abs, b.url, b.size);
-    return json(200, { ok: true, disk: await disk() });
+    if (landings.has(abs)) return json(202, { started: true });
+    if (await fs.stat(abs).catch(() => null))
+      return json(409, { error: "exists" });
+    const { used, total } = await disk();
+    if (total && total - used - held() < b.size)
+      return json(507, { error: "the disk is full" });
+    land(b.id, abs, b.url, b.size);
+    return json(202, { started: true });
   }
   json(404, { error: "no such route" });
 }
@@ -1032,6 +1160,8 @@ function upgrade(req, socket, head) {
     socket.pipe(target).pipe(socket);
   });
   target.on("error", () => refuse(502, "Bad Gateway"));
+  // A browser that drops its end takes only the pair with it.
+  socket.on("error", () => target.destroy());
 }
 
 // The operating system on the volume, whole and entered, on every boot:
@@ -1042,7 +1172,8 @@ function upgrade(req, socket, head) {
 async function settle() {
   if (!OS_ROOT) return;
   // A system set aside by a reset: its home comes over, the rest goes.
-  if (await fs.stat(OLD).catch(() => null)) {
+  const finishing = await fs.stat(OLD).catch(() => null);
+  if (finishing) {
     const home = path.join(OLD, PERSON.home);
     if (await fs.stat(home).catch(() => null)) {
       await fs.rm(ROOT, { recursive: true, force: true });
@@ -1088,6 +1219,17 @@ async function settle() {
     await fs.copyFile(`/${file}`, path.join(OS_ROOT, file));
     await fs.chmod(path.join(OS_ROOT, file), mode);
   }
+  if (finishing) await resetEnded({ ok: true, at: Date.now() });
+  // The image carries no package lists; the system's own are brought up
+  // to date before the machine is served, so the first install finds its
+  // package and never apt's lock. A minute at most: past that the
+  // machine is served and the update finishes on its own.
+  const began = Date.now();
+  const updated = run("chroot", [OS_ROOT, "apt-get", "update", "-qq"]).then(
+    () => console.log(`apt-get update took ${Date.now() - began} ms`),
+    (err) => console.error(`apt-get update: ${err.message}`),
+  );
+  await Promise.race([updated, new Promise((r) => setTimeout(r, 60_000))]);
   busy = null;
   console.log("the operating system on the volume is up");
 }
@@ -1153,7 +1295,14 @@ async function person() {
 // the new one and brings the home over. Cut off anywhere, the next boot
 // finishes it. A laptop has no system to reset.
 let resetting = null;
-let lastReset = null;
+// The last reset's outcome, kept beside the operating system so a boot
+// that finished one cut off can say so.
+const RESET_LOG = OS_ROOT ? path.join(MOUNT, ".reset") : null;
+let lastReset = RESET_LOG ? await recall(RESET_LOG) : null;
+async function resetEnded(outcome) {
+  lastReset = outcome;
+  if (RESET_LOG) await keep(RESET_LOG, outcome);
+}
 async function reset(backedUp) {
   if (!backedUp)
     await startBackup().catch((err) => {
@@ -1209,5 +1358,10 @@ server.listen(PORT, "0.0.0.0", () =>
   console.log(`serving ${ROOT} on ${PORT} as ${FLY_MACHINE_ID}`),
 );
 settleUntilDone();
+// A backup this machine had on its way died with the process that was
+// sending it; the app is told, so another can be taken.
+backupCall("abort", {}).catch((err) =>
+  console.error(`backups left open: ${err.message}`),
+);
 await report();
 setInterval(report, 5 * 60 * 1000).unref();

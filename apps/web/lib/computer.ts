@@ -159,7 +159,9 @@ export async function build(p: Principal): Promise<Built> {
     await noteState(p, c, placed.state);
     return "built";
   } catch (err) {
-    await noteState(p, c, "failed");
+    // A machine that exists and failed is on the record as such, for the
+    // meter and the next look; a build that made none leaves no state.
+    if (c.machineId) await noteState(p, c, "failed");
     throw err;
   } finally {
     await release(p, c.id, held);

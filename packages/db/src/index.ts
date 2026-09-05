@@ -84,6 +84,34 @@ export function asPerson<T>(
   );
 }
 
+// Runs fn as one person writing what is theirs in every org: the person's
+// own row is held first and the membership only checked, so the same
+// write from two of their orgs queues on the person and never on each
+// other's membership.
+export function asSelf<T>(
+  p: { orgId: string; personId: string; userId: string },
+  fn: (q: Query) => Promise<T>,
+): Promise<T> {
+  return scoped(
+    {
+      "app.org_id": p.orgId,
+      "app.person_id": p.personId,
+      "app.member_id": p.userId,
+    },
+    async (q) => {
+      await q.query("select 1 from people where id = $1 for update", [
+        p.personId,
+      ]);
+      const live = await q.query(
+        "select 1 from users where id = $1 and person_id = $2",
+        [p.userId, p.personId],
+      );
+      if (!live.rowCount) throw new Gone("This membership was removed.");
+      return fn(q);
+    },
+  );
+}
+
 // Runs fn seeing only the person and invitations that carry one email: the
 // view a sign-in has before it knows an org.
 export function asEmail<T>(

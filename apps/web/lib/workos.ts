@@ -35,12 +35,12 @@ async function call<T>(path: string, body: Record<string, string>): Promise<T> {
 }
 
 export class WorkOSError extends Error {
-  constructor(
-    public status: number,
-    public code: string,
-    description?: string,
-  ) {
+  status: number;
+  code: string;
+  constructor(status: number, code: string, description?: string) {
     super(`WorkOS ${status} ${code}${description ? `: ${description}` : ""}`);
+    this.status = status;
+    this.code = code;
   }
 }
 

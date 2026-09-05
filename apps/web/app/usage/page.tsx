@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { disk, DiskError } from "@/lib/disk";
-import { filesOf } from "@/lib/files";
+import { filesOf, whole } from "@/lib/files";
 import { dollars, live } from "@/lib/meter";
 import { LADDER, MONTH, PRICES } from "@/lib/prices";
 import { principal } from "@/lib/session";
@@ -240,7 +240,7 @@ export default async function Usage() {
     })),
     ...staged.files.map((f) => ({
       key: `upload:${f.id}`,
-      what: `${f.name}, ${f.state === "ready" ? "landing on your disk" : "still arriving"}`,
+      what: `${f.name}, ${whole(f) ? "landing on your disk" : "still arriving"}`,
       much: bytes(f.size),
       attr: { "data-bucket-upload": f.id },
     })),

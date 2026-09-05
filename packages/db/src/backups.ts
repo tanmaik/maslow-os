@@ -86,6 +86,22 @@ export async function backupInProgress(
   });
 }
 
+// Every backup of the person still on its way.
+export async function backupsOpen(c: {
+  orgId: string;
+  userId: string;
+}): Promise<Backup[]> {
+  return asOrg(c.orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [c.userId]);
+    return (
+      await q.query<Backup>(
+        `select ${COLUMNS} from backups where user_id = $1 and finished_at is null and deleted_at is null`,
+        [c.userId],
+      )
+    ).rows;
+  });
+}
+
 // Closes the row with the size the store confirmed; false when the row
 // was dropped meanwhile, in which case the object must go too.
 export async function finishBackup(

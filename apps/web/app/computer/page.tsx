@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { redirect } from "next/navigation";
 import { after } from "next/server";
+import { Fragment } from "react";
 
 import { ComputerActions } from "@/components/computer-actions";
 import { FileActions } from "@/components/file-actions";
@@ -38,7 +39,7 @@ import { Button } from "@/components/ui/button";
 import { computersOn, ensureFilesystem, status, wanted } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
-import { cleanPath, filesOf } from "@/lib/files";
+import { cleanPath, filesOf, whole } from "@/lib/files";
 import { dollars, live, sweepIfDue } from "@/lib/meter";
 import { LADDER, sizeName } from "@/lib/prices";
 import { principal } from "@/lib/session";
@@ -67,6 +68,14 @@ const STATES: Record<string, string> = {
 };
 
 const href = (path: string) => `/computer?path=${encodeURIComponent(path)}`;
+
+// What the Finder shows of a home: what is not hidden, as a Mac does.
+// The shell and the tools see everything.
+const shown = (name: string) => !name.startsWith(".");
+const shownTree = (t: Tree): Tree => ({
+  ...t,
+  folders: t.folders.filter((f) => shown(f.name)).map(shownTree),
+});
 
 // Vercel gives this request this long.
 export const maxDuration = 60;
@@ -159,6 +168,7 @@ export default async function Computer({
       disk.ports(p),
       disk.terminalUrl(p),
     ]);
+    tree = shownTree(tree);
   } catch (err) {
     if (!(err instanceof DiskError)) throw err;
     if (err.status === 404 && at !== "/") redirect("/computer");
@@ -168,7 +178,8 @@ export default async function Computer({
       </Note>
     );
   }
-  const { entries, disk: space } = listing;
+  const entries = listing.entries.filter((e) => shown(e.name));
+  const space = listing.disk;
   // The row as it is now that the machine has answered: a look that let an
   // outgrown machine go has made one at the size wanted since.
   const computer = (await computerOf(p)) ?? s.computer;
@@ -183,6 +194,7 @@ export default async function Computer({
   const backups = await backupsOf(p);
   const latest = backups[0];
   const restoring = entries.length === 0 ? await disk.restoring(p) : null;
+  const month = (await live(p)).month;
   const notice = resetSaid ?? said(params);
   const ago = (d: Date) => {
     const m = Math.round((Date.now() - d.getTime()) / 60000);
@@ -228,7 +240,7 @@ export default async function Computer({
                     const path = "/" + crumbs.slice(0, i + 1).join("/");
                     const last = i === crumbs.length - 1;
                     return (
-                      <span key={path} className="contents">
+                      <Fragment key={path}>
                         <BreadcrumbSeparator />
                         <BreadcrumbItem>
                           {last ? (
@@ -239,7 +251,7 @@ export default async function Computer({
                             </BreadcrumbLink>
                           )}
                         </BreadcrumbItem>
-                      </span>
+                      </Fragment>
                     );
                   })}
                 </BreadcrumbList>
@@ -321,7 +333,12 @@ export default async function Computer({
                     <TableCell>
                       <span className="text-muted-foreground flex items-center gap-2">
                         <FileIcon className="size-4" />
-                        {f.name} ({f.state === "ready" ? "landing" : "arriving"}
+                        {f.name} (
+                        {!whole(f)
+                          ? "arriving"
+                          : f.said
+                            ? `could not land: ${f.said}; tried again within the hour`
+                            : "landing"}
                         )
                       </span>
                     </TableCell>
@@ -429,7 +446,7 @@ export default async function Computer({
         className="bg-muted/50 text-muted-foreground flex items-center gap-6 border-t py-1.5 pr-4 pl-20 text-xs"
         data-state={state}
         data-disk-used={space.used}
-        data-month-total={(await live(p)).month}
+        data-month-total={month}
       >
         <span>{STATES[state] ?? state}</span>
         <span data-size={computer.size} data-wants={wants}>
@@ -446,9 +463,7 @@ export default async function Computer({
             ? `backed up ${ago(latest.finishedAt!)}, ${backups.length} kept`
             : "not backed up yet"}
         </span>
-        <span className="ml-auto">
-          {dollars((await live(p)).month)} this month so far
-        </span>
+        <span className="ml-auto">{dollars(month)} this month so far</span>
       </footer>
     </main>
   );

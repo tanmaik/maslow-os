@@ -22,13 +22,15 @@ export type Entry = {
 };
 export type Space = { used: number; total: number };
 export type Tree = { name: string; path: string; folders: Tree[] };
+// A file to land: where on the disk, where its bytes are, how many, and
+// the id the machine gives back when it has landed.
+export type Pull = { id: string; path: string; url: string; size: number };
 
 export class DiskError extends Error {
-  constructor(
-    public status: number,
-    message: string,
-  ) {
+  status: number;
+  constructor(status: number, message: string) {
     super(message);
+    this.status = status;
   }
 }
 
@@ -104,15 +106,8 @@ async function call<T>(
         "content-type": "application/json",
       },
       body: body === undefined ? undefined : JSON.stringify(body),
-      // A machine waking from cold takes a few seconds; a pull takes what
-      // the file takes.
-      signal: AbortSignal.timeout(
-        path === "/fs/restore"
-          ? 6 * 3600_000
-          : path === "/fs/pull"
-            ? 3600_000
-            : 90_000,
-      ),
+      // A machine waking from cold takes a few seconds.
+      signal: AbortSignal.timeout(90_000),
     });
   } catch (err) {
     throw new DiskError(
@@ -149,7 +144,7 @@ export async function callIn<T>(
       "content-type": "application/json",
     },
     body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(path === "/fs/pull" ? 3600_000 : 90_000),
+    signal: AbortSignal.timeout(90_000),
   });
   if (!res.ok) {
     const error = (await res.json().catch(() => ({}))) as { error?: string };
@@ -179,9 +174,10 @@ export const disk = {
   move: (p: Principal, from: string, to: string) =>
     call(p, "POST", "/fs/move", { from, to }),
   remove: (p: Principal, path: string) => call(p, "DELETE", `/fs${q(path)}`),
-  // Puts a file on the disk from where its bytes are staged.
-  pull: (p: Principal, path: string, url: string, size: number) =>
-    call<{ disk: Space }>(p, "POST", "/fs/pull", { path, url, size }),
+  // Has the machine put a file on the disk from where its bytes are
+  // staged; it carries on alone and says when the file has landed.
+  pull: (p: Principal, f: Pull) =>
+    call<{ started: boolean }>(p, "POST", "/fs/pull", f),
 
   ports: (p: Principal) => call<{ ports: number[] }>(p, "GET", "/fs/ports"),
   // What is on the disk, biggest first, and what the operating system takes.

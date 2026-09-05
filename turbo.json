@@ -28,7 +28,15 @@
         "FLY_NAME_PREFIX",
         "VERCEL_AUTOMATION_BYPASS_SECRET",
         "LINK_SECRET",
-        "FLY_MACHINES_DOMAIN"
+        "FLY_MACHINES_DOMAIN",
+        "FLY_MACHINES_HOST",
+        "STORAGE_PREFIX",
+        "UPLOADS_DIR",
+        "FILES_PART_SIZE",
+        "FILES_LOCAL_SECRET",
+        "COMPOSIO_API_KEY",
+        "COMPOSIO_API_HOST",
+        "PREVIEW_DB"
       ]
     },
     "typecheck": {

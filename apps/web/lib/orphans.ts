@@ -15,6 +15,17 @@ import { storage } from "./storage.ts";
 // again by the next call, and the sweep calls for every org every hour.
 type Orphan = { id: string; kind: string; ref: string; extra: string | null };
 
+// Every debt this pays; the database refuses any other kind.
+export const KINDS = [
+  "stop",
+  "machine",
+  "volume",
+  "accounts",
+  "picture",
+  "object",
+  "upload",
+] as const;
+
 export async function settle(orgId: string): Promise<number> {
   const owed = await asOrg(
     orgId,

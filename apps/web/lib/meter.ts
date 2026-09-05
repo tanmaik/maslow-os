@@ -41,6 +41,11 @@ const seconds = (a: Date, b: Date) =>
   Math.max(0, (b.getTime() - a.getTime()) / 1000);
 const later = (a: Date, b: Date) => (a > b ? a : b);
 
+// What we asked counts from the moment we asked; what Fly or the daemon
+// reported confirms it.
+const RUNNING = new Set(["started", "reported", "start"]);
+const OFF = new Set(["stopped", "suspended", "stop", "failed", "destroyed"]);
+
 // Everything a member consumed between from and to, from what the rows
 // say. Runs inside an org scope with app.member_id set to the member.
 export async function measure(
@@ -83,17 +88,8 @@ export async function measure(
     let onSince = start;
     let onSize = c.size;
     for (const e of events) {
-      // What we asked counts from the moment we asked; what Fly or the daemon
-      // reported confirms it.
-      const running = ["started", "reported", "start"].includes(e.kind);
-      const off = [
-        "stopped",
-        "suspended",
-        "failed",
-        "destroyed",
-        "stop",
-      ].includes(e.kind);
-      if (!running && !off) continue;
+      const running = RUNNING.has(e.kind);
+      if (!running && !OFF.has(e.kind)) continue;
       if (e.at <= start) {
         on = running;
         onSize = e.size;
@@ -125,29 +121,44 @@ export async function measure(
         to,
       });
     }
-    // Root filesystem: Fly charges it while a machine exists and is stopped,
-    // one GB at most for ours. A machine exists from its placement until it
-    // is destroyed; a filesystem with no machine has none.
-    const placedAt = events.find((e) => e.kind === "stopped")?.at;
-    const destroyedAt = events.find((e) => e.kind === "destroyed")?.at;
-    if (placedAt && (c.machine_id || (destroyedAt && destroyedAt > from))) {
-      const machineAt = later(start, placedAt);
-      const existed = seconds(
-        machineAt,
-        destroyedAt && destroyedAt < to ? destroyedAt : to,
-      );
-      if (existed > 0)
-        out.push({
-          resource: "rootfs",
-          unit: "gb_second",
-          quantity: Math.max(0, existed - secs),
-          price: PRICES.rootfs,
-          live: on || !c.machine_id ? 0 : 1,
-          liveUnit: "GB",
-          from: machineAt,
-          to,
-        });
+    // Root filesystem: Fly charges it while a machine exists and is off,
+    // one GB at most for ours. A machine exists from the first state seen
+    // of it, a failed build included, until it is destroyed, and the next
+    // one made on the volume is its own stretch; a computer with no
+    // machine has none.
+    let exists = false;
+    let existsSince = start;
+    let existsFrom: Date | null = null;
+    let existed = 0;
+    for (const e of events) {
+      const gone = e.kind === "destroyed";
+      if (!RUNNING.has(e.kind) && !OFF.has(e.kind)) continue;
+      if (e.at <= start) {
+        exists = !gone;
+        continue;
+      }
+      if (e.at > to) break;
+      if (exists) {
+        existsFrom ??= existsSince;
+        if (gone) existed += seconds(existsSince, e.at);
+      } else if (!gone) existsSince = e.at;
+      exists = !gone;
     }
+    if (exists) {
+      existsFrom ??= existsSince;
+      existed += seconds(existsSince, to);
+    }
+    if (existed > 0)
+      out.push({
+        resource: "rootfs",
+        unit: "gb_second",
+        quantity: Math.max(0, existed - secs),
+        price: PRICES.rootfs,
+        live: exists && !on ? 1 : 0,
+        liveUnit: "GB",
+        from: existsFrom!,
+        to,
+      });
     // Disk: GB-seconds from the moment the volume existed, the size changing
     // at each extension.
     const volumeEvent = events.find((e) => e.kind === "volume");
@@ -184,7 +195,7 @@ export async function measure(
   // Files: byte-seconds of every file alive in the window.
   const files = (
     await q.query<{ size: string; created_at: Date; deleted_at: Date | null }>(
-      "select size, ready_at as created_at, deleted_at from files where user_id = $1 and state = 'ready' and ready_at is not null",
+      "select size, ready_at as created_at, deleted_at from files where user_id = $1 and state in ('ready', 'landing') and ready_at is not null",
       [userId],
     )
   ).rows;
