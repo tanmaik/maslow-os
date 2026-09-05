@@ -40,8 +40,8 @@ export type Computers =
       // machine gets its own origin, <machine>.<domain>, so what one
       // person's preview runs cannot reach another's downloads or shell.
       domain: string | null;
-      // Signs the links a browser follows to a machine; every machine of
-      // the deployment holds it too, to check a link before waking anyone.
+      // What each machine's own link key is made from, with its name: a
+      // link is checked by the machine it names and by nobody else.
       linkSecret: string | null;
       // Every machine and volume name starts with this; a preview's names
       // carry its pull request, so the reap can find them.

@@ -253,9 +253,9 @@ export async function status(p: Principal): Promise<Status | null> {
   const held = await lease(p, computer.id);
   if (held) {
     try {
-      // One that is off and has been outgrown is let go of here, at a
-      // step boundary and never while it runs; the next attach makes one
-      // at the size wanted, on the same filesystem. Its stop goes on the
+      // One that is off and has been outgrown is let go of here, and a
+      // running one waits for its next stop; the next attach makes one at
+      // the size wanted, on the same filesystem. Its stop goes on the
       // record first, at Fly's own time, so the meter stops there; one
       // that will not go stays on the row, and the next look tries again.
       const outgrown =

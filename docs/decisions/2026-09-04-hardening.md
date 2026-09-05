@@ -10,9 +10,7 @@ they found and what changed:
 machine (download, terminal, preview) is signed, bound to what it is for and
 which machine, and refused once it is stale. The preview cookie is a signed
 link of its own, good for a day, `Secure`, and the plain port is gone. A
-previewed app cannot set cookies on the hostname or replay. (The key was the
-deployment's until 2026-09-05, when each machine got its own; see that day's
-decision.)
+previewed app cannot set cookies on the hostname or replay.
 
 **A machine's secret is the person's, not the org's.** It lives in
 `computer_secrets`, readable by its owner, the machine itself and the sweep.

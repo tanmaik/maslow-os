@@ -200,7 +200,30 @@ const sign = (s) =>
 // under that machine's own key. Only the machine a link names can tell a
 // real one from a forged one, so a link for another machine is replayed
 // there unread and answered where it belongs: a forged link costs a wake
-// and buys nothing.
+// and buys nothing. What forged links can cost that machine's owner is
+// bounded: one past its expiry is refused where it lands, no more than
+// REPLAYS a minute are replayed to any one machine, and no more than
+// TARGETS machines are remembered at once, so a flood of made-up names
+// costs nothing but the refusals.
+const REPLAYS = 10;
+const TARGETS = 1000;
+const replayed = new Map();
+function replayTo(machine) {
+  const now = Date.now();
+  const recent = (replayed.get(machine) ?? []).filter((t) => now - t < 60_000);
+  if (recent.length >= REPLAYS) return { refused: 429 };
+  if (!replayed.has(machine) && replayed.size >= TARGETS)
+    return { refused: 429 };
+  recent.push(now);
+  replayed.set(machine, recent);
+  return { replay: machine };
+}
+setInterval(() => {
+  const now = Date.now();
+  for (const [machine, times] of replayed)
+    if (now - times.at(-1) >= 60_000) replayed.delete(machine);
+}, 60_000).unref();
+const expired = (expires) => !(Number(expires) >= Date.now());
 // The machine a request's hostname names, when the deployment gives each
 // machine an origin of its own: <machine>.<domain>. Where there is such a
 // domain, a browser is only ever answered on a machine's own origin: a
@@ -234,16 +257,14 @@ function signed(url, kind, req) {
       : kind === "p"
         ? port
         : (url.searchParams.get("session") ?? "");
-  if (req && !bound(req, machine)) return { refused: true };
-  if (machine !== FLY_MACHINE_ID) return { replay: machine };
-  if (
-    Number(expires) < Date.now() ||
-    !same(sign(`${kind}|${machine}|${expires}|${what}`), sig)
-  )
-    return { refused: true };
+  if ((req && !bound(req, machine)) || expired(expires))
+    return { refused: 403 };
+  if (machine !== FLY_MACHINE_ID) return replayTo(machine);
+  if (!same(sign(`${kind}|${machine}|${expires}|${what}`), sig))
+    return { refused: 403 };
   // Ourselves and Fly's own way in are not previews.
   if (kind === "p" && (Number(port) === PORT || Number(port) === 22))
-    return { refused: true };
+    return { refused: 403 };
   return { what, port: Number(port) };
 }
 
@@ -283,13 +304,9 @@ function previewCookie(req) {
   if (!m) return null;
   const [machine, expires, port, sig] = m[1].split(".");
   if (!machine || !expires || !port || !sig) return null;
-  if (!bound(req, machine)) return null;
-  if (machine !== FLY_MACHINE_ID) return { replay: machine };
-  if (
-    Number(expires) < Date.now() ||
-    !same(sign(`cookie|${machine}|${expires}|${port}`), sig)
-  )
-    return null;
+  if (!bound(req, machine) || expired(expires)) return null;
+  if (machine !== FLY_MACHINE_ID) return replayTo(machine);
+  if (!same(sign(`cookie|${machine}|${expires}|${port}`), sig)) return null;
   return { port: Number(port) };
 }
 
@@ -652,10 +669,37 @@ const held = () =>
 // The temp files of the landings under way, and no other file.
 const landingTmps = () =>
   new Set([...landings.values()].map((l) => l.tmp).filter(Boolean));
-function land(id, target, url, size) {
+// The id that started a landing is the only one that joins it: a second
+// id for the same path, or the same id for a second path, would land one
+// file with the other's bytes. The path and the id are claimed before
+// anything is waited for, so no second pull passes the same checks
+// meanwhile; a claim that cannot go ahead is let go of with its refusal.
+async function land(id, target, url, size) {
+  if (landings.has(target)) {
+    if (landings.get(target).id === id) return;
+    throw new Refused(409, "something else is landing there");
+  }
+  if (landingIds.has(id))
+    throw new Refused(409, "that landing is under way elsewhere");
   const landing = { id, size, landed: false, tmp: null };
   landings.set(target, landing);
   landingIds.set(id, landing);
+  const release = () => {
+    landings.delete(target);
+    landingIds.delete(id);
+  };
+  try {
+    if (!(await fs.stat(path.dirname(target)).catch(() => null))?.isDirectory())
+      throw new Refused(404, "no such folder");
+    if (await fs.stat(target).catch(() => null))
+      throw new Refused(409, "exists");
+    const { used, total } = await disk();
+    if (total && total - used < held())
+      throw new Refused(507, "the disk is full");
+  } catch (err) {
+    release();
+    throw err;
+  }
   // The id is the landing's until the app has heard how it went: a pull
   // that took the id back while the last one was still being reported
   // would have its record cleared, and its hidden copy deleted, by the
@@ -668,10 +712,7 @@ function land(id, target, url, size) {
       (err) => landed({ id, ok: false, error: err.message }),
     )
     .catch((err) => console.error(`landing ${id}: ${err.message}`))
-    .finally(() => {
-      landings.delete(target);
-      landingIds.delete(id);
-    });
+    .finally(release);
 }
 
 // Tells the app how a landing went, a few times if it must, and whether
@@ -706,30 +747,32 @@ async function handle(req, res) {
     res.writeHead(200, { "fly-replay": `instance=${machine}` });
     res.end();
   };
+  // What a browser is told, in words.
+  const say = (status, text) => {
+    res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
+    res.end(text);
+  };
+  const REFUSED = {
+    403: "This link has expired or is not one of ours. Open it again from your computer.",
+    429: "That computer has been asked for too often just now. Try again in a minute.",
+  };
   // A browser living at a previewed port sees that port, not us; only
   // signed links and the disk's own routes are kept back.
   const ours = /^\/(fs|dl|term|p)(\/|$)/.test(url.pathname);
   if (!ours) {
     const cookie = previewCookie(req);
     if (cookie?.replay) return replay(cookie.replay);
+    if (cookie?.refused) return say(cookie.refused, REFUSED[cookie.refused]);
     if (cookie) return forward(req, res, cookie.port);
   }
   if (url.pathname === "/health") return json(200, { ok: true });
-
-  // What a browser is told, in words.
-  const say = (status, text) => {
-    res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
-    res.end(text);
-  };
-  const STALE =
-    "This link has expired or is not one of ours. Open it again from your computer.";
 
   // A browser's download, by a signed link; a range of it, for a download
   // that picks up where it stopped.
   const dl = signed(url, "dl", req);
   if (dl) {
     if (dl.replay) return replay(dl.replay);
-    if (dl.refused) return say(403, STALE);
+    if (dl.refused) return say(dl.refused, REFUSED[dl.refused]);
     const abs = await real(dl.what);
     const s = await fs.stat(abs).catch(() => null);
     if (!s?.isFile()) return say(404, "There is no such file on your disk.");
@@ -764,7 +807,7 @@ async function handle(req, res) {
   const pv = signed(url, "p", req);
   if (pv) {
     if (pv.replay) return replay(pv.replay);
-    if (pv.refused) return say(403, STALE);
+    if (pv.refused) return say(pv.refused, REFUSED[pv.refused]);
     const day = Date.now() + 86400_000;
     const cookieSig = sign(`cookie|${FLY_MACHINE_ID}|${day}|${pv.port}`);
     const secure =
@@ -1018,23 +1061,7 @@ async function handle(req, res) {
       !(b.size >= 0)
     )
       return json(400, { error: "an id, a url and a size" });
-    if (!(await fs.stat(path.dirname(abs)).catch(() => null))?.isDirectory())
-      return json(404, { error: "no such folder" });
-    // The id that started a landing is the only one that joins it: a
-    // second id for the same path, or the same id for a second path,
-    // would land one file with the other's bytes.
-    if (landings.has(abs))
-      return landings.get(abs).id === b.id
-        ? json(202, { started: true })
-        : json(409, { error: "something else is landing there" });
-    if (landingIds.has(b.id))
-      return json(409, { error: "that landing is under way elsewhere" });
-    if (await fs.stat(abs).catch(() => null))
-      return json(409, { error: "exists" });
-    const { used, total } = await disk();
-    if (total && total - used - held() < b.size)
-      return json(507, { error: "the disk is full" });
-    land(b.id, abs, b.url, b.size);
+    await land(b.id, abs, b.url, b.size);
     return json(202, { started: true });
   }
   json(404, { error: "no such route" });
@@ -1076,7 +1103,9 @@ try {
 // alone for half an hour is closed. The local shell gets a small
 // environment of its own, not the daemon's. Nothing said to a shell that
 // has exited, or to a socket that has closed, can bring the daemon down.
-// A machine holds this many shells at once and no more.
+// A machine holds this many shells at once: at the cap, the one whose
+// socket has been gone longest makes room, and only when every shell has
+// a socket is a new one refused.
 const sessions = new Map();
 const SESSIONS = 8;
 const quietly = (fn) => {
@@ -1086,6 +1115,16 @@ const quietly = (fn) => {
     console.error(`shell: ${err.message}`);
   }
 };
+function makeRoom() {
+  let oldest = null;
+  for (const [id, s] of sessions)
+    if (!s.ws && (!oldest || s.left < oldest[1].left)) oldest = [id, s];
+  if (!oldest) return false;
+  sessions.delete(oldest[0]);
+  clearTimeout(oldest[1].idle);
+  quietly(() => oldest[1].shell.kill());
+  return true;
+}
 const SCROLLBACK = 200_000;
 function spawnShell() {
   // Inside the operating system on the volume, at home, as the person.
@@ -1140,7 +1179,7 @@ function attach(ws, id) {
   });
   let session = sessions.get(id);
   if (!session) {
-    if (sessions.size >= SESSIONS)
+    if (sessions.size >= SESSIONS && !makeRoom())
       return ws.close(1013, "This computer has all the shells it can hold.");
     let shell;
     try {
@@ -1149,7 +1188,7 @@ function attach(ws, id) {
       console.error(`no shell: ${err.message}`);
       return ws.close(1011, "The shell could not start.");
     }
-    session = { shell, ws: null, screen: "", idle: null };
+    session = { shell, ws: null, screen: "", idle: null, left: 0 };
     sessions.set(id, session);
     shell.onData((data) => {
       session.screen = (session.screen + data).slice(-SCROLLBACK);
@@ -1158,7 +1197,7 @@ function attach(ws, id) {
     });
     shell.onExit(() => {
       session.gone = true;
-      sessions.delete(id);
+      if (sessions.get(id) === session) sessions.delete(id);
       quietly(() => session.ws?.close(1000, "The shell exited."));
     });
   }
@@ -1178,6 +1217,7 @@ function attach(ws, id) {
   ws.on("close", () => {
     if (session.ws !== ws) return;
     session.ws = null;
+    session.left = Date.now();
     session.idle = setTimeout(() => {
       if (!session.ws) quietly(() => session.shell.kill());
     }, 30 * 60_000);
@@ -1218,16 +1258,21 @@ function upgrade(req, socket, head) {
   const term = signed(url, "term", req);
   if (term) {
     if (term.replay) return replay(term.replay);
-    if (term.refused) return refuse(403, "Forbidden");
+    if (term.refused)
+      return refuse(
+        term.refused,
+        term.refused === 429 ? "Too Many Requests" : "Forbidden",
+      );
     if (!pty) return refuse(501, "No terminal on this machine");
     if (busy) return refuse(503, "Not right now");
     return shells.handleUpgrade(req, socket, head, (ws) =>
-      attach(ws, term.what || "default"),
+      attach(ws, term.what),
     );
   }
   // A previewed app's own sockets, live reload and the like.
   const cookie = previewCookie(req);
   if (cookie?.replay) return replay(cookie.replay);
+  if (cookie?.refused) return refuse(429, "Too Many Requests");
   if (!cookie) return refuse(404, "Not Found");
   const target = connect(cookie.port, "127.0.0.1", () => {
     const headers = Object.entries(req.headers)
@@ -1450,7 +1495,12 @@ process.on("unhandledRejection", (err) =>
   console.error(`unhandled: ${err?.stack ?? err}`),
 );
 
-// A root that cannot be made is a machine that cannot serve: said now.
+// A root that cannot be made, or a port that cannot be listened on, is a
+// machine that cannot serve: said now, and died of, so Fly starts it over.
+server.on("error", (err) => {
+  console.error(`listen: ${err.message}`);
+  process.exit(1);
+});
 if (!OS_ROOT) await fs.mkdir(ROOT, { recursive: true });
 server.listen(PORT, "0.0.0.0", () =>
   console.log(`serving ${ROOT} on ${PORT} as ${FLY_MACHINE_ID}`),

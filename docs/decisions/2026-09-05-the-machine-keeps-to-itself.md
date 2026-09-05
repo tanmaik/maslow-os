@@ -24,13 +24,19 @@ everything and the next look makes the machine on it.
 link it does not hold the key for, so a link naming another machine goes
 there and is answered there. A forged link therefore costs a wake and buys
 nothing; that is the price of the key not being shared, and it is worth it.
+The wake is metered to the owner of the machine the link names, so what
+forged links can cost them is bounded: a link past its expiry is refused
+where it lands and never replayed, and a machine replays no more than ten
+links a minute to any one other machine, answering the rest 429.
 
 **A terminal link names its session.** The session is inside the signature,
 so one link opens the one shell it was made for, and the tab that owns a
-session asks the app for its own link. A machine holds eight shells at once.
-Sockets are pinged every thirty seconds and closed when they stop answering,
-so a lid closed on a terminal does not hold a shell or keep the machine from
-being sized.
+session asks the app for its own link. A machine holds eight shells at once;
+at the cap, the shell whose tab has been gone longest makes room for the
+new one, and only when every shell has a tab is one refused. Sockets are
+pinged every thirty seconds and closed when they stop answering, so a lid
+closed on a terminal does not hold a shell or keep the machine from being
+sized.
 
 **A path is confined by its parent, not by its name.** The folder a path
 sits in is resolved before the name is put back on it, so a symlink made in

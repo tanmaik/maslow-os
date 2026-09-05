@@ -2143,6 +2143,77 @@ try {
   }
   for (const name of ["big-a.bin", "big-c.bin"])
     await asResized(`/fs?path=%2F${name}`, { method: "DELETE" });
+  // A landing is claimed before anything about it is checked, so two
+  // pulls arriving together cannot both start: the same id and path is
+  // one pull, joined; another id for the path, or the path's id for
+  // another path, is refused.
+  let asked = 0;
+  const holding = [];
+  const slow = createServer((req, res) => {
+    asked++;
+    holding.push(res);
+  });
+  await new Promise((r) => slow.listen(0, "127.0.0.1", r));
+  const slowUrl = `http://127.0.0.1:${slow.address().port}/held`;
+  const claimId = crypto.randomUUID();
+  const claim = (id, name) =>
+    asResized("/fs/pull", {
+      method: "POST",
+      body: JSON.stringify({ id, path: `/${name}`, url: slowUrl, size: 5 }),
+    }).then((r) => r.status);
+  const together = await Promise.all([
+    claim(claimId, "claimed.bin"),
+    claim(claimId, "claimed.bin"),
+  ]);
+  const otherId = await claim(crypto.randomUUID(), "claimed.bin");
+  const otherPath = await claim(claimId, "elsewhere.bin");
+  for (const res of holding) {
+    res.writeHead(200, { "content-length": 5 });
+    res.end("hello");
+  }
+  slow.close();
+  check(
+    "a landing is claimed before it is checked: one pull per path, one path per id",
+    together.every((s) => s === 202) &&
+      asked === 1 &&
+      otherId === 409 &&
+      otherPath === 409,
+    `together ${together.join(" and ")}, pulled ${asked} time(s); another id ${otherId}, another path ${otherPath}`,
+  );
+  for (let i = 0; i < 40; i++) {
+    const c = await (await asResized("/fs/stat?path=%2Fclaimed.bin")).json();
+    if (c?.size === 5) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  // A link made in the shell that points outside the home, with a name
+  // under it that is not there yet, reaches nothing: a folder, a move and
+  // a pull under it are refused, and nothing is made outside.
+  const outside = path.join(scratch, "outside");
+  const link = path.join(scratch, "computers", resizedMachine.volume, "out");
+  await fs.mkdir(outside, { recursive: true });
+  await fs.symlink(outside, link);
+  const post = (route, body) =>
+    asResized(route, { method: "POST", body: JSON.stringify(body) }).then(
+      (r) => r.status,
+    );
+  const viaLink = {
+    folder: await post("/fs/folder", { path: "/out/made" }),
+    move: await post("/fs/move", { from: "/claimed.bin", to: "/out/made" }),
+    pull: await post("/fs/pull", {
+      id: crypto.randomUUID(),
+      path: "/out/made",
+      url: slowUrl,
+      size: 5,
+    }),
+  };
+  await fs.unlink(link);
+  await asResized("/fs?path=%2Fclaimed.bin", { method: "DELETE" });
+  check(
+    "a link out of the home reaches nothing, even to a name not there yet",
+    Object.values(viaLink).every((status) => status === 400) &&
+      !(await fs.stat(path.join(outside, "made")).catch(() => null)),
+    `folder ${viaLink.folder}, move ${viaLink.move}, pull ${viaLink.pull}`,
+  );
   // Six looks at once for one membership make one computer: Marge has
   // none going in, so the one after is theirs.
   const margeHadNone = fake.machines.size === 1;
@@ -2307,6 +2378,30 @@ try {
     forgedLink.status === 403 &&
       (await forgedLink.text()).includes("not one of ours"),
     `${forgedLink.status}, ${someMachine.id} ${someMachine.state}`,
+  );
+  // A link past its expiry is refused where it lands and never replayed,
+  // and a machine replays no more than ten links a minute to any one
+  // other machine: a forged link costs its owner only so many wakes.
+  const running = [...fake.machines.values()].find(
+    (m) => m.state === "started",
+  );
+  const nobody = "m00009999";
+  const direct = (expires) =>
+    fetch(
+      `http://127.0.0.1:${running.port}/dl/${nobody}/${expires}/forged?path=%2Fx`,
+    );
+  const expiredLink = await direct(1);
+  const sent = [];
+  for (let i = 0; i < 11; i++) sent.push(await direct(9999999999999));
+  check(
+    "an expired link is refused unread; ten replays a minute to one machine",
+    expiredLink.status === 403 &&
+      !expiredLink.headers.has("fly-replay") &&
+      sent
+        .slice(0, 10)
+        .every((r) => r.headers.get("fly-replay") === `instance=${nobody}`) &&
+      sent[10].status === 429,
+    `expired ${expiredLink.status}${expiredLink.headers.has("fly-replay") ? " and replayed" : ""}; then ${sent.map((r) => r.status).join(" ")}`,
   );
   // Late's org may have computers; Late opens theirs, so the org has a
   // volume and a machine on Fly when it is deleted.

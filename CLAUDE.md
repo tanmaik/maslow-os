@@ -253,8 +253,10 @@ Fly's proxy suspends it once nothing has asked for it. An upload is staged
 in the bucket only until the machine has pulled it onto the disk. The page
 has a shell on the disk, and every port the machine listens on is a
 preview a browser can open; both come from the machine itself, by links
-signed with a key the whole deployment holds, so nothing unsigned wakes
-a machine. A machine's secret is its owner's, never the org's.
+signed with that machine's own key, made from the deployment's secret and
+the machine's name. A link naming another machine is replayed to it
+unread, so a forged link costs a wake and buys nothing. A machine's secret
+is its owner's, never the org's.
 
 Every machine and volume on Fly is recorded in our database with the org and
 person it belongs to, at creation, before it is used. A sweep reconciles Fly's
