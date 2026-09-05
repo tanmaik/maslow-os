@@ -121,8 +121,9 @@ export const composio = {
     return t && toApp(t);
   },
 
-  // A page at Composio where userId signs in to the app. The browser comes
-  // back to callbackUrl with the account's id and whether it succeeded.
+  // A page at Composio where userId signs in to the app. Afterwards the
+  // browser comes to the project's verifier with a session to redeem, or,
+  // on a project without one, to callbackUrl with the account's id.
   async link(
     userId: string,
     slug: string,
@@ -153,6 +154,30 @@ export const composio = {
       cursor = page.next_cursor;
     } while (cursor);
     return out;
+  },
+
+  // Completes a sign-in Composio is holding until we vouch for who did it.
+  // "failed" when the sign-in was not this user's; "connected" when it was.
+  async complete(
+    sessionUri: string,
+    userId: string,
+  ): Promise<"connected" | "failed"> {
+    const c = config();
+    const res = await fetch(
+      `${c.api}/api/v3.1/connected_accounts/complete_auth`,
+      {
+        method: "POST",
+        headers: { "x-api-key": c.apiKey, "content-type": "application/json" },
+        body: JSON.stringify({ session_uri: sessionUri, user_id: userId }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (res.status === 400) return "failed";
+    if (!res.ok)
+      throw new Error(
+        `Composio POST /connected_accounts/complete_auth answered ${res.status}: ${(await res.text()).slice(0, 300)}`,
+      );
+    return "connected";
   },
 
   // Deletes the account and revokes what the app granted it. An account

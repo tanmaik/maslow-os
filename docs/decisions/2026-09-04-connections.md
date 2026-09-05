@@ -27,6 +27,17 @@ the hourly sweep as machines are against Fly's, was considered and rejected:
 that pattern exists because a lost machine bills forever, and a lost Composio
 account bills nobody. The only thing a copy adds is a way to go stale.
 
+## A sign-in is vouched for
+
+A sign-in link can be copied and finished by someone else, which would tie
+that person's account to whoever began it. So production's Composio project
+holds every finished sign-in until we vouch for who did it: Composio sends
+the browser to us with a one-time session, and we redeem it naming the
+signed-in membership; a mismatch fails the connection. The verifier is one
+public address per project, so laptops and previews cannot have one and
+their project takes the browser's word instead, which is fine for seeded
+people and our own test sign-ins.
+
 ## Whose OAuth apps
 
 Composio's managed ones, as the old repo used throughout. They put Composio's
@@ -46,6 +57,5 @@ straight back, so the smoke connects one with no credentials.
 
 Tools reaching the agent, and the read job that backfills six months of a
 connected app into the brain: both wait on the model door and the jobs, and
-their shape is chosen when the consumer exists. Composio's callback identity
-verification, which needs the project's dashboard. Writing back to apps.
+their shape is chosen when the consumer exists. Writing back to apps.
 Triggers and webhooks. Our own OAuth apps.

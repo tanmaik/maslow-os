@@ -6,8 +6,8 @@ import { deployment } from "./deployment.ts";
 
 // A person's connections to outside apps, as Composio holds them. The
 // Composio user is the membership. The fake has a few pretend apps whose
-// sign-in is a redirect straight back, and keeps its accounts in this
-// process.
+// sign-in is a redirect straight back to be vouched for, and keeps its
+// accounts in this process.
 
 export type Connection = Account & { appName: string };
 
@@ -46,11 +46,11 @@ const vendor = {
       id,
       userId,
       app: slug,
-      status: "ACTIVE",
+      status: "INITIATED",
       createdAt: new Date(),
     });
     return Promise.resolve(
-      `${callbackUrl}?status=success&connected_account_id=${id}`,
+      `${callbackUrl.replace(/callback$/, "verify")}?session_uri=held_${id}`,
     );
   },
   accountsOf(userId: string): Promise<Account[]> {
@@ -64,6 +64,19 @@ const vendor = {
     if (deployment.connections.kind === "composio") return composio.remove(id);
     pretend.delete(id);
     return Promise.resolve();
+  },
+  complete(
+    sessionUri: string,
+    userId: string,
+  ): Promise<"connected" | "failed"> {
+    if (deployment.connections.kind === "composio")
+      return composio.complete(sessionUri, userId);
+    const held = /^held_pretend_[0-9a-f]{8}$/.test(sessionUri)
+      ? pretend.get(sessionUri.slice("held_".length))
+      : undefined;
+    if (!held || held.status !== "INITIATED") return Promise.resolve("failed");
+    held.status = held.userId === userId ? "ACTIVE" : "FAILED";
+    return Promise.resolve(held.status === "ACTIVE" ? "connected" : "failed");
   },
 };
 
@@ -121,6 +134,12 @@ export const connections = {
     );
     if (!account) return "gone";
     return account.status === "ACTIVE" ? "connected" : "failed";
+  },
+
+  // Vouches for who finished a sign-in the vendor is holding: the account
+  // activates for this membership, or fails if the sign-in was someone else's.
+  vouch(p: Principal, sessionUri: string) {
+    return vendor.complete(sessionUri, p.userId);
   },
 
   // Deletes one of the membership's accounts at the vendor. False when the

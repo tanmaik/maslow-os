@@ -150,7 +150,8 @@ A person's accounts in outside apps are held at Composio and nowhere else:
 the Composio user is the membership, and a connection is seen by nobody else
 in the org. Every app Composio reaches is one a person can connect; the
 product names none. The page asks Composio what is connected each time it is
-shown, and says so when Composio does not answer. Access to a person's apps
+shown, and says so when Composio does not answer. In production a finished
+sign-in activates only once we have vouched for who did it. Access to a person's apps
 ends with their membership: a membership that ends or an org that is deleted
 owes its accounts to Composio the way it owes its machines to Fly, in the
 same transaction. Composio's managed OAuth
