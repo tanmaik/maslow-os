@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@placeholder/brain": "workspace:*",
     "@placeholder/db": "workspace:*",
     "@shadcn/react": "^0.3.1",
@@ -39,7 +40,8 @@
     "shadcn": "^4.20.1",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.3",
-    "tw-animate-css": "^1.4.0"
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@types/d3-force": "^3.0.10",

@@ -11,8 +11,22 @@ import { cache } from "react";
 import { filesystemAtSignIn } from "./computer.ts";
 import { cookie, FLOW, SESSION, SESSION_LIFETIME } from "./cookie.ts";
 
-// What a sign-in remembers between its two legs: the email a code was sent to.
-export type Flow = { email: string };
+// What a sign-in remembers between its two legs: the email a code was sent
+// to, and where it was going.
+export type Flow = { email: string; next?: string };
+
+// A place on this site a sign-in may come back to: a path, never another
+// host.
+const PATH = /^\/(?!\/)/;
+
+// Where a sign-in ends up: the path it was asked to come back to, or home.
+export function destination(home: string, next: unknown): string {
+  return typeof next === "string" && PATH.test(next) ? `${home}${next}` : home;
+}
+
+// The same place, with one thing to say on arrival.
+export const noticed = (to: string, notice: string) =>
+  `${to}${to.includes("?") ? "&" : "?"}${notice}`;
 
 // Who the current request acts as, or null when nobody is signed in. Looked
 // up once per request, however many components ask.
@@ -66,7 +80,13 @@ export async function pendingFlow(): Promise<Flow | null> {
   if (!raw) return null;
   try {
     const flow = JSON.parse(raw) as Partial<Flow>;
-    if (typeof flow.email === "string") return { email: flow.email };
+    if (typeof flow.email === "string")
+      return {
+        email: flow.email,
+        ...(typeof flow.next === "string" && PATH.test(flow.next)
+          ? { next: flow.next }
+          : {}),
+      };
   } catch {}
   return null;
 }

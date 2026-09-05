@@ -1,3 +1,4 @@
+import { agentsOf } from "@placeholder/db/auth";
 import { groupsOf } from "@placeholder/db/groups";
 import { orgOf } from "@placeholder/db/settings";
 import { redirect } from "next/navigation";
@@ -39,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Agents } from "@/app/settings/agents";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { Connections } from "@/app/settings/connections";
 import { Groups } from "@/app/settings/groups";
@@ -70,6 +72,7 @@ type Notice = {
   invite?: "sent" | "pending" | "member";
   group?: "saved" | "deleted" | "gone";
   connection?: "connected" | "failed" | "disconnected" | "gone" | "unanswered";
+  agent?: "disconnected" | "gone";
   // What is being searched for among the apps to connect.
   apps?: string;
 };
@@ -121,6 +124,8 @@ const NOTICES: Record<string, string> = {
   "connection=gone": "No such app or connection.",
   "connection=unanswered":
     "Composio refused or didn't answer, so nothing changed. Try again in a moment.",
+  "agent=disconnected": "Disconnected. Its token no longer works.",
+  "agent=gone": "That agent was already disconnected.",
 };
 
 // The signed-in person's org and profile, and who is in the org.
@@ -135,6 +140,7 @@ export default async function Settings({
   const said = (k: keyof Notice) => (n[k] ? NOTICES[`${k}=${n[k]}`] : null);
   const { org, members, invited, past } = await orgOf(p);
   const groups = await groupsOf(p);
+  const agents = await agentsOf(p);
   const appsQuery = (n.apps ?? "").trim();
   // Live from the vendor; when it does not answer, the card says so rather
   // than showing nothing connected or nothing found.
@@ -637,6 +643,8 @@ export default async function Settings({
         found={found}
         said={said("connection")}
       />
+
+      <Agents agents={agents} said={said("agent")} />
 
       <Groups
         groups={groups}

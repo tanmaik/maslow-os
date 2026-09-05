@@ -31,6 +31,21 @@ Mail goes through Resend when `RESEND_API_KEY` and `MAIL_FROM` are set: the
 sign-in code, and invitations. Without them, locally and on previews, the code
 is printed to the server's terminal and the page says so.
 
+## Claude and the brain
+
+The brain is an MCP server at `/mcp`, behind the same sign-in as the site.
+Give Claude Code the URL and it does the rest:
+
+```
+claude mcp add --transport http brain https://<host>/mcp
+```
+
+On claude.ai, add the same URL as a custom connector. Either way a browser
+opens, you sign in and allow it, and Claude reads and writes your brain as
+you, in the org you were signed in to. Every write it makes is logged as
+the model's. Disconnect it under Agents in settings. Locally the host is the
+one `pnpm dev` prints; claude.ai cannot reach a laptop.
+
 Uploaded images live in an S3-compatible bucket named by `STORAGE_ENDPOINT`,
 `STORAGE_REGION`, `STORAGE_BUCKET`, `STORAGE_ACCESS_KEY` and
 `STORAGE_SECRET_KEY`. Without them a checkout uses a directory and a preview

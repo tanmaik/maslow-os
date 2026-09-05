@@ -3,12 +3,14 @@ import { orgs } from "@placeholder/db/seed";
 
 import { deployment } from "@/lib/deployment";
 import { origin } from "@/lib/origin";
-import { signedIn } from "@/lib/session";
+import { destination, signedIn } from "@/lib/session";
 
-// Signs in as a seeded person. Never in production.
+// Signs in as a seeded person, and returns to the page it was picked from.
+// Never in production.
 export async function POST(request: Request) {
   if (!deployment.seededSignIn) return new Response(null, { status: 404 });
-  const userId = (await request.formData()).get("user");
+  const form = await request.formData();
+  const userId = form.get("user");
   const org = orgs.find((o) => o.users.some((u) => u.id === userId));
   if (!org || typeof userId !== "string")
     return new Response("No such seeded person.", { status: 400 });
@@ -29,6 +31,6 @@ export async function POST(request: Request) {
   const u = org.users.find((u) => u.id === userId)!;
   return signedIn(
     { personId: u.personId, orgId: org.id, userId, role: live.role },
-    origin(request),
+    destination(origin(request), form.get("next")),
   );
 }

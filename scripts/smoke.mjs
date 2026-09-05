@@ -12,6 +12,7 @@ import { createServer } from "node:http";
 import { startFakeFly } from "./fake-fly.mjs";
 import { smokeBrain } from "./smoke-brain.mjs";
 import { smokeConnections } from "./smoke-connections.mjs";
+import { smokeMcp } from "./smoke-mcp.mjs";
 import { root, startStack } from "./stack.mjs";
 
 // The smoke carries no credentials: a checkout's pulled config must not reach
@@ -2389,8 +2390,10 @@ try {
     stale.includes("Pick a person from the pill"),
     "sign-in page",
   );
-  failed ||= !(await smokeConnections(stack, signIn));
-  failed ||= !(await smokeBrain(stack));
+  // Every suite runs, whatever failed before it.
+  failed = !(await smokeConnections(stack, signIn)) || failed;
+  failed = !(await smokeBrain(stack)) || failed;
+  failed = !(await smokeMcp(stack, signIn)) || failed;
 } finally {
   await stack.stop();
   fake.close();

@@ -3,7 +3,7 @@ import { allow, clear } from "@placeholder/db/throttle";
 import { deployment } from "@/lib/deployment";
 import { send } from "@/lib/mail";
 import { origin } from "@/lib/origin";
-import { abandoned, continuing } from "@/lib/session";
+import { abandoned, continuing, destination, noticed } from "@/lib/session";
 import { createCode, WorkOSError } from "@/lib/workos";
 
 // Codes an address may ask for, and codes one network address may ask for,
@@ -21,7 +21,8 @@ const MAX_EMAIL = 254;
 export async function POST(request: Request) {
   if (deployment.identity.kind !== "workos")
     return new Response(null, { status: 404 });
-  const email = (await request.formData()).get("email");
+  const form = await request.formData();
+  const email = form.get("email");
   if (
     typeof email !== "string" ||
     !email.includes("@") ||
@@ -29,7 +30,7 @@ export async function POST(request: Request) {
   )
     return new Response("An email address is required.", { status: 400 });
   const address = email.trim().toLowerCase();
-  const home = origin(request);
+  const to = destination(origin(request), form.get("next"));
 
   // The network address is what the nearest proxy reports; with no proxy
   // there is none to count against.
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   const allowed =
     (await allow(`email:${address}`, PER_EMAIL, WINDOW)) &&
     (!from || (await allow(`from:${from}`, PER_ADDRESS, WINDOW)));
-  if (!allowed) return abandoned(`${home}/?email=slow`);
+  if (!allowed) return abandoned(noticed(to, "email=slow"));
 
   let code: string;
   try {
@@ -45,7 +46,7 @@ export async function POST(request: Request) {
   } catch (err) {
     // WorkOS refusing the address is the person's to fix; anything else is ours.
     if (err instanceof WorkOSError && [400, 422].includes(err.status))
-      return abandoned(`${home}/?email=rejected`);
+      return abandoned(noticed(to, "email=rejected"));
     throw err;
   }
   await clear(`code:${address}`);
@@ -58,5 +59,9 @@ export async function POST(request: Request) {
       text: `${code} is your sign-in code. It expires in ten minutes.`,
     });
   }
-  return continuing(home, { email: address });
+  const next = form.get("next");
+  return continuing(to, {
+    email: address,
+    ...(typeof next === "string" ? { next } : {}),
+  });
 }

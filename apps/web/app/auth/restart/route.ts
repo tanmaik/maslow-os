@@ -1,7 +1,9 @@
 import { origin } from "@/lib/origin";
-import { abandoned } from "@/lib/session";
+import { abandoned, destination } from "@/lib/session";
 
-// Forgets a sign-in in progress so a different address can be used.
+// Forgets a sign-in in progress so a different address can be used, where
+// the sign-in was.
 export async function POST(request: Request) {
-  return abandoned(origin(request));
+  const form = await request.formData();
+  return abandoned(destination(origin(request), form.get("next")));
 }

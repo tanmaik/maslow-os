@@ -3,7 +3,13 @@ import { allow, clear } from "@placeholder/db/throttle";
 
 import { deployment } from "@/lib/deployment";
 import { origin } from "@/lib/origin";
-import { abandoned, pendingFlow, signedIn } from "@/lib/session";
+import {
+  abandoned,
+  destination,
+  noticed,
+  pendingFlow,
+  signedIn,
+} from "@/lib/session";
 import { redeemCode, WorkOSError } from "@/lib/workos";
 
 // Guesses one address gets before its sign-in is abandoned.
@@ -19,11 +25,11 @@ export async function POST(request: Request) {
   const code = (await request.formData()).get("code");
   if (typeof code !== "string")
     return new Response("A code is required.", { status: 400 });
-  const home = origin(request);
+  const to = destination(origin(request), flow.next);
 
   const key = `code:${flow.email}`;
   if (!(await allow(key, GUESSES, WINDOW)))
-    return abandoned(`${home}/?code=locked`);
+    return abandoned(noticed(to, "code=locked"));
 
   try {
     const identity = await redeemCode(flow.email, code.trim());
@@ -31,11 +37,11 @@ export async function POST(request: Request) {
     // An org founded here starts with computers on outside production.
     return signedIn(
       await signIn({ ...identity, computers: !deployment.production }),
-      home,
+      to,
     );
   } catch (err) {
     if (err instanceof WorkOSError && /one_time_code/.test(err.code))
-      return Response.redirect(`${home}/?code=wrong`, 303);
+      return Response.redirect(noticed(to, "code=wrong"), 303);
     throw err;
   }
 }

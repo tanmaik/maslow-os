@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronsUpDown, UserRound } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { deployment } from "@/lib/deployment";
 
@@ -37,7 +37,7 @@ const onPill =
 
 // A pill in the corner: closed, it is who you are, with a count of what is
 // faked; open, it says where this is, what each vendor is, and lets you be
-// someone else.
+// someone else on the page you are looking at.
 export function DevPill({
   where,
   vendors,
@@ -47,6 +47,8 @@ export function DevPill({
   current,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [here, setHere] = useState("");
+  useEffect(() => setHere(location.pathname + location.search), []);
   const faked = Object.entries(vendors).filter(([, v]) => v === null);
   const fakedSaid =
     faked.length > 0 ? `${faked.map(([k]) => k).join(", ")} faked` : null;
@@ -111,6 +113,7 @@ export function DevPill({
                     {o.people.map((u) => (
                       <form key={u.id} action="/auth/dev" method="post">
                         <input type="hidden" name="user" value={u.id} />
+                        <input type="hidden" name="next" value={here} />
                         <Button
                           variant={current === u.id ? "secondary" : "ghost"}
                           size="xs"

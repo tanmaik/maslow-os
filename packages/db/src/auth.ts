@@ -231,15 +231,22 @@ export async function switchTo(
     : null;
 }
 
-// Opens a session and returns the token the browser will hold, or null if
-// the membership is no longer the person's. It lasts until deleteSession:
-// signing out is the only way a session ends.
-export async function createSession(p: Principal): Promise<string | null> {
+// A session and the app holding it, when it is not a browser's.
+export type Session = Principal & { client: string | null };
+
+// Opens a session and returns the token its holder will keep, or null if
+// the membership is no longer the person's. A browser's session names no
+// client; an app connected through OAuth names itself. It lasts until
+// deleteSession: signing out is the only way a session ends.
+export async function createSession(
+  p: Principal,
+  client: string | null = null,
+): Promise<string | null> {
   const id = randomUUID();
   const opened = await asOrg(p.orgId, (q) =>
     q.query(
-      "insert into sessions (id, org_id, user_id) select $1, $2, id from users where id = $3 and person_id = $4",
-      [id, p.orgId, p.userId, p.personId],
+      "insert into sessions (id, org_id, user_id, client) select $1, $2, id, $5 from users where id = $3 and person_id = $4",
+      [id, p.orgId, p.userId, p.personId, client],
     ),
   );
   return opened.rowCount ? `${p.orgId}.${id}` : null;
@@ -250,14 +257,19 @@ const TOKEN = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/;
 // Finds who a session token belongs to, or null if it is malformed or gone.
 export async function resolveSession(
   token: string | undefined,
-): Promise<Principal | null> {
+): Promise<Session | null> {
   const parts = token?.match(TOKEN);
   if (!parts) return null;
   const [, orgId, id] = parts;
   const row = await asOrg(orgId!, async (q) =>
     (
-      await q.query<{ user_id: string; person_id: string; role: Role }>(
-        "select s.user_id, u.person_id, u.role from sessions s join users u on u.id = s.user_id where s.id = $1",
+      await q.query<{
+        user_id: string;
+        person_id: string;
+        role: Role;
+        client: string | null;
+      }>(
+        "select s.user_id, s.client, u.person_id, u.role from sessions s join users u on u.id = s.user_id where s.id = $1",
         [id],
       )
     ).rows.at(0),
@@ -268,8 +280,40 @@ export async function resolveSession(
         orgId: orgId!,
         userId: row.user_id,
         role: row.role,
+        client: row.client,
       }
     : null;
+}
+
+// An app holding a session of the person's, through this membership.
+export type Agent = { id: string; client: string; createdAt: Date };
+
+// Every app the person let in through this membership, oldest first.
+export async function agentsOf(p: Principal): Promise<Agent[]> {
+  return asOrg(
+    p.orgId,
+    async (q) =>
+      (
+        await q.query<Agent>(
+          'select id, client, created_at as "createdAt" from sessions where user_id = $1 and client is not null order by created_at, id',
+          [p.userId],
+        )
+      ).rows,
+  );
+}
+
+// Ends one of the person's own app sessions. Whether one ended.
+export async function disconnectAgent(
+  p: Principal,
+  id: string,
+): Promise<boolean> {
+  const gone = await asOrg(p.orgId, (q) =>
+    q.query(
+      "delete from sessions where id = $1 and user_id = $2 and client is not null",
+      [id, p.userId],
+    ),
+  );
+  return Boolean(gone.rowCount);
 }
 
 export async function deleteSession(token: string | undefined): Promise<void> {
