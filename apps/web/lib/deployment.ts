@@ -49,6 +49,10 @@ export type Computers =
     }
   | { kind: "none" };
 
+// Product analytics go to PostHog, or nowhere. The key is the project token:
+// write-only, made to be given to a browser.
+export type Analytics = { kind: "posthog"; key: string } | { kind: "none" };
+
 // Connections to outside apps are held at Composio, or by a fake with a
 // few pretend apps, or nowhere.
 export type Connections =
@@ -166,6 +170,16 @@ function computers(): Computers {
   };
 }
 
+function analytics(): Analytics {
+  const key = process.env.POSTHOG_KEY;
+  if (key) return { kind: "posthog", key };
+  if (production)
+    throw new Error(
+      "No analytics: set POSTHOG_KEY. Production has no fallback.",
+    );
+  return { kind: "none" };
+}
+
 // A deployment without Composio has no connections in production, and
 // pretend ones anywhere else.
 function connections(): Connections {
@@ -201,6 +215,7 @@ export const deployment = {
   https,
   identity: identityProvider(),
   mail: mail(),
+  analytics: analytics(),
 };
 
 // A code sign-in mails its codes, so in production WorkOS without mail is a

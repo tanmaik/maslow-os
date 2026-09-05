@@ -22,6 +22,7 @@ const noCredentials = Object.fromEntries(
     "WORKOS_CLIENT_ID",
     "RESEND_API_KEY",
     "MAIL_FROM",
+    "POSTHOG_KEY",
     "STORAGE_ENDPOINT",
     "STORAGE_REGION",
     "STORAGE_BUCKET",
@@ -31,8 +32,11 @@ const noCredentials = Object.fromEntries(
   ].map((k) => [k, ""]),
 );
 
-// Fly is faked: computers are built and run against a server in this process.
-const fake = await startFakeFly();
+// Fly is faked: computers are built and run against a server in this
+// process, on a scratch directory of the smoke's own that each run empties.
+const computersDir = path.join(root, ".local", "smoke-computers");
+await fs.rm(computersDir, { recursive: true, force: true });
+const fake = await startFakeFly({ dir: computersDir });
 const { freePort } = await import("./stack.mjs");
 const webPort = await freePort();
 const stack = await startStack({

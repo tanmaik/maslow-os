@@ -6,6 +6,7 @@ import {
 } from "@placeholder/db/auth";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
+import { cache } from "react";
 
 import { filesystemAtSignIn } from "./computer.ts";
 import { cookie, FLOW, SESSION, SESSION_LIFETIME } from "./cookie.ts";
@@ -13,10 +14,11 @@ import { cookie, FLOW, SESSION, SESSION_LIFETIME } from "./cookie.ts";
 // What a sign-in remembers between its two legs: the email a code was sent to.
 export type Flow = { email: string };
 
-// Who the current request acts as, or null when nobody is signed in.
-export async function principal(): Promise<Principal | null> {
-  return resolveSession((await cookies()).get(SESSION)?.value);
-}
+// Who the current request acts as, or null when nobody is signed in. Looked
+// up once per request, however many components ask.
+export const principal = cache(async (): Promise<Principal | null> =>
+  resolveSession((await cookies()).get(SESSION)?.value),
+);
 
 // Opens a session for p and sends the browser to `to` holding it. If the
 // membership was removed in the meantime, the browser goes there as it was.

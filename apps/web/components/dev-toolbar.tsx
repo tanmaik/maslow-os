@@ -34,6 +34,7 @@ export async function DevToolbar() {
         vendors={{
           identity: deployment.identity.kind === "workos" ? "WorkOS" : null,
           mail: deployment.mail.kind === "resend" ? "Resend" : null,
+          analytics: deployment.analytics.kind === "posthog" ? "PostHog" : null,
           storage: deployment.storage.kind === "s3" ? "S3" : null,
           computers:
             deployment.computers.kind === "fly" &&

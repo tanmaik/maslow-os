@@ -59,6 +59,7 @@ export function vendorsOf(env) {
   return {
     identity: has("WORKOS_API_KEY", "WORKOS_CLIENT_ID") ? "WorkOS" : null,
     mail: has("RESEND_API_KEY", "MAIL_FROM") ? "Resend" : null,
+    analytics: has("POSTHOG_KEY") ? "PostHog" : null,
     storage: has(
       "STORAGE_ENDPOINT",
       "STORAGE_REGION",

@@ -36,7 +36,13 @@ Uploaded images live in an S3-compatible bucket named by `STORAGE_ENDPOINT`,
 `STORAGE_SECRET_KEY`. Without them a checkout uses a directory and a preview
 refuses uploads.
 
-Production refuses to start without WorkOS, mail, or storage.
+Analytics, replay and error tracking go to PostHog when `POSTHOG_KEY` is
+set: every page seen, click, error and replay, as whoever is signed in,
+tagged local, preview or production. One PostHog project serves all three,
+and its filter counts only production. Without the key nothing is reported
+and the pill says so.
+
+Production refuses to start without WorkOS, mail, storage, or analytics.
 
 ## Dev secrets
 
