@@ -1110,11 +1110,15 @@ try {
       (await computerPage(ottoNow)).includes('data-file="/dusk.txt"'),
     "a path with .. is not a path",
   );
-  // The terminal: a shell on the disk over a WebSocket by a signed link;
-  // it sees the files, and a stranger's link is refused. The ports the
-  // machine listens on are previews: a link sets the cookie, and the
-  // browser then lives at the port through the machine.
-  const shellLink = rootAfter.match(/data-terminal-url="([^"]+)"/)?.[1];
+  // The terminal: a shell on the disk over a WebSocket by a signed link
+  // for the session the tab names; it sees the files, and neither a
+  // forged link nor another session's is opened. The ports the machine
+  // listens on are previews: a link sets the cookie, and the browser then
+  // lives at the port through the machine.
+  const shellLink = await fetch(
+    `${stack.url}/computer/terminal?session=smoke-shell`,
+    { headers: { cookie: ottoNow } },
+  ).then(async (r) => (await r.json()).url);
   const typed = await new Promise((resolve) => {
     const ws = new WebSocket(shellLink);
     let seen = "";
@@ -1144,16 +1148,21 @@ try {
       .trim()
       .slice(-80),
   );
-  const forgedShell = await new Promise((resolve) => {
-    const ws = new WebSocket(shellLink.replace(/\/[^/]+$/, "/forged"));
-    ws.onopen = () => resolve("opened");
-    ws.onerror = () => resolve("refused");
-    ws.onclose = () => resolve("refused");
-  });
+  const opens = (link) =>
+    new Promise((resolve) => {
+      const ws = new WebSocket(link);
+      ws.onopen = () => resolve("opened");
+      ws.onerror = () => resolve("refused");
+      ws.onclose = () => resolve("refused");
+    });
+  const forgedShell = await opens(shellLink.replace(/\/[^/?]+\?/, "/forged?"));
+  const otherSession = await opens(
+    shellLink.replace("session=smoke-shell", "session=smoke-other"),
+  );
   check(
-    "a forged terminal link is refused",
-    forgedShell === "refused",
-    forgedShell,
+    "a terminal link opens the session it names and no other",
+    forgedShell === "refused" && otherSession === "refused",
+    `forged ${forgedShell}, another session ${otherSession}`,
   );
   const listener = createServer((req, res) => {
     res.writeHead(200, { "content-type": "text/plain" });
@@ -1709,19 +1718,17 @@ try {
       !fake.machines.has(goneId),
     `${fake.machines.size} machines now`,
   );
-  // A machine on an old image is let go of by the sweep while it is off,
-  // and its stop is on the record, so the meter stops with it; the next
-  // look makes one on the same disk.
+  // A machine on an old image answers no link of ours, so it is let go
+  // of while it runs, not only when it falls idle: by the sweep, whose
+  // stop is on the record so the meter stops with it, and by the page's
+  // own look, so the first view after a deploy lands on the new image.
+  // Either way the next look makes one on the same disk.
   const onOld = await (
     await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })
   ).json();
-  for (const [id, mc] of fake.machines) {
+  const oldOnes = [...fake.machines.keys()];
+  for (const mc of fake.machines.values())
     mc.image = "registry.fly.io/placeholder-computers:v0";
-    await fetch(`${fake.url}/v1/apps/x/machines/${id}/suspend`, {
-      method: "POST",
-      headers: { authorization: "Bearer fake" },
-    });
-  }
   await fetch(`${stack.url}/meter/sweep`, {
     headers: { authorization: "Bearer smoke" },
   });
@@ -1730,13 +1737,27 @@ try {
   ).json();
   const machinesAfterOld = fake.machines.size;
   check(
-    "a machine on an old image is replaced by the sweep, and the meter stops",
+    "a running machine on an old image is replaced by the sweep, and the meter stops",
     onOld.active.some((a) => a.resource === "compute") &&
+      oldOnes.length > 0 &&
       machinesAfterOld === 0 &&
       !offOld.active.some((a) => a.resource === "compute") &&
       /data-state="started"/.test(await computerPage(ottoNow)) &&
       fake.machines.size === 1,
-    `compute ${onOld.active.some((a) => a.resource === "compute") ? "on" : "off"} before, ${machinesAfterOld} machines after the sweep, compute ${offOld.active.some((a) => a.resource === "compute") ? "on" : "off"}, ${fake.machines.size} after the look`,
+    `compute ${onOld.active.some((a) => a.resource === "compute") ? "on" : "off"} before, ${oldOnes.length} running, ${machinesAfterOld} machines after the sweep, compute ${offOld.active.some((a) => a.resource === "compute") ? "on" : "off"}, ${fake.machines.size} after the look`,
+  );
+  // The page does not wait for a sweep to be rid of one.
+  const [staleId] = fake.machines.keys();
+  for (const mc of fake.machines.values())
+    mc.image = "registry.fly.io/placeholder-computers:v0";
+  const afterLook = await computerPage(ottoNow);
+  check(
+    "the page's own look replaces a machine on an old image",
+    Boolean(staleId) &&
+      !fake.machines.has(staleId) &&
+      fake.machines.size === 1 &&
+      /data-state="started"/.test(afterLook),
+    `${staleId} gone: ${!fake.machines.has(staleId)}, ${fake.machines.size} machines now`,
   );
   // A report with the wrong secret, or for a machine we never made, is a 404.
   const [m1] = fake.machines.keys();
@@ -2260,10 +2281,10 @@ try {
       (await settingsPage(ottoNow)).includes("Blue Whale Bakery"),
     `owner ${ottoDeletes.status}, wrong name ${wrongName.headers.get("location")?.split("?")[1]}`,
   );
-  // A forged link wakes nobody: the proxy is asked for another machine by
-  // a link that is not ours, and answers without waking it.
+  // Only the machine a link names holds the key to read it: a forged link
+  // landing on another machine is replayed to the one it names, and
+  // refused there.
   const [someMachine] = [...fake.machines.values()];
-  const wasState = someMachine.state;
   const forgedLink = await fetch(
     `${fake.url}/dl/${someMachine.id}/9999999999999/forged?path=%2Fx`,
     {
@@ -2273,11 +2294,10 @@ try {
     },
   );
   check(
-    "a forged link is refused where it lands and wakes nobody",
+    "a forged link is refused by the machine it names",
     forgedLink.status === 403 &&
-      (await forgedLink.text()).includes("not one of ours") &&
-      someMachine.state === wasState,
-    `${forgedLink.status}, ${someMachine.id} ${wasState} → ${someMachine.state}`,
+      (await forgedLink.text()).includes("not one of ours"),
+    `${forgedLink.status}, ${someMachine.id} ${someMachine.state}`,
   );
   // Late's org may have computers; Late opens theirs, so the org has a
   // volume and a machine on Fly when it is deleted.

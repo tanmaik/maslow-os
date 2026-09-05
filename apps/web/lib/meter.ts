@@ -378,12 +378,13 @@ export async function sweep(now = new Date()): Promise<number> {
             // What Fly's proxy did to it since: exact starts and stops.
             if (m?.events) await noteEventsIn(orgId, c, m.events);
             // A machine on an image that is not the image is let go of
-            // while it is off; the next look makes one on the same volume,
-            // which holds everything. That is how machines are updated.
+            // whatever it is doing: it signs its links with the key the
+            // image it was made from was given, so it answers none of
+            // ours until it is replaced. The next look makes one on the
+            // same volume, which holds everything. That is how machines
+            // are updated.
             const stale =
-              m?.config?.image !== undefined &&
-              m.config.image !== IMAGE &&
-              (m.state === "stopped" || m.state === "suspended");
+              m?.config?.image !== undefined && m.config.image !== IMAGE;
             if (stale) {
               console.log(`machine ${m.id} is on ${m.config!.image}; replaced`);
               await fly.destroyMachine(m.id).catch(() => {});

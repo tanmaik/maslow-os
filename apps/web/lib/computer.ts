@@ -24,7 +24,7 @@ import {
 import { randomBytes, randomUUID } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import { DISK_GB, fly, machineName, MAX_DISK_GB, volumeName } from "./fly.ts";
+import { DISK_GB, fly, IMAGE, MAX_DISK_GB, volumeName } from "./fly.ts";
 import { LADDER } from "./prices.ts";
 
 export type Built = "built" | "exists" | "off" | "not-allowed";
@@ -126,7 +126,7 @@ export async function build(p: Principal): Promise<Built> {
       let machine;
       try {
         machine = await fly.createMachine(
-          machineName(c.id),
+          c.id,
           c.volumeId!,
           await secretOf(p, c.id),
           c.size,
@@ -264,9 +264,17 @@ export async function status(p: Principal): Promise<Status | null> {
       const outgrown =
         (machine?.state === "stopped" || machine?.state === "suspended") &&
         wanted(computer) !== null;
-      if (machine && !outgrown) await noteState(p, computer, machine.state);
+      // One on an image that is not the image goes whatever it is doing,
+      // and here rather than at the next sweep: it answers no link of
+      // ours, so the first look after a deploy is the one that replaces
+      // it, and the attach below makes one from the image on the same
+      // filesystem.
+      const stale =
+        machine?.config?.image !== undefined && machine.config.image !== IMAGE;
+      if (machine && !outgrown && !stale)
+        await noteState(p, computer, machine.state);
       else {
-        if (outgrown) {
+        if (outgrown || stale) {
           await noteEventsIn(p.orgId, computer, machine?.events ?? []);
           await fly.destroyMachine(computer.machineId);
         }

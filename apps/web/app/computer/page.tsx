@@ -160,13 +160,11 @@ export default async function Computer({
   let listing: Awaited<ReturnType<typeof disk.list>>;
   let tree: Tree;
   let ports: number[];
-  let shell: string;
   try {
-    [listing, { tree }, { ports }, shell] = await Promise.all([
+    [listing, { tree }, { ports }] = await Promise.all([
       disk.list(p, at),
       disk.tree(p),
       disk.ports(p),
-      disk.terminalUrl(p),
     ]);
     tree = shownTree(tree);
   } catch (err) {
@@ -436,7 +434,7 @@ export default async function Computer({
               )}
             </div>
             <div className="min-h-0 flex-1">
-              <Terminal url={shell} />
+              <Terminal />
             </div>
           </div>
         </div>

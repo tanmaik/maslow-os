@@ -10,6 +10,7 @@ import { createHmac } from "node:crypto";
 
 import { build, computersOn } from "./computer.ts";
 import { deployment } from "./deployment.ts";
+import { linkKeyOf } from "./fly.ts";
 
 // The person's disk, as the daemon on their machine serves it. Every call
 // goes through Fly's proxy to the machine by id, which wakes it if it is
@@ -46,13 +47,6 @@ function config() {
   const c = deployment.computers;
   if (c.kind !== "fly") throw new DiskError(503, "Computers are not set up.");
   return c;
-}
-// The key links are signed with, demanded the moment one is made.
-function linkKey(): string {
-  const key = process.env.LINK_SECRET ?? config().linkSecret;
-  if (!key)
-    throw new DiskError(503, "LINK_SECRET is not set; no link can be signed.");
-  return key;
 }
 const host = () => config().host;
 
@@ -230,13 +224,16 @@ export const disk = {
   },
 
   // A link the browser follows to the machine itself for the bytes, good
-  // for ten minutes, signed with the deployment's key and bound to what it
-  // is for and which machine.
+  // for ten minutes, signed with that machine's own key and bound to what
+  // it is for and which machine.
   downloadUrl: (p: Principal, path: string) =>
     link(p, "dl", path, `${q(path)}`),
-  // A shell on the disk, over a WebSocket to the machine.
-  terminalUrl: async (p: Principal) =>
-    (await link(p, "term", "term")).replace(/^http/, "ws"),
+  // A shell on the disk, over a WebSocket to the machine. The link names
+  // the session it opens, so it opens that shell and no other.
+  terminalUrl: async (p: Principal, session: string) =>
+    (
+      await link(p, "term", session, `?session=${encodeURIComponent(session)}`)
+    ).replace(/^http/, "ws"),
   // A browser's view of an app the machine serves on a port.
   previewUrl: (p: Principal, port: number) =>
     link(p, "p", String(port), `/${port}`),
@@ -253,7 +250,10 @@ async function link(
   if (before) await noteCause(p.orgId, before, `link-${kind}`);
   const c = await machineOf(p);
   const expires = Date.now() + 600_000;
-  const sig = createHmac("sha256", linkKey())
+  const key = linkKeyOf(c.id);
+  if (!key)
+    throw new DiskError(503, "LINK_SECRET is not set; no link can be signed.");
+  const sig = createHmac("sha256", key)
     .update(`${kind}|${c.machineId}|${expires}|${what}`)
     .digest("base64url");
   // On the machine's own origin when the deployment has a domain for it.

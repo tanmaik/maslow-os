@@ -134,12 +134,12 @@ function computers(): Computers {
     throw new Error(
       "Computers need both FLY_API_TOKEN and FLY_COMPUTERS_APP, or neither.",
     );
-  // Production refuses to start without the key its links are signed with;
-  // elsewhere the key is read when a link is made, since a preview's build
-  // is not given the deployment's shared values.
+  // Production refuses to start without the key each machine's own link
+  // key is derived from; elsewhere the key is read when a link is made,
+  // since a preview's build is not given the deployment's shared values.
   if (production && !linkSecret)
     throw new Error(
-      "Computers need LINK_SECRET, the key their links are signed with.",
+      "Computers need LINK_SECRET, the key their link keys come from.",
     );
   const site = process.env.VERCEL_PROJECT_PRODUCTION_URL;
   const report =

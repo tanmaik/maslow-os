@@ -21,14 +21,13 @@ import { promisify } from "node:util";
 
 import { WebSocketServer } from "ws";
 
-// COMPUTER_SECRET is this machine's own, for the app's calls; LINK_SECRET
-// is the deployment's, so any machine can tell a real link from a forged
-// one before it wakes the machine the link names.
-const { COMPUTER_SECRET, LINK_SECRET, REPORT_URL, FLY_MACHINE_ID } =
-  process.env;
-if (!COMPUTER_SECRET || !LINK_SECRET || !REPORT_URL || !FLY_MACHINE_ID) {
+// COMPUTER_SECRET is this machine's own, for the app's calls; LINK_KEY is
+// this machine's own too, the key its links are signed with, so a shell
+// with root here forges no link to anybody else's machine.
+const { COMPUTER_SECRET, LINK_KEY, REPORT_URL, FLY_MACHINE_ID } = process.env;
+if (!COMPUTER_SECRET || !LINK_KEY || !REPORT_URL || !FLY_MACHINE_ID) {
   console.error(
-    "A computer needs COMPUTER_SECRET, LINK_SECRET, REPORT_URL and FLY_MACHINE_ID.",
+    "A computer needs COMPUTER_SECRET, LINK_KEY, REPORT_URL and FLY_MACHINE_ID.",
   );
   process.exit(1);
 }
@@ -157,29 +156,51 @@ function under(raw) {
   return abs;
 }
 
-// The same, with symlinks followed: what the path really is must still be
-// under the root, or a link made in the shell would reach outside.
+const inRoot = (p) => p === ROOT || p.startsWith(ROOT + path.sep);
+// A path that is not there yet is not a path; one that cannot be resolved
+// at all is not one either.
+const nowhere = (err) => {
+  if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
+  throw new Refused(400, "not a path");
+};
+// Where a path really is: the deepest part of it that exists, resolved,
+// with the names that are not there yet joined back on. A link anywhere
+// along the way must land under the root.
+async function resolved(abs) {
+  if (abs === ROOT) return ROOT;
+  const there = await fs.realpath(abs).catch(nowhere);
+  if (there) {
+    if (!inRoot(there)) throw new Refused(400, "not a path");
+    return there;
+  }
+  return path.join(await resolved(path.dirname(abs)), path.basename(abs));
+}
+// The same, with symlinks followed: the folder a path sits in is resolved
+// before its own name is put back on, so neither a link made in the shell
+// nor a leaf that is not there yet reaches outside the root.
 async function real(raw) {
   const abs = under(raw);
-  const there = await fs.realpath(abs).catch((err) => {
-    if (err.code === "ENOENT") return null;
-    throw err;
-  });
-  if (there && there !== ROOT && !there.startsWith(ROOT + path.sep))
-    throw new Refused(400, "not a path");
-  return abs;
+  if (abs === ROOT) return ROOT;
+  const there = path.join(
+    await resolved(path.dirname(abs)),
+    path.basename(abs),
+  );
+  const leaf = await fs.realpath(there).catch(nowhere);
+  if (leaf && !inRoot(leaf)) throw new Refused(400, "not a path");
+  return there;
 }
 
 const same = (a, b) =>
   a.length === b.length && timingSafeEqual(Buffer.from(a), Buffer.from(b));
 
 const sign = (s) =>
-  createHmac("sha256", LINK_SECRET).update(s).digest("base64url");
+  createHmac("sha256", LINK_KEY).update(s).digest("base64url");
 
 // A signed link names the machine, when it expires, and what it is for,
-// all under the deployment's key, so any machine checks it before a word
-// is said to the machine it names; only then is a link for another
-// machine replayed there. A stale or forged link wakes nobody.
+// under that machine's own key. Only the machine a link names can tell a
+// real one from a forged one, so a link for another machine is replayed
+// there unread and answered where it belongs: a forged link costs a wake
+// and buys nothing.
 // The machine a request's hostname names, when the deployment gives each
 // machine an origin of its own: <machine>.<domain>. Where there is such a
 // domain, a browser is only ever answered on a machine's own origin: a
@@ -206,19 +227,20 @@ function signed(url, kind, req) {
   );
   if (!m || m[1] !== kind) return null;
   const [, , machine, expires, sig, port] = m;
+  // A terminal link names the session it opens, so one link is one shell.
   const what =
     kind === "dl"
       ? (url.searchParams.get("path") ?? "")
       : kind === "p"
         ? port
-        : "term";
+        : (url.searchParams.get("session") ?? "");
+  if (req && !bound(req, machine)) return { refused: true };
+  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   if (
     Number(expires) < Date.now() ||
     !same(sign(`${kind}|${machine}|${expires}|${what}`), sig)
   )
     return { refused: true };
-  if (req && !bound(req, machine)) return { refused: true };
-  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   // Ourselves and Fly's own way in are not previews.
   if (kind === "p" && (Number(port) === PORT || Number(port) === 22))
     return { refused: true };
@@ -262,12 +284,12 @@ function previewCookie(req) {
   const [machine, expires, port, sig] = m[1].split(".");
   if (!machine || !expires || !port || !sig) return null;
   if (!bound(req, machine)) return null;
+  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   if (
     Number(expires) < Date.now() ||
     !same(sign(`cookie|${machine}|${expires}|${port}`), sig)
   )
     return null;
-  if (machine !== FLY_MACHINE_ID) return { replay: machine };
   return { port: Number(port) };
 }
 
@@ -292,9 +314,11 @@ async function backup() {
   const tar = spawn("tar", ["-C", ROOT, "-czf", "-", "."], {
     stdio: ["ignore", "pipe", "inherit"],
   });
+  tar.on("error", (err) => tar.stdout.destroy(err));
   let n = 0;
   let buffer = [];
   let held = 0;
+  let bytes = 0;
   const send = async (chunks) => {
     const body = Buffer.concat(chunks);
     const { url } = await backupCall("part", { id, partNumber: ++n });
@@ -309,6 +333,7 @@ async function backup() {
   };
   try {
     for await (let chunk of tar.stdout) {
+      bytes += chunk.length;
       // Parts are cut at exactly PART bytes; the store takes no more.
       while (held + chunk.length >= PART) {
         const take = chunk.subarray(0, PART - held);
@@ -324,15 +349,17 @@ async function backup() {
       }
     }
     if (held > 0 || n === 0) await send(buffer);
-    // An archive is whole only if tar said so.
+    // An archive is whole only if tar said so. A home in use changes
+    // under tar as it reads: it says 1 and hands over a whole archive
+    // anyway, so 1 with bytes in it is a backup, and nothing else is.
+    const whole = (code) =>
+      code === 0 || (code === 1 && bytes > 0)
+        ? Promise.resolve()
+        : Promise.reject(new Error(`tar exited ${code}`));
     await new Promise((resolve, reject) => {
       if (tar.exitCode !== null)
-        return tar.exitCode === 0
-          ? resolve()
-          : reject(new Error(`tar exited ${tar.exitCode}`));
-      tar.on("exit", (code) =>
-        code === 0 ? resolve() : reject(new Error(`tar exited ${code}`)),
-      );
+        return whole(tar.exitCode).then(resolve, reject);
+      tar.on("exit", (code) => whole(code).then(resolve, reject));
     });
     await backupCall("complete", { id, parts });
     return { id, parts: n };
@@ -367,6 +394,7 @@ const visible = (names) =>
 const run = (cmd, args) =>
   new Promise((resolve, reject) => {
     const c = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
+    c.on("error", reject);
     c.on("exit", (code) =>
       code === 0 ? resolve() : reject(new Error(`${cmd} exited ${code}`)),
     );
@@ -392,11 +420,12 @@ async function restore(url) {
     const tar = spawn("tar", ["-C", dir, "-xzf", "-", "--no-same-owner"], {
       stdio: ["pipe", "ignore", "inherit"],
     });
-    const done = new Promise((resolve, reject) =>
+    const done = new Promise((resolve, reject) => {
+      tar.on("error", reject);
       tar.on("exit", (code) =>
         code === 0 ? resolve() : reject(new Error(`tar exited ${code}`)),
-      ),
-    );
+      );
+    });
     await pipeline(Readable.fromWeb(res.body), tar.stdin);
     await done;
     // A link in an archive could point anywhere; none is put back.
@@ -444,6 +473,9 @@ function forward(req, res, port) {
       res.end(`Nothing answers on port ${port}: ${err.message}`);
     } else res.destroy();
   });
+  // A browser that drops its end takes the connection upstream with it,
+  // so nothing on the machine is left holding a request nobody wants.
+  res.on("close", () => out.destroy());
   req.pipe(out);
 }
 
@@ -608,14 +640,26 @@ async function pull(id, target, url, size, landing = { landed: false }) {
 // so pulls accepted together cannot together overrun it; on a real disk
 // the bytes written so far count twice until then, which errs safe.
 const landings = new Map();
+// The same landings by the id the app gave each, so an id owns the file
+// it is putting in place and no second call can take its name or its
+// hidden copy.
+const landingIds = new Map();
+// Why the disk cannot be emptied while something is arriving on it.
+const LANDING_NOW =
+  "A file is on its way onto the disk; reset once it is there.";
 const held = () =>
   [...landings.values()].reduce((n, l) => n + (l.landed ? 0 : l.size), 0);
 // The temp files of the landings under way, and no other file.
 const landingTmps = () =>
   new Set([...landings.values()].map((l) => l.tmp).filter(Boolean));
 function land(id, target, url, size) {
-  const landing = { size, landed: false, tmp: null };
+  const landing = { id, size, landed: false, tmp: null };
   landings.set(target, landing);
+  landingIds.set(id, landing);
+  // The id is the landing's until the app has heard how it went: a pull
+  // that took the id back while the last one was still being reported
+  // would have its record cleared, and its hidden copy deleted, by the
+  // word about the one before it.
   pull(id, target, url, size, landing)
     .then(
       async () => {
@@ -624,7 +668,10 @@ function land(id, target, url, size) {
       (err) => landed({ id, ok: false, error: err.message }),
     )
     .catch((err) => console.error(`landing ${id}: ${err.message}`))
-    .finally(() => landings.delete(target));
+    .finally(() => {
+      landings.delete(target);
+      landingIds.delete(id);
+    });
 }
 
 // Tells the app how a landing went, a few times if it must, and whether
@@ -833,6 +880,7 @@ async function handle(req, res) {
   // or stopped partway.
   if (url.pathname === "/fs/reset" && req.method === "POST") {
     const { backedUp } = await readJson(req);
+    if (landings.size || restoring) return json(409, { error: LANDING_NOW });
     if (!resetting)
       resetting = reset(backedUp === true)
         .then(() => resetEnded({ ok: true, at: Date.now() }))
@@ -972,7 +1020,15 @@ async function handle(req, res) {
       return json(400, { error: "an id, a url and a size" });
     if (!(await fs.stat(path.dirname(abs)).catch(() => null))?.isDirectory())
       return json(404, { error: "no such folder" });
-    if (landings.has(abs)) return json(202, { started: true });
+    // The id that started a landing is the only one that joins it: a
+    // second id for the same path, or the same id for a second path,
+    // would land one file with the other's bytes.
+    if (landings.has(abs))
+      return landings.get(abs).id === b.id
+        ? json(202, { started: true })
+        : json(409, { error: "something else is landing there" });
+    if (landingIds.has(b.id))
+      return json(409, { error: "that landing is under way elsewhere" });
     if (await fs.stat(abs).catch(() => null))
       return json(409, { error: "exists" });
     const { used, total } = await disk();
@@ -998,6 +1054,7 @@ const server = createServer((req, res) =>
 // keys, bytes out are the screen, and a text frame is a resize. The pty
 // is native code, built into the image; a machine without it says so.
 const shells = new WebSocketServer({ noServer: true });
+shells.on("error", (err) => console.error(`terminals: ${err.message}`));
 let pty = null;
 try {
   pty = (await import("node-pty")).default;
@@ -1019,7 +1076,9 @@ try {
 // alone for half an hour is closed. The local shell gets a small
 // environment of its own, not the daemon's. Nothing said to a shell that
 // has exited, or to a socket that has closed, can bring the daemon down.
+// A machine holds this many shells at once and no more.
 const sessions = new Map();
+const SESSIONS = 8;
 const quietly = (fn) => {
   try {
     fn();
@@ -1072,8 +1131,17 @@ function spawnShell() {
       });
 }
 function attach(ws, id) {
+  // A socket that fails is closed, never thrown: a bad frame is one
+  // browser's problem, not the machine's.
+  ws.on("error", (err) => console.error(`terminal: ${err.message}`));
+  ws.alive = true;
+  ws.on("pong", () => {
+    ws.alive = true;
+  });
   let session = sessions.get(id);
   if (!session) {
+    if (sessions.size >= SESSIONS)
+      return ws.close(1013, "This computer has all the shells it can hold.");
     let shell;
     try {
       shell = spawnShell();
@@ -1115,13 +1183,16 @@ function attach(ws, id) {
     }, 30 * 60_000);
   });
 }
-shells.on("connection", (ws, req) =>
-  attach(
-    ws,
-    new URL(req.url, "http://computer").searchParams.get("session") ||
-      "default",
-  ),
-);
+// A socket that has stopped answering is closed: the shell it held is
+// let go of at its own pace, and the machine reads as quiet again.
+setInterval(() => {
+  for (const ws of shells.clients)
+    quietly(() => {
+      if (ws.alive === false) return ws.terminate();
+      ws.alive = false;
+      ws.ping();
+    });
+}, 30_000).unref();
 
 server.on("upgrade", (req, socket, head) => {
   try {
@@ -1151,7 +1222,7 @@ function upgrade(req, socket, head) {
     if (!pty) return refuse(501, "No terminal on this machine");
     if (busy) return refuse(503, "Not right now");
     return shells.handleUpgrade(req, socket, head, (ws) =>
-      shells.emit("connection", ws, req),
+      attach(ws, term.what || "default"),
     );
   }
   // A previewed app's own sockets, live reload and the like.
@@ -1167,8 +1238,10 @@ function upgrade(req, socket, head) {
     socket.pipe(target).pipe(socket);
   });
   target.on("error", () => refuse(502, "Bad Gateway"));
-  // A browser that drops its end takes only the pair with it.
+  // Either end that goes takes the other with it.
+  target.on("close", () => socket.destroy());
   socket.on("error", () => target.destroy());
+  socket.on("close", () => target.destroy());
 }
 
 // The operating system on the volume, whole and entered, on every boot:
@@ -1190,8 +1263,7 @@ async function settle() {
     await run("rm", ["-rf", OLD]);
   }
   // The marker sits beside the operating system, out of the shell's own
-  // root, and a copy that was cut off is finished, never wiped: nothing a
-  // person put there is deleted by a boot.
+  // root, and nothing a person put there is deleted by a boot.
   const done = path.join(MOUNT, ".os-ready");
   if (!(await fs.stat(done).catch(() => null))) {
     console.log("copying the operating system onto the volume");
@@ -1203,8 +1275,15 @@ async function settle() {
         ["proc", "sys", "dev", "run", "tmp", "data", "computer"].includes(name)
       )
         continue;
-      if (await fs.stat(`${OS_ROOT}/${name}`).catch(() => null)) continue;
-      await run("cp", ["-a", `/${name}`, `${OS_ROOT}/${name}`]);
+      // Each entry is copied aside and moved into place, so a boot cut
+      // off mid-copy leaves nothing half-there and the next one finishes
+      // the job: what is in place is whole.
+      const there = `${OS_ROOT}/${name}`;
+      if (await fs.lstat(there).catch(() => null)) continue;
+      const copying = `${there}.copying`;
+      await run("rm", ["-rf", copying]);
+      await run("cp", ["-a", `/${name}`, copying]);
+      await fs.rename(copying, there);
     }
     for (const d of ["proc", "sys", "dev", "run", "tmp"])
       await fs.mkdir(path.join(OS_ROOT, d), { recursive: true });
@@ -1323,6 +1402,9 @@ async function reset(backedUp) {
       409,
       "There is no system on this computer to reset: it has none of its own",
     );
+  // The backup takes minutes, and a file can start landing in them: the
+  // home is not taken out from under one.
+  if (landings.size || restoring) throw new Refused(409, LANDING_NOW);
   busy = "Your computer's system is being reset; a minute.";
   try {
     for (const s of sessions.values()) quietly(() => s.shell.kill());
@@ -1358,6 +1440,16 @@ async function settleUntilDone(tries = Infinity) {
     }
   }
 }
+
+// The daemon's death is the machine's: every shell, server and job on it
+// goes with it. Nothing a client says, and nothing a spawned process
+// does, is worth that, so what escapes a handler is said and survived.
+process.on("uncaughtException", (err) =>
+  console.error(`uncaught: ${err?.stack ?? err}`),
+);
+process.on("unhandledRejection", (err) =>
+  console.error(`unhandled: ${err?.stack ?? err}`),
+);
 
 // A root that cannot be made is a machine that cannot serve: said now.
 if (!OS_ROOT) await fs.mkdir(ROOT, { recursive: true });

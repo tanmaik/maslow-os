@@ -1,3 +1,5 @@
+import { createHmac } from "node:crypto";
+
 import { deployment } from "./deployment.ts";
 import { parseSize } from "./prices.ts";
 
@@ -35,7 +37,7 @@ export type Machine = {
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, and the person's account in it, copied onto the
 // volume on first boot.
-export const IMAGE = "registry.fly.io/placeholder-computers:v12";
+export const IMAGE = "registry.fly.io/placeholder-computers:v14";
 // Every disk starts here; the operating system takes about a gigabyte of
 // it, and it doubles when it fills, to the cap.
 export const DISK_GB = 3;
@@ -55,6 +57,19 @@ export const volumeName = (computerId: string) =>
   `${config().namePrefix.replaceAll("-", "_")}c_${computerId.replaceAll("-", "").slice(0, 16)}`;
 export const machineName = (computerId: string) =>
   `${config().namePrefix}c-${computerId.slice(0, 8)}`;
+
+// The key one machine's links are signed with: the deployment's key
+// through that machine's name, which is its computer's alone. The
+// deployment's key never leaves the app, so a person with root on their
+// own machine holds a key that opens theirs and nobody else's.
+export function linkKeyOf(computerId: string): string | null {
+  const secret = process.env.LINK_SECRET ?? config().linkSecret;
+  return secret
+    ? createHmac("sha256", secret)
+        .update(machineName(computerId))
+        .digest("base64url")
+    : null;
+}
 
 async function call<T>(
   method: string,
@@ -95,28 +110,24 @@ export const fly = {
   // it runs. Fly's proxy fronts it: a request naming it wakes it, and it
   // is suspended again once nothing has asked for it for a while.
   async createMachine(
-    name: string,
+    computerId: string,
     volumeId: string,
     secret: string,
     size: string,
   ): Promise<Machine> {
     const { kind, cpus, memoryMb } = parseSize(size);
+    const linkKey = linkKeyOf(computerId);
+    if (!linkKey)
+      throw new Error("LINK_SECRET is not set; no machine can be made.");
     return call("POST", "/machines", {
-      name,
+      name: machineName(computerId),
       region: config().region,
       skip_launch: true,
       config: {
         image: IMAGE,
         env: {
           COMPUTER_SECRET: secret,
-          LINK_SECRET:
-            process.env.LINK_SECRET ??
-            config().linkSecret ??
-            (() => {
-              throw new Error(
-                "LINK_SECRET is not set; no machine can be made.",
-              );
-            })(),
+          LINK_KEY: linkKey,
           REPORT_URL: config().report,
           // The operating system lives here on the volume.
           OS_ROOT: "/data/os",

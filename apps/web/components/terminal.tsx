@@ -7,12 +7,13 @@ import { Terminal as Xterm } from "@xterm/xterm";
 import { useEffect, useRef, useState } from "react";
 
 // A shell on the person's disk: keys go to the machine over the socket,
-// the screen comes back. A socket that closes — the shell exited, the
-// system was reset, the link aged — is opened again on a fresh link: on
-// its own every few seconds for a couple of minutes, and on any key or
-// click after that. Nothing typed goes unanswered.
+// the screen comes back. The tab names its session and asks for a link to
+// it, which the app signs for that session alone. A socket that closes —
+// the shell exited, the system was reset, the link aged — is opened again
+// on a fresh link: on its own every few seconds for a couple of minutes,
+// and on any key or click after that. Nothing typed goes unanswered.
 const TRIES = 24;
-export function Terminal({ url }: { url: string }) {
+export function Terminal() {
   const box = useRef<HTMLDivElement>(null);
   const term = useRef<Xterm>(null);
   const fit = useRef<FitAddon>(null);
@@ -66,15 +67,14 @@ export function Terminal({ url }: { url: string }) {
         ws.send(JSON.stringify({ resize: [t.cols, t.rows] }));
     };
     (async () => {
-      let link = url;
-      if (again > 0) {
-        const res = await fetch("/computer/terminal").catch(() => null);
-        if (gone) return;
-        if (!res?.ok) return closed();
-        link = ((await res.json()) as { url: string }).url;
-        if (gone) return;
-      }
-      ws = new WebSocket(`${link}?session=${session}`);
+      const res = await fetch(`/computer/terminal?session=${session}`).catch(
+        () => null,
+      );
+      if (gone) return;
+      if (!res?.ok) return closed();
+      const { url } = (await res.json()) as { url: string };
+      if (gone) return;
+      ws = new WebSocket(url);
       ws.binaryType = "arraybuffer";
       ws.onopen = () => {
         phase.current = "open";
@@ -117,13 +117,9 @@ export function Terminal({ url }: { url: string }) {
         ws.close();
       }
     };
-  }, [url, again]);
+  }, [again]);
   return (
-    <div
-      className="relative h-full bg-[#0a0a0a] p-2"
-      data-terminal={state}
-      data-terminal-url={url}
-    >
+    <div className="relative h-full bg-[#0a0a0a] p-2" data-terminal={state}>
       <div ref={box} className="h-full" />
       {state !== "open" && (
         <button
