@@ -7,7 +7,7 @@ import { z } from "zod";
 // What an agent is told when it connects.
 const INSTRUCTIONS = `This is one person's brain: a graph of what they know as records, the links between them, and a log of every change. It is a mind, not a mirror: write what you concluded, with a confidence and an edge back to a stub of what it rests on (the app, its own id, and enough to cite it), never a copy of a mailbox or a calendar.
 
-Kinds and verbs are the org's own vocabulary. Read the catalog before writing; reuse a name before defining one; a record of an undefined kind is refused. Define a kind or verb in the same write call, with a one-sentence description. A kind may declare fields; values then live in props and must fit.
+Kinds and verbs are this person's own vocabulary, and it starts empty. Read the catalog before writing; reuse a name before defining one; a record of an undefined kind is refused. Define a kind or verb in the same write call, with a one-sentence description. A kind may declare fields; values then live in props and must fit. The catalog also lists kinds colleagues have shared into this brain, each with its owner and how it reached here; those are read with the owner named, and never written to.
 
 Writes are idempotent on a record's source and sourceRef: write the same thing twice and nothing changes. Edit from the version you read. Every record carries where it came from, so cite it.`;
 
@@ -117,7 +117,7 @@ export function brainServer(s: Session): McpServer {
     "catalog",
     {
       description:
-        "The org's vocabulary: every kind with the fields it declares, and every verb an edge can carry. Read before writing; reuse before defining.",
+        "The person's vocabulary: every kind they defined with the fields it declares, and every verb an edge can carry, plus kinds colleagues shared into this brain (via says whether the whole kind or some records, to everyone or to them; ownerId says whose). Read before writing; reuse before defining; write only to your own kinds.",
       annotations: { readOnlyHint: true },
     },
     door((q) => brain.catalog(q)),
@@ -127,13 +127,18 @@ export function brainServer(s: Session): McpServer {
     "read",
     {
       description:
-        "Records, newest first by when they happened. Filter by kind, layer, source, time, a person record they link to, and full-text query (words, quoted phrases, -exclusions). where and orderBy work on a kind's declared fields and need a kind. Pages by cursor.",
+        "Records, newest first by when they happened. Filter by kind, layer, source, time, a person record they link to, and full-text query (words, quoted phrases, -exclusions). A kind is one person's: the caller's own, or with owner, one shared into this brain. where and orderBy work on a kind's declared fields and need a kind. Pages by cursor.",
       inputSchema: {
         scope: z
           .enum(["mine", "shared", "all"])
           .optional()
-          .describe("the person's own records, what others shared, or both"),
+          .describe(
+            "with no kind: the person's own records, what others shared, or both",
+          ),
         kind: z.string().optional(),
+        owner: id
+          .optional()
+          .describe("with kind: the member whose kind it is, from the catalog"),
         layer: z.enum(["source", "derived"]).optional(),
         source: z.string().optional(),
         person: id.optional().describe("a person record's id"),

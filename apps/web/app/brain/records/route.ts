@@ -35,8 +35,10 @@ export async function POST(request: Request) {
   try {
     const id = await asPerson(p, async (db) => {
       if (kind === NOTE.name) await defineKind(db, author, NOTE);
-      const declared = (await catalog(db)).kinds.find((k) => k.name === kind);
-      if (!declared) throw new NotFound(`no kind "${kind}" in this brain`);
+      const declared = (await catalog(db)).kinds.find(
+        (k) => k.name === kind && !k.via,
+      );
+      if (!declared) throw new NotFound(`no kind "${kind}" in your vocabulary`);
       const written = await write(db, author, {
         records: [
           {

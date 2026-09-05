@@ -17,23 +17,32 @@ export type Subject =
   | { kind: "group"; id: string }
   | { kind: "member"; id: string };
 
-// One share: a subject may do this much with one record.
+// What a grant is on: one record, or one kind and so every record of it.
+export type Target = { record: string } | { kind: string };
+
+// One share: a subject may do this much with one record or one kind.
 export type Grant = {
   id: string;
-  recordId: string;
+  on: Target;
   subject: Subject;
   level: Access;
   author: Author;
   createdAt: Date;
 };
 
-// One verb an edge can carry.
+// How a kind that is not the reader's own reaches them: through a grant on
+// the whole kind or on some of its records, to everyone in the org or to
+// them in particular.
+export type Via = { whole: boolean; everyone: boolean };
+
+// One verb an edge can carry, in the vocabulary of the member who owns it.
 export type Verb = {
   id: string;
   name: string;
   description: string;
   author: Author;
   createdAt: Date;
+  ownerId: string;
 };
 
 export type PropertyType =
@@ -50,10 +59,12 @@ export type Property = {
   options: string[] | null;
   author: Author;
   createdAt: Date;
+  ownerId: string;
 };
 
-// One kind a record can be, with the fields it declares.
-export type Kind = Verb & { properties: Property[] };
+// One kind a record can be, with the fields it declares. Via is set when
+// the kind is someone else's, shared into this brain.
+export type Kind = Verb & { properties: Property[]; via: Via | null };
 
 // One thing the brain knows, with where it came from.
 export type BrainRecord = {

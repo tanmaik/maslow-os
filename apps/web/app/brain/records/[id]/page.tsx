@@ -54,8 +54,9 @@ import {
 import { BrainGraph } from "../../graph/lazy";
 import { Split } from "../../graph/split";
 import { KindIcon, KindMark } from "../../kind-icon";
+import { peopleOf } from "../../people";
+import { Sharing } from "../../sharing";
 import { TypeBadge } from "../../type-badge";
-import { Sharing } from "./sharing";
 
 // One record as a page to read: its body, with everything about it beside
 // the graph around it: fields, origin, links read as sentences, history,
@@ -102,19 +103,15 @@ export default async function Page({
       edges,
       others: new Map(others.map((r) => [r.id, r])),
       winner,
-      kind: vocabulary.kinds.find((k) => k.name === record.kind),
+      kind: vocabulary.kinds.find(
+        (k) => k.name === record.kind && k.ownerId === record.ownerId,
+      ),
       verbs: vocabulary.verbs,
       events: await history(db, { of: id }),
       near: await graph(db, [id]),
-      grants: await grantsOf(db, id),
+      grants: await grantsOf(db, { record: id }),
       all,
-      people: new Map(
-        (
-          await db.query<{ id: string; name: string }>(
-            "select id, name from users",
-          )
-        ).rows.map((u) => [u.id, u.name]),
-      ),
+      people: await peopleOf(db),
     };
   });
   if (!found) notFound();
@@ -222,7 +219,7 @@ export default async function Page({
       </Table>
 
       <Sharing
-        action={`${recordHref(r.id)}/share`}
+        on={{ record: r.id }}
         owner={isOwner}
         ownerName={people.get(r.ownerId) ?? "someone no longer here"}
         grants={grants}
@@ -304,7 +301,11 @@ export default async function Page({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-2xl font-semibold">{r.title || "(untitled)"}</h1>
-          <KindMark kind={r.kind} className="text-muted-foreground text-sm" />
+          <KindMark
+            kind={r.kind}
+            owner={r.ownerId === p.userId ? undefined : r.ownerId}
+            className="text-muted-foreground text-sm"
+          />
         </div>
         {isOwner && (
           <form action={action} method="post">
@@ -430,7 +431,7 @@ function Links({
   );
 }
 
-// A new link from or to this record, on one of the org's verbs.
+// A new link from or to this record, on one of the person's own verbs.
 function LinkForm({
   record,
   verbs,

@@ -39,17 +39,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { principal } from "@/lib/session";
 
 import { FieldInputs } from "./fields";
-import { cell, recordHref } from "./format";
+import { cell, recordHref, sharedHow } from "./format";
 import { BrainGraph } from "./graph/lazy";
 import { Split } from "./graph/split";
 import { KindIcon, KindMark } from "./kind-icon";
+import { peopleOf } from "./people";
 import { TypeBadge } from "./type-badge";
 
-// The query the table shows: a kind or all, a search, one value per enum
-// field, a sort column and direction, and where the page starts.
+// The query the table shows: a kind or all, whose when the kind is shared
+// into this brain, a search, one value per enum field, a sort column and
+// direction, and where the page starts.
 type Params = {
   scope?: "mine" | "shared" | "all";
   kind?: string;
+  from?: string;
   q?: string;
   sort?: string;
   dir?: "asc" | "desc";
@@ -77,8 +80,16 @@ export default async function Page({
       Array.isArray(v) ? v[0] : v,
     ]),
   ) as Params;
-  const { kinds } = await asPerson(p, catalog);
-  const kind = kinds.find((k) => k.name === params.kind);
+  const { kinds, people } = await asPerson(p, async (db) => ({
+    ...(await catalog(db)),
+    people: await peopleOf(db),
+  }));
+  const mine = kinds.filter((k) => !k.via);
+  const kind = kinds.find(
+    (k) =>
+      k.name === params.kind &&
+      (params.from ? k.ownerId === params.from : !k.via),
+  );
   if (params.kind && !kind) redirect("/brain");
   const properties = kind?.properties ?? [];
   const enums = properties.filter((f) => f.type === "enum");
@@ -112,6 +123,7 @@ export default async function Page({
       page: await read(db, {
         scope,
         kind: kind?.name,
+        owner: kind?.via ? kind.ownerId : undefined,
         query: params.q || undefined,
         where,
         orderBy: sortField
@@ -155,20 +167,25 @@ export default async function Page({
         </h1>
         <p className="text-muted-foreground text-sm">
           {kind?.description ?? "Everything this brain knows, newest first."}
+          {kind?.via &&
+            ` ${people.get(kind.ownerId) ?? "Someone no longer here"}'s, ${sharedHow(kind.via)}.`}
         </p>
       </div>
       <form method="get" className="flex flex-wrap items-center gap-2">
         {kind && <input type="hidden" name="kind" value={kind.name} />}
-        <Select name="scope" defaultValue={scope}>
-          <SelectTrigger aria-label="Whose">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="mine">Mine</SelectItem>
-            <SelectItem value="shared">Shared with me</SelectItem>
-            <SelectItem value="all">Everything I can see</SelectItem>
-          </SelectContent>
-        </Select>
+        {kind?.via && <input type="hidden" name="from" value={kind.ownerId} />}
+        {!kind && (
+          <Select name="scope" defaultValue={scope}>
+            <SelectTrigger aria-label="Whose">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="mine">Mine</SelectItem>
+              <SelectItem value="shared">Shared with me</SelectItem>
+              <SelectItem value="all">Everything I can see</SelectItem>
+            </SelectContent>
+          </Select>
+        )}
         <div className="relative w-full sm:w-64">
           <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
@@ -178,14 +195,14 @@ export default async function Page({
             className="pl-8"
           />
         </div>
-        {!kind && kinds.length > 0 && (
+        {!kind && mine.length > 0 && (
           <Select name="kind" defaultValue="">
             <SelectTrigger aria-label="Kind">
               <SelectValue placeholder="Any kind" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="">Any kind</SelectItem>
-              {kinds.map((k) => (
+              {mine.map((k) => (
                 <SelectItem key={k.id} value={k.name}>
                   <KindIcon kind={k.name} />
                   {k.name}
@@ -230,7 +247,9 @@ export default async function Page({
           {page.records.length === 1 ? "" : "s"}
         </span>
         <span className="flex-1" />
-        <NewRecord kind={kind ?? kinds.find((k) => k.name === "note")} />
+        {!kind?.via && (
+          <NewRecord kind={kind ?? mine.find((k) => k.name === "note")} />
+        )}
       </form>
 
       {page.records.length === 0 && kinds.length === 0 ? (
@@ -265,7 +284,7 @@ export default async function Page({
           </TableHeader>
           <TableBody>
             {page.records.map((r) => (
-              <Row key={r.id} r={r} kind={kind} />
+              <Row key={r.id} r={r} kind={kind} me={p.userId} />
             ))}
             {page.records.length === 0 && (
               <TableRow>
@@ -296,8 +315,9 @@ export default async function Page({
   return <Split graph={<BrainGraph graph={whole} />}>{view}</Split>;
 }
 
-// A record as a row. The whole row opens it.
-function Row({ r, kind }: { r: BrainRecord; kind?: Kind }) {
+// A record as a row. The whole row opens it; its kind opens the kind's
+// table, which is its owner's.
+function Row({ r, kind, me }: { r: BrainRecord; kind?: Kind; me: string }) {
   return (
     <TableRow
       className={`relative ${r.deletedAt ? "text-muted-foreground" : ""}`}
@@ -328,7 +348,11 @@ function Row({ r, kind }: { r: BrainRecord; kind?: Kind }) {
         ))
       ) : (
         <TableCell>
-          <KindMark kind={r.kind} className="relative z-10" />
+          <KindMark
+            kind={r.kind}
+            owner={r.ownerId === me ? undefined : r.ownerId}
+            className="relative z-10"
+          />
         </TableCell>
       )}
       <TableCell className="text-muted-foreground hidden whitespace-nowrap sm:table-cell">

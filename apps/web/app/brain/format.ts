@@ -1,4 +1,4 @@
-import type { Property } from "@placeholder/brain";
+import type { Kind, Property, Via } from "@placeholder/brain";
 import { format } from "date-fns";
 
 // How the brain's values read on screen.
@@ -28,9 +28,50 @@ export function cell(v: unknown, p?: Property): string {
 
 export const recordHref = (id: string) => `/brain/records/${id}`;
 
-// The table view of one kind, or of everything.
-export const kindHref = (kind?: string) =>
-  kind ? `/brain?kind=${encodeURIComponent(kind)}` : "/brain";
+// The table view of one kind, or of everything. A kind shared into this
+// brain is named with its owner.
+export const kindHref = (kind?: string, owner?: string) => {
+  if (!kind) return "/brain";
+  const q = new URLSearchParams({ kind });
+  if (owner) q.set("from", owner);
+  return `/brain?${q}`;
+};
+
+// How a shared kind reached this brain, as a person reads it.
+export const sharedHow = (via: Via) =>
+  `${via.whole ? "every record" : "some records"}, ${
+    via.everyone ? "everyone in the org" : "shared with you"
+  }`;
+
+type SharedGroup = {
+  owner: string;
+  ownerId: string;
+  how: string;
+  kinds: Kind[];
+};
+
+// The kinds shared into this brain, grouped by who owns them and how they
+// were opened, in the catalog's order.
+export function sharedGroups(
+  kinds: Kind[],
+  people: Map<string, string>,
+): SharedGroup[] {
+  const groups = new Map<string, SharedGroup>();
+  for (const k of kinds) {
+    if (!k.via) continue;
+    const how = sharedHow(k.via);
+    const key = `${k.ownerId}:${how}`;
+    const group = groups.get(key) ?? {
+      owner: people.get(k.ownerId) ?? "someone no longer here",
+      ownerId: k.ownerId,
+      how,
+      kinds: [],
+    };
+    group.kinds.push(k);
+    groups.set(key, group);
+  }
+  return [...groups.values()];
+}
 
 // A kind's colour, the same everywhere it is drawn, from a hash of its name
 // so adding a kind never recolours the others.

@@ -52,7 +52,8 @@ export const toRecord = (r: RecordRow): BrainRecord => ({
   access: r.access,
 });
 
-export const verbColumns = "id, name, description, author, created_at";
+export const verbColumns =
+  "id, name, description, author, created_at, person_id";
 
 export type VerbRow = {
   id: string;
@@ -60,6 +61,7 @@ export type VerbRow = {
   description: string;
   author: string;
   created_at: Date;
+  person_id: string;
 };
 
 export const toVerb = (v: VerbRow): Verb => ({
@@ -68,10 +70,12 @@ export const toVerb = (v: VerbRow): Verb => ({
   description: v.description,
   author: v.author,
   createdAt: v.created_at,
+  ownerId: v.person_id,
 });
 
 export const propertyColumns =
-  "id, kind, name, type, description, required, options, author, created_at";
+  "id, kind, name, type, description, required, options, author, " +
+  "created_at, person_id";
 
 export type PropertyRow = {
   id: string;
@@ -83,6 +87,7 @@ export type PropertyRow = {
   options: string[] | null;
   author: string;
   created_at: Date;
+  person_id: string;
 };
 
 export const toProperty = (p: PropertyRow): Property => ({
@@ -95,6 +100,7 @@ export const toProperty = (p: PropertyRow): Property => ({
   options: p.options,
   author: p.author,
   createdAt: p.created_at,
+  ownerId: p.person_id,
 });
 
 export const edgeColumns =

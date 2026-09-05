@@ -1,5 +1,6 @@
-import { catalog } from "@placeholder/brain";
+import { catalog, grantsOf, type Kind } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
+import { groupsOf } from "@placeholder/db/groups";
 import { redirect } from "next/navigation";
 
 import { FormDialog } from "@/components/form-dialog";
@@ -27,8 +28,10 @@ import { principal } from "@/lib/session";
 
 import { LocalTime } from "@/components/local-time";
 
-import { authorText } from "../format";
+import { authorText, sharedGroups } from "../format";
 import { KindIcon, KindMark } from "../kind-icon";
+import { peopleOf } from "../people";
+import { Sharing } from "../sharing";
 import { TypeBadge } from "../type-badge";
 
 const TYPES = [
@@ -41,21 +44,30 @@ const TYPES = [
   "list",
 ] as const;
 
-// The org's vocabulary: every kind with the fields it declares, and every
-// verb, each with who defined it. A person adds to it here.
+// This person's vocabulary: every kind they defined with the fields it
+// declares, and every verb, each with who defined it and who it is shared
+// with; then the kinds colleagues have shared into this brain, grouped by
+// who owns them and how they were opened. A person adds to their own here.
 export default async function Page() {
   const p = await principal();
   if (!p) redirect("/");
-  const { kinds, verbs, people } = await asPerson(p, async (db) => ({
-    ...(await catalog(db)),
-    people: new Map(
-      (
-        await db.query<{ id: string; name: string }>(
-          "select id, name from users",
-        )
-      ).rows.map((u) => [u.id, u.name]),
-    ),
-  }));
+  const { kinds, verbs, people, grants } = await asPerson(p, async (db) => {
+    const vocabulary = await catalog(db);
+    const grants = new Map(
+      await Promise.all(
+        vocabulary.kinds
+          .filter((k) => !k.via)
+          .map(
+            async (k) => [k.id, await grantsOf(db, { kind: k.id })] as const,
+          ),
+      ),
+    );
+    return { ...vocabulary, people: await peopleOf(db), grants };
+  });
+  const groups = await groupsOf(p);
+  const mine = kinds.filter((k) => !k.via);
+  const shared = sharedGroups(kinds, people);
+  const members = [...people].map(([id, name]) => ({ id, name }));
   const who = (author: string) => authorText(author, people);
 
   return (
@@ -63,8 +75,9 @@ export default async function Page() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Vocabulary</h1>
         <p className="text-muted-foreground text-sm">
-          The kinds of thing this brain holds and the ways they relate. Anyone
-          in the org can add to it.
+          The kinds of thing this brain holds and the ways they relate. They are
+          yours: a colleague sees a kind, and every record of it, once you share
+          it.
         </p>
       </div>
       <section className="space-y-3">
@@ -72,7 +85,7 @@ export default async function Page() {
           <h2 className="font-medium">Kinds</h2>
           <div className="flex gap-2">
             <Define what="kind" />
-            {kinds.length > 0 && <AddField kinds={kinds.map((k) => k.name)} />}
+            {mine.length > 0 && <AddField kinds={mine.map((k) => k.name)} />}
           </div>
         </div>
         <Table>
@@ -85,10 +98,11 @@ export default async function Page() {
               <TableHead>Fields</TableHead>
               <TableHead className="hidden lg:table-cell">Defined by</TableHead>
               <TableHead className="hidden lg:table-cell">When</TableHead>
+              <TableHead>Sharing</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {kinds.map((k) => (
+            {mine.map((k) => (
               <TableRow key={k.id}>
                 <TableCell className="max-w-48 align-top font-medium whitespace-normal">
                   <KindMark kind={k.name} />
@@ -100,31 +114,7 @@ export default async function Page() {
                   {k.description}
                 </TableCell>
                 <TableCell className="align-top whitespace-normal">
-                  {k.properties.length === 0 ? (
-                    <span className="text-muted-foreground">any</span>
-                  ) : (
-                    <dl className="space-y-2">
-                      {k.properties.map((f) => (
-                        <div key={f.id} className="space-y-1">
-                          <dt className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium">{f.name}</span>
-                            <TypeBadge type={f.type} />
-                            {f.required && (
-                              <Badge variant="secondary">required</Badge>
-                            )}
-                            {f.options?.map((o) => (
-                              <Badge key={o} variant="outline">
-                                {o}
-                              </Badge>
-                            ))}
-                          </dt>
-                          <dd className="text-muted-foreground">
-                            {f.description}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  )}
+                  <Fields kind={k} />
                 </TableCell>
                 <TableCell className="text-muted-foreground hidden align-top lg:table-cell">
                   {who(k.author)}
@@ -132,11 +122,21 @@ export default async function Page() {
                 <TableCell className="text-muted-foreground hidden align-top whitespace-nowrap lg:table-cell">
                   <LocalTime at={k.createdAt} />
                 </TableCell>
+                <TableCell className="min-w-48 align-top whitespace-normal">
+                  <Sharing
+                    on={{ kind: k.id }}
+                    owner
+                    ownerName="you"
+                    grants={grants.get(k.id) ?? []}
+                    groups={groups}
+                    members={members}
+                  />
+                </TableCell>
               </TableRow>
             ))}
-            {kinds.length === 0 && (
+            {mine.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
+                <TableCell colSpan={6} className="text-muted-foreground">
                   No kinds yet. Whoever writes the first record of a kind
                   defines it.
                 </TableCell>
@@ -145,6 +145,51 @@ export default async function Page() {
           </TableBody>
         </Table>
       </section>
+
+      {shared.map((g) => (
+        <section key={`${g.ownerId}:${g.how}`} className="space-y-3">
+          <h2 className="font-medium">
+            {g.owner}
+            {"'s kinds, "}
+            {g.how}
+          </h2>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Kind</TableHead>
+                <TableHead className="hidden sm:table-cell">
+                  Description
+                </TableHead>
+                <TableHead>Fields</TableHead>
+                <TableHead className="hidden lg:table-cell">
+                  Defined by
+                </TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {g.kinds.map((k) => (
+                <TableRow key={k.id}>
+                  <TableCell className="max-w-48 align-top font-medium whitespace-normal">
+                    <KindMark kind={k.name} owner={k.ownerId} />
+                    <p className="text-muted-foreground mt-1 font-normal sm:hidden">
+                      {k.description}
+                    </p>
+                  </TableCell>
+                  <TableCell className="hidden max-w-md align-top whitespace-normal sm:table-cell">
+                    {k.description}
+                  </TableCell>
+                  <TableCell className="align-top whitespace-normal">
+                    <Fields kind={k} />
+                  </TableCell>
+                  <TableCell className="text-muted-foreground hidden align-top lg:table-cell">
+                    {who(k.author)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </section>
+      ))}
 
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -186,6 +231,32 @@ export default async function Page() {
         </Table>
       </section>
     </>
+  );
+}
+
+// The fields a kind declares, each with its type and what it means.
+function Fields({ kind }: { kind: Kind }) {
+  if (kind.properties.length === 0) {
+    return <span className="text-muted-foreground">any</span>;
+  }
+  return (
+    <dl className="space-y-2">
+      {kind.properties.map((f) => (
+        <div key={f.id} className="space-y-1">
+          <dt className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium">{f.name}</span>
+            <TypeBadge type={f.type} />
+            {f.required && <Badge variant="secondary">required</Badge>}
+            {f.options?.map((o) => (
+              <Badge key={o} variant="outline">
+                {o}
+              </Badge>
+            ))}
+          </dt>
+          <dd className="text-muted-foreground">{f.description}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }
 

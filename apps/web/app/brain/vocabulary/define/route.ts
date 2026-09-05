@@ -12,8 +12,8 @@ import { NextResponse } from "next/server";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-// Adds a kind, a field on a kind, or a verb to the org's vocabulary, as the
-// signed-in person.
+// Adds a kind, a field on a kind, or a verb to the signed-in person's
+// vocabulary.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });

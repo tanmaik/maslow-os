@@ -1,4 +1,4 @@
-// The brain: what an org knows, behind one read door and one write door.
+// The brain: what a person knows, behind one read door and one write door.
 export { catalog, defineKind, defineVerb } from "./catalog.ts";
 export { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
 export { defineProperty } from "./properties.ts";

@@ -1,4 +1,4 @@
-import type { Grant, Subject } from "@placeholder/brain";
+import type { Grant, Subject, Target } from "@placeholder/brain";
 import type { Group } from "@placeholder/db/groups";
 
 import { FormDialog } from "@/components/form-dialog";
@@ -18,23 +18,29 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 const value = (s: Subject) =>
   s.kind === "everyone" ? "everyone" : `${s.kind}:${s.id}`;
 
-// Who a record is shared with, and, for its owner, a way to share it with a
-// person, a group or everyone at a level.
+// Who a record or a kind is shared with, and, for its owner, a way to share
+// it with a person, a group or everyone at a level. Sharing a kind shares
+// every record of it.
 export function Sharing({
-  action,
+  on,
   owner,
   ownerName,
   grants,
   groups,
   members,
 }: {
-  action: string;
+  on: Target;
   owner: boolean;
   ownerName: string;
   grants: Grant[];
   groups: Group[];
   members: { id: string; name: string }[];
 }) {
+  const what = "kind" in on ? "kind" : "record";
+  const target =
+    "kind" in on
+      ? { name: "kind", value: on.kind }
+      : { name: "record", value: on.record };
   const name = (s: Subject) =>
     s.kind === "everyone"
       ? "Everyone"
@@ -61,14 +67,19 @@ export function Sharing({
       {owner && (
         <FormDialog
           trigger="Share"
-          title="Share this record"
-          description="Who may see it, change it, or do everything with it. The most any path gives someone is what they can do."
+          title={`Share this ${what}`}
+          description={
+            what === "kind"
+              ? "Who may see every record of this kind, change them, or do everything with them. The most any path gives someone is what they can do."
+              : "Who may see it, change it, or do everything with it. The most any path gives someone is what they can do."
+          }
         >
-          <form action={action} method="post" className="grid gap-3">
+          <form action="/brain/share" method="post" className="grid gap-3">
+            <input type="hidden" name={target.name} value={target.value} />
             <div className="space-y-1">
-              <Label htmlFor="subject">With</Label>
+              <Label htmlFor={`${what}-subject`}>With</Label>
               <Select name="subject" defaultValue="everyone">
-                <SelectTrigger id="subject" className="w-full">
+                <SelectTrigger id={`${what}-subject`} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -89,9 +100,9 @@ export function Sharing({
               </Select>
             </div>
             <div className="space-y-1">
-              <Label htmlFor="level">May</Label>
+              <Label htmlFor={`${what}-level`}>May</Label>
               <Select name="level" defaultValue="view">
-                <SelectTrigger id="level" className="w-full">
+                <SelectTrigger id={`${what}-level`} className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -119,8 +130,13 @@ export function Sharing({
                       <Badge variant="outline">{g.level}</Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <form action={action} method="post">
+                      <form action="/brain/share" method="post">
                         <input type="hidden" name="intent" value="unshare" />
+                        <input
+                          type="hidden"
+                          name={target.name}
+                          value={target.value}
+                        />
                         <input
                           type="hidden"
                           name="subject"

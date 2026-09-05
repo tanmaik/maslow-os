@@ -11,18 +11,23 @@ export type PropertyDefinition = {
 };
 
 // The fields a kind declares, by name. Empty when the kind accepts anything.
+// The kind is the reader's own unless owner names whose it is.
 export async function propertiesOf(
   q: Query,
   kind: string,
+  owner?: string,
 ): Promise<Map<string, Property>> {
   const { rows } = await q.query<PropertyRow>(
-    `select ${propertyColumns} from kind_properties where kind = $1 order by name`,
-    [kind],
+    `select ${propertyColumns} from kind_properties
+     where kind = $1 and person_id = coalesce($2, current_member())
+     order by name`,
+    [kind, owner ?? null],
   );
   return new Map(rows.map((r) => [r.name, toProperty(r)]));
 }
 
-// Adds a field to a kind's form. Defining one that exists returns it unchanged.
+// Adds a field to one of this person's kinds. Defining one that exists
+// returns it unchanged.
 export async function defineProperty(
   q: Query,
   author: Author,
@@ -55,7 +60,7 @@ export async function defineProperty(
       `insert into kind_properties
          (kind, name, type, description, required, options, author)
        values ($1, $2, $3, $4, $5, $6, $7)
-       on conflict (org_id, kind, name) do nothing`,
+       on conflict (org_id, person_id, kind, name) do nothing`,
       [
         kind,
         def.name,
@@ -68,12 +73,13 @@ export async function defineProperty(
     );
   } catch (err) {
     if ((err as { code?: string }).code === "23503") {
-      throw new NotFound(`"${kind}" is not a kind in this brain's vocabulary`);
+      throw new NotFound(`"${kind}" is not a kind in your vocabulary`);
     }
     throw err;
   }
   const { rows } = await q.query<PropertyRow>(
-    `select ${propertyColumns} from kind_properties where kind = $1 and name = $2`,
+    `select ${propertyColumns} from kind_properties
+     where kind = $1 and name = $2 and person_id = current_member()`,
     [kind, def.name],
   );
   return toProperty(rows[0]!);

@@ -14,9 +14,10 @@ ways out, both under "past members" in settings:
   is theirs again the moment they sign in. Inviting the same email again does
   the same on sign-in, so there is no way to fork one person into two
   memberships.
-- **Purge** deletes the membership and every record and edge under it. That
-  may include things the org depended on; the owner is told so and chooses.
-  Events stay, as the log of what happened.
+- **Purge** deletes the membership and every record, edge, kind, field and
+  verb under it, with the shares on them. That may include things the org
+  depended on; the owner is told so and chooses. Events stay, as the log of
+  what happened.
 
 ## One membership per person per org, ever
 

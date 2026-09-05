@@ -81,14 +81,16 @@ async function resolve(
   return rows[0].id;
 }
 
-// The names this brain has defined, read once per call. A name it has not is
-// refused before anything is written.
+// The names this person has defined, read once per call. A name they have
+// not is refused before anything is written.
 async function vocabulary(q: Query) {
   const names = async (table: "record_kinds" | "edge_verbs") =>
     new Set(
-      (await q.query<{ name: string }>(`select name from ${table}`)).rows.map(
-        (r) => r.name,
-      ),
+      (
+        await q.query<{ name: string }>(
+          `select name from ${table} where person_id = current_member()`,
+        )
+      ).rows.map((r) => r.name),
     );
   const [kinds, verbs] = [
     await names("record_kinds"),
@@ -98,7 +100,7 @@ async function vocabulary(q: Query) {
   const defined = (what: "kind" | "verb", name: string) => {
     if (!(what === "kind" ? kinds : verbs).has(name)) {
       throw new Invalid(
-        `no ${what} "${name}" in this brain; define it, with a description, first`,
+        `no ${what} "${name}" in your vocabulary; define it, with a description, first`,
       );
     }
   };
@@ -127,9 +129,10 @@ export type Written = {
 };
 
 // Writes records and edges as one author, defining any kinds and verbs the
-// brain does not have yet in the same call. Idempotent: the same input twice
-// leaves the brain as it was. Each record must fit its kind's form. Edges may
-// name records written in the same call.
+// person does not have yet in the same call. Idempotent: the same input twice
+// leaves the brain as it was. A record is of the writer's own kind and must
+// fit its form; an edge carries the writer's own verb. Edges may name records
+// written in the same call.
 export async function write(
   q: Query,
   author: Author,
@@ -239,7 +242,7 @@ export type Patch = {
 
 // Changes a record from the version the caller read. A stale version is a
 // Conflict; the caller reads again and decides. New props replace the old and
-// must fit the kind's form.
+// must fit the form of the kind, which is the record owner's.
 export async function edit(
   q: Query,
   author: Author,
@@ -252,16 +255,18 @@ export async function edit(
     const current = await q.query<{
       kind: string;
       props: Record<string, unknown>;
-    }>("select kind, props from records where id = $1 and deleted_at is null", [
-      id,
-    ]);
+      person_id: string;
+    }>(
+      "select kind, props, person_id from records where id = $1 and deleted_at is null",
+      [id],
+    );
     if (!current.rows[0])
       throw new NotFound(`record ${id} is not in this brain`);
     const kind = patch.kind ?? current.rows[0].kind;
     check(
       kind,
       patch.props ?? current.rows[0].props,
-      await propertiesOf(q, kind),
+      await propertiesOf(q, kind, current.rows[0].person_id),
     );
   }
   const { rows } = await q.query<RecordRow>(

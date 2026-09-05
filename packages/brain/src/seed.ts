@@ -5,7 +5,7 @@ import type { EdgeInput, RecordInput } from "./types.ts";
 import { write } from "./write.ts";
 
 // The vocabulary the seeded records use. A real brain starts with none and
-// its vocabulary is whatever gets defined in it.
+// a person's vocabulary is whatever they define in it.
 export const vocabulary: {
   kinds: KindDefinition[];
   verbs: { name: string; description: string }[];
@@ -376,8 +376,9 @@ export const seeds: Record<
   },
 };
 
-// Gives each seeded org the starter vocabulary, and its first person the
-// records. Idempotent, like the doors it goes through.
+// Gives each seeded org's first person the starter vocabulary and the
+// records; a colleague starts with none. Idempotent, like the doors it goes
+// through.
 export async function seedBrain(
   url: string,
   orgs: readonly {

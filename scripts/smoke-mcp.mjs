@@ -279,6 +279,15 @@ export async function smokeMcp(stack, signIn) {
       mine.value.records.every((r) => r.ownerId === orgs[0].users[0].id),
     `${mine.value?.records.length ?? mine.text} records, all Wile's`,
   );
+  const vocabulary = await call(grant.access_token, "catalog", {});
+  check(
+    "the catalog is Wile's own vocabulary",
+    vocabulary.value?.kinds.length > 0 &&
+      vocabulary.value.kinds.every(
+        (k) => k.ownerId === orgs[0].users[0].id && k.via === null,
+      ),
+    `${vocabulary.value?.kinds.length ?? vocabulary.text} kinds, all Wile's`,
+  );
   const badSince = await call(grant.access_token, "read", {
     since: "yesterday",
   });
@@ -340,6 +349,33 @@ export async function smokeMcp(stack, signIn) {
     "another org's token sees none of it",
     across.value?.length === 0,
     `${across.value?.length ?? across.text} records`,
+  );
+
+  // A colleague's Claude sees the colleague's own kinds and the one kind
+  // Wile shared with the org, read as Wile's.
+  const roadRunner = await signIn(orgs[0].users[1].id);
+  const colleagueCode = (
+    await decide("allow", roadRunner)
+  ).to?.searchParams.get("code");
+  const colleagueGrant = await (
+    await token({ ...exchange, code: colleagueCode })
+  ).json();
+  const theirs = await call(colleagueGrant.access_token, "catalog", {});
+  const lift = theirs.value?.kinds.find((k) => k.name === "lift");
+  const lifts = await call(colleagueGrant.access_token, "read", {
+    kind: "lift",
+    owner: orgs[0].users[0].id,
+  });
+  check(
+    "a colleague's catalog is their own and what was shared",
+    theirs.value?.kinds.every(
+      (k) => k.ownerId === orgs[0].users[1].id || k.via !== null,
+    ) &&
+      lift?.via?.whole === true &&
+      lift.via.everyone === true &&
+      !theirs.value.kinds.some((k) => k.name === "person") &&
+      lifts.value?.records.length === 3,
+    `${theirs.value?.kinds.map((k) => k.name).join(", ") ?? theirs.text}; ${lifts.value?.records.length ?? lifts.text} of Wile's lifts`,
   );
 
   // Settings lists the agent; disconnecting it ends its access.

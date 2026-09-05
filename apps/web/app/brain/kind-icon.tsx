@@ -67,12 +67,15 @@ export function KindIcon({
 }
 
 // A kind named beside its icon, linking to its table unless told not to.
+// Owner names whose the kind is when it is someone else's.
 export function KindMark({
   kind,
+  owner,
   link = true,
   className,
 }: {
   kind: string;
+  owner?: string;
   link?: boolean;
   className?: string;
 }) {
@@ -84,7 +87,7 @@ export function KindMark({
   );
   const classes = cn("inline-flex items-center gap-1.5", className);
   return link ? (
-    <a href={kindHref(kind)} className={cn(classes, "hover:underline")}>
+    <a href={kindHref(kind, owner)} className={cn(classes, "hover:underline")}>
       {inner}
     </a>
   ) : (

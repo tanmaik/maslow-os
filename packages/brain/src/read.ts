@@ -23,9 +23,13 @@ import type {
 } from "./types.ts";
 
 export type ReadOptions = {
-  // Whose records: the reader's own, what others shared with them, or both.
+  // Whose records, when no kind is named: the reader's own, what others
+  // shared with them, or both.
   scope?: "mine" | "shared" | "all";
+  // One person's kind: the reader's own, or with owner, one shared into
+  // this brain by that member.
   kind?: string;
+  owner?: string;
   layer?: Layer;
   source?: string;
   // A person record's id: only records linked to it by an edge.
@@ -109,9 +113,11 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   if (!["mine", "shared", "all"].includes(scope)) {
     throw new Invalid(`"${String(scope)}" is not a scope`);
   }
+  if (opts.owner && !opts.kind) throw new Invalid("an owner needs a kind");
   const params: unknown[] = [
     opts.includeDeleted ?? false,
     opts.kind ?? null,
+    opts.owner ?? null,
     opts.layer ?? null,
     opts.source ?? null,
     opts.person ?? null,
@@ -122,24 +128,27 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   const where = [
     "($1::boolean or deleted_at is null)",
     "($2::text is null or kind = $2)",
-    "($3::text is null or layer = $3)",
-    "($4::text is null or source = $4)",
-    `($5::uuid is null or (
-       r.id not in (select same_record($5))
+    "($3::uuid is null or person_id = $3)",
+    "($4::text is null or layer = $4)",
+    "($5::text is null or source = $5)",
+    `($6::uuid is null or (
+       r.id not in (select same_record($6))
        and exists (
          select 1 from edges e
          join records p
            on p.id = case when e.from_id = r.id then e.to_id else e.from_id end
          where (e.from_id = r.id or e.to_id = r.id)
-           and p.id in (select same_record($5)))))`,
-    "($6::timestamptz is null or coalesce(occurred_at, created_at) >= $6)",
-    "($7::timestamptz is null or coalesce(occurred_at, created_at) < $7)",
-    "($8::text is null or search @@ websearch_to_tsquery('english', $8))",
-    scope === "mine"
-      ? "person_id = current_member()"
-      : scope === "shared"
-        ? "person_id <> current_member()"
-        : "true",
+           and p.id in (select same_record($6)))))`,
+    "($7::timestamptz is null or coalesce(occurred_at, created_at) >= $7)",
+    "($8::timestamptz is null or coalesce(occurred_at, created_at) < $8)",
+    "($9::text is null or search @@ websearch_to_tsquery('english', $9))",
+    opts.kind
+      ? "person_id = coalesce($3, current_member())"
+      : scope === "mine"
+        ? "person_id = current_member()"
+        : scope === "shared"
+          ? "person_id <> current_member()"
+          : "true",
   ];
   const param = (value: unknown) => `$${params.push(value)}`;
 
@@ -148,7 +157,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   let form: Map<string, Property> | null = null;
   const field = async (name: string) => {
     if (!opts.kind) throw new Invalid(`filtering by "${name}" needs a kind`);
-    form ??= await propertiesOf(q, opts.kind);
+    form ??= await propertiesOf(q, opts.kind, opts.owner);
     const p = form.get(name);
     if (!p) throw new Invalid(`${opts.kind} has no field "${name}"`);
     const key = param(p.name);
@@ -201,7 +210,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     direction = DIRECTIONS[wanted];
     keyOf = (r) => String(r.props[p.name]);
   }
-  const orderName = `${scope}/${opts.kind ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
+  const orderName = `${scope}/${opts.kind ?? ""}/${opts.owner ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
   if (opts.cursor) {
     const c = decode(opts.cursor, orderName);
     if (!keyFits(orderType, c.key)) throw new Invalid("that is not a cursor");

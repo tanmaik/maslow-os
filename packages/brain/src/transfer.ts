@@ -19,10 +19,11 @@ import type {
 } from "./types.ts";
 import { merge, write } from "./write.ts";
 
-// One person's brain as a file: the org's vocabulary, every live record and
-// edge of their own, the shares they gave, and their log. Edges name their
-// ends by source and ref, never by id, and shares name people by email and
-// groups by name, so the file imports into any brain.
+// One person's brain as a file: their vocabulary, every live record and edge
+// of their own, the shares they gave, and their log. Edges name their ends by
+// source and ref, never by id; shares name a record the same way, a kind by
+// name, people by email and groups by name, so the file imports into any
+// brain. What colleagues shared into this brain stays out: it is theirs.
 export type Snapshot = {
   format: "maslow-brain/1";
   exportedAt: string;
@@ -63,7 +64,7 @@ export type Snapshot = {
     author: Author;
   }[];
   grants: {
-    record: { source: string; sourceRef: string };
+    on: { source: string; sourceRef: string } | { kind: string };
     subject: "everyone" | { group: string } | { member: string };
     level: Access;
     author: Author;
@@ -72,8 +73,9 @@ export type Snapshot = {
 };
 
 type GrantExportRow = {
-  source: string;
-  source_ref: string;
+  source: string | null;
+  source_ref: string | null;
+  kind: string | null;
   subject: "everyone" | "group" | "member";
   level: Access;
   author: string;
@@ -96,7 +98,9 @@ type EdgeExportRow = {
 };
 
 export async function exportBrain(q: Query): Promise<Snapshot> {
-  const { kinds, verbs } = await catalog(q);
+  const vocabulary = await catalog(q);
+  const kinds = vocabulary.kinds.filter((k) => !k.via);
+  const verbs = vocabulary.verbs;
   // Live records and the aliases merged into them; plainly deleted ones stay out.
   const records = await q.query<
     RecordRow & { into_source: string | null; into_ref: string | null }
@@ -125,13 +129,15 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
      order by e.created_at, e.id`,
   );
   const grants = await q.query<GrantExportRow>(
-    `select r.source, r.source_ref, g.subject, g.level, g.author,
-            gr.name as group_name, u.email as member_email
+    `select r.source, r.source_ref, k.name as kind, g.subject, g.level,
+            g.author, gr.name as group_name, u.email as member_email
      from grants g
-     join records r on r.id = g.record_id
+     left join records r on r.id = g.record_id
+     left join record_kinds k on k.id = g.kind_id
      left join groups gr on gr.id = g.group_id
      left join users u on u.id = g.member_id
-     where r.person_id = current_member() and r.deleted_at is null
+     where coalesce(r.person_id, k.person_id) = current_member()
+       and r.deleted_at is null
        and g.author = 'person:' || current_member()::text
      order by g.created_at, g.id`,
   );
@@ -198,7 +204,9 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       return subject
         ? [
             {
-              record: { source: g.source, sourceRef: g.source_ref },
+              on: g.kind
+                ? { kind: g.kind }
+                : { source: g.source!, sourceRef: g.source_ref! },
               subject,
               level: g.level,
               author: g.author,
@@ -264,7 +272,8 @@ const isRecordEntry = (v: unknown) =>
 const LEVELS = new Set<string>(["view", "edit", "owner"]);
 const isGrantEntry = (v: unknown) =>
   isObject(v) &&
-  isRef(v.record) &&
+  isObject(v.on) &&
+  (isRef(v.on) || isText(v.on.kind)) &&
   (v.subject === "everyone" ||
     (isObject(v.subject) &&
       Object.keys(v.subject).length === 1 &&
@@ -309,11 +318,14 @@ export async function importBrain(
   snapshot: unknown,
 ): Promise<Imported> {
   if (!isSnapshot(snapshot)) throw new Invalid("that is not a brain file");
-  const count = (c: Awaited<ReturnType<typeof catalog>>) => ({
-    kinds: c.kinds.length,
-    properties: c.kinds.reduce((n, k) => n + k.properties.length, 0),
-    verbs: c.verbs.length,
-  });
+  const count = (c: Awaited<ReturnType<typeof catalog>>) => {
+    const mine = c.kinds.filter((k) => !k.via);
+    return {
+      kinds: mine.length,
+      properties: mine.reduce((n, k) => n + k.properties.length, 0),
+      verbs: c.verbs.length,
+    };
+  };
   const before = count(await catalog(q));
   for (const k of snapshot.kinds) await defineKind(q, author, k);
   for (const p of snapshot.properties ?? []) {
@@ -348,11 +360,20 @@ export async function importBrain(
     await merge(q, author, winner.id, loser.id);
     merges += 1;
   }
-  // A share lands where its record, its group or its person is here.
+  // A share lands where its record or kind, its group or its person is here.
+  const ownKind = async (name: string) =>
+    (
+      await q.query<{ id: string }>(
+        "select id from record_kinds where name = $1 and person_id = current_member()",
+        [name],
+      )
+    ).rows[0];
   let grants = 0;
   for (const g of snapshot.grants ?? []) {
-    const record = await byRef(g.record);
-    if (!record) continue;
+    const target =
+      "kind" in g.on ? await ownKind(g.on.kind) : await byRef(g.on);
+    if (!target) continue;
+    const on = "kind" in g.on ? { kind: target.id } : { record: target.id };
     let subject:
       | { kind: "everyone" }
       | { kind: "group"; id: string }
@@ -373,7 +394,7 @@ export async function importBrain(
       if (found.rows[0]) subject = { kind: "member", id: found.rows[0].id };
     }
     if (!subject) continue;
-    await share(q, author, record.id, subject, g.level);
+    await share(q, author, on, subject, g.level);
     grants += 1;
   }
   return {

@@ -1,7 +1,8 @@
 // The brain's part of the merge gate, run through the doors as the app role:
-// each org sees only its own records, writes are idempotent, the vocabulary is
-// open, events belong to the database, and an export imports back to the same
-// answers. Returns true when every check passed.
+// each person sees only their own records and vocabulary until a share says
+// otherwise, writes are idempotent, events belong to the database, and an
+// export imports back to the same answers. Returns true when every check
+// passed.
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 
@@ -41,6 +42,15 @@ export async function smokeBrain(stack) {
       `${pass ? "ok  " : "FAIL"}  brain: ${label.padEnd(34)} ${detail}`,
     );
     ok &&= pass;
+  };
+  // What a door said to a call: allowed, or the refusal's name.
+  const attempt = async (fn) => {
+    try {
+      await fn();
+      return "allowed";
+    } catch (err) {
+      return err.constructor.name;
+    }
   };
   const [acme, bakery] = orgs;
   const titles = (page) => page.records.map((r) => r.title).sort();
@@ -134,11 +144,135 @@ export async function smokeBrain(stack) {
       }),
     );
     check(
-      "a colleague shares the vocabulary, not the records",
+      "a colleague sees neither the records nor the vocabulary",
       orgOnly.records.length === 0 &&
         colleague.page.records.length === 0 &&
-        colleague.vocab.kinds.length === vocabulary.kinds.length,
-      `${colleague.page.records.length} records, ${colleague.vocab.kinds.length} kinds`,
+        colleague.vocab.kinds.length === 0 &&
+        colleague.vocab.verbs.length === 0,
+      `${colleague.page.records.length} records, ${colleague.vocab.kinds.length} kinds, ${colleague.vocab.verbs.length} verbs`,
+    );
+
+    // A kind is shared whole with the org, or opened one record at a time;
+    // either way it appears in the colleague's catalog as its owner's, and
+    // goes when the share does.
+    const roadRunner = (fn) => asPerson(member(acme, 1), fn);
+    const opened = await me(acme)(async (q) => {
+      const commitment = (await brain.catalog(q)).kinds.find(
+        (k) => k.name === "commitment",
+      );
+      const beep = (await brain.read(q, { kind: "person" })).records.find(
+        (r) => r.title === "Road Runner",
+      );
+      await brain.share(
+        q,
+        "smoke",
+        { kind: commitment.id },
+        { kind: "everyone" },
+        "view",
+      );
+      await brain.share(
+        q,
+        "smoke",
+        { record: beep.id },
+        { kind: "member", id: acme.users[1].id },
+        "view",
+      );
+      return {
+        commitment,
+        beep,
+        commitments: (await brain.read(q, { kind: "commitment" })).records
+          .length,
+        grants: await brain.grantsOf(q, { kind: commitment.id }),
+      };
+    });
+    const seen = await roadRunner(async (q) => {
+      const vocab = await brain.catalog(q);
+      const commitment = vocab.kinds.find((k) => k.name === "commitment");
+      return {
+        vocab,
+        commitment,
+        person: vocab.kinds.find((k) => k.name === "person"),
+        theirs: await brain.read(q, {
+          kind: "commitment",
+          owner: acme.users[0].id,
+        }),
+        own: await brain.read(q, { kind: "commitment" }),
+        beep: (await brain.get(q, [opened.beep.id]))[0],
+        people: await brain.read(q, {
+          kind: "person",
+          owner: acme.users[0].id,
+        }),
+        note: await brain.defineKind(q, "smoke", {
+          name: "note",
+          description: "Road Runner's own notes.",
+        }),
+        steal: await attempt(() =>
+          brain.share(
+            q,
+            "smoke",
+            { kind: commitment.id },
+            { kind: "everyone" },
+            "view",
+          ),
+        ),
+      };
+    });
+    check(
+      "a kind shared with the org opens every record of it",
+      seen.commitment?.via?.whole === true &&
+        seen.commitment.via.everyone === true &&
+        seen.commitment.ownerId === acme.users[0].id &&
+        seen.commitment.properties.length === 2 &&
+        seen.theirs.records.length === opened.commitments &&
+        opened.commitments > 0 &&
+        seen.own.records.length === 0 &&
+        seen.vocab.verbs.length === 0 &&
+        opened.grants.length === 1 &&
+        opened.grants[0].on.kind === opened.commitment.id,
+      `${seen.theirs.records.length} of Wile's commitments, ${seen.own.records.length} of Road Runner's, ${seen.commitment?.properties.length} fields`,
+    );
+    check(
+      "a record shared alone opens it and its kind, and no other record of it",
+      seen.beep?.title === "Road Runner" &&
+        seen.person?.via?.whole === false &&
+        seen.person.via.everyone === false &&
+        seen.person.properties.some((f) => f.name === "emails") &&
+        seen.people.records.length === 1 &&
+        seen.people.records[0].id === opened.beep.id,
+      `${seen.beep?.title ?? "hidden"}, kind ${seen.person ? "listed" : "missing"}, ${seen.people.records.length} of Wile's people in view`,
+    );
+    const wileNote = (await me(acme)((q) => brain.catalog(q))).kinds.find(
+      (k) => k.name === "note",
+    );
+    check(
+      "two people each have a note kind of their own",
+      seen.note.ownerId === acme.users[1].id &&
+        seen.note.via === null &&
+        wileNote?.ownerId === acme.users[0].id &&
+        wileNote.via === null &&
+        seen.steal === "Forbidden",
+      `Road Runner's and Wile's; sharing another's kind ${seen.steal}`,
+    );
+    await me(acme)(async (q) => {
+      await brain.unshare(
+        q,
+        { kind: opened.commitment.id },
+        { kind: "everyone" },
+      );
+      await brain.unshare(
+        q,
+        { record: opened.beep.id },
+        { kind: "member", id: acme.users[1].id },
+      );
+    });
+    const closed = await roadRunner(async (q) => ({
+      kinds: (await brain.catalog(q)).kinds.map((k) => k.name),
+      beep: (await brain.get(q, [opened.beep.id])).length,
+    }));
+    check(
+      "unsharing takes the kind and the record away",
+      closed.kinds.join(",") === "note" && closed.beep === 0,
+      `${closed.kinds.join(", ")} left, ${closed.beep} records`,
     );
 
     // Search and the person filter.
@@ -681,14 +815,6 @@ export async function smokeBrain(stack) {
     const pim = await admit("viewer@sharing.test", "Pim");
     const ottoElsewhere = await admit("stranger@sharing.test", "Stranger");
     const as = (who) => (fn) => asPerson(who, fn);
-    const attempt = async (fn) => {
-      try {
-        await fn();
-        return "allowed";
-      } catch (err) {
-        return err.constructor.name;
-      }
-    };
     const noteOf = (ref, title) => ({
       kind: "note",
       layer: "source",
@@ -696,11 +822,19 @@ export async function smokeBrain(stack) {
       sourceRef: ref,
       title,
     });
+    // Each of them defines a note and a verb of their own: a record is of
+    // its writer's kind, and a link carries its maker's verb.
+    const words = {
+      kinds: [{ name: "note", description: "Something written down." }],
+      verbs: [{ name: "mentions", description: "Talks about." }],
+    };
+    for (const who of [otto, pim]) {
+      await as(who)((q) => brain.write(q, "smoke", words));
+    }
     const [privateNote] = (
       await as(marge)((q) =>
         brain.write(q, "smoke", {
-          kinds: [{ name: "note", description: "Something written down." }],
-          verbs: [{ name: "mentions", description: "Talks about." }],
+          ...words,
           records: [noteOf("share-1", "Levain log")],
         }),
       )
@@ -719,7 +853,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${marge.userId}`,
-        privateNote,
+        { record: privateNote },
         {
           kind: "member",
           id: otto.userId,
@@ -737,7 +871,13 @@ export async function smokeBrain(stack) {
           brain.edit(q, "smoke", privateNote, r.version, { title: "Mine now" }),
         ),
         share: await attempt(() =>
-          brain.share(q, "smoke", privateNote, { kind: "everyone" }, "view"),
+          brain.share(
+            q,
+            "smoke",
+            { record: privateNote },
+            { kind: "everyone" },
+            "view",
+          ),
         ),
         history: (await brain.history(q, { of: privateNote })).length,
       };
@@ -758,7 +898,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${marge.userId}`,
-        privateNote,
+        { record: privateNote },
         {
           kind: "member",
           id: otto.userId,
@@ -807,7 +947,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${marge.userId}`,
-        privateNote,
+        { record: privateNote },
         {
           kind: "member",
           id: otto.userId,
@@ -846,7 +986,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${marge.userId}`,
-        teamNote,
+        { record: teamNote },
         {
           kind: "group",
           id: bakers,
@@ -884,14 +1024,20 @@ export async function smokeBrain(stack) {
     ).records;
     const everyoneEdit = await attempt(() =>
       as(marge)((q) =>
-        brain.share(q, "smoke", orgNote, { kind: "everyone" }, "edit"),
+        brain.share(
+          q,
+          "smoke",
+          { record: orgNote },
+          { kind: "everyone" },
+          "edit",
+        ),
       ),
     );
     await as(marge)((q) =>
       brain.share(
         q,
         `person:${marge.userId}`,
-        orgNote,
+        { record: orgNote },
         { kind: "everyone" },
         "view",
       ),
@@ -966,7 +1112,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${marge.userId}`,
-        privateNote,
+        { record: privateNote },
         {
           kind: "member",
           id: otto.userId,
@@ -1005,7 +1151,11 @@ export async function smokeBrain(stack) {
       return (await brain.edgesOf(q, own))[0].id;
     });
     await as(marge)((q) =>
-      brain.unshare(q, privateNote, { kind: "member", id: otto.userId }),
+      brain.unshare(
+        q,
+        { record: privateNote },
+        { kind: "member", id: otto.userId },
+      ),
     );
     const unlinked = await as(otto)((q) =>
       attempt(() => brain.unlink(q, "smoke", edgeToNote)),
@@ -1019,7 +1169,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${marge.userId}`,
-        privateNote,
+        { record: privateNote },
         {
           kind: "member",
           id: otto.userId,
@@ -1034,7 +1184,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${otto.userId}`,
-        privateNote,
+        { record: privateNote },
         {
           kind: "member",
           id: pim.userId,
@@ -1043,7 +1193,7 @@ export async function smokeBrain(stack) {
       ),
     );
     const margeGave = (await as(marge)((q) => brain.exportBrain(q))).grants
-      .filter((g) => g.record.sourceRef === "share-1")
+      .filter((g) => g.on.sourceRef === "share-1")
       .map((g) => g.subject.member ?? g.subject);
     const theirs = await groupsDoor.defineGroup(ottoElsewhere, "Theirs", "");
     const joinTheirs = await as(marge)((q) =>
@@ -1071,7 +1221,7 @@ export async function smokeBrain(stack) {
       await brain.share(
         q,
         `person:${marge.userId}`,
-        target,
+        { record: target },
         {
           kind: "member",
           id: otto.userId,
@@ -1114,7 +1264,7 @@ export async function smokeBrain(stack) {
         await brain.share(
           q,
           `person:${who.userId}`,
-          dup,
+          { record: dup },
           { kind: "everyone" },
           "view",
         );
@@ -1156,7 +1306,7 @@ export async function smokeBrain(stack) {
         await brain.share(
           q,
           `person:${marge.userId}`,
-          r,
+          { record: r },
           { kind: "member", id: otto.userId },
           "owner",
         );
@@ -1164,7 +1314,7 @@ export async function smokeBrain(stack) {
       await brain.share(
         q,
         `person:${marge.userId}`,
-        b,
+        { record: b },
         { kind: "member", id: otto.userId },
         "view",
       );
@@ -1200,7 +1350,7 @@ export async function smokeBrain(stack) {
       brain.share(
         q,
         `person:${otto.userId}`,
-        ottoNote,
+        { record: ottoNote },
         {
           kind: "group",
           id: bakers,
@@ -1218,7 +1368,11 @@ export async function smokeBrain(stack) {
     );
 
     await as(marge)((q) =>
-      brain.unshare(q, privateNote, { kind: "member", id: otto.userId }),
+      brain.unshare(
+        q,
+        { record: privateNote },
+        { kind: "member", id: otto.userId },
+      ),
     );
     const gone = (await as(otto)((q) => brain.get(q, [privateNote]))).length;
     check("unshare takes it away", gone === 0, `${gone} records`);
@@ -1248,6 +1402,20 @@ export async function smokeBrain(stack) {
     } finally {
       await owner.end();
     }
+    // A kind shared whole travels in the file as a share by name. It stays
+    // shared: the agent's smoke reads it as a colleague.
+    await me(acme)(async (q) => {
+      const lift = (await brain.catalog(q)).kinds.find(
+        (k) => k.name === "lift",
+      );
+      await brain.share(
+        q,
+        `person:${acme.users[0].id}`,
+        { kind: lift.id },
+        { kind: "everyone" },
+        "view",
+      );
+    });
     const exported = await me(acme)((q) => brain.exportBrain(q));
     const imported = await asPerson(
       { orgId: target, personId: targetPerson, userId: targetPerson },
@@ -1278,8 +1446,12 @@ export async function smokeBrain(stack) {
         imported.vocab.kinds.find((k) => k.name === "lift").properties
           .length === 2 &&
         imported.counts.merges === 2 &&
-        imported.aboutBeep.records.length === 5,
-      `${imported.all.records.length} records, ${imported.counts.edges} edges, ${imported.counts.properties} fields, ${imported.counts.merges} merges`,
+        imported.aboutBeep.records.length === 5 &&
+        exported.grants.length === 1 &&
+        exported.grants[0].on.kind === "lift" &&
+        exported.grants[0].subject === "everyone" &&
+        imported.counts.grants === 1,
+      `${imported.all.records.length} records, ${imported.counts.edges} edges, ${imported.counts.properties} fields, ${imported.counts.merges} merges, ${imported.counts.grants} shares`,
     );
     check(
       "importing twice adds nothing",

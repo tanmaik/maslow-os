@@ -6,6 +6,7 @@ import {
   unshare,
   type Access,
   type Subject,
+  type Target,
 } from "@placeholder/brain";
 import { asPerson, isUuid } from "@placeholder/db";
 import { NextResponse } from "next/server";
@@ -13,7 +14,7 @@ import { NextResponse } from "next/server";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-import { recordHref } from "../../../format";
+import { recordHref } from "../format";
 
 // A subject as the form names it: "everyone", "group:<id>" or "member:<id>".
 function subjectFrom(value: string): Subject | null {
@@ -25,17 +26,23 @@ function subjectFrom(value: string): Subject | null {
   return null;
 }
 
-// Shares a record with a person, a group or everyone at a level, or takes a
-// share away. The record's owner only.
-export async function POST(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> },
-) {
+// What the form is sharing: a record or a kind, by id.
+function targetFrom(form: FormData): Target | null {
+  const record = String(form.get("record") ?? "");
+  const kind = String(form.get("kind") ?? "");
+  if (isUuid(record)) return { record };
+  if (isUuid(kind)) return { kind };
+  return null;
+}
+
+// Shares a record or a kind with a person, a group or everyone at a level,
+// or takes a share away. The owner only.
+export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
-  const { id } = await params;
-  if (!isUuid(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
+  const on = targetFrom(form);
+  if (!on) return new Response(null, { status: 404 });
   const subject = subjectFrom(String(form.get("subject") ?? ""));
   if (!subject) {
     return new Response("Choose who to share with.", { status: 400 });
@@ -44,8 +51,8 @@ export async function POST(
 
   try {
     await asPerson(p, async (db) => {
-      if (form.get("intent") === "unshare") await unshare(db, id, subject);
-      else await share(db, `person:${p.userId}`, id, subject, level);
+      if (form.get("intent") === "unshare") await unshare(db, on, subject);
+      else await share(db, `person:${p.userId}`, on, subject, level);
     });
   } catch (err) {
     if (err instanceof Invalid || err instanceof NotFound) {
@@ -56,5 +63,6 @@ export async function POST(
     }
     throw err;
   }
-  return NextResponse.redirect(`${origin(request)}${recordHref(id)}`, 303);
+  const back = "record" in on ? recordHref(on.record) : "/brain/vocabulary";
+  return NextResponse.redirect(`${origin(request)}${back}`, 303);
 }

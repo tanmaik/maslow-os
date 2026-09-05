@@ -49,8 +49,9 @@ export async function POST(
       const [current] = await get(db, [id]);
       if (!current) throw new NotFound(`record ${id} is not in this brain`);
       const declared =
-        (await catalog(db)).kinds.find((k) => k.name === current.kind)
-          ?.properties ?? [];
+        (await catalog(db)).kinds.find(
+          (k) => k.name === current.kind && k.ownerId === current.ownerId,
+        )?.properties ?? [];
       const title = String(form.get("title") ?? "").trim();
       if (!title) throw new Invalid("A record needs a title.");
       const version = Number(form.get("version"));
