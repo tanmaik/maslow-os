@@ -40,7 +40,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { DeleteOrg } from "@/app/settings/delete-org";
+import { Connections } from "@/app/settings/connections";
 import { Groups } from "@/app/settings/groups";
+import { connections } from "@/lib/connections";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
 import { amount, dollars } from "@/lib/meter";
@@ -67,6 +69,9 @@ type Notice = {
     | "gone";
   invite?: "sent" | "pending" | "member";
   group?: "saved" | "deleted" | "gone";
+  connection?: "connected" | "failed" | "disconnected" | "gone" | "unanswered";
+  // What is being searched for among the apps to connect.
+  apps?: string;
 };
 
 const NOTICES: Record<string, string> = {
@@ -110,6 +115,12 @@ const NOTICES: Record<string, string> = {
   "group=saved": "Saved.",
   "group=deleted": "Group deleted, and the shares it held with it.",
   "group=gone": "Nobody by that id is in the org.",
+  "connection=connected": "Connected.",
+  "connection=failed": "That sign-in didn't finish. Try again.",
+  "connection=disconnected": "Disconnected.",
+  "connection=gone": "No such app or connection.",
+  "connection=unanswered":
+    "Composio refused or didn't answer, so nothing changed. Try again in a moment.",
 };
 
 // The signed-in person's org and profile, and who is in the org.
@@ -124,6 +135,19 @@ export default async function Settings({
   const said = (k: keyof Notice) => (n[k] ? NOTICES[`${k}=${n[k]}`] : null);
   const { org, members, invited, past } = await orgOf(p);
   const groups = await groupsOf(p);
+  const appsQuery = (n.apps ?? "").trim();
+  // Live from the vendor; when it does not answer, the card says so rather
+  // than showing nothing connected or nothing found.
+  const unanswered = (err: Error) => {
+    console.error(`connections: ${err.message}`);
+    return null;
+  };
+  const [connected, found] = connections.enabled
+    ? await Promise.all([
+        connections.list(p).catch(unanswered),
+        appsQuery ? connections.search(appsQuery).catch(unanswered) : [],
+      ])
+    : [[], []];
   const me = members.find((m) => m.id === p.userId)!;
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
@@ -605,6 +629,14 @@ export default async function Settings({
           </CardContent>
         </Card>
       )}
+
+      <Connections
+        enabled={connections.enabled}
+        connections={connected}
+        query={appsQuery}
+        found={found}
+        said={said("connection")}
+      />
 
       <Groups
         groups={groups}

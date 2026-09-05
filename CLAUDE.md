@@ -144,6 +144,18 @@ written by the database and the app cannot write them. A merge hides the
 loser behind a pointer to the winner and rewrites nothing, so it reverses.
 A brain exports to a file that imports into any brain, as the importer.
 
+## Connections
+
+A person's accounts in outside apps are held at Composio and nowhere else:
+the Composio user is the membership, and a connection is seen by nobody else
+in the org. Every app Composio reaches is one a person can connect; the
+product names none. The page asks Composio what is connected each time it is
+shown, and says so when Composio does not answer. Access to a person's apps
+ends with their membership: a membership that ends or an org that is deleted
+owes its accounts to Composio the way it owes its machines to Fly, in the
+same transaction. Composio's managed OAuth
+apps sign people in until a customer needs our name on the consent screen.
+
 ## Real and fake
 
 Development runs against the real thing — real vendors, your own keys —

@@ -52,6 +52,7 @@ const faked = {
   identity: "faked: pick a seeded person from the pill",
   mail: "faked: sign-in codes print here",
   storage: `faked: uploads go to ${process.env.UPLOADS_DIR ?? ".local/uploads"}`,
+  connections: "faked: three pretend apps connect with a click",
 };
 for (const [name, vendor] of Object.entries(stack.vendors)) {
   console.log(`${name.padEnd(9)} ${vendor ? `real (${vendor})` : faked[name]}`);

@@ -17,7 +17,10 @@ import { cn } from "@/lib/utils";
 type Props = {
   where: typeof deployment.where;
   // Each contract's vendor when real, null when this deployment fakes it.
-  vendors: Record<"identity" | "mail" | "storage" | "computers", string | null>;
+  vendors: Record<
+    "identity" | "mail" | "storage" | "computers" | "connections",
+    string | null
+  >;
   signedIn: boolean;
   me: { name: string; org: string } | null;
   orgs: {

@@ -40,6 +40,8 @@ export async function DevToolbar() {
             deployment.computers.api === "https://api.machines.dev"
               ? "Fly"
               : null,
+          connections:
+            deployment.connections.kind === "composio" ? "Composio" : null,
         }}
         signedIn={p !== null}
         me={me ?? null}

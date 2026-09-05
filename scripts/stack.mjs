@@ -68,6 +68,7 @@ export function vendorsOf(env) {
     )
       ? "S3"
       : null,
+    connections: has("COMPOSIO_API_KEY") ? "Composio" : null,
   };
 }
 

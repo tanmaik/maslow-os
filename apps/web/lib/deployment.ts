@@ -49,6 +49,13 @@ export type Computers =
     }
   | { kind: "none" };
 
+// Connections to outside apps are held at Composio, or by a fake with a
+// few pretend apps, or nowhere.
+export type Connections =
+  | { kind: "composio"; apiKey: string; api: string }
+  | { kind: "fake" }
+  | { kind: "none" };
+
 // Production is the live Vercel environment or any box that is not a
 // development server and not a Vercel preview.
 const production = process.env.VERCEL
@@ -159,6 +166,19 @@ function computers(): Computers {
   };
 }
 
+// A deployment without Composio has no connections in production, and
+// pretend ones anywhere else.
+function connections(): Connections {
+  const { COMPOSIO_API_KEY: apiKey } = process.env;
+  if (apiKey)
+    return {
+      kind: "composio",
+      apiKey,
+      api: process.env.COMPOSIO_API_HOST ?? "https://backend.composio.dev",
+    };
+  return production ? { kind: "none" } : { kind: "fake" };
+}
+
 // The sweep is what meters, backs up and cleans; production without its
 // cron's secret would run none of it and say nothing.
 if (production && !process.env.CRON_SECRET)
@@ -177,6 +197,7 @@ export const deployment = {
   seededSignIn: !production,
   storage: storage(),
   computers: computers(),
+  connections: connections(),
   https,
   identity: identityProvider(),
   mail: mail(),

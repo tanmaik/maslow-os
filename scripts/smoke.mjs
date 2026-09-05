@@ -10,6 +10,7 @@ import { createServer } from "node:http";
 
 import { startFakeFly } from "./fake-fly.mjs";
 import { smokeBrain } from "./smoke-brain.mjs";
+import { smokeConnections } from "./smoke-connections.mjs";
 import { root, startStack } from "./stack.mjs";
 
 // The smoke carries no credentials: a checkout's pulled config must not reach
@@ -25,6 +26,7 @@ const noCredentials = Object.fromEntries(
     "STORAGE_BUCKET",
     "STORAGE_ACCESS_KEY",
     "STORAGE_SECRET_KEY",
+    "COMPOSIO_API_KEY",
   ].map((k) => [k, ""]),
 );
 
@@ -1803,6 +1805,7 @@ try {
     stale.includes("Pick a person from the pill"),
     "sign-in page",
   );
+  failed ||= !(await smokeConnections(stack, signIn));
   failed ||= !(await smokeBrain(stack));
 } finally {
   await stack.stop();

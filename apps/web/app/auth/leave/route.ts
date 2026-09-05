@@ -1,6 +1,7 @@
 import { leaveOrg } from "@placeholder/db/settings";
 import { NextResponse } from "next/server";
 
+import { settle } from "@/lib/orphans";
 import { origin } from "@/lib/origin";
 import { principal, signedOut } from "@/lib/session";
 
@@ -11,6 +12,7 @@ export async function POST(request: Request) {
   if (!p) return new Response(null, { status: 401 });
   const home = origin(request);
   const outcome = await leaveOrg(p);
+  if (outcome === "left") await settle(p.orgId);
   return outcome === "left"
     ? signedOut(home)
     : NextResponse.redirect(`${home}/settings?leave=${outcome}`, 303);

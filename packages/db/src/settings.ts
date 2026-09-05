@@ -179,9 +179,9 @@ export async function setAvatar(p: Principal, key: string): Promise<void> {
   await setProfile(p, { avatar_key: key });
 }
 
-// Ends a membership: its sessions, and its invitation. It becomes a past
-// member, kept with everything it wrote, unseen, until an owner brings it back
-// or purges it.
+// Ends a membership: its sessions, its invitation, and its accounts in
+// outside apps. It becomes a past member, kept with everything it wrote,
+// unseen, until an owner brings it back or purges it.
 async function endMembership(q: Query, id: string): Promise<boolean> {
   await seeingPast(q);
   const leaving = (
@@ -195,6 +195,12 @@ async function endMembership(q: Query, id: string): Promise<boolean> {
   // it is stopped. A restore forgives it.
   await q.query(
     "insert into orphans (org_id, kind, ref) select org_id, 'stop', machine_id from computers where user_id = $1 and machine_id is not null",
+    [id],
+  );
+  // Access to their apps ends with the membership; brought back, they
+  // connect again.
+  await q.query(
+    "insert into orphans (org_id, kind, ref) values (current_org(), 'accounts', $1)",
     [id],
   );
   await q.query("delete from sessions where user_id = $1", [id]);
@@ -273,6 +279,10 @@ export async function deleteOrg(
          select org_id, case when upload_id is not null then 'upload' else 'object' end, key, upload_id
            from backups where deleted_at is null`,
     );
+    await seeingPast(q);
+    await q.query(
+      "insert into orphans (org_id, kind, ref) select org_id, 'accounts', id from users",
+    );
     const gone = await q.query("delete from orgs where name = $1", [name]);
     return gone.rowCount ? "deleted" : "mismatch";
   });
@@ -313,6 +323,11 @@ export async function restoreMember(
     );
     await q.query(
       "delete from orphans where kind = 'stop' and ref in (select machine_id from computers where user_id = $1)",
+      [id],
+    );
+    // A debt for their apps not yet paid is forgiven with them.
+    await q.query(
+      "delete from orphans where kind = 'accounts' and ref = $1::text",
       [id],
     );
     return "restored";
