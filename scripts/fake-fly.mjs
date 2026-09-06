@@ -200,7 +200,11 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
             "failed_precondition: unable to start machine from current state: 'created'",
         });
     }
-    if (action === "start" && mc.state !== "started") await boot(mc);
+    // Fly refuses to start what is up already, as it refuses one still
+    // coming up; the app takes either as the state it wanted.
+    if (action === "start" && mc.state === "started")
+      return json(409, { error: "aborted: machine still attempting to start" });
+    if (action === "start") await boot(mc);
     if (action === "restart") {
       if (mc.state === "started") halt(mc, "stopped");
       await boot(mc);

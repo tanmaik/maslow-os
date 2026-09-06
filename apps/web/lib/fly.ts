@@ -192,8 +192,12 @@ export const fly = {
     return m;
   },
 
+  // Asked of a machine already on its way up, or up, Fly answers 409: that
+  // is the state wanted, and the caller waits for it to settle.
   async start(id: string): Promise<void> {
-    await call("POST", `/machines/${id}/start`);
+    await call("POST", `/machines/${id}/start`).catch((err) => {
+      if (!/ answered 409:/.test((err as Error).message)) throw err;
+    });
   },
 
   // Off until the proxy is asked for it again: a past member's machine.
