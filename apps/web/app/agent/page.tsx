@@ -12,12 +12,8 @@ export default async function NewAgentPage() {
   const models = offered();
   return (
     <NewConversation
-      models={models.map((m) => ({
-        id: m.id,
-        label: m.label,
-        claude: m.claude,
-      }))}
-      defaultModel={defaultModel()}
+      models={models.map((m) => ({ id: m.id, label: m.label }))}
+      defaultModel={defaultModel().id}
       faked={models.length === 0 && !deployment.production}
     />
   );

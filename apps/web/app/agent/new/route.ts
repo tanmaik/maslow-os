@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const model =
     typeof asked.model === "string" && models.some((m) => m.id === asked.model)
       ? asked.model
-      : defaultModel();
+      : defaultModel().id;
   const id = randomUUID();
   await createSession(p, { id, computerId: computer.id, model });
   return Response.json({ id });

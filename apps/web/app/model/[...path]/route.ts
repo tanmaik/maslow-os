@@ -14,8 +14,8 @@ import {
   costOf,
   defaultModel,
   MODEL_CAP_USD,
+  modelById,
   offered,
-  providerOf,
   routeFor,
 } from "@/lib/models";
 
@@ -135,21 +135,19 @@ async function forward(
         .map((m) => m.id)
         .join(", ")}.`,
     );
-  const named = model ?? defaultModel();
+  const named = model ?? defaultModel().id;
   const route = faked
-    ? { provider: providerOf(named), url: "", headers: {}, model: named }
+    ? {
+        provider: modelById(named)?.provider ?? "openrouter",
+        url: "",
+        headers: {},
+      }
     : routeFor(named);
   if (!route)
     return refuse(
       503,
       `This deployment has no key for the vendor of ${model}.`,
     );
-  // The vendor is told the name it knows the model by; the ledger keeps
-  // ours.
-  const sent =
-    body && route.model !== model
-      ? JSON.stringify({ ...asked, model: route.model })
-      : body;
 
   if (free) {
     if (faked)
@@ -170,8 +168,15 @@ async function forward(
     const up = await fetch(`${route.url}/${path}${search}`, {
       method: request.method,
       headers,
-      body: sent,
+      body,
     });
+    // A vendor that does not count tokens answers 404; the count is then
+    // estimated at four characters a token, which is all the harness
+    // needs of it.
+    if (up.status === 404 && path === "v1/messages/count_tokens")
+      return Response.json({
+        input_tokens: Math.ceil((body?.length ?? 0) / 4),
+      });
     // The body arrives decoded; only the headers that still describe it go
     // on.
     const out = new Headers();
@@ -227,7 +232,7 @@ async function forward(
       upstream = await fetch(`${route.url}/${path}${search}`, {
         method: request.method,
         headers,
-        body: sent,
+        body,
         signal: AbortSignal.timeout(maxDuration * 1000 - 5000),
       });
     } catch (err) {

@@ -1182,6 +1182,9 @@ const MODEL_ENV = {
         ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.MODEL,
         ANTHROPIC_DEFAULT_FABLE_MODEL: process.env.MODEL,
         CLAUDE_CODE_SUBAGENT_MODEL: process.env.MODEL,
+        ...(process.env.MODEL_CONTEXT
+          ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: process.env.MODEL_CONTEXT }
+          : {}),
       }
     : {}),
 };
@@ -1590,6 +1593,40 @@ async function handClaudeTheBrain() {
   await fs.rename(temp, file);
 }
 
+// Claude Code on the machine is told what the deployment's model is, since
+// it is not one it knows: the one row it offers, and the Claude whose
+// handling applies to it. Settings the deployment manages on a machine;
+// the harness's own on a laptop.
+async function tellClaudeTheModel() {
+  if (!process.env.MODEL) return;
+  const file = OS_ROOT
+    ? path.join(OS_ROOT, "etc/claude-code/managed-settings.json")
+    : path.join(ROOT, ".claude/settings.json");
+  let settings = {};
+  try {
+    settings = JSON.parse(await fs.readFile(file, "utf8"));
+  } catch {}
+  if (!settings || typeof settings !== "object" || Array.isArray(settings))
+    settings = {};
+  settings.modelPicker = {
+    options: [
+      {
+        model: process.env.MODEL,
+        label: process.env.MODEL_LABEL ?? process.env.MODEL,
+        ...(process.env.MODEL_BEHAVES_AS
+          ? { behavesAs: process.env.MODEL_BEHAVES_AS }
+          : {}),
+      },
+    ],
+    replaceBuiltInOptions: true,
+  };
+  await fs.mkdir(path.dirname(file), { recursive: true });
+  const temp = `${file}.tmp`;
+  await fs.writeFile(temp, JSON.stringify(settings, null, 2));
+  if (!OS_ROOT) await own(temp);
+  await fs.rename(temp, file);
+}
+
 // Tried until it works: a boot that cannot set the operating system up
 // says so and tries again in a minute, rather than dying and being
 // restarted into the same failure.
@@ -1598,6 +1635,7 @@ async function settleUntilDone(tries = Infinity) {
     try {
       const settled = await settle();
       await handClaudeTheBrain();
+      await tellClaudeTheModel();
       // Whatever an agent was doing when the machine went down, it resumes.
       agent
         .restore()

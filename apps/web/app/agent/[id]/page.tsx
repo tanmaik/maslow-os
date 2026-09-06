@@ -79,11 +79,7 @@ export default async function SessionPage({
       url={url}
       shell={shell}
       trouble={trouble}
-      models={models.map((m) => ({
-        id: m.id,
-        label: m.label,
-        claude: m.claude,
-      }))}
+      models={models.map((m) => ({ id: m.id, label: m.label }))}
       faked={models.length === 0}
       spend={spend}
     />

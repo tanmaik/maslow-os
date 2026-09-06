@@ -14,7 +14,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-export type ModelOption = { id: string; label: string; claude: boolean };
+export type ModelOption = { id: string; label: string };
 
 // Where the person writes, as t3code draws it: a rounded card, the prompt
 // above a toolbar with the model on the left and a round send on the right.
@@ -121,11 +121,6 @@ export function Composer({
                     {models.map((m) => (
                       <SelectItem key={m.id} value={m.id}>
                         {m.label}
-                        {!m.claude && (
-                          <span className="text-muted-foreground ms-1 text-xs">
-                            not Claude
-                          </span>
-                        )}
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -112,6 +112,9 @@ export function agents({
       ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
       ANTHROPIC_DEFAULT_FABLE_MODEL: model,
       CLAUDE_CODE_SUBAGENT_MODEL: model,
+      ...(process.env.MODEL_CONTEXT
+        ? { CLAUDE_CODE_MAX_CONTEXT_TOKENS: process.env.MODEL_CONTEXT }
+        : {}),
       LANG: "C.UTF-8",
     };
     // Inside the operating system on the volume, at home, as the person:

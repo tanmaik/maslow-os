@@ -1,7 +1,7 @@
 import { createHmac } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import { defaultModel } from "./models.ts";
+import { modelEnv } from "./models.ts";
 import { parseSize } from "./prices.ts";
 
 // The Fly Machines API, the part of it a computer needs. No SDK.
@@ -49,7 +49,7 @@ export const autostops = (m: Machine) =>
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, and the person's account in it, copied onto the
 // volume on first boot, and the agent's harness beside the daemon.
-export const IMAGE = "registry.fly.io/placeholder-computers:v28";
+export const IMAGE = "registry.fly.io/placeholder-computers:v29";
 // Every disk starts here; the operating system takes about a gigabyte of
 // it, and it doubles when it fills, to the cap.
 export const DISK_GB = 3;
@@ -141,8 +141,9 @@ export const fly = {
           COMPUTER_SECRET: secret,
           LINK_KEY: linkKey,
           REPORT_URL: config().report,
-          // The model a shell's Claude Code runs on through the gateway.
-          MODEL: defaultModel(),
+          // The model Claude Code runs on through the gateway, and what
+          // to make of it.
+          ...modelEnv(),
           // The operating system lives here on the volume.
           OS_ROOT: "/data/os",
           // The domain each machine has an origin under, when there is one.
