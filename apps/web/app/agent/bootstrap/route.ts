@@ -17,5 +17,5 @@ export async function POST(request: Request) {
   if (typeof session !== "string") return new Response(null, { status: 400 });
   const s = await sessionForMachine(machineId, secret, session);
   if (!s) return new Response(null, { status: 404 });
-  return Response.json(bootstrapFor(s));
+  return Response.json(bootstrapFor(s, { machineId, secret }));
 }

@@ -1,9 +1,11 @@
-import { asPerson, Gone } from "@placeholder/db";
-import { resolveSession } from "@placeholder/db/auth";
+import { asPerson, Gone, isUuid } from "@placeholder/db";
+import { personBehindMachine } from "@placeholder/db/agents";
+import { resolveSession, type Session } from "@placeholder/db/auth";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { NextResponse } from "next/server";
 
 import { about, brainServer, type About } from "@/lib/mcp";
+import { machineFrom } from "@/lib/machine";
 import { origin } from "@/lib/origin";
 
 // A stranger, or a token whose membership is gone, is told where to sign in.
@@ -18,15 +20,32 @@ const refused = (request: Request) =>
     },
   );
 
-// The brain as an MCP server, for an app holding a session as a bearer
-// token; a browser's session opens the site, never this. Every request
-// stands alone, answered in one JSON body, so it runs wherever the app does.
-// The one that opens a connection is told whose brain this is and what is
-// in it, with the membership held until the answer is made.
-export async function POST(request: Request) {
+// Who is knocking: the person's own machine, speaking as itself, naming
+// the conversation it is having if it is having one; or an app holding a
+// session as a bearer token. A browser's session opens the site, never
+// this.
+async function whoever(request: Request): Promise<Session | null> {
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/i);
   const session = await resolveSession(token?.[1]);
-  if (!session || session.client === null) return refused(request);
+  if (session) return session.client === null ? null : session;
+  const machine = machineFrom(request);
+  if (!machine) return null;
+  const conversation = request.headers.get("x-agent-session");
+  if (conversation && !isUuid(conversation)) return null;
+  return personBehindMachine(
+    machine.machineId,
+    machine.secret,
+    conversation ?? undefined,
+  );
+}
+
+// The brain as an MCP server. Every request stands alone, answered in one
+// JSON body, so it runs wherever the app does. The one that opens a
+// connection is told whose brain this is and what is in it, with the
+// membership held until the answer is made.
+export async function POST(request: Request) {
+  const session = await whoever(request);
+  if (!session) return refused(request);
   const answer = async (known: About | null) => {
     const transport = new WebStandardStreamableHTTPServerTransport({
       sessionIdGenerator: undefined,

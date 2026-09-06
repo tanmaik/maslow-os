@@ -8,6 +8,7 @@ import { computerByMachine } from "@placeholder/db/backups";
 import { after } from "next/server";
 
 import { deployment } from "@/lib/deployment";
+import { machineFrom } from "@/lib/machine";
 import {
   CATALOG,
   costOf,
@@ -35,18 +36,6 @@ const refuse = (status: number, message: string) =>
     { type: "error", error: { type: "api_error", message } },
     { status },
   );
-
-// The machine's word for who it is: its id and secret as one bearer token,
-// as Claude Code sends a credential, or as two headers.
-function machineFrom(request: Request) {
-  const bearer = request.headers.get("authorization")?.replace(/^Bearer /, "");
-  const dot = bearer?.indexOf(".") ?? -1;
-  if (bearer && dot > 0)
-    return { machineId: bearer.slice(0, dot), secret: bearer.slice(dot + 1) };
-  const secret = request.headers.get("x-computer-secret");
-  const machineId = request.headers.get("fly-machine-id");
-  return secret && machineId ? { machineId, secret } : null;
-}
 
 // The pretend model's answer, with a usage the meter can read: what a shell
 // or a harness gets on a deployment with no key, outside production.

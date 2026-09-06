@@ -28,17 +28,37 @@ export type Bootstrap = {
   seq: number;
 };
 
-export function bootstrapFor(s: MachineSession): Bootstrap {
+// The person's brain is a tool the harness is given, reached at the app's
+// door as the machine, naming the conversation.
+export function bootstrapFor(
+  s: MachineSession,
+  machine: { machineId: string; secret: string },
+): Bootstrap {
   const models = offered();
   const c = deployment.computers;
-  const gateway = c.kind === "fly" ? `${new URL(c.report).origin}/model` : "";
+  const app = c.kind === "fly" ? new URL(c.report).origin : null;
   return {
     fake: models.length === 0 && !deployment.production,
     model: models.some((m) => m.id === s.model)
       ? s.model
       : (models[0]?.id ?? s.model),
-    gateway,
-    mcpServers: [],
+    gateway: app ? `${app}/model` : "",
+    mcpServers: app
+      ? [
+          {
+            name: "brain",
+            type: "http",
+            url: `${app}/mcp`,
+            headers: [
+              {
+                name: "Authorization",
+                value: `Bearer ${machine.machineId}.${machine.secret}`,
+              },
+              { name: "x-agent-session", value: s.id },
+            ],
+          },
+        ]
+      : [],
     seq: s.seq,
   };
 }

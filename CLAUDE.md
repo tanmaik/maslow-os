@@ -309,7 +309,11 @@ no vendor key and speaks to the gateway as itself, with its own secret as the
 bearer token Claude Code sends. Every call is a row before it is made and is
 settled with what it cost when the answer ends, so no token is bought
 without a row; a call is its person's to read, and the org sees what each
-member used through the usage ledger. Any vendor that speaks the Anthropic
+member used through the usage ledger. The brain is reached the same way: the
+harness is handed the brain's MCP door as its first tool, Claude Code in the
+terminal has it in its settings, and both knock as the machine, which the
+door lets in as the person the machine belongs to. Any
+vendor that speaks the Anthropic
 protocol is a route in that gateway; a session is configured by the app in
 one answer at its start — model, gateway, tools — so a model, a vendor or
 an MCP server is added in the app alone. Every shell on the machine is on

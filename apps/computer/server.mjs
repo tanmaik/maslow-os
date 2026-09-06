@@ -1558,6 +1558,38 @@ async function reset(backedUp) {
   });
 }
 
+// Claude Code in the person's shell is told where their brain is, in its
+// own settings at home: the brain's door, knocked on as this machine.
+async function handClaudeTheBrain() {
+  const home = OS_ROOT ? path.join(OS_ROOT, PERSON.home) : ROOT;
+  const file = path.join(home, ".claude.json");
+  // Only a plain file of theirs is read and kept; anything else there,
+  // a link out of the home or a file that is not a settings object, is
+  // replaced by the settings alone.
+  let settings = {};
+  try {
+    const there = await fs.lstat(file);
+    if (there.isFile()) settings = JSON.parse(await fs.readFile(file, "utf8"));
+  } catch {}
+  if (!settings || typeof settings !== "object" || Array.isArray(settings))
+    settings = {};
+  settings.mcpServers = {
+    ...(settings.mcpServers ?? {}),
+    brain: {
+      type: "http",
+      url: `${new URL(REPORT_URL).origin}/mcp`,
+      headers: { Authorization: `Bearer ${FLY_MACHINE_ID}.${COMPUTER_SECRET}` },
+    },
+  };
+  // Written whole, then moved into place: a boot cut off mid-write leaves
+  // the file as it was.
+  await fs.mkdir(home, { recursive: true });
+  const temp = `${file}.tmp`;
+  await fs.writeFile(temp, JSON.stringify(settings, null, 2));
+  await own(temp);
+  await fs.rename(temp, file);
+}
+
 // Tried until it works: a boot that cannot set the operating system up
 // says so and tries again in a minute, rather than dying and being
 // restarted into the same failure.
@@ -1565,6 +1597,7 @@ async function settleUntilDone(tries = Infinity) {
   for (let n = 1; ; n++) {
     try {
       const settled = await settle();
+      await handClaudeTheBrain();
       // Whatever an agent was doing when the machine went down, it resumes.
       agent
         .restore()

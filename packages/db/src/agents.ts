@@ -1,5 +1,6 @@
 import { asMachine, asOrg, asPerson } from "./index.ts";
-import type { Principal } from "./auth.ts";
+import type { Principal, Session as Holder } from "./auth.ts";
+import { computerByMachine } from "./backups.ts";
 
 // A conversation with the agent on the person's machine, and what happened
 // in it. The person reads and names sessions; the machine writes what the
@@ -169,6 +170,40 @@ export async function sessionForMachine(
         )
       ).rows[0] ?? null,
   );
+}
+
+// The person a machine acts for: the one it belongs to, or, when it names
+// a conversation, the one that conversation belongs to, which must be its
+// own. The brain's door takes this as it takes a session. Null for a
+// stranger, or a machine naming another machine's conversation.
+export async function personBehindMachine(
+  machineId: string,
+  secret: string,
+  sessionId?: string,
+): Promise<Holder | null> {
+  const s = sessionId
+    ? await sessionForMachine(machineId, secret, sessionId)
+    : await computerByMachine(machineId, secret);
+  if (!s) return null;
+  const u = await asOrg(
+    s.orgId,
+    async (q) =>
+      (
+        await q.query<{ personId: string; role: "owner" | "member" }>(
+          'select person_id as "personId", role from users where id = $1',
+          [s.userId],
+        )
+      ).rows[0],
+  );
+  return u
+    ? {
+        personId: u.personId,
+        orgId: s.orgId,
+        userId: s.userId,
+        role: u.role,
+        client: "your agent",
+      }
+    : null;
 }
 
 // What the machine says happened, kept once per seq; the session's title,

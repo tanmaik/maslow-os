@@ -1907,6 +1907,66 @@ try {
     headers: bearer,
     body: JSON.stringify({ model: "gpt-9", messages: [] }),
   });
+  // The harness is handed the brain as a tool, reached at the app's door as
+  // the machine naming its conversation; a stranger, or a machine naming a
+  // conversation not its own, is refused there.
+  const booted = await (
+    await fetch(`${stack.url}/agent/bootstrap`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${machineSecret.secret}`,
+        "fly-machine-id": machineSecret.machine_id,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ session: sessionId }),
+    })
+  ).json();
+  const brainTool = booted.mcpServers?.find((m) => m.name === "brain");
+  const knock = (headers) =>
+    fetch(`${stack.url}/mcp`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        ...headers,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "smoke", version: "0" },
+        },
+      }),
+    });
+  const asAgent = await knock(
+    Object.fromEntries(
+      (brainTool?.headers ?? []).map((h) => [h.name, h.value]),
+    ),
+  );
+  const agentHello = asAgent.ok ? await asAgent.json() : null;
+  const asStranger = await knock({
+    authorization: "Bearer m00000001.nope",
+    "x-agent-session": sessionId,
+  });
+  const asOtherConversation = await knock({
+    ...bearer,
+    "x-agent-session": "00000000-0000-4000-8000-00000000dead",
+  });
+  // The shell's Claude Code knocks as the machine alone, and is its person.
+  const asShell = await knock(bearer);
+  check(
+    "the agent is handed the brain, and reaches it as its machine",
+    brainTool?.url === `${stack.url}/mcp` &&
+      asAgent.status === 200 &&
+      String(agentHello?.result?.instructions ?? "").includes("your agent") &&
+      asShell.status === 200 &&
+      asStranger.status === 401 &&
+      asOtherConversation.status === 401,
+    `tool ${brainTool?.url ?? "none"}; agent ${asAgent.status}, shell ${asShell.status}, stranger ${asStranger.status}, other conversation ${asOtherConversation.status}`,
+  );
   let settledCall;
   for (let i = 0; i < 20; i++) {
     settledCall = await asOrg(
