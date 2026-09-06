@@ -9,10 +9,10 @@ import { devSecrets, freePort, root, startStack } from "./stack.mjs";
 // the dev secrets hold WorkOS, the bucket, mail and the model key. The
 // machine is the exception. A machine on Fly cannot call a laptop back, so
 // on a laptop the machine is a process beside the app, against a fake
-// Machines API in this process: the same daemon, the same harness, the same
+// Machines API in this process: the same daemon, the same
 // gateway, one address. `COMPUTERS=fly pnpm dev` makes real machines in the
 // preview Fly app instead, named for this checkout and purged nightly, for
-// work on the machine itself; their reports, backups and agent cannot reach
+// work on the machine itself; their reports and backups cannot reach
 // here and say so. Real machines are otherwise exercised on the preview.
 const secrets = devSecrets();
 // This checkout, told apart from every other laptop and worktree.
@@ -31,7 +31,7 @@ const wantFly = process.env.COMPUTERS === "fly";
 if (wantFly && !effective.FLY_API_TOKEN)
   throw new Error("COMPUTERS=fly needs the dev secrets; run `pnpm env:pull`.");
 // The machines' disks live outside the checkout, in this laptop's scratch:
-// the harness reads every CLAUDE.md and git repository above its working
+// Claude Code reads every CLAUDE.md and git repository above its working
 // directory, and a disk inside the checkout would hand it this repo as the
 // person's project. The scratch is the laptop's to purge, as the nightly
 // reap purges a laptop's machines on Fly.
@@ -76,7 +76,7 @@ const faked = {
   analytics: "faked: nothing is reported",
   storage: `faked: uploads go to ${process.env.UPLOADS_DIR ?? ".local/uploads"}`,
   connections: "faked: three pretend apps connect with a click",
-  models: "faked: the agent answers every prompt the same way",
+  models: "faked: a pretend model answers Claude Code, and nothing is spent",
 };
 for (const [name, vendor] of Object.entries(stack.vendors)) {
   console.log(`${name.padEnd(9)} ${vendor ? `real (${vendor})` : faked[name]}`);
@@ -84,7 +84,7 @@ for (const [name, vendor] of Object.entries(stack.vendors)) {
 console.log(
   fake
     ? "computers on this laptop, against a fake Fly in this process (COMPUTERS=fly pnpm dev makes real ones)"
-    : `computers real, on Fly as dev-${checkout}-*, purged nightly; a machine cannot reach this laptop, so its reports, backups and agent fail here`,
+    : `computers real, on Fly as dev-${checkout}-*, purged nightly; a machine cannot reach this laptop, so its reports and backups fail here`,
 );
 if (!fake && effective.STORAGE_BUCKET)
   console.log(`storage   real, under dev/${checkout}/, purged nightly`);

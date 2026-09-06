@@ -15,13 +15,12 @@ import { createServer, request as httpRequest } from "node:http";
 import { connect } from "node:net";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 
 import { WebSocketServer } from "ws";
-
-import { agents } from "./agent.mjs";
 
 // COMPUTER_SECRET is this machine's own, for the app's calls; LINK_KEY is
 // this machine's own too, the key its links are signed with, so a shell
@@ -72,9 +71,6 @@ const AS_ME = {
   "fly-machine-id": FLY_MACHINE_ID,
   "content-type": "application/json",
 };
-// Where a session is configured and its events are told: the agent's doors.
-const AGENT_URL = REPORT_URL.replace(/\/computer\/report$/, "/agent");
-
 // The disk's fullness. A laptop's directory stands in for a volume of
 // DISK_GB, measured as what it holds.
 const DISK_GB = process.env.DISK_GB;
@@ -249,7 +245,7 @@ const bound = (req, machine) => {
 
 function signed(url, kind, req) {
   const m = url.pathname.match(
-    /^\/(dl|term|p|acp)\/([^/]+)\/(\d+)\/([^/]+)(?:\/(\d+))?$/,
+    /^\/(dl|term|p)\/([^/]+)\/(\d+)\/([^/]+)(?:\/(\d+))?$/,
   );
   if (!m || m[1] !== kind) return null;
   const [, , machine, expires, sig, port] = m;
@@ -774,7 +770,7 @@ async function handle(req, res) {
     "This link has expired or is not one of ours. Open it again from your computer.";
   // A browser living at a previewed port sees that port, not us; only
   // signed links and the disk's own routes are kept back.
-  const ours = /^\/(fs|dl|term|p|acp)(\/|$)/.test(url.pathname);
+  const ours = /^\/(fs|dl|term|p)(\/|$)/.test(url.pathname);
   if (!ours) {
     const cookie = previewCookie(req);
     if (cookie?.replay) return replay(cookie.replay);
@@ -1225,7 +1221,8 @@ function spawnShell() {
         rows: 30,
         cwd: ROOT,
         env: {
-          PATH: process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin",
+          // Claude Code from the daemon's own dependencies, as on a machine.
+          PATH: `${fileURLToPath(new URL("./node_modules/.bin", import.meta.url))}:${process.env.PATH ?? "/usr/local/bin:/usr/bin:/bin"}`,
           HOME: ROOT,
           TERM: "xterm-256color",
           LANG: process.env.LANG ?? "C.UTF-8",
@@ -1298,19 +1295,6 @@ setInterval(() => {
     });
 }, 30_000).unref();
 
-// The agent: one harness per conversation, on the disk, spoken to over its
-// own socket. The app configures each session; the disk remembers what ran.
-const sockets = new WebSocketServer({ noServer: true });
-const agent = agents({
-  root: ROOT,
-  osRoot: OS_ROOT,
-  person: PERSON,
-  machineId: FLY_MACHINE_ID,
-  secret: COMPUTER_SECRET,
-  agentUrl: AGENT_URL,
-  log: (line) => console.error(line),
-});
-
 server.on("upgrade", (req, socket, head) => {
   try {
     upgrade(req, socket, head);
@@ -1340,17 +1324,6 @@ function upgrade(req, socket, head) {
     if (busy) return refuse(503, "Not right now");
     return shells.handleUpgrade(req, socket, head, (ws) =>
       attach(ws, term.what),
-    );
-  }
-  // The agent's socket for one conversation, by a signed link naming it.
-  const conversation = signed(url, "acp", req);
-  if (conversation) {
-    if (conversation.replay) return replay(conversation.replay);
-    if (conversation.refused || !/^[0-9a-f-]{36}$/.test(conversation.what))
-      return refuse(403, "Forbidden");
-    if (busy) return refuse(503, "Not right now");
-    return sockets.handleUpgrade(req, socket, head, (ws) =>
-      agent.attach(ws, conversation.what),
     );
   }
   // A previewed app's own sockets, live reload and the like.
@@ -1421,8 +1394,8 @@ async function settle() {
   await person();
   for (const d of ["proc", "sys", "dev"])
     await run("mount", ["--rbind", `/${d}`, path.join(OS_ROOT, d)]);
-  // The daemon's own directory, harness included, seen from inside: the
-  // harness ships with the image and updates with it, never with the OS.
+  // The daemon's own directory, Claude Code included, seen from inside:
+  // both ship with the image and update with it, never with the OS.
   // The folder an earlier daemon bound ours at, empty since no mount
   // outlives a boot, goes; a system made before is left plain too.
   await fs.rmdir(path.join(OS_ROOT, "computer")).catch(() => {});
@@ -1544,7 +1517,6 @@ async function reset(backedUp) {
   osSize = { bytes: 0, at: 0 };
   try {
     for (const s of sessions.values()) quietly(() => s.shell.kill());
-    await agent.stopAll();
     for (const d of ["dev", "sys", "proc", "opt/maslow"])
       await run("umount", ["-l", "-R", path.join(OS_ROOT, d)]);
     await fs.rm(path.join(MOUNT, ".os-ready"), { force: true });
@@ -1596,7 +1568,7 @@ async function handClaudeTheBrain() {
 // Claude Code on the machine is told what the deployment's model is, since
 // it is not one it knows: the one row it offers, and the Claude whose
 // handling applies to it. Settings the deployment manages on a machine;
-// the harness's own on a laptop.
+// Claude Code's own on a laptop.
 async function tellClaudeTheModel() {
   if (!process.env.MODEL) return;
   const file = OS_ROOT
@@ -1636,10 +1608,6 @@ async function settleUntilDone(tries = Infinity) {
       const settled = await settle();
       await handClaudeTheBrain();
       await tellClaudeTheModel();
-      // Whatever an agent was doing when the machine went down, it resumes.
-      agent
-        .restore()
-        .catch((err) => console.error(`agents not restored: ${err.message}`));
       return settled;
     } catch (err) {
       console.error(

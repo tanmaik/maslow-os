@@ -1,11 +1,12 @@
-import type { ModelCall } from "@placeholder/db/agents";
+import type { ModelCall } from "@placeholder/db/model-calls";
 
 import { deployment } from "./deployment.ts";
 
-// The models an agent can run on, each behind the vendor that serves it,
-// with the vendor's list price in dollars per million tokens. One model,
-// GLM, from OpenRouter: the harness sends tens of thousands of tokens of
-// its own with every call, so the price per token is the whole bill.
+// The models Claude Code on a computer can run on, each behind the vendor
+// that serves it, with the vendor's list price in dollars per million
+// tokens. One model, GLM, from OpenRouter: Claude Code sends tens of
+// thousands of tokens of its own with every call, so the price per token
+// is the whole bill.
 // Claude Code was built for Claude and is told what to make of a model it
 // does not know: the Claude to treat it like, and how much it holds.
 export type Provider = "anthropic" | "openrouter";
@@ -39,9 +40,10 @@ export const CATALOG: Model[] = [
   },
 ];
 
-// What one org may spend on models in a month before the gate refuses. The
-// abuse limit, not a plan.
+// What one org may spend on models in a month, and one person in an hour,
+// before the gate refuses. Abuse limits, not a plan.
 export const MODEL_CAP_USD = 200;
+export const MODEL_HOUR_CAP_USD = 10;
 
 export const modelById = (id: string): Model | undefined =>
   CATALOG.find((m) => m.id === id);
@@ -75,7 +77,7 @@ export function routeFor(
 export const offered = (): Model[] =>
   CATALOG.filter((m) => routeFor(m.id) !== null);
 
-// The model a new conversation, and a shell's Claude Code, runs on.
+// The model Claude Code on a computer runs on.
 export const defaultModel = (): Model => offered()[0] ?? CATALOG[0]!;
 
 // What a machine is told about its model, for Claude Code on it.

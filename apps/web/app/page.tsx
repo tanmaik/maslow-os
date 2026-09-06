@@ -43,9 +43,6 @@ export default async function Page({
       <Button nativeButton={false} render={<a href="/computer" />}>
         Open your computer
       </Button>
-      <Button nativeButton={false} render={<a href="/agent" />}>
-        Talk to the agent
-      </Button>
       <Button nativeButton={false} render={<a href="/brain" />}>
         Open the brain
       </Button>

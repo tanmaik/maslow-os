@@ -1760,118 +1760,8 @@ try {
     `Marge's copy answers ${shared.status}, ${sharedOwed} owed`,
   );
 
-  // The agent: a conversation on the machine, spoken to over a signed
-  // socket. The faked agent answers with a tool call, a subagent, a sentence
-  // and a result, then wakes on its own for one more turn; the page then
-  // shows the same events from the database; every door a machine knocks on
-  // gives a stranger a 404.
-  const made = await fetch(`${stack.url}/agent/new`, {
-    method: "POST",
-    headers: { cookie: ottoNow, "content-type": "application/json" },
-    body: JSON.stringify({ model: "z-ai/glm-5.3-flash" }),
-  });
-  const { id: sessionId } = await made.json();
-  const agentPage = async () =>
-    (
-      await fetch(`${stack.url}/agent/${sessionId}`, {
-        headers: { cookie: ottoNow },
-      })
-    ).text();
-  const freshAgent = await agentPage();
-  const acpLink = freshAgent.match(/data-acp-url="([^"]+)"/)?.[1];
-  const frames = await new Promise((resolve) => {
-    if (!acpLink) return resolve([]);
-    const ws = new WebSocket(acpLink.replaceAll("&amp;", "&"));
-    const seen = [];
-    const done = setTimeout(() => {
-      ws.close();
-      resolve(seen);
-    }, 30000);
-    ws.onopen = () => ws.send(JSON.stringify({ prompt: "Hello, agent" }));
-    ws.onmessage = (e) => {
-      const f = JSON.parse(String(e.data));
-      seen.push(f);
-      // The second result is the wakeup's turn ending.
-      if (seen.filter((x) => x.event?.kind === "result").length === 2) {
-        clearTimeout(done);
-        ws.close();
-        resolve(seen);
-      }
-    };
-    ws.onerror = () => resolve(seen);
-    ws.onclose = (e) => {
-      if (e.reason) seen.push({ closed: e.reason });
-      resolve(seen);
-    };
-  });
-  const kinds = frames.filter((f) => f.event).map((f) => f.event.kind);
-  const agentCall = frames.find(
-    (f) => f.event?.kind === "tool" && f.event.body.agent,
-  )?.event.body;
-  check(
-    "the faked agent answers over the socket: a tool call, a subagent, text, a result",
-    made.status === 200 &&
-      ["prompt", "tool", "text", "result"].every((k) => kinds.includes(k)) &&
-      agentCall?.usage?.tokens === 12 &&
-      frames.some(
-        (f) =>
-          f.event?.kind === "tool" &&
-          String(f.event.body.parent ?? "").endsWith("-helper"),
-      ) &&
-      frames.some((f) => f.status === "faked") &&
-      frames.some((f) => "stream" in f),
-    kinds.join(",") || JSON.stringify(frames.slice(-1)),
-  );
-  // A turn the agent began itself: a wake, its words, and a result of its
-  // own, with the conversation idle again after.
-  check(
-    "the faked agent wakes on its own and the turn is recorded whole",
-    kinds.indexOf("wake") > kinds.indexOf("result") &&
-      kinds.lastIndexOf("result") > kinds.indexOf("wake") &&
-      frames.some(
-        (f) =>
-          f.event?.kind === "text" &&
-          String(f.event.body.text).includes("Woke, as scheduled"),
-      ),
-    kinds.join(","),
-  );
-  // The machine tells the app as it goes; the page catches up: the prompt,
-  // the answer, and the turn's work folded behind how long it took.
-  let shown = "";
-  for (let i = 0; i < 20; i++) {
-    shown = await agentPage();
-    if (shown.includes('data-row-kind="wake"') && shown.includes("Woke, as"))
-      break;
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  check(
-    "the conversation is on the page from the database, and in the sidebar",
-    ["prompt", "text", "result", "wake"].every((k) =>
-      shown.includes(`data-event="${k}"`),
-    ) &&
-      shown.includes('data-row-kind="fold"') &&
-      shown.includes("Worked for") &&
-      shown.includes("Woke up") &&
-      shown.includes(`data-session="${sessionId}"`) &&
-      shown.includes("Hello, agent") &&
-      shown.includes("data-faked") === false,
-    (shown.match(/data-(?:event|row-kind)="[^"]+"/g) ?? []).join(" "),
-  );
-  const strangerHeaders = {
-    authorization: "Bearer nope",
-    "fly-machine-id": "m00000001",
-    "content-type": "application/json",
-  };
-  const strangerReport = await fetch(`${stack.url}/agent/report`, {
-    method: "POST",
-    headers: strangerHeaders,
-    body: JSON.stringify({ session: sessionId, events: [] }),
-  });
-  const strangerBoot = await fetch(`${stack.url}/agent/bootstrap`, {
-    method: "POST",
-    headers: strangerHeaders,
-    body: JSON.stringify({ session: sessionId }),
-  });
+  // The gateway: a stranger gets a 404 at its door; with no key it answers
+  // from a pretend model and writes the call down.
   const strangerModel = await fetch(`${stack.url}/model/v1/messages`, {
     method: "POST",
     headers: {
@@ -1916,21 +1806,8 @@ try {
     headers: bearer,
     body: JSON.stringify({ model: "gpt-9", messages: [] }),
   });
-  // The harness is handed the brain as a tool, reached at the app's door as
-  // the machine naming its conversation; a stranger, or a machine naming a
-  // conversation not its own, is refused there.
-  const booted = await (
-    await fetch(`${stack.url}/agent/bootstrap`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${machineSecret.secret}`,
-        "fly-machine-id": machineSecret.machine_id,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({ session: sessionId }),
-    })
-  ).json();
-  const brainTool = booted.mcpServers?.find((m) => m.name === "brain");
+  // Claude Code on the machine knocks on the brain's door as the machine
+  // alone, and is let in as its person; a stranger is refused.
   const knock = (headers) =>
     fetch(`${stack.url}/mcp`, {
       method: "POST",
@@ -1950,31 +1827,15 @@ try {
         },
       }),
     });
-  const asAgent = await knock(
-    Object.fromEntries(
-      (brainTool?.headers ?? []).map((h) => [h.name, h.value]),
-    ),
-  );
-  const agentHello = asAgent.ok ? await asAgent.json() : null;
-  const asStranger = await knock({
-    authorization: "Bearer m00000001.nope",
-    "x-agent-session": sessionId,
-  });
-  const asOtherConversation = await knock({
-    ...bearer,
-    "x-agent-session": "00000000-0000-4000-8000-00000000dead",
-  });
-  // The shell's Claude Code knocks as the machine alone, and is its person.
   const asShell = await knock(bearer);
+  const shellHello = asShell.ok ? await asShell.json() : null;
+  const asStranger = await knock({ authorization: "Bearer m00000001.nope" });
   check(
-    "the agent is handed the brain, and reaches it as its machine",
-    brainTool?.url === `${stack.url}/mcp` &&
-      asAgent.status === 200 &&
-      String(agentHello?.result?.instructions ?? "").includes("your agent") &&
-      asShell.status === 200 &&
-      asStranger.status === 401 &&
-      asOtherConversation.status === 401,
-    `tool ${brainTool?.url ?? "none"}; agent ${asAgent.status}, shell ${asShell.status}, stranger ${asStranger.status}, other conversation ${asOtherConversation.status}`,
+    "the machine reaches the brain as its person, and a stranger is refused",
+    asShell.status === 200 &&
+      String(shellHello?.result?.instructions ?? "").includes("your agent") &&
+      asStranger.status === 401,
+    `shell ${asShell.status}, stranger ${asStranger.status}`,
   );
   let settledCall;
   for (let i = 0; i < 20; i++) {
@@ -1995,41 +1856,15 @@ try {
     await sleep(100);
   }
   check(
-    "a stranger gets 404 at every agent door; the gateway without a key pretends and writes the call down",
-    strangerReport.status === 404 &&
-      strangerBoot.status === 404 &&
-      strangerModel.status === 404 &&
+    "a stranger gets 404 at the gateway; without a key it pretends and writes the call down",
+    strangerModel.status === 404 &&
       pretendCall.status === 200 &&
       pretendAnswer.includes("message_start") &&
       settledCall.n === 1 &&
       settledCall.tokens === 19 &&
       settledCall.free === true &&
       unoffered.status === 403,
-    `${strangerReport.status} ${strangerBoot.status} ${strangerModel.status}; pretend ${pretendCall.status}, ${settledCall.n} call at ${settledCall.tokens} tokens, unoffered ${unoffered.status}`,
-  );
-  const forgedAgent = await new Promise((resolve) => {
-    const ws = new WebSocket(
-      (acpLink ?? "")
-        .replaceAll("&amp;", "&")
-        .replace(/\/[^/?]+\?/, "/forged?"),
-    );
-    ws.onopen = () => resolve("opened");
-    ws.onerror = () => resolve("refused");
-    ws.onclose = () => resolve("refused");
-  });
-  check(
-    "a forged agent link is refused",
-    forgedAgent === "refused",
-    forgedAgent,
-  );
-  check(
-    "the agent page says computers are off for an org without them",
-    (
-      await (
-        await fetch(`${stack.url}/agent`, { headers: { cookie: wile } })
-      ).text()
-    ).includes("Computers are off for this org"),
-    "note shown",
+    `stranger ${strangerModel.status}; pretend ${pretendCall.status}, ${settledCall.n} call at ${settledCall.tokens} tokens, unoffered ${unoffered.status}`,
   );
   // The meter: a sweep turns what happened into priced usage, per person,
   // and a second sweep only adds the time since.

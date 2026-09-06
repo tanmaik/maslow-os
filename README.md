@@ -51,16 +51,14 @@ Uploaded images live in an S3-compatible bucket named by `STORAGE_ENDPOINT`,
 `STORAGE_SECRET_KEY`. Without them a checkout uses a directory and a preview
 refuses uploads.
 
-The agent runs on the person's machine and reaches its models through the
-app, never with a key of its own: `OPENROUTER_API_KEY` serves the catalog,
-and the person picks a model in the composer. Without it the agent is faked:
-it answers every prompt the same way, and the page and the pill say so. The
-person's brain is the agent's first tool: the harness is handed the brain's
-MCP door at every start, and Claude Code in the terminal finds it in its own
-settings at home; both knock as the machine, so what they read and write is
-the person's and the log says the agent did it. On a laptop the machine is a
-process beside the app, with the same daemon, harness and gateway as on Fly,
-because a machine on Fly cannot call a laptop back. Real machines are
+Claude Code runs on the person's computer, from its terminal, and reaches
+its model through the app, never with a key of its own: `OPENROUTER_API_KEY`
+serves the one model in the catalog. Without it a pretend model answers and
+the pill says so. The person's brain is in Claude Code's settings at home,
+written by the machine at every boot; it knocks as the machine, so what it
+reads and writes is the person's and the log says the agent did it. On a
+laptop the machine is a process beside the app, with the same daemon and
+gateway as on Fly, because a machine on Fly cannot call a laptop back. Real machines are
 exercised on the preview; to make them from a laptop anyway, for work on the
 machine itself:
 

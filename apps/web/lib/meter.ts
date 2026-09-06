@@ -8,7 +8,10 @@ import {
 } from "@placeholder/db/computers";
 import { picturesIn, type Resource, type Unit } from "@placeholder/db/usage";
 
-import { modelCallsBetween } from "@placeholder/db/agents";
+import {
+  modelCallsBetween,
+  settleLostCalls,
+} from "@placeholder/db/model-calls";
 
 import { deployment } from "./deployment.ts";
 import { sweepBackups } from "./backups.ts";
@@ -270,8 +273,8 @@ export async function measure(
       from,
       to,
     });
-  // Tokens: every call the member's agent made through the gateway in the
-  // window, one line per model, at what each call cost. The price is what
+  // Tokens: every call the member's Claude Code made through the gateway
+  // in the window, one line per model, at what each call cost. The price is what
   // those tokens came to per token, since input, output and cache are
   // priced apart.
   const byModel = new Map<string, { tokens: number; cost: number }>();
@@ -462,6 +465,9 @@ async function sweep(now = new Date()): Promise<number> {
       await sweepBackups(orgId, now);
       await settle(orgId);
       if (!orgs.includes(orgId)) continue;
+      // A call begun over ten minutes ago with no answer written is one
+      // the app lost: settled as it stood, marked, and counted.
+      await settleLostCalls(orgId, new Date(now.getTime() - 600_000));
       appended += await asOrg(orgId, async (q) => {
         let n = 0;
         for (const userId of await membersOf(q))

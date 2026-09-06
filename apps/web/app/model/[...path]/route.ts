@@ -3,7 +3,7 @@ import {
   dropModelCall,
   modelSpendOf,
   settleModelCall,
-} from "@placeholder/db/agents";
+} from "@placeholder/db/model-calls";
 import { computerByMachine } from "@placeholder/db/backups";
 import { after } from "next/server";
 
@@ -14,6 +14,7 @@ import {
   costOf,
   defaultModel,
   MODEL_CAP_USD,
+  MODEL_HOUR_CAP_USD,
   modelById,
   offered,
   routeFor,
@@ -28,8 +29,6 @@ import {
 // spent.
 export const maxDuration = 300;
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-
 // An error in the shape the Anthropic client shows the person.
 const refuse = (status: number, message: string) =>
   Response.json(
@@ -38,7 +37,7 @@ const refuse = (status: number, message: string) =>
   );
 
 // The pretend model's answer, with a usage the meter can read: what a shell
-// or a harness gets on a deployment with no key, outside production.
+// or Claude Code gets on a deployment with no key, outside production.
 function pretend(model: string, stream: boolean): Response {
   const usage = { input_tokens: 12, output_tokens: 7 };
   const text = "This is the pretend model. Nothing was spent.";
@@ -107,7 +106,7 @@ async function forward(
   const { machineId, secret } = machine;
   const computer = await computerByMachine(machineId, secret);
   if (!computer) return new Response(null, { status: 404 });
-  // The doors a harness knocks on, and no other: a Messages call is paid
+  // The doors Claude Code knocks on, and no other: a Messages call is paid
   // for; the catalog and a token count are not, and pass through unwritten.
   const path = (await params).path.join("/");
   const paid = request.method === "POST" && path === "v1/messages";
@@ -124,14 +123,14 @@ async function forward(
   try {
     asked = body ? JSON.parse(body) : {};
   } catch {}
-  // Only a model the catalog offers is paid for: the harness names one on
+  // Only a model the catalog offers is paid for: Claude Code names one on
   // every call, and a call naming another is refused before it costs.
   const model = typeof asked.model === "string" ? asked.model : null;
   const catalog = faked ? CATALOG : offered();
   if (paid && !catalog.some((m) => m.id === model))
     return refuse(
       403,
-      `${model ?? "No model"} is not one this deployment offers; the agent runs on ${catalog
+      `${model ?? "No model"} is not one this deployment offers; this computer runs on ${catalog
         .map((m) => m.id)
         .join(", ")}.`,
     );
@@ -171,7 +170,7 @@ async function forward(
       body,
     });
     // A vendor that does not count tokens answers 404; the count is then
-    // estimated at four characters a token, which is all the harness
+    // estimated at four characters a token, which is all Claude Code
     // needs of it.
     if (up.status === 404 && path === "v1/messages/count_tokens")
       return Response.json({
@@ -187,6 +186,11 @@ async function forward(
     return new Response(up.body, { status: up.status, headers: out });
   }
 
+  // The org's month and the person's hour, both from the settled rows.
+  // Calls still in flight are not counted, so a burst can pass the line by
+  // as many calls as run at once, each bounded by what one answer can be:
+  // these are abuse ceilings, and a reservation would have to guess a
+  // call's cost before it is made.
   const monthStart = new Date();
   monthStart.setUTCDate(1);
   monthStart.setUTCHours(0, 0, 0, 0);
@@ -196,13 +200,21 @@ async function forward(
       429,
       `This org has spent $${spent.toFixed(2)} on models this month, past its $${MODEL_CAP_USD} limit. Ask us to raise it.`,
     );
-  const sessionHeader = request.headers.get("x-agent-session");
-  const sessionId =
-    sessionHeader && UUID.test(sessionHeader) ? sessionHeader : null;
+  const hourAgo = new Date(Date.now() - 3_600_000);
+  const hour = await modelSpendOf(
+    computer.orgId,
+    hourAgo,
+    costOf,
+    computer.userId,
+  );
+  if (hour >= MODEL_HOUR_CAP_USD)
+    return refuse(
+      429,
+      `You have spent $${hour.toFixed(2)} on models in the last hour, past the $${MODEL_HOUR_CAP_USD} an hour limit. It clears as the hour passes.`,
+    );
   // The call is a row before the vendor hears of it; if the row cannot be
   // written, nothing is bought.
   const callId = await beginModelCall(machineId, secret, {
-    sessionId,
     provider: route.provider,
     model: model!,
   }).catch(() => null);
@@ -223,10 +235,9 @@ async function forward(
       if (v) headers.set(name, v);
     }
     for (const [k, v] of Object.entries(route.headers)) headers.set(k, v);
-    // OpenRouter keeps one conversation's calls on one upstream cache when
-    // told which conversation they belong to; the vendor caches the rest.
-    if (route.provider === "openrouter" && sessionId)
-      headers.set("x-session-id", sessionId);
+    // OpenRouter keeps one machine's calls on one upstream cache when told
+    // they belong together; the vendor caches the rest.
+    if (route.provider === "openrouter") headers.set("x-session-id", machineId);
     const search = new URL(request.url).search;
     try {
       upstream = await fetch(`${route.url}/${path}${search}`, {

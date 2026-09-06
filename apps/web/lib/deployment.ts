@@ -67,8 +67,8 @@ export type Connections =
   | { kind: "fake" }
   | { kind: "none" };
 
-// The models an agent may run on, reached through our gateway with one key
-// per vendor; or none, and the agent is faked.
+// The models Claude Code on a computer may run on, reached through our
+// gateway with one key per vendor; or none, and a pretend model answers.
 export type Models =
   | { kind: "gateway"; anthropic: string | null; openrouter: string | null }
   | { kind: "none" };
@@ -219,10 +219,10 @@ function connections(): Connections {
   return production ? { kind: "none" } : { kind: "fake" };
 }
 
-// The models the agent runs on: real with a key for the vendor that serves
-// the catalog, OpenRouter. Without one there are none: in production no
-// agent, and anywhere else a faked one. An Anthropic key alone offers no
-// model, and rides along for a bare Claude id.
+// The models Claude Code runs on: real with a key for the vendor that
+// serves the catalog, OpenRouter. Without one there are none: in production
+// no model, and anywhere else a pretend one. An Anthropic key alone offers
+// no model, and rides along for a bare Claude id.
 function models(): Models {
   const { ANTHROPIC_API_KEY: anthropic, OPENROUTER_API_KEY: openrouter } =
     process.env;

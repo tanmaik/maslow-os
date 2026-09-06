@@ -2,8 +2,7 @@
 # their agent reach for, copied onto the volume on first boot and never
 # used from the image again. Kept small, since the copy is the first boot.
 # The pty is native code, built here and copied in, so nothing compiles
-# on the machine. The agent's harness (the ACP adapter over the Claude Agent
-# SDK, with its native binary) is installed here with the daemon's deps and
+# on the machine. Claude Code is installed here with the daemon's deps and
 # bound into the operating system at boot, so it updates with the image.
 FROM node:24-bookworm-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends python3 make g++ && rm -rf /var/lib/apt/lists/*
@@ -21,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
        > /etc/apt/sources.list.d/github-cli.list \
     && apt-get update && apt-get install -y --no-install-recommends gh \
     && rm -rf /var/lib/apt/lists/*
-RUN npm install -g @anthropic-ai/claude-code vercel pnpm && npm cache clean --force
+RUN npm install -g vercel pnpm && npm cache clean --force
 # The person: an ordinary user, uid 1000, at home in /home/me. The base
 # image's node user holds that id and becomes them. sudo is for the
 # package managers alone; what they install with npm and pip lands in
@@ -33,5 +32,5 @@ COPY --chmod=0644 etc/pip.conf /etc/pip.conf
 RUN visudo -cf /etc/sudoers.d/me
 WORKDIR /computer
 COPY --from=build /computer/node_modules node_modules
-COPY package.json server.mjs agent.mjs fake-agent.mjs ./
+COPY package.json server.mjs ./
 CMD ["node", "server.mjs"]

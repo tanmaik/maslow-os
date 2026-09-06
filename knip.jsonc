@@ -15,11 +15,11 @@
       "ignoreDependencies": ["agentation-mcp"],
     },
     "apps/computer": {
-      // The faked agent is its own process, started by path.
-      "entry": ["server.mjs", "fake-agent.mjs"],
+      "entry": ["server.mjs"],
       "includeEntryExports": true,
-      // The agent's harness, started by path inside the operating system.
-      "ignoreDependencies": ["@agentclientprotocol/claude-agent-acp"],
+      // Claude Code, run by the person from their shell, bound in from the
+      // image inside the operating system.
+      "ignoreDependencies": ["@anthropic-ai/claude-code"],
     },
     // A package's doors are entry files; what they export still has to be
     // used by someone.

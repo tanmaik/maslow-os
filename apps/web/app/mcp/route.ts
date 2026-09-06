@@ -1,11 +1,10 @@
-import { asPerson, Gone, isUuid } from "@placeholder/db";
-import { personBehindMachine } from "@placeholder/db/agents";
+import { asPerson, Gone } from "@placeholder/db";
 import { resolveSession, type Session } from "@placeholder/db/auth";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { NextResponse } from "next/server";
 
 import { about, brainServer, type About } from "@/lib/mcp";
-import { machineFrom } from "@/lib/machine";
+import { machineFrom, personBehindMachine } from "@/lib/machine";
 import { origin } from "@/lib/origin";
 
 // A stranger, or a token whose membership is gone, is told where to sign in.
@@ -20,8 +19,8 @@ const refused = (request: Request) =>
     },
   );
 
-// Who is knocking: the person's own machine, speaking as itself, naming
-// the conversation it is having if it is having one; or an app holding a
+// Who is knocking: the person's own machine, speaking as itself; or an
+// app holding a
 // session as a bearer token. A browser's session opens the site, never
 // this.
 async function whoever(request: Request): Promise<Session | null> {
@@ -30,13 +29,7 @@ async function whoever(request: Request): Promise<Session | null> {
   if (session) return session.client === null ? null : session;
   const machine = machineFrom(request);
   if (!machine) return null;
-  const conversation = request.headers.get("x-agent-session");
-  if (conversation && !isUuid(conversation)) return null;
-  return personBehindMachine(
-    machine.machineId,
-    machine.secret,
-    conversation ?? undefined,
-  );
+  return personBehindMachine(machine.machineId, machine.secret);
 }
 
 // The brain as an MCP server. Every request stands alone, answered in one

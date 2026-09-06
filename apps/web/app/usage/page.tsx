@@ -1,5 +1,5 @@
 import { backupsOf } from "@placeholder/db/backups";
-import { modelCallsOf } from "@placeholder/db/agents";
+import { modelCallsOf } from "@placeholder/db/model-calls";
 import {
   CAUSES_OF_SIZE,
   computerOf,
@@ -78,7 +78,6 @@ const CAUSE: Record<Cause, string> = {
   "link-dl": "a download link was followed",
   "link-term": "a terminal was opened",
   "link-p": "a preview was opened",
-  "link-acp": "the agent was opened",
   backup: "the daily backup",
   "powered-on": "you powered it on",
   "powered-off": "you powered it off",
@@ -181,7 +180,7 @@ const WHAT: Record<Resource, string> = {
   rootfs: "Machine's image, while off",
   bucket: "Bucket",
   brain: "Brain",
-  tokens: "Agent: tokens through the gateway",
+  tokens: "Claude Code: tokens through the gateway",
   vectors: "Recall, tokens embedded",
   actions: "Apps, actions run",
 };
@@ -350,11 +349,17 @@ export default async function Usage() {
   // moment ago shows here before the sweep has priced it into the ledger.
   const byModel = new Map<
     string,
-    { calls: number; tokens: number; cost: number }
+    { calls: number; lost: number; tokens: number; cost: number }
   >();
   for (const c of await modelCallsOf(p, monthStart)) {
-    const m = byModel.get(c.model) ?? { calls: 0, tokens: 0, cost: 0 };
+    const m = byModel.get(c.model) ?? {
+      calls: 0,
+      lost: 0,
+      tokens: 0,
+      cost: 0,
+    };
     m.calls += 1;
+    if (c.lost) m.lost += 1;
     m.tokens +=
       c.inputTokens + c.outputTokens + c.cacheReadTokens + c.cacheWriteTokens;
     m.cost += costOf(c);
@@ -362,7 +367,9 @@ export default async function Usage() {
   }
   const tokens: Detail[] = [...byModel].map(([model, m]) => ({
     key: `model:${model}`,
-    what: `${modelLabel(model)}, ${m.calls} call${m.calls === 1 ? "" : "s"}`,
+    what: `${modelLabel(model)}, ${m.calls} call${m.calls === 1 ? "" : "s"}${
+      m.lost ? `, ${m.lost} lost before the answer ended` : ""
+    }`,
     much: `${Math.round(m.tokens).toLocaleString("en-US")} tokens`,
     cost: dollars(m.cost),
     attr: { "data-model": model },
@@ -537,7 +544,7 @@ export default async function Usage() {
                   <TableRow key={`${id}-${l.resource}-${l.model ?? ""}`}>
                     <TableCell className="text-muted-foreground pl-8">
                       {l.resource === "tokens"
-                        ? `Agent: ${modelLabel(l.model)}`
+                        ? `Claude Code: ${modelLabel(l.model)}`
                         : WHAT[l.resource]}
                     </TableCell>
                     <TableCell className="text-muted-foreground font-mono tabular-nums">

@@ -22,7 +22,7 @@ export const SOURCE: Record<Resource, string> = {
   rootfs: "Image",
   bucket: "Bucket",
   brain: "Brain",
-  tokens: "Agent",
+  tokens: "Claude Code",
   vectors: "Recall",
   actions: "Apps",
 };
