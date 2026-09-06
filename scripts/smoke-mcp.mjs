@@ -214,6 +214,25 @@ export async function smokeMcp(stack, signIn) {
       TOKEN.test(grant.access_token ?? ""),
     `answered ${issued.status}`,
   );
+  // An app's session opens the brain and nothing else; a browser's opens
+  // the site and not the brain.
+  const settings = (cookie) =>
+    fetch(`${base}/settings`, { headers: { cookie }, redirect: "manual" });
+  const asBrowser = await settings(wile);
+  const asCookie = await settings(`session=${grant.access_token}`);
+  const asBearer = await fetch(`${base}/mcp`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${wile.split("=")[1]}` },
+  });
+  check(
+    "an app's token is not a browser's, nor a browser's an app's",
+    asBrowser.status === 200 &&
+      (await asBrowser.text()).includes("Agents") &&
+      asCookie.status === 307 &&
+      new URL(asCookie.headers.get("location") ?? "", base).pathname === "/" &&
+      asBearer.status === 401,
+    `settings as the browser: ${asBrowser.status}; as the app: ${asCookie.status} to ${asCookie.headers.get("location")}; brain as the browser: ${asBearer.status}`,
+  );
   check(
     "a code is spent once",
     (await token({ ...exchange, code: fresh })).status === 400,

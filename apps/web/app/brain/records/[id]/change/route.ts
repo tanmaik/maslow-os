@@ -5,13 +5,14 @@ import {
   Forbidden,
   get,
   Invalid,
+  isId,
   NotFound,
   remove,
   restore,
   unlink,
   unmerge,
 } from "@placeholder/brain";
-import { asPerson, isUuid } from "@placeholder/db";
+import { asPerson } from "@placeholder/db";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";
@@ -30,7 +31,7 @@ export async function POST(
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const { id } = await params;
-  if (!isUuid(id)) return new Response(null, { status: 404 });
+  if (!isId(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "edit");
   const author = `person:${p.userId}`;
@@ -42,7 +43,7 @@ export async function POST(
       if (intent === "unmerge") return unmerge(db, author, id);
       if (intent === "unlink") {
         const edge = String(form.get("edge") ?? "");
-        if (!isUuid(edge))
+        if (!isId(edge))
           throw new NotFound(`edge ${edge} is not in this brain`);
         return unlink(db, author, edge);
       }

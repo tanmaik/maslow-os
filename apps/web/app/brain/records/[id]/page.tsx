@@ -6,13 +6,14 @@ import {
   grantsOf,
   graph,
   history,
+  isId,
   read,
   type BrainRecord,
   type Edge,
   type Event,
   type Verb,
 } from "@placeholder/brain";
-import { asPerson, isUuid } from "@placeholder/db";
+import { asPerson } from "@placeholder/db";
 import { groupsOf } from "@placeholder/db/groups";
 import { notFound, redirect } from "next/navigation";
 
@@ -69,7 +70,7 @@ export default async function Page({
   const p = await principal();
   if (!p) redirect("/");
   const { id } = await params;
-  if (!isUuid(id)) notFound();
+  if (!isId(id)) notFound();
   const found = await asPerson(p, async (db) => {
     const [record] = await get(db, [id]);
     if (!record) return null;

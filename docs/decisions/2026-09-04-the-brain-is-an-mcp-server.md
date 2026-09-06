@@ -24,7 +24,10 @@ and the record still belongs to the person.
 
 The access token an app gets is a session token, the same `org.session`
 string a browser holds in its cookie. `sessions` gained a `client` column: a
-browser's is null, an app's is its name. Resolving a bearer token is
+browser's is null, an app's is its name, and each kind opens only its own
+door: the site ignores a session that has a client, and `/mcp` takes only
+one that does, so a token an app holds cannot be pasted into a cookie and
+reach settings, downloads or the computer. Resolving a bearer token is
 `resolveSession`; ending an app's access is deleting its row, from an Agents
 card in settings, and the next request with that token is a stranger. No
 refresh tokens and no expiry: a session lasts until it is ended, as the site's

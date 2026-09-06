@@ -369,7 +369,7 @@ export async function merge(
     }
     const locked = (
       await q.query<RecordRow>(
-        `select ${recordSelect} from records where id = any($1::uuid[])
+        `select ${recordSelect} from records where id = any($1::text[])
          order by id for update`,
         [[winner.id, id]],
       )

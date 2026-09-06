@@ -1,4 +1,5 @@
 import { Invalid } from "./errors.ts";
+import { isId } from "./ids.ts";
 import { accepts, expected, propertiesOf, sqlType } from "./properties.ts";
 import {
   edgeColumns,
@@ -64,7 +65,6 @@ const MAX_LIMIT = 200;
 // A page ends at a sort key and an id, under one order; the next page
 // starts after them, under the same order.
 type Cursor = { key: string; id: string; order: string };
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const encode = (c: Cursor) =>
   Buffer.from(JSON.stringify(c)).toString("base64url");
 function decode(s: string, order: string): Cursor {
@@ -74,11 +74,7 @@ function decode(s: string, order: string): Cursor {
   } catch {
     // Not a cursor at all; refused below.
   }
-  if (
-    typeof c?.key !== "string" ||
-    typeof c.id !== "string" ||
-    !UUID.test(c.id)
-  ) {
+  if (typeof c?.key !== "string" || typeof c.id !== "string" || !isId(c.id)) {
     throw new Invalid("that is not a cursor");
   }
   if (c.order !== order) throw new Invalid("that cursor is from another query");
@@ -131,7 +127,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     "($3::uuid is null or person_id = $3)",
     "($4::text is null or layer = $4)",
     "($5::text is null or source = $5)",
-    `($6::uuid is null or (
+    `($6::text is null or (
        r.id not in (select same_record($6))
        and exists (
          select 1 from edges e
@@ -215,7 +211,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     const c = decode(opts.cursor, orderName);
     if (!keyFits(orderType, c.key)) throw new Invalid("that is not a cursor");
     where.push(
-      `(${order}, id) ${direction === "desc" ? "<" : ">"} (${param(c.key)}::${orderType}, ${param(c.id)}::uuid)`,
+      `(${order}, id) ${direction === "desc" ? "<" : ">"} (${param(c.key)}::${orderType}, ${param(c.id)}::text)`,
     );
   }
 
@@ -240,7 +236,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
 export async function get(q: Query, ids: string[]): Promise<BrainRecord[]> {
   if (ids.length === 0) return [];
   const { rows } = await q.query<RecordRow>(
-    `select ${recordSelect} from records where id = any($1::uuid[])`,
+    `select ${recordSelect} from records where id = any($1::text[])`,
     [ids],
   );
   return rows.map(toRecord);
@@ -311,7 +307,7 @@ export async function graph(q: Query, around?: string[]): Promise<Graph> {
     title: string;
   }>(
     `${STANDING}, focus as (
-       select winner from winner where id = any($1::uuid[])
+       select winner from winner where id = any($1::text[])
      ), near as (
        select from_id as id from resolved
        where to_id in (select winner from focus)
@@ -321,8 +317,8 @@ export async function graph(q: Query, around?: string[]): Promise<Graph> {
      )
      select r.id, r.kind, r.title from records r
      where r.merged_into is null
-       and (r.deleted_at is null or r.id = any($1::uuid[]))
-       and ($1::uuid[] is null or r.id in (select id from near))
+       and (r.deleted_at is null or r.id = any($1::text[]))
+       and ($1::text[] is null or r.id in (select id from near))
      order by r.id`,
     [around ?? null],
   );
@@ -330,7 +326,7 @@ export async function graph(q: Query, around?: string[]): Promise<Graph> {
   const { rows: edges } = await q.query<EdgeRow>(
     `${STANDING}
      select ${edgeColumns} from resolved
-     where from_id = any($1::uuid[]) and to_id = any($1::uuid[])
+     where from_id = any($1::text[]) and to_id = any($1::text[])
      order by id`,
     [ids],
   );
@@ -357,7 +353,7 @@ export async function history(
 ): Promise<Event[]> {
   const { rows } = await q.query<EventRow>(
     `select ${eventColumns} from events
-     where ($1::uuid is null or subject_id = $1)
+     where ($1::text is null or subject_id = $1)
        and ($2::bigint is null or seq < $2)
      order by seq desc limit $3`,
     [

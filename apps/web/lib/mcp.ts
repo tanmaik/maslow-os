@@ -72,7 +72,7 @@ const filter = z.object({
   op: z.enum(["eq", "ne", "lt", "lte", "gt", "gte", "in", "contains"]),
   value: z.unknown(),
 });
-const id = z.string().uuid();
+const id = z.string().regex(brain.ID).describe("ten characters");
 
 type Result = { content: { type: "text"; text: string }[]; isError?: true };
 
@@ -136,7 +136,9 @@ export function brainServer(s: Session): McpServer {
             "with no kind: the person's own records, what others shared, or both",
           ),
         kind: z.string().optional(),
-        owner: id
+        owner: z
+          .string()
+          .uuid()
           .optional()
           .describe("with kind: the member whose kind it is, from the catalog"),
         layer: z.enum(["source", "derived"]).optional(),
@@ -305,7 +307,10 @@ export function brainServer(s: Session): McpServer {
       description:
         "The log of changes, newest first: what changed, by whom, with before and after. Optionally only one record, edge, kind, verb or field's; page with before.",
       inputSchema: {
-        of: id.optional(),
+        of: z
+          .string()
+          .optional()
+          .describe("a record, edge, kind, verb or field id"),
         before: z.number().int().optional(),
         limit: z.number().int().min(1).max(200).optional(),
       },

@@ -6,12 +6,12 @@ import { brainServer } from "@/lib/mcp";
 import { origin } from "@/lib/origin";
 
 // The brain as an MCP server, for an app holding a session as a bearer
-// token. Every request stands alone, answered in one JSON body, so it runs
-// wherever the app does.
+// token; a browser's session opens the site, never this. Every request
+// stands alone, answered in one JSON body, so it runs wherever the app does.
 export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/i);
   const session = await resolveSession(token?.[1]);
-  if (!session) {
+  if (!session || session.client === null) {
     return NextResponse.json(
       { error: "invalid_token" },
       {

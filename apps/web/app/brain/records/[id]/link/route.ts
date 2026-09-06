@@ -1,5 +1,5 @@
-import { Forbidden, Invalid, NotFound, write } from "@placeholder/brain";
-import { asPerson, isUuid } from "@placeholder/db";
+import { Forbidden, Invalid, isId, NotFound, write } from "@placeholder/brain";
+import { asPerson } from "@placeholder/db";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";
@@ -18,12 +18,12 @@ export async function POST(
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const { id } = await params;
-  if (!isUuid(id)) return new Response(null, { status: 404 });
+  if (!isId(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
   const other = String(form.get("other") ?? "");
   const verb = String(form.get("verb") ?? "");
   const out = form.get("direction") !== "in";
-  if (!isUuid(other)) return new Response("Choose a record.", { status: 400 });
+  if (!isId(other)) return new Response("Choose a record.", { status: 400 });
 
   try {
     await asPerson(p, (db) =>

@@ -1,5 +1,6 @@
 import {
   Forbidden,
+  isId,
   Invalid,
   NotFound,
   share,
@@ -30,7 +31,7 @@ function subjectFrom(value: string): Subject | null {
 function targetFrom(form: FormData): Target | null {
   const record = String(form.get("record") ?? "");
   const kind = String(form.get("kind") ?? "");
-  if (isUuid(record)) return { record };
+  if (isId(record)) return { record };
   if (isUuid(kind)) return { kind };
   return null;
 }

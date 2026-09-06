@@ -1,6 +1,7 @@
 // The brain: what a person knows, behind one read door and one write door.
 export { catalog, defineKind, defineVerb } from "./catalog.ts";
 export { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
+export { ID, isId } from "./ids.ts";
 export { defineProperty } from "./properties.ts";
 export {
   aliasesOf,
