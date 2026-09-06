@@ -1,5 +1,9 @@
 import { Invalid } from "./errors.ts";
-import { defineProperty, type PropertyDefinition } from "./properties.ts";
+import {
+  defineProperty,
+  plain,
+  type PropertyDefinition,
+} from "./properties.ts";
 import {
   propertyColumns,
   toProperty,
@@ -66,7 +70,11 @@ async function define(
   author: Author,
   { name, description }: Definition,
 ): Promise<Verb> {
-  if (!name.trim()) throw new Invalid("a kind or verb needs a name");
+  if (!name.trim() || !plain(name) || !plain(description)) {
+    throw new Invalid(
+      "a kind or verb needs a name and a description that print",
+    );
+  }
   if (!description.trim()) {
     throw new Invalid(
       `"${name}" needs a description: one sentence saying what it is`,

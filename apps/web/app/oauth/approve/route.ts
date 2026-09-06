@@ -10,7 +10,7 @@ export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const form = await request.formData();
-  const asked = authorizationRequest(
+  const asked = await authorizationRequest(
     new URLSearchParams(
       [...form.entries()].filter(
         (e): e is [string, string] => typeof e[1] === "string",
@@ -21,13 +21,18 @@ export async function POST(request: Request) {
     if (!asked.back) return new Response(asked.problem, { status: 400 });
     return Response.redirect(asked.back, 303);
   }
-  const { clientId, redirectUri, codeChallenge, state } = asked.request;
+  const { clientId, client, redirectUri, codeChallenge, state } = asked.request;
   const back = new URL(redirectUri);
   if (state) back.searchParams.set("state", state);
   if (form.get("decision") === "allow") {
     back.searchParams.set(
       "code",
-      await issueCode(p, { client: clientId, redirectUri, codeChallenge }),
+      await issueCode(p, {
+        client: clientId,
+        clientName: client.name,
+        redirectUri,
+        codeChallenge,
+      }),
     );
   } else {
     back.searchParams.set("error", "access_denied");

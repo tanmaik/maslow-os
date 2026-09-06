@@ -7,6 +7,7 @@ import { asOrg } from "./index.ts";
 // trade the code in.
 export type Approval = {
   client: string;
+  clientName: string;
   redirectUri: string;
   codeChallenge: string;
 };
@@ -29,12 +30,13 @@ export async function issueCode(
       [p.userId],
     );
     await q.query(
-      "insert into oauth_codes (id, org_id, user_id, client, redirect_uri, code_challenge) values ($1, $2, $3, $4, $5, $6)",
+      "insert into oauth_codes (id, org_id, user_id, client, client_name, redirect_uri, code_challenge) values ($1, $2, $3, $4, $5, $6, $7)",
       [
         id,
         p.orgId,
         p.userId,
         approval.client,
+        approval.clientName,
         approval.redirectUri,
         approval.codeChallenge,
       ],
@@ -49,13 +51,14 @@ const CODE = /^([0-9a-f-]{36})\.([0-9a-f-]{36})$/;
 const challengeOf = (verifier: string) =>
   createHash("sha256").update(verifier).digest("base64url");
 
-// Trades a code for who approved it, once. Null when the code is unknown,
-// spent, older than its lifetime, or brought back by a different app, to a
-// different address, or without the verifier it was made for.
+// Trades a code for who approved it and the app's name, once. Null when the
+// code is unknown, spent, older than its lifetime, or brought back by a
+// different app, to a different address, or without the verifier it was
+// made for.
 export async function redeemCode(
   code: string,
   brought: { client: string; redirectUri: string; verifier: string },
-): Promise<Principal | null> {
+): Promise<(Principal & { clientName: string }) | null> {
   const parts = code.match(CODE);
   if (!parts) return null;
   const [, orgId, id] = parts;
@@ -63,6 +66,7 @@ export async function redeemCode(
     (
       await q.query<{
         client: string;
+        client_name: string;
         redirect_uri: string;
         code_challenge: string;
         user_id: string;
@@ -72,7 +76,8 @@ export async function redeemCode(
         `delete from oauth_codes c using users u
          where c.id = $1 and u.id = c.user_id
            and c.created_at >= now() - interval '${CODE_LIFETIME}'
-         returning c.client, c.redirect_uri, c.code_challenge,
+           and c.client_name <> ''
+         returning c.client, c.client_name, c.redirect_uri, c.code_challenge,
            u.id as user_id, u.person_id, u.role`,
         [id],
       )
@@ -90,5 +95,6 @@ export async function redeemCode(
     orgId: orgId!,
     userId: row.user_id,
     role: row.role,
+    clientName: row.client_name,
   };
 }

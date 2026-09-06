@@ -17,6 +17,12 @@ export { grantsOf, share, unshare } from "./share.ts";
 export { exportBrain, importBrain, isSnapshot } from "./transfer.ts";
 export type * from "./types.ts";
 export {
+  redefine,
+  redefineProperty,
+  removeProperty,
+  undefine,
+} from "./vocabulary.ts";
+export {
   edit,
   merge,
   remove,

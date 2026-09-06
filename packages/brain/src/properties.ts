@@ -10,13 +10,36 @@ export type PropertyDefinition = {
   options?: string[];
 };
 
+// Holds a kind's row until commit: shared by a writer checking a value
+// against the kind's fields, alone by whoever changes those fields, so
+// neither sees the other half-done. False when the kind is not the
+// person's own, which is the only kind whose fields they change.
+export async function holdKind(
+  q: Query,
+  kind: string,
+  alone: boolean,
+  owner?: string,
+): Promise<boolean> {
+  const { rowCount } = await q.query(
+    `select 1 from record_kinds
+     where name = $1 and person_id = coalesce($2, current_member())
+     for ${alone ? "update" : "share"}`,
+    [kind, owner ?? null],
+  );
+  return (rowCount ?? 0) > 0;
+}
+
 // The fields a kind declares, by name. Empty when the kind accepts anything.
-// The kind is the reader's own unless owner names whose it is.
+// The kind is the reader's own unless owner names whose it is. A writer
+// holds the kind until it commits, so a field cannot be declared or
+// redefined under a value that fits only what was declared before.
 export async function propertiesOf(
   q: Query,
   kind: string,
   owner?: string,
+  hold = false,
 ): Promise<Map<string, Property>> {
+  if (hold) await holdKind(q, kind, false, owner);
   const { rows } = await q.query<PropertyRow>(
     `select ${propertyColumns} from kind_properties
      where kind = $1 and person_id = coalesce($2, current_member())
@@ -24,6 +47,40 @@ export async function propertiesOf(
     [kind, owner ?? null],
   );
   return new Map(rows.map((r) => [r.name, toProperty(r)]));
+}
+
+// Whether a name or an origin is one that prints: no control characters, so
+// nothing written can forge a line in what an agent reads.
+export const plain = (s: string) => !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(s);
+
+// Refuses a field that could not be one: a bad name, no description, a type
+// the brain does not have, an enum without options or options without an
+// enum.
+export function checkDefinition(kind: string, def: PropertyDefinition) {
+  if (!/^[a-z][a-z0-9_]*$/.test(def.name)) {
+    throw new Invalid(
+      `"${def.name}" is not a field name: lowercase letters, digits and underscores`,
+    );
+  }
+  if (!def.description.trim() || !plain(def.description)) {
+    throw new Invalid(`${kind}.${def.name} needs a description that prints`);
+  }
+  if (!Object.hasOwn(sqlType, def.type)) {
+    throw new Invalid(
+      `"${String(def.type)}" is not a type; one of ${Object.keys(sqlType).join(", ")}`,
+    );
+  }
+  if (def.type === "enum" && !def.options?.length) {
+    throw new Invalid(`${kind}.${def.name} is an enum and needs options`);
+  }
+  if (def.options?.some((o) => !plain(o))) {
+    throw new Invalid(`${kind}.${def.name} has an option that does not print`);
+  }
+  if (def.type !== "enum" && def.options) {
+    throw new Invalid(
+      `${kind}.${def.name} is not an enum and takes no options`,
+    );
+  }
 }
 
 // Adds a field to one of this person's kinds. Defining one that exists
@@ -34,49 +91,25 @@ export async function defineProperty(
   kind: string,
   def: PropertyDefinition,
 ): Promise<Property> {
-  if (!/^[a-z][a-z0-9_]*$/.test(def.name)) {
-    throw new Invalid(
-      `"${def.name}" is not a field name: lowercase letters, digits and underscores`,
-    );
+  checkDefinition(kind, def);
+  if (!(await holdKind(q, kind, true))) {
+    throw new NotFound(`"${kind}" is not a kind in your vocabulary`);
   }
-  if (!def.description.trim()) {
-    throw new Invalid(`${kind}.${def.name} needs a description`);
-  }
-  if (!Object.hasOwn(sqlType, def.type)) {
-    throw new Invalid(
-      `"${String(def.type)}" is not a type; one of ${Object.keys(sqlType).join(", ")}`,
-    );
-  }
-  if (def.type === "enum" && !def.options?.length) {
-    throw new Invalid(`${kind}.${def.name} is an enum and needs options`);
-  }
-  if (def.type !== "enum" && def.options) {
-    throw new Invalid(
-      `${kind}.${def.name} is not an enum and takes no options`,
-    );
-  }
-  try {
-    await q.query(
-      `insert into kind_properties
-         (kind, name, type, description, required, options, author)
-       values ($1, $2, $3, $4, $5, $6, $7)
-       on conflict (org_id, person_id, kind, name) do nothing`,
-      [
-        kind,
-        def.name,
-        def.type,
-        def.description,
-        def.required ?? false,
-        def.type === "enum" ? def.options : null,
-        author,
-      ],
-    );
-  } catch (err) {
-    if ((err as { code?: string }).code === "23503") {
-      throw new NotFound(`"${kind}" is not a kind in your vocabulary`);
-    }
-    throw err;
-  }
+  await q.query(
+    `insert into kind_properties
+       (kind, name, type, description, required, options, author)
+     values ($1, $2, $3, $4, $5, $6, $7)
+     on conflict (org_id, person_id, kind, name) do nothing`,
+    [
+      kind,
+      def.name,
+      def.type,
+      def.description,
+      def.required ?? false,
+      def.type === "enum" ? def.options : null,
+      author,
+    ],
+  );
   const { rows } = await q.query<PropertyRow>(
     `select ${propertyColumns} from kind_properties
      where kind = $1 and name = $2 and person_id = current_member()`,

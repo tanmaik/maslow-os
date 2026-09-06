@@ -170,7 +170,8 @@ written by the database and the app cannot write them. A merge hides the
 loser behind a pointer to the winner and rewrites nothing, so it reverses.
 A brain exports to a file that imports into any brain, as the importer.
 
-The brain is an MCP server at `/mcp`, and the doors are its tools. An agent
+The brain is an MCP server at `/mcp`, and the doors are its tools, answering
+in lines and saying whose brain it is when an app connects. An agent
 gets in through OAuth on our own sign-in: the person approves it on our page,
 and what it holds is a session, listed and ended from settings like any
 other. Claude Code and claude.ai are the two clients it is checked against.

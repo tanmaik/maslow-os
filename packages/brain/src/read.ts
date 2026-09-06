@@ -177,7 +177,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
       if (!Array.isArray(f.value)) throw new Invalid(`in needs a list`);
       for (const v of f.value) fits(p, v);
       where.push(`${expr} = any(${param(f.value)}::${sqlType[p.type]}[])`);
-    } else if (f.op in OPERATORS) {
+    } else if (Object.hasOwn(OPERATORS, f.op)) {
       fits(p, f.value);
       where.push(
         `${expr} ${OPERATORS[f.op]} ${param(f.value)}::${sqlType[p.type]}`,
@@ -270,9 +270,25 @@ export async function aliasesOf(q: Query, id: string): Promise<string[]> {
 }
 
 export type Graph = {
-  nodes: { id: string; kind: string; title: string }[];
+  // Distance from the records looked around, when any were.
+  nodes: { id: string; kind: string; title: string; depth: number | null }[];
   edges: Edge[];
 };
+
+export type GraphOptions = {
+  // How many links out from the records looked around, one by default.
+  depth?: number;
+  // Only links carrying one of these verbs.
+  verbs?: string[];
+  // Which way to follow links from a record: the ones it makes, the ones
+  // made to it, or both.
+  direction?: "out" | "in" | "both";
+  // At most this many records, nearest first.
+  limit?: number;
+};
+
+const MAX_DEPTH = 4;
+const MAX_NODES = 500;
 
 // What every record stands for, and every edge read between what its ends
 // stand for: a merged record's links show on its winner.
@@ -297,38 +313,77 @@ const STANDING = `
   )`;
 
 // The brain as a graph: live records and the edges between them. Given
-// records to look around, only those, their neighbours and the edges among
-// them; a record looked around is on the map even when deleted, and a
-// merged one is looked around as its winner.
-export async function graph(q: Query, around?: string[]): Promise<Graph> {
-  const { rows: nodes } = await q.query<{
+// records to look around, only those, what is within so many links of them
+// along the verbs asked for, and the edges among them; a record looked
+// around is on the map even when deleted, and a merged one is looked around
+// as its winner.
+export async function graph(
+  q: Query,
+  around?: string[],
+  opts: GraphOptions = {},
+): Promise<Graph> {
+  const depth = Math.min(Math.max(opts.depth ?? 1, 0), MAX_DEPTH);
+  const direction = opts.direction ?? "both";
+  if (!["out", "in", "both"].includes(direction)) {
+    throw new Invalid(`"${String(direction)}" is not a direction to follow`);
+  }
+  const limit = Math.min(Math.max(opts.limit ?? MAX_NODES, 1), MAX_NODES);
+  const verbs = opts.verbs?.length ? opts.verbs : null;
+  // Which records are on the map and how far each is from where the walk
+  // began; with no beginning, every live record, at no distance.
+  const found = new Map<string, number | null>();
+  if (around) {
+    const focus = await q.query<{ winner: string }>(
+      `${STANDING} select distinct winner from winner where id = any($1::text[])`,
+      [around],
+    );
+    for (const f of focus.rows) found.set(f.winner, 0);
+    // One link out from the frontier at a time, never from a removed
+    // record, never through one, and never past the limit.
+    let frontier = [...found.keys()];
+    for (let d = 1; d <= depth && frontier.length && found.size < limit; d++) {
+      const step = await q.query<{ id: string }>(
+        `${STANDING}
+         select distinct n.id from resolved e
+         join records cur on cur.deleted_at is null and cur.id = case
+           when $2 <> 'in' and e.from_id = any($1::text[]) then e.from_id
+           when $2 <> 'out' and e.to_id = any($1::text[]) then e.to_id end
+         join records n on n.deleted_at is null
+           and n.id = case when cur.id = e.from_id then e.to_id else e.from_id end
+         where ($3::text[] is null or e.verb = any($3))
+           and not (n.id = any($4::text[]))
+         order by n.id limit $5`,
+        [frontier, direction, verbs, [...found.keys()], limit - found.size],
+      );
+      frontier = step.rows.map((r) => r.id);
+      for (const id of frontier) found.set(id, d);
+    }
+  } else {
+    const all = await q.query<{ id: string }>(
+      `select id from records where merged_into is null and deleted_at is null
+       order by id limit $1`,
+      [limit],
+    );
+    for (const r of all.rows) found.set(r.id, null);
+  }
+  const ids = [...found.keys()];
+  const { rows: named } = await q.query<{
     id: string;
     kind: string;
     title: string;
-  }>(
-    `${STANDING}, focus as (
-       select winner from winner where id = any($1::text[])
-     ), near as (
-       select from_id as id from resolved
-       where to_id in (select winner from focus)
-       union select to_id from resolved
-       where from_id in (select winner from focus)
-       union select winner from focus
-     )
-     select r.id, r.kind, r.title from records r
-     where r.merged_into is null
-       and (r.deleted_at is null or r.id = any($1::text[]))
-       and ($1::text[] is null or r.id in (select id from near))
-     order by r.id`,
-    [around ?? null],
-  );
-  const ids = nodes.map((n) => n.id);
+  }>(`select id, kind, title from records where id = any($1::text[])`, [ids]);
+  const nodes = named
+    .map((n) => ({ ...n, depth: found.get(n.id) ?? null }))
+    .sort(
+      (a, b) => (a.depth ?? -1) - (b.depth ?? -1) || a.id.localeCompare(b.id),
+    );
   const { rows: edges } = await q.query<EdgeRow>(
     `${STANDING}
      select ${edgeColumns} from resolved
      where from_id = any($1::text[]) and to_id = any($1::text[])
+       and ($2::text[] is null or verb = any($2))
      order by id`,
-    [ids],
+    [ids, verbs],
   );
   return { nodes, edges: edges.map(toEdge) };
 }

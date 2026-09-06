@@ -20,7 +20,7 @@ export default async function Page({
       typeof v === "string" ? [[k, v]] : [],
     ),
   );
-  const asked = authorizationRequest(params);
+  const asked = await authorizationRequest(params);
   if (!asked.ok) {
     if (asked.back) redirect(asked.back.toString());
     return (

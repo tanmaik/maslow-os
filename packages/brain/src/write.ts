@@ -5,7 +5,7 @@ import {
   type KindDefinition,
 } from "./catalog.ts";
 import { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
-import { check, propertiesOf } from "./properties.ts";
+import { check, holdKind, plain, propertiesOf } from "./properties.ts";
 import {
   recordColumns,
   recordSelect,
@@ -81,43 +81,39 @@ async function resolve(
   return rows[0].id;
 }
 
-// The names this person has defined, read once per call. A name they have
-// not is refused before anything is written.
-async function vocabulary(q: Query) {
-  const names = async (table: "record_kinds" | "edge_verbs") =>
-    new Set(
-      (
-        await q.query<{ name: string }>(
-          `select name from ${table} where person_id = current_member()`,
-        )
-      ).rows.map((r) => r.name),
+// The kinds and verbs the call writes, each held until it commits, in one
+// order so two writes never wait on each other in a circle. A name the
+// person has not defined, or one gone by the time it is held, is refused
+// before anything is written.
+async function vocabulary(q: Query, kinds: string[], verbs: string[]) {
+  const missing = (what: "kind" | "verb", name: string) =>
+    new Invalid(
+      `no ${what} "${name}" in your vocabulary; define it, with a description, first`,
     );
-  const [kinds, verbs] = [
-    await names("record_kinds"),
-    await names("edge_verbs"),
-  ];
-  const forms = new Map<string, Promise<Map<string, Property>>>();
-  const defined = (what: "kind" | "verb", name: string) => {
-    if (!(what === "kind" ? kinds : verbs).has(name)) {
-      throw new Invalid(
-        `no ${what} "${name}" in your vocabulary; define it, with a description, first`,
-      );
-    }
-  };
-  return {
-    kind(name: string) {
-      defined("kind", name);
-      let form = forms.get(name);
-      if (!form) {
-        form = propertiesOf(q, name);
-        forms.set(name, form);
-      }
-      return form;
-    },
-    verb(name: string) {
-      defined("verb", name);
-    },
-  };
+  const forms = new Map<string, Map<string, Property>>();
+  for (const name of [...new Set(kinds)].sort()) {
+    if (!(await holdKind(q, name, false))) throw missing("kind", name);
+    forms.set(name, await propertiesOf(q, name));
+  }
+  for (const name of [...new Set(verbs)].sort()) {
+    const { rowCount } = await q.query(
+      `select 1 from edge_verbs
+       where name = $1 and person_id = current_member() for share`,
+      [name],
+    );
+    if (!rowCount) throw missing("verb", name);
+  }
+  return { kind: (name: string) => forms.get(name)! };
+}
+
+// Where a record or an edge came from must print, since it is read back
+// unquoted.
+function origin(source: string, sourceRef: string) {
+  if (!plain(source) || !plain(sourceRef)) {
+    throw new Invalid(
+      `a source and its ref must print: ${JSON.stringify(source)}:${JSON.stringify(sourceRef)}`,
+    );
+  }
 }
 
 export type Written = {
@@ -129,10 +125,9 @@ export type Written = {
 };
 
 // Writes records and edges as one author, defining any kinds and verbs the
-// person does not have yet in the same call. Idempotent: the same input twice
-// leaves the brain as it was. A record is of the writer's own kind and must
-// fit its form; an edge carries the writer's own verb. Edges may name records
-// written in the same call.
+// brain does not have yet in the same call. Idempotent: the same input twice
+// leaves the brain as it was. Each record must fit its kind's form. Edges may
+// name records written in the same call.
 export async function write(
   q: Query,
   author: Author,
@@ -143,15 +138,23 @@ export async function write(
     edges?: EdgeInput[];
   },
 ): Promise<Written> {
-  for (const k of input.kinds ?? []) await defineKind(q, author, k);
+  const byName = (a: Definition, b: Definition) => a.name.localeCompare(b.name);
+  for (const k of [...(input.kinds ?? [])].sort(byName)) {
+    await defineKind(q, author, k);
+  }
   for (const v of input.verbs ?? []) await defineVerb(q, author, v);
-  const known = await vocabulary(q);
+  const known = await vocabulary(
+    q,
+    (input.records ?? []).map((r) => r.kind),
+    (input.edges ?? []).map((e) => e.verb),
+  );
   const ids: string[] = [];
   let changed = 0;
   const written = new Map<string, string>();
   for (const r of input.records ?? []) {
     const props = r.props ?? {};
-    check(r.kind, props, await known.kind(r.kind));
+    check(r.kind, props, known.kind(r.kind));
+    origin(r.source, r.sourceRef);
     const upsert = await q.query<{ id: string }>(UPSERT, [
       r.kind,
       r.layer,
@@ -180,7 +183,7 @@ export async function write(
 
   let edges = 0;
   for (const e of input.edges ?? []) {
-    known.verb(e.verb);
+    origin(e.source, e.sourceRef ?? "");
     const fromId = await resolve(q, e.from, written);
     const toId = await resolve(q, e.to, written);
     if (fromId === toId) {
@@ -242,7 +245,7 @@ export type Patch = {
 
 // Changes a record from the version the caller read. A stale version is a
 // Conflict; the caller reads again and decides. New props replace the old and
-// must fit the form of the kind, which is the record owner's.
+// must fit the kind's form.
 export async function edit(
   q: Query,
   author: Author,
@@ -266,7 +269,7 @@ export async function edit(
     check(
       kind,
       patch.props ?? current.rows[0].props,
-      await propertiesOf(q, kind, current.rows[0].person_id),
+      await propertiesOf(q, kind, current.rows[0].person_id, true),
     );
   }
   const { rows } = await q.query<RecordRow>(

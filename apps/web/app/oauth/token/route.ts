@@ -2,8 +2,6 @@ import { createSession } from "@placeholder/db/auth";
 import { redeemCode } from "@placeholder/db/oauth";
 import { NextResponse } from "next/server";
 
-import { clientOf } from "@/lib/oauth";
-
 const NO_STORE = { "Cache-Control": "no-store", Pragma: "no-cache" };
 
 const refused = (error: string, status = 400) =>
@@ -21,12 +19,11 @@ export async function POST(request: Request) {
   const verifier = form.get("code_verifier");
   const redirectUri = form.get("redirect_uri");
   const clientId = form.get("client_id");
-  const client = clientOf(clientId);
-  if (!code || !verifier || !redirectUri || !client || !clientId)
+  if (!code || !verifier || !redirectUri || !clientId)
     return refused("invalid_request");
   const p = await redeemCode(code, { client: clientId, redirectUri, verifier });
   if (!p) return refused("invalid_grant");
-  const token = await createSession(p, client.name);
+  const token = await createSession(p, p.clientName);
   if (!token) return refused("invalid_grant");
   return NextResponse.json(
     { access_token: token, token_type: "Bearer" },

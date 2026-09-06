@@ -3,8 +3,10 @@
 // a token, the tools called with it, and the agent disconnected from
 // settings. Returns true when every check passed.
 import { createHash, randomBytes } from "node:crypto";
+import { createServer } from "node:http";
 import { createRequire } from "node:module";
 
+import { ID } from "../packages/brain/src/ids.ts";
 import { orgs } from "../packages/db/src/seed.ts";
 
 // The SDK is the web app's; the smoke borrows it to be the client.
@@ -29,6 +31,8 @@ const DOORS = [
   "merge",
   "unmerge",
   "history",
+  "redefine",
+  "undefine",
 ];
 
 export async function smokeMcp(stack, signIn) {
@@ -269,11 +273,15 @@ export async function smokeMcp(stack, signIn) {
   const init = await (
     await rpc(grant.access_token, "initialize", hello)
   ).json();
+  const told = init.result?.instructions ?? "";
   check(
-    "initialize",
+    "initialize says whose brain, what it holds, and how to treat it",
     init.result?.serverInfo?.name === "brain" &&
-      /mind, not a mirror/.test(init.result?.instructions ?? ""),
-    init.result?.protocolVersion ?? JSON.stringify(init).slice(0, 80),
+      told.includes("Wile Coyote's brain in Acme Rockets") &&
+      told.includes("connected to it as Claude") &&
+      /It holds \d+ records: /.test(told) &&
+      /mind, not a mirror/.test(told),
+    told.split("\n")[0]?.slice(0, 100) ?? JSON.stringify(init).slice(0, 80),
   );
   const listed = await (await rpc(grant.access_token, "tools/list", {})).json();
   const names = (listed.result?.tools ?? []).map((t) => t.name);
@@ -288,24 +296,32 @@ export async function smokeMcp(stack, signIn) {
     ).json();
     const text = res.result?.content?.[0]?.text ?? JSON.stringify(res.error);
     const refused = res.result?.isError === true || !res.result;
-    return { refused, text, value: refused ? null : JSON.parse(text) };
+    const lines = text.split("\n");
+    // The lines that name a record or an edge, and each one's id.
+    const rows = lines.filter((l) => ID.test(l.split(" ")[0] ?? ""));
+    return {
+      refused,
+      text,
+      lines,
+      rows,
+      ids: rows.map((l) => l.split(" ")[0]),
+    };
   };
   const mine = await call(grant.access_token, "read", { limit: 200 });
   const acme = seeds[orgs[0].slug];
   check(
-    "read is Wile's brain only",
-    mine.value?.records.length >= acme.records.length &&
-      mine.value.records.every((r) => r.ownerId === orgs[0].users[0].id),
-    `${mine.value?.records.length ?? mine.text} records, all Wile's`,
+    "read is Wile's brain only, a line each",
+    mine.rows.length >= acme.records.length &&
+      mine.lines[0] === `${mine.rows.length} records` &&
+      mine.rows.every((l) => / v\d+/.test(l) && !l.includes(" shared:")),
+    `${mine.rows.length} records, all Wile's`,
   );
   const vocabulary = await call(grant.access_token, "catalog", {});
   check(
     "the catalog is Wile's own vocabulary",
-    vocabulary.value?.kinds.length > 0 &&
-      vocabulary.value.kinds.every(
-        (k) => k.ownerId === orgs[0].users[0].id && k.via === null,
-      ),
-    `${vocabulary.value?.kinds.length ?? vocabulary.text} kinds, all Wile's`,
+    /^kinds \([1-9]\d* yours\):$/.test(vocabulary.lines[0] ?? "") &&
+      !vocabulary.lines.some((l) => l.startsWith("shared in")),
+    vocabulary.lines[0] ?? vocabulary.text,
   );
   const badSince = await call(grant.access_token, "read", {
     since: "yesterday",
@@ -338,23 +354,151 @@ export async function smokeMcp(stack, signIn) {
   const same = await call(grant.access_token, "write", { records: [claim] });
   check(
     "write, idempotently",
-    written.value?.changed === 1 &&
-      same.value?.changed === 0 &&
-      same.value.records[0] === written.value.records[0],
-    `${written.value?.changed ?? written.text} then ${same.value?.changed}`,
+    written.lines[0] === "1 record (1 changed), 0 edges changed" &&
+      same.lines[0] === "1 record (0 changed), 0 edges changed" &&
+      same.ids[0] === written.ids[0],
+    `${written.lines[0]} then ${same.lines[0]}`,
   );
-  const claimId = written.value?.records[0];
+  const claimId = written.ids[0];
   const log = await call(grant.access_token, "history", { of: claimId });
   check(
-    "the log says the model wrote it",
-    log.value?.[0]?.author === "model:Claude",
-    log.value?.[0]?.author ?? log.text,
+    "the log says the model wrote it, in one line",
+    log.lines[1]?.startsWith("#") &&
+      log.lines[1].includes(`record ${claimId} created by=Claude:`),
+    log.lines[1] ?? log.text,
   );
+  const restsOn = mine.ids[0];
+  const linked = await call(grant.access_token, "write", {
+    edges: [
+      {
+        from: { id: claimId },
+        verb: "rests_on",
+        to: { id: restsOn },
+        source: "claude",
+        confidence: 0.9,
+      },
+    ],
+  });
   const got = await call(grant.access_token, "get", { ids: [claimId] });
+  const link = got.lines.find((l) => l.startsWith("  → rests_on "));
   check(
-    "get carries edges",
-    got.value?.[0]?.id === claimId && Array.isArray(got.value[0].edges),
-    got.value ? "record with edges" : got.text,
+    "get carries links, with what is at the other end",
+    linked.lines[0]?.endsWith("1 edge changed") &&
+      got.lines[0]?.startsWith(`${claimId} claim `) &&
+      got.lines[0].includes(`"Wile owes`) &&
+      got.lines[0].includes(" by=Claude") &&
+      link?.includes(`${restsOn} "`) &&
+      link.includes("c=0.9"),
+    link ?? got.text,
+  );
+  const walked = await call(grant.access_token, "graph", {
+    from: [claimId],
+    verbs: ["rests_on"],
+    direction: "out",
+  });
+  const capped = await call(grant.access_token, "graph", {
+    from: [claimId],
+    limit: 1,
+  });
+  check(
+    "graph walks out along a verb, and no further than the limit",
+    walked.lines[0] === "2 records, 1 edge" &&
+      capped.lines[0] === "1 record, 0 edges" &&
+      walked.lines.some(
+        (l) => l.startsWith(`${claimId} claim`) && l.endsWith(" d0"),
+      ) &&
+      walked.lines.some(
+        (l) => l.startsWith(`${restsOn} `) && l.endsWith(" d1"),
+      ),
+    walked.lines[0] ?? walked.text,
+  );
+
+  // The vocabulary bends after the fact: a field is added, renamed and
+  // retyped only as far as its values allow, a kind is renamed with its
+  // records, and neither leaves while anything depends on it.
+  await call(grant.access_token, "write", {
+    kinds: [
+      {
+        name: "claim",
+        description: "Something the model concluded.",
+        properties: [
+          { name: "strength", type: "number", description: "How strong." },
+        ],
+      },
+    ],
+  });
+  const version = Number(got.lines[0].match(/ v(\d+)/)?.[1]);
+  const edited = await call(grant.access_token, "edit", {
+    changes: [{ id: claimId, version, props: { strength: 3 } }],
+  });
+  const retyped = await call(grant.access_token, "redefine", {
+    fields: [{ kind: "claim", name: "strength", type: "text" }],
+  });
+  check(
+    "a field is not retyped over values that would not fit",
+    edited.lines[0]?.includes('{"strength":3}') &&
+      retyped.refused &&
+      retyped.text ===
+        "1 claim record holds a strength that is not a text, removed ones included; fix them first",
+    retyped.text,
+  );
+  const renamedField = await call(grant.access_token, "redefine", {
+    fields: [{ kind: "claim", name: "strength", newName: "weight" }],
+    kinds: [{ name: "claim", newName: "conclusion" }],
+  });
+  const conclusions = await call(grant.access_token, "read", {
+    kind: "conclusion",
+  });
+  check(
+    "a kind and a field are renamed and their records follow",
+    renamedField.lines.includes(
+      "kind conclusion — Something the model concluded.",
+    ) &&
+      renamedField.lines.includes("claim.weight: number — How strong.") &&
+      conclusions.ids[0] === claimId &&
+      conclusions.rows[0].includes('{"weight":3}'),
+    conclusions.rows[0] ?? conclusions.text,
+  );
+  const stuck = await call(grant.access_token, "undefine", {
+    kinds: ["conclusion"],
+  });
+  const dropped = await call(grant.access_token, "undefine", {
+    fields: [{ kind: "conclusion", name: "weight" }],
+  });
+  // The rename and the drop each moved the record's version along.
+  const now = await call(grant.access_token, "get", { ids: [claimId] });
+  const moved = await call(grant.access_token, "edit", {
+    changes: [
+      {
+        id: claimId,
+        version: Number(now.lines[0].match(/ v(\d+)/)?.[1]),
+        kind: "note",
+        props: {},
+      },
+    ],
+  });
+  const gone = await call(grant.access_token, "undefine", {
+    kinds: ["conclusion"],
+  });
+  check(
+    "a kind leaves only once nothing is of it; a field takes its values",
+    stuck.refused &&
+      stuck.text === "records are still conclusion; change their kind first" &&
+      dropped.lines[0] === "removed field conclusion.weight from 1 record" &&
+      !now.lines[0].includes("weight") &&
+      moved.lines[0]?.startsWith(`${claimId} note `) &&
+      gone.lines[0] === "removed kind conclusion",
+    `${stuck.text} / ${dropped.text} / ${moved.lines[0]} / ${gone.text}`,
+  );
+
+  // A name that would forge a line is refused.
+  const forged = await call(grant.access_token, "write", {
+    kinds: [{ name: "note removed", description: "Forgery." }],
+  });
+  check(
+    "a forged name is refused",
+    forged.refused && forged.text.includes("that print"),
+    forged.text,
   );
 
   // Another org's Claude sees nothing of Wile's.
@@ -366,12 +510,12 @@ export async function smokeMcp(stack, signIn) {
   const across = await call(margeGrant.access_token, "get", { ids: [claimId] });
   check(
     "another org's token sees none of it",
-    across.value?.length === 0,
-    `${across.value?.length ?? across.text} records`,
+    across.text === "no records",
+    across.text,
   );
 
   // A colleague's Claude sees the colleague's own kinds and the one kind
-  // Wile shared with the org, read as Wile's.
+  // Wile shared with the org, read as Wile's and never reshaped by them.
   const roadRunner = await signIn(orgs[0].users[1].id);
   const colleagueCode = (
     await decide("allow", roadRunner)
@@ -380,21 +524,24 @@ export async function smokeMcp(stack, signIn) {
     await token({ ...exchange, code: colleagueCode })
   ).json();
   const theirs = await call(colleagueGrant.access_token, "catalog", {});
-  const lift = theirs.value?.kinds.find((k) => k.name === "lift");
+  const lift = theirs.lines.find((l) => l.startsWith("lift owner="));
   const lifts = await call(colleagueGrant.access_token, "read", {
     kind: "lift",
     owner: orgs[0].users[0].id,
   });
+  const notTheirs = await call(colleagueGrant.access_token, "redefine", {
+    kinds: [{ name: "lift", newName: "lifts" }],
+  });
   check(
     "a colleague's catalog is their own and what was shared",
-    theirs.value?.kinds.every(
-      (k) => k.ownerId === orgs[0].users[1].id || k.via !== null,
-    ) &&
-      lift?.via?.whole === true &&
-      lift.via.everyone === true &&
-      !theirs.value.kinds.some((k) => k.name === "person") &&
-      lifts.value?.records.length === 3,
-    `${theirs.value?.kinds.map((k) => k.name).join(", ") ?? theirs.text}; ${lifts.value?.records.length ?? lifts.text} of Wile's lifts`,
+    theirs.lines.includes("shared in (1), read with owner=…:") &&
+      lift ===
+        `lift owner=${orgs[0].users[0].id} whole kind, to everyone — ${lift?.split(" — ")[1]}` &&
+      !theirs.lines.some((l) => l.startsWith("person ")) &&
+      lifts.lines[0] === "3 records" &&
+      notTheirs.refused &&
+      notTheirs.text === "lift is a colleague's kind; only they change it",
+    `${theirs.lines[0]}; ${lift ?? theirs.text}; ${lifts.lines[0]}; ${notTheirs.text}`,
   );
 
   // Settings lists the agent; disconnecting it ends its access.
@@ -481,8 +628,61 @@ export async function smokeMcp(stack, signIn) {
     "the SDK client connects and reads",
     held.tokens?.token_type === "Bearer" &&
       DOORS.every((n) => sdkTools.includes(n)) &&
-      JSON.parse(sdkRead.content[0].text).records.length === 1,
+      sdkRead.content[0].text.startsWith("1 record"),
     `${sdkTools.length} tools`,
+  );
+
+  // An app that publishes its description at an address, as claude.ai
+  // does, is read from there: the page names it, and the token endpoint
+  // takes the address as its client id.
+  const described = createServer((req, res) => {
+    const at = `http://127.0.0.1:${described.address().port}${req.url}`;
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(
+      JSON.stringify({
+        client_id: req.url === "/client.json" ? at : "https://elsewhere.test",
+        client_name: "Described",
+        redirect_uris: [redirectUri],
+      }),
+    );
+  });
+  await new Promise((r) => described.listen(0, "127.0.0.1", r));
+  const documentAt = (name) =>
+    `http://127.0.0.1:${described.address().port}/${name}`;
+  const askDescribed = { ...ask, client_id: documentAt("client.json") };
+  const describedConsent = await page(authorize(askDescribed), wile);
+  const describedCode = new URL(
+    (
+      await fetch(`${base}/oauth/approve`, {
+        method: "POST",
+        headers: { cookie: wile },
+        body: new URLSearchParams({ ...askDescribed, decision: "allow" }),
+        redirect: "manual",
+      })
+    ).headers.get("location") ?? redirectUri,
+  ).searchParams.get("code");
+  const describedGrant = await (
+    await token({
+      ...exchange,
+      code: describedCode,
+      client_id: askDescribed.client_id,
+    })
+  ).json();
+  const describedRead = await call(describedGrant.access_token, "read", {
+    limit: 1,
+  });
+  const misnamed = await page(
+    authorize({ ...ask, client_id: documentAt("other.json") }),
+    wile,
+  );
+  described.close();
+  check(
+    "an app described at an address is read from it",
+    server.client_id_metadata_document_supported === true &&
+      describedConsent.includes("Connect Described?") &&
+      describedRead.lines[0]?.startsWith("1 record") &&
+      misnamed.includes("unknown app"),
+    describedRead.lines[0] ?? describedRead.text,
   );
   return ok;
 }
