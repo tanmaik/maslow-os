@@ -42,6 +42,7 @@ export async function DevToolbar() {
               : null,
           connections:
             deployment.connections.kind === "composio" ? "Composio" : null,
+          embeddings: deployment.embeddings.kind === "voyage" ? "Voyage" : null,
         }}
         signedIn={p !== null}
         me={me ?? null}

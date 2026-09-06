@@ -52,6 +52,7 @@ const noCredentials = Object.fromEntries(
     "STORAGE_ACCESS_KEY",
     "STORAGE_SECRET_KEY",
     "COMPOSIO_API_KEY",
+    "VOYAGE_API_KEY",
   ].map((k) => [k, ""]),
 );
 

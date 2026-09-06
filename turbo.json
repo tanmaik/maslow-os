@@ -36,6 +36,7 @@
         "FILES_PART_SIZE",
         "FILES_LOCAL_SECRET",
         "COMPOSIO_API_KEY",
+        "VOYAGE_API_KEY",
         "COMPOSIO_API_HOST",
         "PREVIEW_DB"
       ]

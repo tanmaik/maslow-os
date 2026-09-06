@@ -598,6 +598,8 @@ export async function live(
 
 // A quantity in a unit people read.
 export function amount(resource: string, unit: string, quantity: number) {
+  if (unit === "token") return `${quantity.toLocaleString("en")} tokens`;
+  if (unit === "run") return `${quantity} ${quantity === 1 ? "run" : "runs"}`;
   if (unit === "second") return `${(quantity / 3600).toFixed(2)} h`;
   if (unit === "gb_second") return `${(quantity / MONTH).toFixed(4)} GB·mo`;
   if (resource === "brain")

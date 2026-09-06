@@ -501,6 +501,35 @@ export async function smokeMcp(stack, signIn) {
     forged.text,
   );
 
+  // Recall finds a record by what it is about, catching up the vectors of
+  // whatever changed since it was last asked.
+  const wanted = mine.rows[1]?.match(/"([^"]*)"/)?.[1] ?? "";
+  const recalled = await call(grant.access_token, "recall", {
+    question: `anything about ${wanted}`,
+    limit: 3,
+  });
+  check(
+    "recall finds a record by meaning",
+    recalled.lines[0] === "3 records, nearest first" &&
+      recalled.lines[1]?.split(" ")[1] === mine.ids[1] &&
+      /^0\.\d\d /.test(recalled.lines[1]),
+    recalled.lines[1]?.slice(0, 60) ?? recalled.text,
+  );
+  const wordless = await call(grant.access_token, "recall", { question: "?!" });
+  check(
+    "a question without a word is refused",
+    wordless.refused && wordless.text === "a question needs a word",
+    wordless.text,
+  );
+  const metered = (await page(`${base}/usage`, wile)).match(
+    /data-usage="vectors"[\s\S]*?(\d[\d,]*) tokens/,
+  );
+  check(
+    "every token recall spent is on the meter",
+    Number(metered?.[1]?.replace(/,/g, "")) > 0,
+    metered ? `${metered[1]} tokens` : "no Recall line on the usage page",
+  );
+
   // Another org's Claude sees nothing of Wile's.
   const marge = await signIn(orgs[1].users[0].id);
   const margeCode = (await decide("allow", marge)).to?.searchParams.get("code");
@@ -529,6 +558,11 @@ export async function smokeMcp(stack, signIn) {
     kind: "lift",
     owner: orgs[0].users[0].id,
   });
+  const shared = await call(colleagueGrant.access_token, "recall", {
+    question: "a barbell exercise",
+    kind: "lift",
+    limit: 1,
+  });
   const notTheirs = await call(colleagueGrant.access_token, "redefine", {
     kinds: [{ name: "lift", newName: "lifts" }],
   });
@@ -539,9 +573,11 @@ export async function smokeMcp(stack, signIn) {
         `lift owner=${orgs[0].users[0].id} whole kind, to everyone — ${lift?.split(" — ")[1]}` &&
       !theirs.lines.some((l) => l.startsWith("person ")) &&
       lifts.lines[0] === "3 records" &&
+      shared.lines[0] === "1 record, nearest first" &&
+      lifts.ids.includes(shared.lines[1]?.split(" ")[1]) &&
       notTheirs.refused &&
       notTheirs.text === "lift is a colleague's kind; only they change it",
-    `${theirs.lines[0]}; ${lift ?? theirs.text}; ${lifts.lines[0]}; ${notTheirs.text}`,
+    `${theirs.lines[0]}; ${lift ?? theirs.text}; ${lifts.lines[0]}; ${shared.lines[0]}; ${notTheirs.text}`,
   );
 
   // Settings lists the agent; disconnecting it ends its access.

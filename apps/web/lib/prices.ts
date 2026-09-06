@@ -22,6 +22,8 @@ export const SOURCE: Record<Resource, string> = {
   rootfs: "Image",
   bucket: "Bucket",
   brain: "Brain",
+  vectors: "Recall",
+  actions: "Apps",
 };
 
 export const PRICES = {
@@ -45,6 +47,13 @@ export const PRICES = {
   // Neon storage, per byte-second: $0.35 per GB a month, for the rows a
   // person's brain holds. Compute is shared and not yet apportioned.
   brain: 0.35 / MONTH / 1e9,
+  // Voyage voyage-4-lite, per token: $0.02 per million on its list, read
+  // 2026-09-05. The allowance Voyage gives us is ours, not the person's,
+  // and is reconciled against its bill like every other discount.
+  vectors: 0.02 / 1e6,
+  // Composio, per tool call: $0.0003 on its list, read 2026-09-05; the
+  // calls its free plan includes are ours the same way.
+  actions: 0.0003,
 };
 
 // What a size costs running all month.

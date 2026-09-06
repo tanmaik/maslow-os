@@ -53,6 +53,13 @@ export type Computers =
 // write-only, made to be given to a browser.
 export type Analytics = { kind: "posthog"; key: string } | { kind: "none" };
 
+// Vectors for the brain's recall come from Voyage, or from a stand-in that
+// hashes words, or from nowhere, in which case there is no recall.
+export type Embeddings =
+  | { kind: "voyage"; apiKey: string; model: string }
+  | { kind: "fake" }
+  | { kind: "none" };
+
 // Connections to outside apps are held at Composio, or by a fake with a
 // few pretend apps, or nowhere.
 export type Connections =
@@ -180,6 +187,19 @@ function analytics(): Analytics {
   return { kind: "none" };
 }
 
+// A deployment without Voyage has no recall in production, and a stand-in
+// anywhere else.
+function embeddings(): Embeddings {
+  const { VOYAGE_API_KEY: apiKey } = process.env;
+  if (apiKey)
+    return {
+      kind: "voyage",
+      apiKey,
+      model: "voyage-4-lite",
+    };
+  return production ? { kind: "none" } : { kind: "fake" };
+}
+
 // A deployment without Composio has no connections in production, and
 // pretend ones anywhere else.
 function connections(): Connections {
@@ -212,6 +232,7 @@ export const deployment = {
   storage: storage(),
   computers: computers(),
   connections: connections(),
+  embeddings: embeddings(),
   https,
   identity: identityProvider(),
   mail: mail(),

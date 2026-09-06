@@ -1,10 +1,13 @@
 import * as brain from "@placeholder/brain";
-import { asPerson, Gone } from "@placeholder/db";
+import { asPerson, Gone, type Query } from "@placeholder/db";
 import { fullName, type Session } from "@placeholder/db/auth";
+import { spend } from "@placeholder/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
+import { embed, model } from "./embeddings";
 import * as lines from "./lines";
+import { PRICES } from "./prices";
 
 // Who and what an agent is connected to, read once when it connects.
 export type About = {
@@ -190,17 +193,19 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     { instructions: instructions(a, s.client) },
   );
   const author = s.client ? `model:${s.client}` : `person:${s.userId}`;
+  const refusing = async (fn: () => Promise<string>): Promise<Result> => {
+    try {
+      return said(await fn());
+    } catch (err) {
+      if (REFUSALS.some((R) => err instanceof R))
+        return { isError: true, ...said((err as Error).message) };
+      throw err;
+    }
+  };
   const door =
-    <A>(fn: (q: brain.Query, args: A) => Promise<string>) =>
-    async (args: A): Promise<Result> => {
-      try {
-        return said(await asPerson(s, (q) => fn(q, args)));
-      } catch (err) {
-        if (REFUSALS.some((R) => err instanceof R))
-          return { isError: true, ...said((err as Error).message) };
-        throw err;
-      }
-    };
+    <A>(fn: (q: Query, args: A) => Promise<string>) =>
+    (args: A) =>
+      refusing(() => asPerson(s, (q) => fn(q, args)));
   const date = (s: string | undefined) => (s ? new Date(s) : undefined);
   const line = (r: brain.BrainRecord, detail?: "brief" | "full") =>
     lines.record(r, s.userId, detail);
@@ -527,6 +532,90 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       return out.join("\n") || "nothing to remove";
     }),
   );
+
+  // Recall exists where vectors can be made.
+  const vectors = model();
+  if (vectors) {
+    // Every token the model counts goes on the meter, in the name of the
+    // app that asked.
+    const metered = async (
+      q: Query,
+      texts: string[],
+      as: "query" | "document",
+    ) => {
+      const made = await embed(texts, as);
+      await spend(
+        q,
+        s.userId,
+        "vectors",
+        "token",
+        made.tokens,
+        PRICES.vectors,
+        s.client ?? "browser",
+      );
+      return made.vectors;
+    };
+    // Records changed since their vector was made are caught up first, a
+    // batch at a time until none are behind, each batch in a transaction
+    // of its own, so what was made stays made if the model fails midway.
+    // One ask does at most fifty batches; a brain larger than that fills
+    // in over a few.
+    const catchUp = async () => {
+      for (let batch = 0; batch < 50; batch++) {
+        const caught = await asPerson(s, async (q) => {
+          const behind = await brain.stale(q, vectors);
+          if (behind.length === 0) return true;
+          const made = await metered(
+            q,
+            behind.map((b) => b.text),
+            "document",
+          );
+          await brain.remember(
+            q,
+            vectors,
+            behind.map((b, i) => ({ ...b, embedding: made[i]! })),
+          );
+          return false;
+        });
+        if (caught) return;
+      }
+    };
+    server.registerTool(
+      "recall",
+      {
+        description:
+          "Records nearest a question by meaning, best first with a score, across kinds. Use when you do not know the words a record uses; read with query when you do.",
+        inputSchema: {
+          question: z.string(),
+          kind: z.string().optional(),
+          since: moment.optional(),
+          until: moment.optional(),
+          limit: z.number().int().min(1).max(50).optional(),
+        },
+        annotations: { readOnlyHint: true },
+      },
+      (a) =>
+        refusing(async () => {
+          if (!/[\p{L}\p{N}]/u.test(a.question))
+            throw new brain.Invalid("a question needs a word");
+          await catchUp();
+          return asPerson(s, async (q) => {
+            const [asked] = await metered(q, [a.question], "query");
+            const found = await brain.recall(q, vectors, asked!, {
+              kind: a.kind,
+              since: date(a.since),
+              until: date(a.until),
+              limit: a.limit,
+            });
+            if (found.length === 0) return "no records";
+            return [
+              `${plural(found.length, "record")}, nearest first`,
+              ...found.map((f) => `${f.score.toFixed(2)} ${line(f.record)}`),
+            ].join("\n");
+          });
+        }),
+    );
+  }
 
   return server;
 }

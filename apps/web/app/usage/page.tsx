@@ -62,9 +62,13 @@ function stored(gbSeconds: number): string {
 
 // A metered quantity, in the unit a person would say it.
 const amount = (unit: string, quantity: number) =>
-  unit === "second"
-    ? spell(quantity)
-    : stored(unit === "gb_second" ? quantity : quantity / 1e9);
+  unit === "token"
+    ? `${quantity.toLocaleString("en")} tokens`
+    : unit === "run"
+      ? `${quantity} ${quantity === 1 ? "action" : "actions"}`
+      : unit === "second"
+        ? spell(quantity)
+        : stored(unit === "gb_second" ? quantity : quantity / 1e9);
 
 // Why a machine came back, in the person's words.
 const CAUSE: Record<Cause, string> = {
@@ -157,7 +161,15 @@ type Detail = {
   attr?: Record<string, string>;
 };
 
-const ORDER: Resource[] = ["compute", "disk", "rootfs", "bucket", "brain"];
+const ORDER: Resource[] = [
+  "compute",
+  "disk",
+  "rootfs",
+  "bucket",
+  "brain",
+  "vectors",
+  "actions",
+];
 
 const WHAT: Record<Resource, string> = {
   compute: "Machine running",
@@ -165,6 +177,8 @@ const WHAT: Record<Resource, string> = {
   rootfs: "Machine's image, while off",
   bucket: "Bucket",
   brain: "Brain",
+  vectors: "Recall, tokens embedded",
+  actions: "Apps, actions run",
 };
 
 // One figure in a strip: what it is, then how much.
@@ -219,6 +233,8 @@ export default async function Usage() {
     rootfs: "$0.15 per GB a month",
     bucket: "$0.02 per GB a month",
     brain: "$0.35 per GB a month",
+    vectors: "$0.02 per million tokens",
+    actions: "$0.0003 per action",
   };
 
   const machine: Detail[] = computer
@@ -330,6 +346,8 @@ export default async function Usage() {
       : [],
     bucket,
     brain,
+    vectors: [],
+    actions: [],
   };
 
   const byResource = new Map(mine.map((l) => [l.resource, l]));

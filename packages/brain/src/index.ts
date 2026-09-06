@@ -13,6 +13,7 @@ export {
   read,
   type Graph,
 } from "./read.ts";
+export { recall, remember, stale } from "./recall.ts";
 export { grantsOf, share, unshare } from "./share.ts";
 export { exportBrain, importBrain, isSnapshot } from "./transfer.ts";
 export type * from "./types.ts";

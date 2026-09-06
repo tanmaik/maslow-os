@@ -1,8 +1,32 @@
 import { asOrg, asPerson, type Query } from "./index.ts";
 import type { Principal } from "./auth.ts";
 
-export type Resource = "compute" | "rootfs" | "disk" | "bucket" | "brain";
-export type Unit = "second" | "gb_second" | "byte_second";
+export type Resource =
+  "compute" | "rootfs" | "disk" | "bucket" | "brain" | "vectors" | "actions";
+export type Unit = "second" | "gb_second" | "byte_second" | "token" | "run";
+
+// Records what a person just spent at a vendor, in the vendor's unit, at
+// the price on its list, and what it was for, at the instant it happened.
+// Read inside the person's scope.
+export async function spend(
+  q: Query,
+  userId: string,
+  resource: Resource,
+  unit: Unit,
+  quantity: number,
+  price: number,
+  cause: string,
+): Promise<void> {
+  await q.query(
+    `insert into usage
+       (org_id, user_id, resource, unit, quantity, price, cost, from_at, to_at,
+        cause)
+     values (current_org(), $1, $2, $3, $4::numeric, $5::numeric,
+       $4::numeric * $5::numeric, clock_timestamp(),
+       clock_timestamp() + interval '1 microsecond', $6)`,
+    [userId, resource, unit, quantity, price, cause],
+  );
+}
 
 export type Line = {
   userId: string;

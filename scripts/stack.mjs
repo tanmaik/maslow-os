@@ -74,6 +74,7 @@ function vendorsOf(env) {
       ? "S3"
       : null,
     connections: has("COMPOSIO_API_KEY") ? "Composio" : null,
+    embeddings: has("VOYAGE_API_KEY") ? "Voyage" : null,
   };
 }
 
