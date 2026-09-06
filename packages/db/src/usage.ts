@@ -2,7 +2,14 @@ import { asOrg, asPerson, type Query } from "./index.ts";
 import type { Principal } from "./auth.ts";
 
 export type Resource =
-  "compute" | "rootfs" | "disk" | "bucket" | "brain" | "vectors" | "actions";
+  | "compute"
+  | "rootfs"
+  | "disk"
+  | "bucket"
+  | "brain"
+  | "tokens"
+  | "vectors"
+  | "actions";
 export type Unit = "second" | "gb_second" | "byte_second" | "token" | "run";
 
 // Records what a person just spent at a vendor, in the vendor's unit, at
@@ -32,6 +39,8 @@ export type Line = {
   userId: string;
   name: string | null;
   resource: Resource;
+  // The model, for tokens; null for everything else.
+  model: string | null;
   unit: Unit;
   quantity: number;
   cost: number;
@@ -52,7 +61,7 @@ async function lines(
     async (q) =>
       (
         await q.query<Line>(
-          `select u.user_id as "userId", m.name, u.resource, u.unit,
+          `select u.user_id as "userId", m.name, u.resource, u.model, u.unit,
                   sum(u.quantity * share)::float8 as quantity,
                   sum(u.cost * share)::float8 as cost
              from usage u
@@ -63,8 +72,8 @@ async function lines(
                  / nullif(extract(epoch from (u.to_at - u.from_at)), 0), 1) end as share
              ) s
             where u.to_at > $1 and ($2::uuid is null or u.user_id = $2)
-            group by u.user_id, m.name, u.resource, u.unit
-            order by m.name nulls last, u.resource`,
+            group by u.user_id, m.name, u.resource, u.model, u.unit
+            order by m.name nulls last, u.resource, u.model`,
           [since, userId],
         )
       ).rows,

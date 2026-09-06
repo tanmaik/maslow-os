@@ -727,11 +727,13 @@ export async function status(p: Principal): Promise<Status | null> {
       // so the meter stops there.
       const stale =
         machine?.config?.image !== undefined && machine.config.image !== IMAGE;
-      if (machine && !stale) await noteState(p.orgId, computer, machine.state);
+      if (machine && machine.state !== "destroyed" && !stale)
+        await noteState(p.orgId, computer, machine.state);
       else {
         if (machine) {
           await noteEventsIn(p.orgId, computer, machine.events ?? []);
-          await fly.destroyMachine(computer.machineId);
+          if (machine.state !== "destroyed")
+            await fly.destroyMachine(computer.machineId);
         }
         // Gone, behind our back or by our hand: the row forgets it and
         // compute can be attached again on the same filesystem.
@@ -743,7 +745,7 @@ export async function status(p: Principal): Promise<Status | null> {
       await release(p.orgId, computer.id, held);
     }
   }
-  if (!machine)
+  if (!machine || machine.state === "destroyed")
     return { computer: { ...computer, machineId: null }, state: "no-compute" };
   return { computer, state: machine.state };
 }

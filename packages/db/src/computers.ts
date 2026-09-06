@@ -195,6 +195,7 @@ export type Cause =
   | "link-dl"
   | "link-term"
   | "link-p"
+  | "link-acp"
   | "backup"
   | "powered-on"
   | "powered-off"

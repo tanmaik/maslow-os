@@ -1749,6 +1749,218 @@ try {
       sharedOwed === 0,
     `Marge's copy answers ${shared.status}, ${sharedOwed} owed`,
   );
+
+  // The agent: a conversation on the machine, spoken to over a signed
+  // socket. The faked agent answers with a tool call, a subagent, a sentence
+  // and a result, then wakes on its own for one more turn; the page then
+  // shows the same events from the database; every door a machine knocks on
+  // gives a stranger a 404.
+  const made = await fetch(`${stack.url}/agent/new`, {
+    method: "POST",
+    headers: { cookie: ottoNow, "content-type": "application/json" },
+    body: JSON.stringify({ model: "z-ai/glm-5.3-flash" }),
+  });
+  const { id: sessionId } = await made.json();
+  const agentPage = async () =>
+    (
+      await fetch(`${stack.url}/agent/${sessionId}`, {
+        headers: { cookie: ottoNow },
+      })
+    ).text();
+  const freshAgent = await agentPage();
+  const acpLink = freshAgent.match(/data-acp-url="([^"]+)"/)?.[1];
+  const frames = await new Promise((resolve) => {
+    if (!acpLink) return resolve([]);
+    const ws = new WebSocket(acpLink.replaceAll("&amp;", "&"));
+    const seen = [];
+    const done = setTimeout(() => {
+      ws.close();
+      resolve(seen);
+    }, 30000);
+    ws.onopen = () => ws.send(JSON.stringify({ prompt: "Hello, agent" }));
+    ws.onmessage = (e) => {
+      const f = JSON.parse(String(e.data));
+      seen.push(f);
+      // The second result is the wakeup's turn ending.
+      if (seen.filter((x) => x.event?.kind === "result").length === 2) {
+        clearTimeout(done);
+        ws.close();
+        resolve(seen);
+      }
+    };
+    ws.onerror = () => resolve(seen);
+    ws.onclose = (e) => {
+      if (e.reason) seen.push({ closed: e.reason });
+      resolve(seen);
+    };
+  });
+  const kinds = frames.filter((f) => f.event).map((f) => f.event.kind);
+  const agentCall = frames.find(
+    (f) => f.event?.kind === "tool" && f.event.body.agent,
+  )?.event.body;
+  check(
+    "the faked agent answers over the socket: a tool call, a subagent, text, a result",
+    made.status === 200 &&
+      ["prompt", "tool", "text", "result"].every((k) => kinds.includes(k)) &&
+      agentCall?.usage?.tokens === 12 &&
+      frames.some(
+        (f) =>
+          f.event?.kind === "tool" &&
+          String(f.event.body.parent ?? "").endsWith("-helper"),
+      ) &&
+      frames.some((f) => f.status === "faked") &&
+      frames.some((f) => "stream" in f),
+    kinds.join(",") || JSON.stringify(frames.slice(-1)),
+  );
+  // A turn the agent began itself: a wake, its words, and a result of its
+  // own, with the conversation idle again after.
+  check(
+    "the faked agent wakes on its own and the turn is recorded whole",
+    kinds.indexOf("wake") > kinds.indexOf("result") &&
+      kinds.lastIndexOf("result") > kinds.indexOf("wake") &&
+      frames.some(
+        (f) =>
+          f.event?.kind === "text" &&
+          String(f.event.body.text).includes("Woke, as scheduled"),
+      ),
+    kinds.join(","),
+  );
+  // The machine tells the app as it goes; the page catches up: the prompt,
+  // the answer, and the turn's work folded behind how long it took.
+  let shown = "";
+  for (let i = 0; i < 20; i++) {
+    shown = await agentPage();
+    if (shown.includes('data-row-kind="wake"') && shown.includes("Woke, as"))
+      break;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  check(
+    "the conversation is on the page from the database, and in the sidebar",
+    ["prompt", "text", "result", "wake"].every((k) =>
+      shown.includes(`data-event="${k}"`),
+    ) &&
+      shown.includes('data-row-kind="fold"') &&
+      shown.includes("Worked for") &&
+      shown.includes("Woke up") &&
+      shown.includes(`data-session="${sessionId}"`) &&
+      shown.includes("Hello, agent") &&
+      shown.includes("data-faked") === false,
+    (shown.match(/data-(?:event|row-kind)="[^"]+"/g) ?? []).join(" "),
+  );
+  const strangerHeaders = {
+    authorization: "Bearer nope",
+    "fly-machine-id": "m00000001",
+    "content-type": "application/json",
+  };
+  const strangerReport = await fetch(`${stack.url}/agent/report`, {
+    method: "POST",
+    headers: strangerHeaders,
+    body: JSON.stringify({ session: sessionId, events: [] }),
+  });
+  const strangerBoot = await fetch(`${stack.url}/agent/bootstrap`, {
+    method: "POST",
+    headers: strangerHeaders,
+    body: JSON.stringify({ session: sessionId }),
+  });
+  const strangerModel = await fetch(`${stack.url}/model/v1/messages`, {
+    method: "POST",
+    headers: {
+      "x-computer-secret": "nope",
+      "fly-machine-id": "m00000001",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ model: "z-ai/glm-5.3-flash", messages: [] }),
+  });
+  const machineSecret = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) => {
+      await q.query("select set_config('app.member_id', $1, true)", [
+        "20000000-0000-4000-8000-000000000002",
+      ]);
+      return (
+        await q.query(
+          "select s.secret, c.machine_id from computer_secrets s join computers c on c.id = s.computer_id",
+        )
+      ).rows[0];
+    },
+  );
+  // With no key the gateway answers from a pretend model, and the machine
+  // speaks as a bearer token the way Claude Code does; the call is a row
+  // settled with what the answer said it used, at no cost.
+  const bearer = {
+    authorization: `Bearer ${machineSecret.machine_id}.${machineSecret.secret}`,
+    "content-type": "application/json",
+  };
+  const pretendCall = await fetch(`${stack.url}/model/v1/messages`, {
+    method: "POST",
+    headers: bearer,
+    body: JSON.stringify({
+      model: "z-ai/glm-5.3-flash",
+      stream: true,
+      messages: [{ role: "user", content: "hello" }],
+    }),
+  });
+  const pretendAnswer = await pretendCall.text();
+  const unoffered = await fetch(`${stack.url}/model/v1/messages`, {
+    method: "POST",
+    headers: bearer,
+    body: JSON.stringify({ model: "gpt-9", messages: [] }),
+  });
+  let settledCall;
+  for (let i = 0; i < 20; i++) {
+    settledCall = await asOrg(
+      "00000000-0000-4000-8000-000000000002",
+      async (q) => {
+        await q.query("select set_config('app.member_id', $1, true)", [
+          "20000000-0000-4000-8000-000000000002",
+        ]);
+        return (
+          await q.query(
+            "select count(*)::int as n, coalesce(sum(input_tokens + output_tokens), 0)::int as tokens, coalesce(bool_and(reported_cost = 0), false) as free from model_calls where settled_at is not null",
+          )
+        ).rows[0];
+      },
+    );
+    if (settledCall.n > 0) break;
+    await sleep(100);
+  }
+  check(
+    "a stranger gets 404 at every agent door; the gateway without a key pretends and writes the call down",
+    strangerReport.status === 404 &&
+      strangerBoot.status === 404 &&
+      strangerModel.status === 404 &&
+      pretendCall.status === 200 &&
+      pretendAnswer.includes("message_start") &&
+      settledCall.n === 1 &&
+      settledCall.tokens === 19 &&
+      settledCall.free === true &&
+      unoffered.status === 403,
+    `${strangerReport.status} ${strangerBoot.status} ${strangerModel.status}; pretend ${pretendCall.status}, ${settledCall.n} call at ${settledCall.tokens} tokens, unoffered ${unoffered.status}`,
+  );
+  const forgedAgent = await new Promise((resolve) => {
+    const ws = new WebSocket(
+      (acpLink ?? "")
+        .replaceAll("&amp;", "&")
+        .replace(/\/[^/?]+\?/, "/forged?"),
+    );
+    ws.onopen = () => resolve("opened");
+    ws.onerror = () => resolve("refused");
+    ws.onclose = () => resolve("refused");
+  });
+  check(
+    "a forged agent link is refused",
+    forgedAgent === "refused",
+    forgedAgent,
+  );
+  check(
+    "the agent page says computers are off for an org without them",
+    (
+      await (
+        await fetch(`${stack.url}/agent`, { headers: { cookie: wile } })
+      ).text()
+    ).includes("Computers are off for this org"),
+    "note shown",
+  );
   // The meter: a sweep turns what happened into priced usage, per person,
   // and a second sweep only adds the time since.
   const sweepOnce = () =>
@@ -1780,7 +1992,7 @@ try {
   const by = Object.fromEntries(ottoMetered.map((r) => [r.resource, r]));
   const margeBrain = margeMetered.find((r) => r.resource === "brain");
   check(
-    "the meter prices compute, disk, bucket and brain per person",
+    "the meter prices compute, disk, bucket, brain and tokens per person",
     swept.appended > 0 &&
       by.compute?.unit === "second" &&
       by.compute.q > 0 &&
@@ -1790,7 +2002,11 @@ try {
       by.bucket.q > 0 &&
       margeBrain?.unit === "byte_second" &&
       margeBrain.q > 0 &&
-      [...ottoMetered, ...margeMetered].every((r) => r.n >= 2 && r.cost >= 0),
+      by.tokens?.unit === "token" &&
+      by.tokens.q === 19 &&
+      [...ottoMetered, ...margeMetered].every(
+        (r) => (r.n >= 2 || r.resource === "tokens") && r.cost >= 0,
+      ),
     [...ottoMetered, margeBrain]
       .filter(Boolean)
       .map(

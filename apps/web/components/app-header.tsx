@@ -63,6 +63,14 @@ export async function AppHeader() {
           variant="ghost"
           size="sm"
           nativeButton={false}
+          render={<a href="/agent" />}
+        >
+          Agent
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          nativeButton={false}
           render={<a href="/brain" />}
         >
           Brain

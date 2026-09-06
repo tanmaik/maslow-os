@@ -1,4 +1,5 @@
 import { backupsOf } from "@placeholder/db/backups";
+import { modelCallsOf } from "@placeholder/db/agents";
 import {
   CAUSES_OF_SIZE,
   computerOf,
@@ -29,6 +30,7 @@ import {
 import { disk, DiskError } from "@/lib/disk";
 import { filesOf, whole } from "@/lib/files";
 import { live } from "@/lib/meter";
+import { costOf, modelById } from "@/lib/models";
 import {
   bytes,
   dollars,
@@ -76,6 +78,7 @@ const CAUSE: Record<Cause, string> = {
   "link-dl": "a download link was followed",
   "link-term": "a terminal was opened",
   "link-p": "a preview was opened",
+  "link-acp": "the agent was opened",
   backup: "the daily backup",
   "powered-on": "you powered it on",
   "powered-off": "you powered it off",
@@ -167,6 +170,7 @@ const ORDER: Resource[] = [
   "rootfs",
   "bucket",
   "brain",
+  "tokens",
   "vectors",
   "actions",
 ];
@@ -177,10 +181,14 @@ const WHAT: Record<Resource, string> = {
   rootfs: "Machine's image, while off",
   bucket: "Bucket",
   brain: "Brain",
+  tokens: "Agent: tokens through the gateway",
   vectors: "Recall, tokens embedded",
   actions: "Apps, actions run",
 };
 
+// A model's name, for a line of tokens.
+const modelLabel = (id: string | null) =>
+  modelById(id ?? "")?.label ?? id ?? "a model";
 // One figure in a strip: what it is, then how much.
 function Cell({ label, value }: { label: string; value: string }) {
   return (
@@ -233,6 +241,7 @@ export default async function Usage() {
     rootfs: "$0.15 per GB a month",
     bucket: "$0.02 per GB a month",
     brain: "$0.35 per GB a month",
+    tokens: "the vendor's own price for each call",
     vectors: "$0.02 per million tokens",
     actions: "$0.0003 per action",
   };
@@ -333,6 +342,29 @@ export default async function Usage() {
     attr: { "data-brain-kind": k.kind },
   }));
 
+  const tokenLines = mine.filter((l) => l.resource === "tokens");
+  // This month's calls by model, from the calls themselves, so one made a
+  // moment ago shows here before the sweep has priced it into the ledger.
+  const byModel = new Map<
+    string,
+    { calls: number; tokens: number; cost: number }
+  >();
+  for (const c of await modelCallsOf(p, monthStart)) {
+    const m = byModel.get(c.model) ?? { calls: 0, tokens: 0, cost: 0 };
+    m.calls += 1;
+    m.tokens +=
+      c.inputTokens + c.outputTokens + c.cacheReadTokens + c.cacheWriteTokens;
+    m.cost += costOf(c);
+    byModel.set(c.model, m);
+  }
+  const tokens: Detail[] = [...byModel].map(([model, m]) => ({
+    key: `model:${model}`,
+    what: `${modelLabel(model)}, ${m.calls} call${m.calls === 1 ? "" : "s"}`,
+    much: `${Math.round(m.tokens).toLocaleString("en-US")} tokens`,
+    cost: dollars(m.cost),
+    attr: { "data-model": model },
+  }));
+
   const details: Record<Resource, Detail[]> = {
     compute: machine,
     disk: contents,
@@ -346,11 +378,21 @@ export default async function Usage() {
       : [],
     bucket,
     brain,
+    tokens,
     vectors: [],
     actions: [],
   };
 
-  const byResource = new Map(mine.map((l) => [l.resource, l]));
+  const byResource = new Map(
+    mine.filter((l) => l.resource !== "tokens").map((l) => [l.resource, l]),
+  );
+  if (tokenLines.length)
+    byResource.set("tokens", {
+      ...tokenLines[0]!,
+      model: null,
+      quantity: tokenLines.reduce((n, l) => n + l.quantity, 0),
+      cost: tokenLines.reduce((n, l) => n + l.cost, 0),
+    });
   const lines = ORDER.filter(
     (r) => byResource.has(r) || details[r].length > 0,
   ).map((r) => ({ resource: r, line: byResource.get(r), detail: details[r] }));
@@ -489,9 +531,11 @@ export default async function Usage() {
                   </TableCell>
                 </TableRow>
                 {m.lines.map((l) => (
-                  <TableRow key={`${id}-${l.resource}`}>
+                  <TableRow key={`${id}-${l.resource}-${l.model ?? ""}`}>
                     <TableCell className="text-muted-foreground pl-8">
-                      {WHAT[l.resource]}
+                      {l.resource === "tokens"
+                        ? `Agent: ${modelLabel(l.model)}`
+                        : WHAT[l.resource]}
                     </TableCell>
                     <TableCell className="text-muted-foreground font-mono tabular-nums">
                       {amount(l.unit, l.quantity)}

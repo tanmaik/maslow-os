@@ -223,7 +223,9 @@ computers live in the preview Fly app and its objects under a `dev/` prefix
 in the dev bucket — a bucket of its own, with keys of its own, so nothing
 outside production holds production's — named for the checkout, and the nightly reap purges them:
 tomorrow makes new ones. A machine cannot reach a laptop, so its reports and
-backups fail there and say so. A preview is the same: a Neon branch off an
+backups fail there and say so; `pnpm dev` therefore runs the machine as a
+process beside the app, the same daemon, harness and gateway at one address,
+and makes real ones only when told to. A preview is the same: a Neon branch off an
 empty parent — never off production — migrated and seeded on deploy, on
 preview keys. The per-PR workflow is the only thing that builds a preview:
 database first, then deploy, and both die with the pull request; its machines
@@ -295,8 +297,32 @@ Transcripts live on the volume, the conversation lives in the database, and
 the interface reconnects to a session by id — never to a process. When a
 machine restarted underneath one, it says so.
 
-The interface is an ACP client. Its layout is taken directly from t3code and
-the Beautiful UI harness, not reinvented.
+The interface is an ACP client. Its layout is taken directly from t3code,
+element by element, on our own shadcn skin, not reinvented.
+
+The harness is Claude Code through the ACP adapter, one process per
+conversation, started by the daemon on the person's machine with root and
+full freedom. It ships in the image with the daemon and is bound into the
+operating system at boot, so it updates with the image and the OS stays the
+person's. Models are reached through a gateway in the app: the machine holds
+no vendor key and speaks to the gateway as itself, with its own secret as the
+bearer token Claude Code sends. Every call is a row before it is made and is
+settled with what it cost when the answer ends, so no token is bought
+without a row; a call is its person's to read, and the org sees what each
+member used through the usage ledger. Any vendor that speaks the Anthropic
+protocol is a route in that gateway; a session is configured by the app in
+one answer at its start — model, gateway, tools — so a model, a vendor or
+an MCP server is added in the app alone. Every shell on the machine is on
+the gateway too, so Claude Code in the terminal needs no sign-in. Without a
+key, production has no agent and boots; anywhere else a pretend model
+answers and nothing is spent.
+
+A turn the agent begins on its own — a wakeup it scheduled, a cron, a task
+that came back — is recorded like one the person began, with why it woke,
+and nothing the agent said in it is lost. A wakeup or a cron keeps the
+harness alive with nobody watching, and outlives a restart. A subagent's
+work nests under the call that spawned it, with its own bill; every call any
+of them makes goes through the gateway under the conversation's id.
 
 ## Interface
 

@@ -8,10 +8,13 @@ import {
 } from "@placeholder/db/computers";
 import { picturesIn, type Resource, type Unit } from "@placeholder/db/usage";
 
+import { modelCallsBetween } from "@placeholder/db/agents";
+
 import { deployment } from "./deployment.ts";
 import { sweepBackups } from "./backups.ts";
 import { unpaid, upholdIn } from "./computer.ts";
 import { expireUploads, landStaged } from "./files.ts";
+import { costOf } from "./models.ts";
 import { settle } from "./orphans.ts";
 import { fly, machineName } from "./fly.ts";
 import { MONTH, PRICES } from "./prices.ts";
@@ -23,6 +26,8 @@ import { MONTH, PRICES } from "./prices.ts";
 
 export type Measure = {
   resource: Resource;
+  // The model, for tokens.
+  model?: string;
   unit: Unit;
   quantity: number;
   price: number;
@@ -264,6 +269,31 @@ export async function measure(
       from,
       to,
     });
+  // Tokens: every call the member's agent made through the gateway in the
+  // window, one line per model, at what each call cost. The price is what
+  // those tokens came to per token, since input, output and cache are
+  // priced apart.
+  const byModel = new Map<string, { tokens: number; cost: number }>();
+  for (const c of await modelCallsBetween(q, userId, from, to)) {
+    const m = byModel.get(c.model) ?? { tokens: 0, cost: 0 };
+    m.tokens +=
+      c.inputTokens + c.outputTokens + c.cacheReadTokens + c.cacheWriteTokens;
+    m.cost += costOf(c);
+    byModel.set(c.model, m);
+  }
+  for (const [model, m] of byModel)
+    if (m.tokens > 0)
+      out.push({
+        resource: "tokens",
+        model,
+        unit: "token",
+        quantity: m.tokens,
+        price: m.cost / m.tokens,
+        live: 0,
+        liveUnit: "tokens",
+        from,
+        to,
+      });
   return out;
 }
 
@@ -462,13 +492,18 @@ async function append(q: Query, orgId: string, userId: string, now: Date) {
     .now;
   now = dbNow;
   const fresh = now.getTime() - 3600_000;
+  // Tokens are spent at instants, not held from one sweep to the next: a
+  // member's first are billed from the turn of the month, not an hour back.
+  const monthStart = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
+  const since = (resource: string) =>
+    lasts.get(resource) ?? (resource === "tokens" ? monthStart : fresh);
   let n = 0;
-  for (const t of new Set([fresh, ...lasts.values()])) {
+  for (const t of new Set([fresh, since("tokens"), ...lasts.values()])) {
     let from = new Date(t);
     if (seconds(from, now) <= 0) continue;
     for (const to of ends(from, now)) {
       const measures = (await measure(q, userId, from, to)).filter(
-        (m) => (lasts.get(m.resource) ?? fresh) === t,
+        (m) => since(m.resource) === t,
       );
       for (const m of measures) {
         // A stretch that begins at or after this segment's end — a disk
@@ -477,11 +512,12 @@ async function append(q: Query, orgId: string, userId: string, now: Date) {
         // it ends.
         if (m.from >= to) continue;
         await q.query(
-          "insert into usage (org_id, user_id, resource, unit, quantity, price, cost, from_at, to_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict do nothing",
+          "insert into usage (org_id, user_id, resource, model, unit, quantity, price, cost, from_at, to_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) on conflict do nothing",
           [
             orgId,
             userId,
             m.resource,
+            m.model ?? null,
             m.unit,
             m.quantity,
             m.price,
@@ -581,6 +617,8 @@ export async function live(
       now,
       brain,
     );
+    // The rate is what ticks: a burst of tokens in the last minute is spent,
+    // not a pace, so it counts in the month and not in the hour.
     const active = minute
       .filter((m) => m.live > 0)
       .map((m) => ({

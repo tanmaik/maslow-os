@@ -9,6 +9,7 @@
 // moment, and one whose service does not is left running. Nothing here
 // costs money.
 import { spawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import { createServer, request as httpRequest } from "node:http";
 import { connect, createServer as tcp } from "node:net";
@@ -32,7 +33,6 @@ export const IDLE_MS = 1000;
 export async function startFakeFly({ dir = ".local/computers" } = {}) {
   const volumes = new Map();
   const machines = new Map();
-  let n = 0;
   const at = () => Date.now();
 
   // The proxy's autostop: a started machine whose service asks for it,
@@ -131,7 +131,10 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
       return json(401, { error: "bad token" });
     const [, kind, id, action] = m;
     if (kind === "volumes" && req.method === "POST") {
-      const v = { id: `vol_${++n}`, ...JSON.parse(body) };
+      const v = {
+        id: `vol_${randomBytes(10).toString("hex")}`,
+        ...JSON.parse(body),
+      };
       volumes.set(v.id, v);
       return json(201, v);
     }
@@ -144,7 +147,7 @@ export async function startFakeFly({ dir = ".local/computers" } = {}) {
       if (!volumes.has(input.config?.mounts?.[0]?.volume))
         return json(422, { error: "no such volume" });
       const mc = {
-        id: `m${(++n).toString().padStart(8, "0")}`,
+        id: randomBytes(7).toString("hex"),
         name: input.name,
         region: input.region,
         state: "created",

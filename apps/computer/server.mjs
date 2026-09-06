@@ -21,6 +21,8 @@ import { promisify } from "node:util";
 
 import { WebSocketServer } from "ws";
 
+import { agents } from "./agent.mjs";
+
 // COMPUTER_SECRET is this machine's own, for the app's calls; LINK_KEY is
 // this machine's own too, the key its links are signed with, so a shell
 // with root here forges no link to anybody else's machine.
@@ -70,6 +72,8 @@ const AS_ME = {
   "fly-machine-id": FLY_MACHINE_ID,
   "content-type": "application/json",
 };
+// Where a session is configured and its events are told: the agent's doors.
+const AGENT_URL = REPORT_URL.replace(/\/computer\/report$/, "/agent");
 
 // The disk's fullness. A laptop's directory stands in for a volume of
 // DISK_GB, measured as what it holds.
@@ -245,7 +249,7 @@ const bound = (req, machine) => {
 
 function signed(url, kind, req) {
   const m = url.pathname.match(
-    /^\/(dl|term|p)\/([^/]+)\/(\d+)\/([^/]+)(?:\/(\d+))?$/,
+    /^\/(dl|term|p|acp)\/([^/]+)\/(\d+)\/([^/]+)(?:\/(\d+))?$/,
   );
   if (!m || m[1] !== kind) return null;
   const [, , machine, expires, sig, port] = m;
@@ -407,8 +411,11 @@ function startBackup() {
 // its own first and moves into place in one step under the tree's lock,
 // with the disk checked again at that moment; an archive that will not
 // unpack leaves nothing behind.
+// The daemon's own record of what ran lives in `.placeholder`: ours, not the
+// person's, and never shown as theirs.
+const OURS = new Set(["lost+found", ".placeholder", ".tmp"]);
 const visible = (names) =>
-  names.filter((x) => !x.startsWith(".") && x !== "lost+found");
+  names.filter((x) => !x.startsWith(".") && !OURS.has(x));
 const run = (cmd, args) =>
   new Promise((resolve, reject) => {
     const c = spawn(cmd, args, { stdio: ["ignore", "inherit", "inherit"] });
@@ -529,7 +536,12 @@ async function list(dir) {
   });
   const entries = [];
   for (const d of names) {
-    if (d.name === "lost+found" || SCRATCH.test(d.name)) continue;
+    if (
+      d.name === "lost+found" ||
+      SCRATCH.test(d.name) ||
+      (dir === ROOT && OURS.has(d.name))
+    )
+      continue;
     const s = await fs.stat(path.join(dir, d.name)).catch(() => null);
     if (!s) continue;
     entries.push({
@@ -762,7 +774,7 @@ async function handle(req, res) {
     "This link has expired or is not one of ours. Open it again from your computer.";
   // A browser living at a previewed port sees that port, not us; only
   // signed links and the disk's own routes are kept back.
-  const ours = /^\/(fs|dl|term|p)(\/|$)/.test(url.pathname);
+  const ours = /^\/(fs|dl|term|p|acp)(\/|$)/.test(url.pathname);
   if (!ours) {
     const cookie = previewCookie(req);
     if (cookie?.replay) return replay(cookie.replay);
@@ -1157,6 +1169,22 @@ function makeRoom() {
   return true;
 }
 const SCROLLBACK = 200_000;
+// The gateway to the model, on the app, and this machine's word to it: a
+// shell's Claude Code needs no sign-in and runs on the model the app named.
+const MODEL_ENV = {
+  ANTHROPIC_BASE_URL: `${new URL(REPORT_URL).origin}/model`,
+  ANTHROPIC_AUTH_TOKEN: `${FLY_MACHINE_ID}.${COMPUTER_SECRET}`,
+  ...(process.env.MODEL
+    ? {
+        ANTHROPIC_MODEL: process.env.MODEL,
+        ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.MODEL,
+        ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.MODEL,
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.MODEL,
+        ANTHROPIC_DEFAULT_FABLE_MODEL: process.env.MODEL,
+        CLAUDE_CODE_SUBAGENT_MODEL: process.env.MODEL,
+      }
+    : {}),
+};
 function spawnShell() {
   // Inside the operating system on the volume, at home, as the person.
   return OS_ROOT
@@ -1184,6 +1212,7 @@ function spawnShell() {
             SHELL,
             TERM: "xterm-256color",
             LANG: "C.UTF-8",
+            ...MODEL_ENV,
           },
         },
       )
@@ -1197,6 +1226,7 @@ function spawnShell() {
           HOME: ROOT,
           TERM: "xterm-256color",
           LANG: process.env.LANG ?? "C.UTF-8",
+          ...MODEL_ENV,
         },
       });
 }
@@ -1265,6 +1295,19 @@ setInterval(() => {
     });
 }, 30_000).unref();
 
+// The agent: one harness per conversation, on the disk, spoken to over its
+// own socket. The app configures each session; the disk remembers what ran.
+const sockets = new WebSocketServer({ noServer: true });
+const agent = agents({
+  root: ROOT,
+  osRoot: OS_ROOT,
+  person: PERSON,
+  machineId: FLY_MACHINE_ID,
+  secret: COMPUTER_SECRET,
+  agentUrl: AGENT_URL,
+  log: (line) => console.error(line),
+});
+
 server.on("upgrade", (req, socket, head) => {
   try {
     upgrade(req, socket, head);
@@ -1294,6 +1337,17 @@ function upgrade(req, socket, head) {
     if (busy) return refuse(503, "Not right now");
     return shells.handleUpgrade(req, socket, head, (ws) =>
       attach(ws, term.what),
+    );
+  }
+  // The agent's socket for one conversation, by a signed link naming it.
+  const conversation = signed(url, "acp", req);
+  if (conversation) {
+    if (conversation.replay) return replay(conversation.replay);
+    if (conversation.refused || !/^[0-9a-f-]{36}$/.test(conversation.what))
+      return refuse(403, "Forbidden");
+    if (busy) return refuse(503, "Not right now");
+    return sockets.handleUpgrade(req, socket, head, (ws) =>
+      agent.attach(ws, conversation.what),
     );
   }
   // A previewed app's own sockets, live reload and the like.
@@ -1364,6 +1418,10 @@ async function settle() {
   await person();
   for (const d of ["proc", "sys", "dev"])
     await run("mount", ["--rbind", `/${d}`, path.join(OS_ROOT, d)]);
+  // The daemon's own directory, harness included, seen from inside: the
+  // harness ships with the image and updates with it, never with the OS.
+  await fs.mkdir(path.join(OS_ROOT, "computer"), { recursive: true });
+  await run("mount", ["--bind", "/computer", path.join(OS_ROOT, "computer")]);
   // The deployment's own: its DNS and hosts, the sudo rule, the profile
   // and pip's setting, current from the image on every boot.
   for (const [file, mode] of [
@@ -1480,7 +1538,8 @@ async function reset(backedUp) {
   osSize = { bytes: 0, at: 0 };
   try {
     for (const s of sessions.values()) quietly(() => s.shell.kill());
-    for (const d of ["dev", "sys", "proc"])
+    await agent.stopAll();
+    for (const d of ["dev", "sys", "proc", "computer"])
       await run("umount", ["-l", "-R", path.join(OS_ROOT, d)]);
     await fs.rm(path.join(MOUNT, ".os-ready"), { force: true });
     await fs.rename(OS_ROOT, OLD);
@@ -1502,7 +1561,12 @@ async function reset(backedUp) {
 async function settleUntilDone(tries = Infinity) {
   for (let n = 1; ; n++) {
     try {
-      return await settle();
+      const settled = await settle();
+      // Whatever an agent was doing when the machine went down, it resumes.
+      agent
+        .restore()
+        .catch((err) => console.error(`agents not restored: ${err.message}`));
+      return settled;
     } catch (err) {
       console.error(
         `the operating system could not be set up: ${err.message}; again in a minute`,

@@ -15,6 +15,7 @@
     "./files": "./src/files.ts",
     "./usage": "./src/usage.ts",
     "./groups": "./src/groups.ts",
+    "./agents": "./src/agents.ts",
     "./oauth": "./src/oauth.ts"
   },
   "scripts": {

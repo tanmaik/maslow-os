@@ -237,9 +237,12 @@ export const disk = {
     link(p, "p", String(port), `/${port}`),
 };
 
-async function link(
+// A link the browser follows to the machine itself, good for ten minutes,
+// signed with the deployment's key and bound to what it is for and which
+// machine: a download, a shell, a preview, or the agent's socket.
+export async function link(
   p: Principal,
-  kind: "dl" | "term" | "p",
+  kind: "dl" | "term" | "p" | "acp",
   what: string,
   tail = "",
 ): Promise<string> {

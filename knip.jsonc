@@ -15,8 +15,11 @@
       "ignoreDependencies": ["agentation-mcp"],
     },
     "apps/computer": {
-      "entry": ["server.mjs"],
+      // The faked agent is its own process, started by path.
+      "entry": ["server.mjs", "fake-agent.mjs"],
       "includeEntryExports": true,
+      // The agent's harness, started by path inside the operating system.
+      "ignoreDependencies": ["@agentclientprotocol/claude-agent-acp"],
     },
     // A package's doors are entry files; what they export still has to be
     // used by someone.

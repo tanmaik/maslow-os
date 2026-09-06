@@ -51,6 +51,19 @@ Uploaded images live in an S3-compatible bucket named by `STORAGE_ENDPOINT`,
 `STORAGE_SECRET_KEY`. Without them a checkout uses a directory and a preview
 refuses uploads.
 
+The agent runs on the person's machine and reaches its models through the
+app, never with a key of its own: `OPENROUTER_API_KEY` serves the catalog,
+and the person picks a model in the composer. Without it the agent is faked:
+it answers every prompt the same way, and the page and the pill say so. On a laptop the machine is a
+process beside the app, with the same daemon, harness and gateway as on Fly,
+because a machine on Fly cannot call a laptop back. Real machines are
+exercised on the preview; to make them from a laptop anyway, for work on the
+machine itself:
+
+```
+COMPUTERS=fly pnpm dev
+```
+
 Analytics, replay and error tracking go to PostHog when `POSTHOG_KEY` is
 set: every page seen, click, error and replay, as whoever is signed in,
 tagged local, preview or production. One PostHog project serves all three,

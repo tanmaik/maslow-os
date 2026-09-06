@@ -25,7 +25,8 @@ type Props = {
     | "storage"
     | "computers"
     | "connections"
-    | "embeddings",
+    | "embeddings"
+    | "models",
     string | null
   >;
   signedIn: boolean;

@@ -42,6 +42,7 @@ export async function DevToolbar() {
               : null,
           connections:
             deployment.connections.kind === "composio" ? "Composio" : null,
+          models: deployment.models.kind === "gateway" ? "OpenRouter" : null,
           embeddings: deployment.embeddings.kind === "voyage" ? "Voyage" : null,
         }}
         signedIn={p !== null}

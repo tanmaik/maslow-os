@@ -1,14 +1,19 @@
 import { createHash } from "node:crypto";
 import os from "node:os";
+import path from "node:path";
 
 import { startFakeFly } from "./fake-fly.mjs";
 import { devSecrets, freePort, root, startStack } from "./stack.mjs";
 
-// Development runs the real thing: the dev secrets hold the preview Fly
-// app and the bucket, and everything this checkout makes there is named
-// for it and purged by the nightly reap. Without the secrets, computers
-// run against a fake Machines API in this process: they cost nothing and
-// behave as Fly does.
+// Development runs the real thing where the real thing can reach a laptop:
+// the dev secrets hold WorkOS, the bucket, mail and the model key. The
+// machine is the exception. A machine on Fly cannot call a laptop back, so
+// on a laptop the machine is a process beside the app, against a fake
+// Machines API in this process: the same daemon, the same harness, the same
+// gateway, one address. `COMPUTERS=fly pnpm dev` makes real machines in the
+// preview Fly app instead, named for this checkout and purged nightly, for
+// work on the machine itself; their reports, backups and agent cannot reach
+// here and say so. Real machines are otherwise exercised on the preview.
 const secrets = devSecrets();
 // This checkout, told apart from every other laptop and worktree.
 const checkout = createHash("sha1")
@@ -22,7 +27,19 @@ if (!effective.FLY_API_TOKEN !== !effective.FLY_COMPUTERS_APP)
   throw new Error(
     "Fly is half set: FLY_API_TOKEN and FLY_COMPUTERS_APP go together, or neither.",
   );
-const fake = effective.FLY_API_TOKEN ? null : await startFakeFly();
+const wantFly = process.env.COMPUTERS === "fly";
+if (wantFly && !effective.FLY_API_TOKEN)
+  throw new Error("COMPUTERS=fly needs the dev secrets; run `pnpm env:pull`.");
+// The machines' disks live outside the checkout, in this laptop's scratch:
+// the harness reads every CLAUDE.md and git repository above its working
+// directory, and a disk inside the checkout would hand it this repo as the
+// person's project. The scratch is the laptop's to purge, as the nightly
+// reap purges a laptop's machines on Fly.
+const fake = wantFly
+  ? null
+  : await startFakeFly({
+      dir: path.join(os.tmpdir(), "placeholder", checkout, "computers"),
+    });
 const stack = await startStack({
   webPort,
   env: fake
@@ -31,6 +48,7 @@ const stack = await startStack({
         FLY_COMPUTERS_APP: "fake",
         FLY_API_HOST: fake.url,
         FLY_MACHINES_HOST: fake.url,
+        FLY_MACHINES_DOMAIN: "",
         LINK_SECRET: "fake-link",
         FLY_REPORT_URL:
           effective.FLY_REPORT_URL ??
@@ -58,14 +76,15 @@ const faked = {
   analytics: "faked: nothing is reported",
   storage: `faked: uploads go to ${process.env.UPLOADS_DIR ?? ".local/uploads"}`,
   connections: "faked: three pretend apps connect with a click",
+  models: "faked: the agent answers every prompt the same way",
 };
 for (const [name, vendor] of Object.entries(stack.vendors)) {
   console.log(`${name.padEnd(9)} ${vendor ? `real (${vendor})` : faked[name]}`);
 }
 console.log(
   fake
-    ? "computers faked in this process"
-    : `computers real, on Fly as dev-${checkout}-*, purged nightly; a machine cannot reach this laptop, so its reports and backups fail here`,
+    ? "computers on this laptop, against a fake Fly in this process (COMPUTERS=fly pnpm dev makes real ones)"
+    : `computers real, on Fly as dev-${checkout}-*, purged nightly; a machine cannot reach this laptop, so its reports, backups and agent fail here`,
 );
 if (!fake && effective.STORAGE_BUCKET)
   console.log(`storage   real, under dev/${checkout}/, purged nightly`);
