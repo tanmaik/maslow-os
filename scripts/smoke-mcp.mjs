@@ -600,6 +600,13 @@ export async function smokeMcp(stack, signIn) {
     kinds: [{ name: "scrap", description: "Another scrap." }],
   });
   const tooSoon = await call(grant.access_token, "restore", { ids: [scrapId] });
+  const scrapLog = await call(grant.access_token, "history", {
+    of: scrapId,
+    limit: 1,
+  });
+  const tooSoonBack = await call(grant.access_token, "revert", {
+    changes: [Number(scrapLog.lines[1]?.match(/^#(\d+) /)?.[1])],
+  });
   const back = await call(grant.access_token, "restore", { kinds: ["scrap"] });
   const withIt = await call(grant.access_token, "catalog", {});
   const restored = await call(grant.access_token, "restore", {
@@ -615,6 +622,8 @@ export async function smokeMcp(stack, signIn) {
       tooSoon.refused &&
       tooSoon.text ===
         `record ${scrapId} is of kind scrap, which is removed; restore the kind first` &&
+      tooSoonBack.refused &&
+      tooSoonBack.text === tooSoon.text &&
       back.lines[0] === "restored kind scrap" &&
       withIt.lines.includes("  grade: number — How good.") &&
       restored.lines[0] === `restored ${scrapId} ${ungradedId}`,

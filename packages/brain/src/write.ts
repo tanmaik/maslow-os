@@ -258,15 +258,20 @@ export async function unlink(q: Query, author: Author, id: string) {
 
 // Brings a hidden link back, under a verb that is there.
 export async function restoreEdge(q: Query, author: Author, id: string) {
-  const { rows: gone } = await q.query<{ verb: string }>(
-    `select e.verb from edges e
-     join edge_verbs v on v.person_id = e.person_id and v.name = e.verb
-     where e.id = $1 and v.deleted_at is not null`,
+  const { rows: of } = await q.query<{ verb: string }>(
+    "select verb from edges where id = $1",
     [id],
   );
-  if (gone[0]) {
+  const verb = of[0]?.verb;
+  const { rowCount: live } = await q.query(
+    `select 1 from edge_verbs
+     where name = $1 and person_id = current_member() and deleted_at is null
+     for share`,
+    [verb ?? null],
+  );
+  if (verb && !live) {
     throw new Invalid(
-      `edge ${id} carries ${gone[0].verb}, which is removed; restore the verb first`,
+      `edge ${id} carries ${verb}, which is removed; restore the verb first`,
     );
   }
   const result = await q.query(
@@ -361,18 +366,17 @@ export async function remove(q: Query, author: Author, id: string) {
   if (!result.rowCount) throw new NotFound(`record ${id} is not in this brain`);
 }
 
-// Brings a removed record back, under a kind that is there.
+// Brings a removed record back, under a kind that is there. The kind is
+// held until the transaction commits, so it cannot be removed underneath.
 export async function restore(q: Query, author: Author, id: string) {
   await need(q, id, "owner");
-  const { rows: gone } = await q.query<{ kind: string }>(
-    `select r.kind from records r
-     join record_kinds k on k.person_id = r.person_id and k.name = r.kind
-     where r.id = $1 and k.deleted_at is not null`,
+  const { rows: of } = await q.query<{ kind: string }>(
+    "select kind from records where id = $1",
     [id],
   );
-  if (gone[0]) {
+  if (of[0] && !(await holdKind(q, of[0].kind, false))) {
     throw new Invalid(
-      `record ${id} is of kind ${gone[0].kind}, which is removed; restore the kind first`,
+      `record ${id} is of kind ${of[0].kind}, which is removed; restore the kind first`,
     );
   }
   const result = await q.query(

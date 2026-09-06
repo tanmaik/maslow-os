@@ -1,5 +1,5 @@
 import { Conflict, Invalid, NotFound } from "./errors.ts";
-import { check, defineProperty, propertiesOf } from "./properties.ts";
+import { check, defineProperty, holdKind, propertiesOf } from "./properties.ts";
 import { eventColumns, toEvent, type EventRow } from "./rows.ts";
 import type { Author, PropertyType, Query } from "./types.ts";
 import {
@@ -9,7 +9,7 @@ import {
   restoreDefinition,
   undefine,
 } from "./vocabulary.ts";
-import { remove, restoreEdge, unlink } from "./write.ts";
+import { remove, restore, restoreEdge, unlink } from "./write.ts";
 
 // Walking a change back from the log. A person's changes are numbered from
 // one; the latest change to a thing is the one that can be walked back, so
@@ -53,7 +53,14 @@ export async function revert(
         await remove(q, author, id);
         return `removed record ${id}`;
       }
+      if (e.action === "deleted") {
+        await restore(q, author, id);
+        return `restored record ${id}`;
+      }
       const kind = text(before, "kind");
+      if (!(await holdKind(q, kind, false))) {
+        throw new Invalid(`kind ${kind} is removed; restore it first`);
+      }
       const props = (before.props ?? {}) as Row;
       check(kind, props, await propertiesOf(q, kind, undefined, true));
       const result = await q

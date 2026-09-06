@@ -108,6 +108,20 @@ export async function undefine(
   what: "kind" | "verb",
   name: string,
 ): Promise<void> {
+  // Held alone first, so a record or an edge being brought back under it
+  // waits, and the count below is the truth when the row changes.
+  const held =
+    what === "kind"
+      ? await holdKind(q, name, true)
+      : (
+          await q.query(
+            `select 1 from edge_verbs
+             where name = $1 and person_id = current_member()
+               and deleted_at is null for update`,
+            [name],
+          )
+        ).rowCount;
+  if (!held) await refuse(q, what, name);
   const { rowCount: used } = await q.query(
     what === "kind"
       ? `select 1 from records
