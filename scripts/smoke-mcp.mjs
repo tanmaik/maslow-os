@@ -501,6 +501,64 @@ export async function smokeMcp(stack, signIn) {
     forged.text,
   );
 
+  // The person's apps: nothing until one is connected; then find names the
+  // actions that fit, run runs one as the person, and an app not connected
+  // is refused with where to connect it.
+  const none = await call(grant.access_token, "apps", {});
+  const begun = await fetch(`${base}/settings/connections`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ intent: "connect", app: "pigeon" }),
+    redirect: "manual",
+  });
+  await fetch(begun.headers.get("location"), {
+    headers: { cookie: wile },
+    redirect: "manual",
+  });
+  const apps = await call(grant.access_token, "apps", {});
+  const fits = await call(grant.access_token, "find", {
+    task: "send a message to someone",
+  });
+  const sent = await call(grant.access_token, "run", {
+    action: "PIGEON_SEND",
+    inputs: { to: "Road Runner", body: "Beep." },
+  });
+  const unconnected = await call(grant.access_token, "run", {
+    action: "SUNDIAL_TODAY",
+  });
+  const short = await call(grant.access_token, "run", {
+    action: "PIGEON_SEND",
+    inputs: { to: "Road Runner" },
+  });
+  const named = await call(grant.access_token, "find", {
+    task: "today's events",
+    apps: ["sundial"],
+  });
+  check(
+    "apps: find names what fits, run runs it as the person",
+    none.text.startsWith("no apps connected") &&
+      apps.lines[0] === 'pigeon "Carrier Pigeon" ACTIVE' &&
+      fits.lines[0] === "PIGEON_SEND (pigeon) — Sends a message by pigeon." &&
+      fits.lines[1] === "  to: string, required — Who." &&
+      sent.lines[0] === "source=pigeon action=PIGEON_SEND" &&
+      sent.lines[2] === '{"id":"pgn_1","sent":true,"to":"Road Runner"}' &&
+      unconnected.refused &&
+      unconnected.text === "connect sundial in settings first" &&
+      named.refused &&
+      named.text === "connect sundial in settings first" &&
+      short.refused &&
+      short.text === "missing body",
+    `${apps.lines[0]} / ${fits.lines[0]} / ${unconnected.text} / ${named.text}`,
+  );
+  const charged = (await page(`${base}/usage`, wile)).match(
+    /data-usage="actions"[\s\S]*?(\d+) actions?/,
+  );
+  check(
+    "every action is on the meter: the search and the run",
+    charged?.[1] === "2",
+    charged ? `${charged[1]} actions` : "no Apps line on the usage page",
+  );
+
   // Recall finds a record by what it is about, catching up the vectors of
   // whatever changed since it was last asked.
   const wanted = mine.rows[1]?.match(/"([^"]*)"/)?.[1] ?? "";

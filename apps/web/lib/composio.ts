@@ -190,4 +190,167 @@ export const composio = {
       "null",
     );
   },
+
+  // The tools that fit a task, asked of Composio's own search, which answers
+  // with a plan, its pitfalls and the tools it names; each tool's inputs
+  // are read from its schema.
+  async findTools(
+    userId: string,
+    task: string,
+    toolkits: string[],
+  ): Promise<Found> {
+    const answer = await call<{ data: Search }>(
+      "POST",
+      "/tools/execute/COMPOSIO_SEARCH_TOOLS",
+      {
+        user_id: userId,
+        arguments: {
+          queries: [{ use_case: task, toolkits }],
+          session: { generate_id: true },
+        },
+      },
+    );
+    const result = answer.data?.results?.[0];
+    const slugs = [
+      ...(result?.primary_tool_slugs ?? []),
+      ...(result?.related_tool_slugs ?? []),
+    ].slice(0, 8);
+    const actions = await Promise.all(
+      slugs.map(async (slug) => {
+        const t = await call<Tool | null>(
+          "GET",
+          `/tools/${encodeURIComponent(slug)}`,
+          undefined,
+          "null",
+        );
+        return t && toAction(t);
+      }),
+    );
+    return {
+      plan: result?.recommended_plan_steps ?? [],
+      pitfalls: result?.known_pitfalls ?? [],
+      actions: actions.filter((a): a is Action => a !== null),
+    };
+  },
+
+  // Runs one tool as a user. An app the user has not connected is a
+  // Refused; anything else the tool says is handed back as it said it.
+  async execute(
+    userId: string,
+    slug: string,
+    args: Record<string, unknown>,
+  ): Promise<Ran> {
+    const c = config();
+    const res = await fetch(
+      `${c.api}/api/v3.1/tools/execute/${encodeURIComponent(slug)}`,
+      {
+        method: "POST",
+        headers: { "x-api-key": c.apiKey, "content-type": "application/json" },
+        body: JSON.stringify({ user_id: userId, arguments: args }),
+        signal: AbortSignal.timeout(60_000),
+      },
+    );
+    const app = slug.split("_")[0]!.toLowerCase();
+    if (res.status === 404) {
+      const why = (await res.json().catch(() => null)) as {
+        error?: { code?: number; message?: string };
+      } | null;
+      if (why?.error?.code === 1810)
+        throw new Refused(`connect ${app} in settings first`);
+      return {
+        ok: false,
+        data: null,
+        error: why?.error?.message ?? "no such tool",
+        app,
+      };
+    }
+    if (!res.ok)
+      throw new Error(
+        `Composio POST /tools/execute/${slug} answered ${res.status}: ${(await res.text()).slice(0, 300)}`,
+      );
+    const ran = (await res.json()) as {
+      data: unknown;
+      error: string | null;
+      successful: boolean;
+    };
+    return { ok: ran.successful, data: ran.data, error: ran.error, app };
+  },
 };
+
+// Thrown when a run cannot happen for a reason the agent can act on: an
+// app the person has not connected, or the hour's runs used up.
+export class Refused extends Error {}
+
+type Input = {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+};
+
+// One thing a tool can do, and what it takes.
+export type Action = {
+  slug: string;
+  app: string;
+  description: string;
+  inputs: Input[];
+};
+
+export type Found = { plan: string[]; pitfalls: string[]; actions: Action[] };
+
+export type Ran = {
+  ok: boolean;
+  data: unknown;
+  error: string | null;
+  app: string;
+};
+
+type Search = {
+  results?: {
+    primary_tool_slugs?: string[];
+    related_tool_slugs?: string[];
+    recommended_plan_steps?: string[];
+    known_pitfalls?: string[];
+  }[];
+};
+type Tool = {
+  slug: string;
+  description?: string;
+  toolkit?: { slug: string };
+  input_parameters?: {
+    properties?: Record<
+      string,
+      { type?: string; enum?: string[]; description?: string }
+    >;
+    required?: string[];
+  };
+};
+
+// The first sentence of a description, cut short.
+const gist = (s: string | undefined, most = 90) => {
+  const first = (s ?? "").replace(/\s+/g, " ").split(/(?<=\.)\s/)[0] ?? "";
+  return first.length > most ? `${first.slice(0, most - 1)}…` : first;
+};
+
+const MOST_INPUTS = 16;
+
+// A tool as an action: its inputs from its schema, required first,
+// Composio's own user_id left out, and no more than a screenful.
+function toAction(t: Tool): Action {
+  const required = new Set(t.input_parameters?.required ?? []);
+  return {
+    slug: t.slug,
+    app: t.toolkit?.slug ?? t.slug.split("_")[0]!.toLowerCase(),
+    description: gist(t.description, 140),
+    inputs: Object.entries(t.input_parameters?.properties ?? {})
+      .filter(([name]) => name !== "user_id")
+      .map(([name, p]) => ({
+        name,
+        type: p.enum ? p.enum.join("|") : (p.type ?? "any"),
+        required: required.has(name),
+        description: gist(p.description),
+      }))
+      .sort((a, b) => Number(b.required) - Number(a.required))
+      .slice(0, MOST_INPUTS),
+  };
+}

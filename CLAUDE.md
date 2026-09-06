@@ -188,6 +188,8 @@ ends with their membership: a membership that ends or an org that is deleted
 owes its accounts to Composio the way it owes its machines to Fly, in the
 same transaction. Composio's managed OAuth
 apps sign people in until a customer needs our name on the consent screen.
+The agent reaches those apps through three MCP tools, apps, find and run,
+never a tool per action.
 
 ## Real and fake
 
