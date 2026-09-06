@@ -481,14 +481,70 @@ export async function smokeMcp(stack, signIn) {
     kinds: ["conclusion"],
   });
   check(
-    "a kind leaves only once nothing is of it; a field takes its values",
+    "a kind leaves only once nothing live is of it; a field takes its values",
     stuck.refused &&
-      stuck.text === "records are still conclusion; change their kind first" &&
+      stuck.text ===
+        "records are still conclusion; change or remove them first" &&
       dropped.lines[0] === "removed field conclusion.weight from 1 record" &&
       !now.lines[0].includes("weight") &&
       moved.lines[0]?.startsWith(`${claimId} note `) &&
       gone.lines[0] === "removed kind conclusion",
     `${stuck.text} / ${dropped.text} / ${moved.lines[0]} / ${gone.text}`,
+  );
+
+  // A removed kind is hidden, not erased: it leaves the catalog, its name
+  // stays its own, a removed record of it waits for it, and restore brings
+  // it back as it was, with its fields.
+  const scrap = await call(grant.access_token, "write", {
+    kinds: [
+      {
+        name: "scrap",
+        description: "A throwaway kind.",
+        properties: [
+          { name: "grade", type: "number", description: "How good." },
+        ],
+      },
+    ],
+    records: [
+      {
+        kind: "scrap",
+        layer: "derived",
+        source: "claude",
+        sourceRef: "scrap-1",
+        title: "A scrap",
+        props: { grade: 2 },
+      },
+    ],
+  });
+  const scrapId = scrap.ids[0];
+  await call(grant.access_token, "remove", { ids: [scrapId] });
+  const scrapGone = await call(grant.access_token, "undefine", {
+    kinds: ["scrap"],
+  });
+  const without = await call(grant.access_token, "catalog", {});
+  const reuse = await call(grant.access_token, "write", {
+    kinds: [{ name: "scrap", description: "Another scrap." }],
+  });
+  const tooSoon = await call(grant.access_token, "restore", { ids: [scrapId] });
+  const back = await call(grant.access_token, "restore", { kinds: ["scrap"] });
+  const withIt = await call(grant.access_token, "catalog", {});
+  const restored = await call(grant.access_token, "restore", {
+    ids: [scrapId],
+  });
+  check(
+    "a removed kind is hidden with its records and comes back before them",
+    scrapGone.lines[0] === "removed kind scrap" &&
+      !without.lines.some((l) => l.startsWith("scrap ")) &&
+      reuse.refused &&
+      reuse.text ===
+        "kind scrap is removed; restore it, or choose another name" &&
+      tooSoon.refused &&
+      tooSoon.text ===
+        `record ${scrapId} is of kind scrap, which is removed; restore the kind first` &&
+      back.lines[0] === "restored kind scrap" &&
+      withIt.lines.includes("  grade: number — How good.") &&
+      restored.lines[0] === `restored ${scrapId}`,
+    `${scrapGone.text} / ${reuse.text} / ${tooSoon.text} / ${back.text} / ${restored.text}`,
   );
 
   // A name that would forge a line is refused.

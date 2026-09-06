@@ -21,6 +21,7 @@ export {
   redefine,
   redefineProperty,
   removeProperty,
+  restoreDefinition,
   undefine,
 } from "./vocabulary.ts";
 export {

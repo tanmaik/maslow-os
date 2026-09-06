@@ -38,12 +38,12 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
                 left join records r on r.kind = k.name
                   and r.person_id = k.person_id
                   and r.deleted_at is null and r.merged_into is null
-                where k.person_id = current_member()
+                where k.person_id = current_member() and k.deleted_at is null
                 group by k.name) k) as kinds,
          (select count(*)::int from record_kinds
-          where person_id <> current_member()) as shared,
-         (select coalesce(array_agg(name order by name), '{}') from edge_verbs)
-           as verbs
+          where person_id <> current_member() and deleted_at is null) as shared,
+         (select coalesce(array_agg(name order by name), '{}') from edge_verbs
+          where deleted_at is null) as verbs
        from users u where u.id = $1`,
     [s.userId],
   );
@@ -421,12 +421,27 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
   server.registerTool(
     "restore",
     {
-      description: "Brings removed records back.",
-      inputSchema: { ids },
+      description:
+        "Brings removed records, kinds and verbs back. A record comes back only once its kind is there.",
+      inputSchema: {
+        ids: ids.optional(),
+        kinds: z.array(z.string()).optional(),
+        verbs: z.array(z.string()).optional(),
+      },
     },
     door(async (q, a) => {
-      for (const id of a.ids) await brain.restore(q, author, id);
-      return `restored ${a.ids.join(" ")}`;
+      const out: string[] = [];
+      for (const name of a.kinds ?? []) {
+        await brain.restoreDefinition(q, author, "kind", name);
+        out.push(`restored kind ${name}`);
+      }
+      for (const name of a.verbs ?? []) {
+        await brain.restoreDefinition(q, author, "verb", name);
+        out.push(`restored verb ${name}`);
+      }
+      for (const id of a.ids ?? []) await brain.restore(q, author, id);
+      if (a.ids?.length) out.push(`restored ${a.ids.join(" ")}`);
+      return out.join("\n") || "nothing to restore";
     }),
   );
 
@@ -532,7 +547,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "undefine",
     {
       description:
-        "Takes kinds, verbs or fields out of the vocabulary. A kind with records or a verb with edges is refused; change or remove those first. Removing a field takes its values out of every record of the kind.",
+        "Hides kinds and verbs, and takes fields off kinds. A kind with live records or a verb with edges is refused; change or remove those first. A hidden kind or verb keeps its history and comes back with restore; its removed records come back after it. Removing a field takes its values out of every record of the kind.",
       inputSchema: {
         kinds: z.array(z.string()).optional(),
         verbs: z.array(z.string()).optional(),

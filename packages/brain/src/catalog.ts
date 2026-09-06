@@ -35,14 +35,14 @@ export async function catalog(
     `select ${verbColumns},
        case when person_id = current_member() then null
          else kind_reach(id) end as reach
-     from record_kinds
+     from record_kinds where deleted_at is null
      order by person_id <> current_member(), name`,
   );
   const properties = await q.query<PropertyRow>(
     `select ${propertyColumns} from kind_properties order by kind, name`,
   );
   const verbs = await q.query<VerbRow>(
-    `select ${verbColumns} from edge_verbs order by name`,
+    `select ${verbColumns} from edge_verbs where deleted_at is null order by name`,
   );
   const fields = new Map<string, Property[]>();
   for (const row of properties.rows) {
@@ -85,11 +85,16 @@ async function define(
      on conflict (org_id, person_id, name) do nothing`,
     [name, description, author],
   );
-  const { rows } = await q.query<VerbRow>(
-    `select ${verbColumns} from ${table}
+  const { rows } = await q.query<VerbRow & { removed: boolean }>(
+    `select ${verbColumns}, deleted_at is not null as removed from ${table}
      where name = $1 and person_id = current_member()`,
     [name],
   );
+  if (rows[0]!.removed) {
+    throw new Invalid(
+      `${table === "record_kinds" ? "kind" : "verb"} ${name} is removed; restore it, or choose another name`,
+    );
+  }
   return toVerb(rows[0]!);
 }
 

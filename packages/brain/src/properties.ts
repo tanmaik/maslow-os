@@ -23,6 +23,7 @@ export async function holdKind(
   const { rowCount } = await q.query(
     `select 1 from record_kinds
      where name = $1 and person_id = coalesce($2, current_member())
+       and deleted_at is null
      for ${alone ? "update" : "share"}`,
     [kind, owner ?? null],
   );

@@ -13,6 +13,7 @@ import {
   type RecordRow,
 } from "./rows.ts";
 import { need } from "./share.ts";
+import { refuse } from "./vocabulary.ts";
 import type {
   Author,
   BrainRecord,
@@ -86,22 +87,29 @@ async function resolve(
 // person has not defined, or one gone by the time it is held, is refused
 // before anything is written.
 async function vocabulary(q: Query, kinds: string[], verbs: string[]) {
-  const missing = (what: "kind" | "verb", name: string) =>
-    new Invalid(
-      `no ${what} "${name}" in your vocabulary; define it, with a description, first`,
-    );
+  const missing = async (what: "kind" | "verb", name: string) => {
+    await refuse(q, what, name).catch((err) => {
+      if (err instanceof NotFound) {
+        throw new Invalid(
+          `no ${what} "${name}" in your vocabulary; define it, with a description, first`,
+        );
+      }
+      throw err;
+    });
+  };
   const forms = new Map<string, Map<string, Property>>();
   for (const name of [...new Set(kinds)].sort()) {
-    if (!(await holdKind(q, name, false))) throw missing("kind", name);
+    if (!(await holdKind(q, name, false))) await missing("kind", name);
     forms.set(name, await propertiesOf(q, name));
   }
   for (const name of [...new Set(verbs)].sort()) {
     const { rowCount } = await q.query(
       `select 1 from edge_verbs
-       where name = $1 and person_id = current_member() for share`,
+       where name = $1 and person_id = current_member() and deleted_at is null
+       for share`,
       [name],
     );
-    if (!rowCount) throw missing("verb", name);
+    if (!rowCount) await missing("verb", name);
   }
   return { kind: (name: string) => forms.get(name)! };
 }
@@ -318,8 +326,20 @@ export async function remove(q: Query, author: Author, id: string) {
   if (!result.rowCount) throw new NotFound(`record ${id} is not in this brain`);
 }
 
+// Brings a removed record back, under a kind that is there.
 export async function restore(q: Query, author: Author, id: string) {
   await need(q, id, "owner");
+  const { rows: gone } = await q.query<{ kind: string }>(
+    `select r.kind from records r
+     join record_kinds k on k.person_id = r.person_id and k.name = r.kind
+     where r.id = $1 and k.deleted_at is not null`,
+    [id],
+  );
+  if (gone[0]) {
+    throw new Invalid(
+      `record ${id} is of kind ${gone[0].kind}, which is removed; restore the kind first`,
+    );
+  }
   const result = await q.query(
     "update records set deleted_at = null, author = $2 where id = $1 and deleted_at is not null and merged_into is null",
     [id, author],

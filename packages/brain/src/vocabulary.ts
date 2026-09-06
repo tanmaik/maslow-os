@@ -20,21 +20,33 @@ import type { Author, Property, Query, Verb } from "./types.ts";
 // Changing the vocabulary after it is in use. A kind, a verb or a field is
 // its owner's, and so are the records of it, so a change reaches the
 // caller's own records and nobody else's: a rename carries them along, and
-// a removal is refused while anything still depends on it.
+// a removal is refused while anything live still depends on it. A kind or
+// a verb removed is hidden and kept, like a record, and restore brings it
+// back.
 
 const TABLE = { kind: "record_kinds", verb: "edge_verbs" } as const;
 
-// A kind seen but not owned is a colleague's, shared in; nothing here
-// touches it.
-async function refuse(q: Query, what: "kind" | "verb", name: string) {
-  const { rowCount } = await q.query(
-    `select 1 from ${TABLE[what]} where name = $1 and person_id <> current_member()`,
+// Why a kind or verb named is not one of the caller's to use: a
+// colleague's, shared in; the caller's own but removed; or not there.
+export async function refuse(
+  q: Query,
+  what: "kind" | "verb",
+  name: string,
+): Promise<never> {
+  const { rows } = await q.query<{ mine: boolean; removed: boolean }>(
+    `select person_id = current_member() as mine, deleted_at is not null as removed
+     from ${TABLE[what]} where name = $1
+     order by person_id = current_member() desc limit 1`,
     [name],
   );
-  if (rowCount) {
+  const found = rows[0];
+  if (found && !found.mine) {
     throw new Forbidden(
       `${name} is a colleague's ${what}; only they change it`,
     );
+  }
+  if (found?.removed) {
+    throw new Invalid(`${what} ${name} is removed; restore it first`);
   }
   throw new NotFound(`no ${what} "${name}" in your vocabulary`);
 }
@@ -63,7 +75,7 @@ export async function redefine(
       `update ${TABLE[what]}
        set name = coalesce($2, name), description = coalesce($3, description),
            author = $4
-       where name = $1 and person_id = current_member()
+       where name = $1 and person_id = current_member() and deleted_at is null
        returning ${verbColumns}`,
       [name, change.newName ?? null, change.description ?? null, author],
     )
@@ -79,32 +91,58 @@ export async function redefine(
   return toVerb(rows[0]!);
 }
 
-// Takes one of the caller's kinds or verbs out of the vocabulary, with a
-// kind's fields. Refused while a record is of the kind or an edge carries
-// the verb, removed ones included.
+// Hides one of the caller's kinds or verbs, with a kind's fields. Refused
+// while a live record is of the kind or an edge carries the verb; removed
+// records go quiet with their kind and come back after it.
 export async function undefine(
   q: Query,
   author: Author,
   what: "kind" | "verb",
   name: string,
 ): Promise<void> {
-  await q.query("select set_config('app.author', $1, true)", [author]);
-  const result = await q
-    .query(
-      `delete from ${TABLE[what]} where name = $1 and person_id = current_member()`,
-      [name],
-    )
-    .catch((err) => {
-      if ((err as { code?: string }).code === "23503") {
-        throw new Invalid(
-          what === "kind"
-            ? `records are still ${name}; change their kind first`
-            : `edges still ${name}; unlink them first`,
-        );
-      }
-      throw err;
-    });
+  const { rowCount: used } = await q.query(
+    what === "kind"
+      ? `select 1 from records
+         where kind = $1 and person_id = current_member() and deleted_at is null
+         limit 1`
+      : `select 1 from edges
+         where verb = $1 and person_id = current_member() limit 1`,
+    [name],
+  );
+  if (used) {
+    throw new Invalid(
+      what === "kind"
+        ? `records are still ${name}; change or remove them first`
+        : `edges still ${name}; unlink them first`,
+    );
+  }
+  const result = await q.query(
+    `update ${TABLE[what]} set deleted_at = now(), author = $2
+     where name = $1 and person_id = current_member() and deleted_at is null`,
+    [name, author],
+  );
   if (!result.rowCount) await refuse(q, what, name);
+}
+
+// Brings a removed kind or verb of the caller's back, as it was.
+export async function restoreDefinition(
+  q: Query,
+  author: Author,
+  what: "kind" | "verb",
+  name: string,
+): Promise<void> {
+  const result = await q.query(
+    `update ${TABLE[what]} set deleted_at = null, author = $2
+     where name = $1 and person_id = current_member() and deleted_at is not null`,
+    [name, author],
+  );
+  if (result.rowCount) return;
+  const { rowCount } = await q.query(
+    `select 1 from ${TABLE[what]} where name = $1 and person_id = current_member()`,
+    [name],
+  );
+  if (rowCount) throw new Invalid(`${what} ${name} is not removed`);
+  await refuse(q, what, name);
 }
 
 export type PropertyChange = Partial<PropertyDefinition> & { newName?: string };
