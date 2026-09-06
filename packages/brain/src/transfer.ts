@@ -124,6 +124,7 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
      join records f on f.id = e.from_id
      join records t on t.id = e.to_id
      where f.person_id = current_member() and t.person_id = current_member()
+       and e.deleted_at is null
        and (f.deleted_at is null or f.merged_into is not null)
        and (t.deleted_at is null or t.merged_into is not null)
      order by e.created_at, e.id`,

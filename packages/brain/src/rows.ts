@@ -136,10 +136,11 @@ export const toEdge = (e: EdgeRow): Edge => ({
 });
 
 export const eventColumns =
-  "seq, at, subject, subject_id, action, author, before, after";
+  "seq, n, at, subject, subject_id, action, author, before, after";
 
 export type EventRow = {
   seq: string;
+  n: string;
   at: Date;
   subject: Event["subject"];
   subject_id: string;
@@ -151,6 +152,7 @@ export type EventRow = {
 
 export const toEvent = (e: EventRow): Event => ({
   seq: Number(e.seq),
+  n: Number(e.n),
   at: e.at,
   subject: e.subject,
   subjectId: e.subject_id,

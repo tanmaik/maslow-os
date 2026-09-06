@@ -427,9 +427,10 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "restore",
     {
       description:
-        "Brings removed records, kinds and verbs back. A record comes back only once its kind is there.",
+        "Brings removed records, edges, kinds and verbs back. A record comes back only once its kind is there, an edge once its verb is.",
       inputSchema: {
         ids: ids.optional(),
+        edges: ids.optional(),
         kinds: z.array(z.string()).optional(),
         verbs: z.array(z.string()).optional(),
       },
@@ -446,6 +447,8 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       }
       for (const id of a.ids ?? []) await brain.restore(q, author, id);
       if (a.ids?.length) out.push(`restored ${a.ids.join(" ")}`);
+      for (const id of a.edges ?? []) await brain.restoreEdge(q, author, id);
+      if (a.edges?.length) out.push(`restored edges ${a.edges.join(" ")}`);
       return out.join("\n") || "nothing to restore";
     }),
   );
@@ -453,7 +456,8 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
   server.registerTool(
     "unlink",
     {
-      description: "Removes edges by id. The log keeps what they said.",
+      description:
+        "Hides edges by id. Their rows and history stay; restore brings them back.",
       inputSchema: { ids },
       annotations: { destructiveHint: true },
     },
@@ -492,7 +496,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "history",
     {
       description:
-        "The log of changes, newest first: what changed, by whom, and only the fields that moved. Optionally only one record, edge, kind, verb or field's; page with before.",
+        "The log of changes, newest first: what changed, by whom, and only the fields that moved. Your own changes are numbered #1 up; colleagues' changes to what is shared with you show between under their own numbers. Optionally only one record, edge, kind, verb or field's; page with before, the cursor the last page gives.",
       inputSchema: {
         of: z
           .string()
@@ -509,6 +513,23 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       const full = events.length === (a.limit ?? 50);
       const head = `${plural(events.length, "change")}${full ? `, more before=${events[events.length - 1]!.seq}` : ""}`;
       return [head, ...events.map((e) => lines.event(e, s.userId))].join("\n");
+    }),
+  );
+
+  server.registerTool(
+    "revert",
+    {
+      description:
+        "Walks your own changes back by their number in history: the latest change to a thing only, so nothing made since is lost. A walk-back is one more change in the log. Shares and memberships are changed in settings, not here.",
+      inputSchema: {
+        changes: z.array(z.number().int().positive()).min(1).max(50),
+      },
+      annotations: { destructiveHint: true },
+    },
+    door(async (q, a) => {
+      const out: string[] = [];
+      for (const n of a.changes) out.push(await brain.revert(q, author, n));
+      return out.join("\n");
     }),
   );
 

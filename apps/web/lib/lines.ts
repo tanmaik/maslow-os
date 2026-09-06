@@ -178,9 +178,22 @@ function differing(a: string, b: string): [string, string] {
 // One change from the log: what, when, by whom, and only the fields that
 // moved.
 export function event(e: Event, me: string): string {
-  const head = `#${e.seq} ${when(e.at)} ${e.subject} ${e.subjectId} ${e.action} by=${by(e.author, me)}`;
+  const head = `#${e.n} ${when(e.at)} ${e.subject} ${e.subjectId} ${e.action} by=${by(e.author, me)}`;
   const before = (e.before ?? {}) as Record<string, unknown>;
   const after = (e.after ?? {}) as Record<string, unknown>;
+  if (e.subject === "share") {
+    const row = e.action === "deleted" ? before : after;
+    const to =
+      row.subject === "group"
+        ? `group ${quoted(String(row.group))}`
+        : row.subject === "member"
+          ? "a colleague"
+          : "everyone";
+    const what = row.kind
+      ? `kind ${token(String(row.kind))}`
+      : `record ${row.record_id} ${quoted(String(row.record ?? ""))}`;
+    return `${head}: ${what} to ${to} at ${row.level}`;
+  }
   if (e.action === "created" || e.action === "deleted") {
     const row = e.action === "created" ? after : before;
     const name = row.title ?? row.name ?? row.verb;

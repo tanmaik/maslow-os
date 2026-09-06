@@ -106,10 +106,14 @@ export type Edge = {
 };
 
 // One change the database logged.
+// One line of the log: its place in the whole log, its number among its
+// person's changes, and what changed.
 export type Event = {
   seq: number;
+  n: number;
   at: Date;
-  subject: "record" | "edge" | "kind" | "verb" | "property";
+  subject:
+    "record" | "edge" | "kind" | "verb" | "property" | "share" | "member";
   subjectId: string;
   action: "created" | "updated" | "deleted";
   author: Author;

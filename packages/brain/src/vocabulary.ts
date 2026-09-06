@@ -100,8 +100,8 @@ export async function redefine(
 }
 
 // Hides one of the caller's kinds or verbs, with a kind's fields. Refused
-// while a live record is of the kind or an edge carries the verb; removed
-// records go quiet with their kind and come back after it.
+// while a live record is of the kind or a live edge carries the verb;
+// removed ones go quiet with it and come back after it.
 export async function undefine(
   q: Query,
   author: Author,
@@ -114,7 +114,8 @@ export async function undefine(
          where kind = $1 and person_id = current_member() and deleted_at is null
          limit 1`
       : `select 1 from edges
-         where verb = $1 and person_id = current_member() limit 1`,
+         where verb = $1 and person_id = current_member()
+           and deleted_at is null limit 1`,
     [name],
   );
   if (used) {

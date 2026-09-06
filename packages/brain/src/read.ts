@@ -141,6 +141,7 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
          join records p
            on p.id = case when e.from_id = r.id then e.to_id else e.from_id end
          where (e.from_id = r.id or e.to_id = r.id)
+           and e.deleted_at is null
            and p.id in (select same_record($6)))))`,
     "($7::timestamptz is null or coalesce(occurred_at, created_at) >= $7)",
     "($8::timestamptz is null or coalesce(occurred_at, created_at) < $8)",
@@ -262,6 +263,7 @@ export async function edgesOf(
   const { rows } = await q.query<EdgeRow>(
     `select ${edgeColumns} from edges
      where (from_id in (select same_record($1)) or to_id in (select same_record($1)))
+       and deleted_at is null
        and ($2::text is null or verb = $2)
      order by coalesce(occurred_at, created_at), id`,
     [id, verb ?? null],
@@ -318,7 +320,7 @@ const STANDING = `
     from edges e
     join winner wf on wf.id = e.from_id
     join winner wt on wt.id = e.to_id
-    where wf.winner <> wt.winner
+    where wf.winner <> wt.winner and e.deleted_at is null
     order by wf.winner, e.verb, wt.winner, e.created_at, e.id
   )`;
 

@@ -14,6 +14,7 @@ export {
   type Graph,
 } from "./read.ts";
 export { recall, remember, stale } from "./recall.ts";
+export { revert } from "./revert.ts";
 export { grantsOf, share, unshare } from "./share.ts";
 export { exportBrain, importBrain, isSnapshot } from "./transfer.ts";
 export type * from "./types.ts";
@@ -29,6 +30,7 @@ export {
   merge,
   remove,
   restore,
+  restoreEdge,
   unlink,
   unmerge,
   write,

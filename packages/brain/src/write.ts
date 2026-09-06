@@ -217,10 +217,11 @@ export async function write(
          on conflict (org_id, from_id, verb, to_id) do update set
            props = excluded.props, confidence = excluded.confidence,
            occurred_at = excluded.occurred_at, source = excluded.source,
-           source_ref = excluded.source_ref, author = excluded.author
-         where (edges.props, edges.confidence, edges.occurred_at)
+           source_ref = excluded.source_ref, author = excluded.author,
+           deleted_at = null
+         where (edges.props, edges.confidence, edges.occurred_at, edges.deleted_at)
            is distinct from
-               (excluded.props, excluded.confidence, excluded.occurred_at)`,
+               (excluded.props, excluded.confidence, excluded.occurred_at, null)`,
       [
         fromId,
         e.verb,
@@ -239,14 +240,40 @@ export async function write(
 }
 
 // Removes an edge, in the author's name. The log keeps what it said.
+// Hides a link. Its row and its history stay; restore brings it back.
 export async function unlink(q: Query, author: Author, id: string) {
-  await q.query("select set_config('app.author', $1, true)", [author]);
-  const result = await q.query("delete from edges where id = $1", [id]);
+  const result = await q.query(
+    "update edges set deleted_at = now(), author = $2 where id = $1 and deleted_at is null",
+    [id, author],
+  );
   if (result.rowCount) return;
-  const seen = await q.query("select 1 from edges where id = $1", [id]);
+  const seen = await q.query(
+    "select 1 from edges where id = $1 and deleted_at is null",
+    [id],
+  );
   if (seen.rowCount)
     throw new Forbidden("you may see this link, not remove it");
   throw new NotFound(`edge ${id} is not in this brain`);
+}
+
+// Brings a hidden link back, under a verb that is there.
+export async function restoreEdge(q: Query, author: Author, id: string) {
+  const { rows: gone } = await q.query<{ verb: string }>(
+    `select e.verb from edges e
+     join edge_verbs v on v.person_id = e.person_id and v.name = e.verb
+     where e.id = $1 and v.deleted_at is not null`,
+    [id],
+  );
+  if (gone[0]) {
+    throw new Invalid(
+      `edge ${id} carries ${gone[0].verb}, which is removed; restore the verb first`,
+    );
+  }
+  const result = await q.query(
+    "update edges set deleted_at = null, author = $2 where id = $1 and deleted_at is not null",
+    [id, author],
+  );
+  if (!result.rowCount) throw new NotFound(`edge ${id} is not hidden`);
 }
 
 export type Patch = {

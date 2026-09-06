@@ -393,6 +393,53 @@ export async function smokeMcp(stack, signIn) {
       link.includes("c=0.9"),
     link ?? got.text,
   );
+  const edgeId = link?.match(/edge=(\S+)/)?.[1];
+  const hidden = await call(grant.access_token, "unlink", { ids: [edgeId] });
+  const unlinkedGet = await call(grant.access_token, "get", { ids: [claimId] });
+  const relinked = await call(grant.access_token, "restore", {
+    edges: [edgeId],
+  });
+  const relinkedGet = await call(grant.access_token, "get", { ids: [claimId] });
+  check(
+    "a link is hidden, not erased, and comes back",
+    hidden.lines[0] === `unlinked ${edgeId}` &&
+      !unlinkedGet.lines.some((l) => l.startsWith("  → rests_on ")) &&
+      relinked.lines[0] === `restored edges ${edgeId}` &&
+      relinkedGet.lines.some((l) => l.startsWith("  → rests_on ")),
+    `${hidden.text} / ${relinked.text}`,
+  );
+  const retitled = await call(grant.access_token, "edit", {
+    changes: [
+      {
+        id: claimId,
+        version: Number(relinkedGet.lines[0].match(/ v(\d+)/)?.[1]),
+        title: "Wile owes Road Runner two anvils",
+      },
+    ],
+  });
+  const ownLog = await call(grant.access_token, "history", {
+    of: claimId,
+    limit: 1,
+  });
+  const last = Number(ownLog.lines[1]?.match(/^#(\d+) /)?.[1]);
+  const claimLog = await call(grant.access_token, "history", {
+    of: claimId,
+    limit: 200,
+  });
+  const first = Number(claimLog.lines.at(-1)?.match(/^#(\d+) /)?.[1]);
+  const early = await call(grant.access_token, "revert", { changes: [first] });
+  const undone = await call(grant.access_token, "revert", { changes: [last] });
+  const backAgain = await call(grant.access_token, "get", { ids: [claimId] });
+  check(
+    "a change is walked back by its number, the latest only",
+    retitled.lines[0]?.includes("two anvils") &&
+      last > first &&
+      early.refused &&
+      /is not the latest change/.test(early.text) &&
+      undone.lines[0] === `record ${claimId} as before #${last}` &&
+      backAgain.lines[0]?.includes('"Wile owes Road Runner an anvil"'),
+    `${early.text} / ${undone.text}`,
+  );
   const walked = await call(grant.access_token, "graph", {
     from: [claimId],
     verbs: ["rests_on"],
@@ -429,7 +476,7 @@ export async function smokeMcp(stack, signIn) {
       },
     ],
   });
-  const version = Number(got.lines[0].match(/ v(\d+)/)?.[1]);
+  const version = Number(backAgain.lines[0].match(/ v(\d+)/)?.[1]);
   const edited = await call(grant.access_token, "edit", {
     changes: [{ id: claimId, version, props: { strength: 3 } }],
   });
@@ -694,6 +741,20 @@ export async function smokeMcp(stack, signIn) {
     await token({ ...exchange, code: colleagueCode })
   ).json();
   const theirs = await call(colleagueGrant.access_token, "catalog", {});
+  const theirLog = await call(colleagueGrant.access_token, "history", {
+    limit: 200,
+  });
+  check(
+    "the log shows a colleague the share that reached them, and who joined",
+    theirLog.lines.some((l) =>
+      / share \S+ created by=colleague: kind lift to everyone at view$/.test(l),
+    ) &&
+      theirLog.lines.some((l) => / member \S+ created by=/.test(l)) &&
+      !theirLog.lines.some((l) =>
+        /record \S+ created by=colleague: claim /.test(l),
+      ),
+    theirLog.lines.find((l) => / share /.test(l)) ?? theirLog.lines[0],
+  );
   const lift = theirs.lines.find((l) => l.startsWith("lift owner="));
   const lifts = await call(colleagueGrant.access_token, "read", {
     kind: "lift",

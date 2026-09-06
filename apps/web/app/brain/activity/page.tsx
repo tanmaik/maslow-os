@@ -27,6 +27,8 @@ const SUBJECTS: Record<Event["subject"], string> = {
   kind: "kind",
   verb: "verb",
   property: "field",
+  share: "share",
+  member: "member",
 };
 
 // What an event was about, from the row it left behind.
@@ -43,6 +45,21 @@ function subjectOf(e: Event): { label: string; href?: string } {
       return { label: name("verb") };
     case "property":
       return { label: `${name("kind")}.${name("name")}` };
+    case "share": {
+      const to =
+        name("subject") === "group"
+          ? `group ${name("group")}`
+          : name("subject") === "member"
+            ? "a colleague"
+            : "everyone";
+      const what = name("kind") ? `kind ${name("kind")}` : name("record");
+      return {
+        label: `${what} to ${to} at ${name("level")}`,
+        href: name("record_id") ? recordHref(name("record_id")) : undefined,
+      };
+    }
+    case "member":
+      return { label: `${name("name")}, ${name("role")}` };
     default:
       return { label: name("name") };
   }
@@ -75,7 +92,9 @@ export default async function Page({
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">Activity</h1>
         <p className="text-muted-foreground text-sm">
-          Every change to this brain, newest first, as the database logged it.
+          Every change that concerns you, newest first, as the database logged
+          it: your own, what colleagues did to what they shared with you, and
+          who joined or left.
         </p>
       </div>
       <Table>
