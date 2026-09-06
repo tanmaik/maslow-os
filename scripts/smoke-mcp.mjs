@@ -726,23 +726,25 @@ export async function smokeMcp(stack, signIn) {
     `${sdkTools.length} tools`,
   );
 
-  // An app that publishes its description at an address, as claude.ai
-  // does, is read from there: the page names it, and the token endpoint
-  // takes the address as its client id.
+  // An app that publishes its description at an address, as Claude Code
+  // does, is read from there, at a name that has to be looked up: the page
+  // names it, and the token endpoint takes the address as its client id.
+  // It registers its callback without a port, as a command-line app that
+  // takes whatever port is free does.
   const described = createServer((req, res) => {
-    const at = `http://127.0.0.1:${described.address().port}${req.url}`;
+    const at = `http://localhost:${described.address().port}${req.url}`;
     res.writeHead(200, { "content-type": "application/json" });
     res.end(
       JSON.stringify({
         client_id: req.url === "/client.json" ? at : "https://elsewhere.test",
         client_name: "Described",
-        redirect_uris: [redirectUri],
+        redirect_uris: ["http://localhost/callback"],
       }),
     );
   });
-  await new Promise((r) => described.listen(0, "127.0.0.1", r));
+  await new Promise((r) => described.listen(0, r));
   const documentAt = (name) =>
-    `http://127.0.0.1:${described.address().port}/${name}`;
+    `http://localhost:${described.address().port}/${name}`;
   const askDescribed = { ...ask, client_id: documentAt("client.json") };
   const describedConsent = await page(authorize(askDescribed), wile);
   const describedCode = new URL(

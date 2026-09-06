@@ -67,7 +67,7 @@ async function connectedApps(p: Principal): Promise<Set<string>> {
 const appOf = (slug: string) => slug.split("_")[0]!.toLowerCase();
 
 // How many actions one membership may run an hour through an agent.
-const RUNS_AN_HOUR = 60;
+const RUNS_AN_HOUR = 600;
 
 // One call to the vendor, on the meter at its list price, in the name of
 // what it was for, in the transaction of the membership that made it.

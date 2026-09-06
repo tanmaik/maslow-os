@@ -28,7 +28,8 @@ apps the person has connected are searched or run; an action in any other
 is refused with where to connect it, before anything reaches the vendor.
 Every call to the vendor, a search or a run, is on the meter as it happens,
 at Composio's list price per tool call, with the action as its cause; and
-one membership may run sixty an hour through an agent, the abuse limit.
+one membership may run six hundred an hour through an agent, the abuse
+limit: ten a minute is more than a person asks for and less than a loop.
 This is the shape Anthropic's tool search, Cloudflare's code mode and
 Composio's own router converged on: search, then execute.
 

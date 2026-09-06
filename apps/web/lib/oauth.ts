@@ -53,6 +53,21 @@ const nameOf = (v: unknown) =>
         .slice(0, MAX_NAME)
     : "") || "An app";
 
+// Whether an address is one the app registered. A command-line app
+// listens on the machine itself at whatever port is free, so on the machine
+// itself the port is not part of the match.
+function registered(c: Client, redirectUri: string): boolean {
+  const given = new URL(redirectUri);
+  return c.redirectUris.some((r) => {
+    const known = new URL(r);
+    if (known.protocol === "http:" && given.protocol === "http:") {
+      known.port = "";
+      given.port = "";
+    }
+    return known.href === given.href;
+  });
+}
+
 export const clientId = (c: Client) =>
   Buffer.from(JSON.stringify({ n: c.name, r: c.redirectUris })).toString(
     "base64url",
@@ -111,8 +126,9 @@ function keep(id: string, client: Client | null) {
 }
 
 // Reads a document from an address, connecting to the one network address
-// it was checked at, so a second lookup cannot answer differently. Null
-// unless the answer is a 200 no larger than a description may be.
+// it was checked at, so a second lookup cannot answer differently; Node
+// asks for one address or a list of them. Null unless the answer is a 200
+// no larger than a description may be.
 function read(
   url: URL,
   address: string,
@@ -124,7 +140,10 @@ function read(
       url,
       {
         headers: { accept: "application/json" },
-        lookup: (_host, _options, done) => done(null, address, family),
+        lookup: (_host, options, done) =>
+          options.all
+            ? done(null, [{ address, family }])
+            : done(null, address, family),
         servername: url.hostname,
         timeout: 5000,
       },
@@ -227,7 +246,7 @@ export async function authorizationRequest(
     };
   const client = await clientOf(clientId);
   if (!client) return { ok: false, problem: "unknown app", back: null };
-  if (!client.redirectUris.includes(redirectUri))
+  if (!registered(client, redirectUri))
     return {
       ok: false,
       problem: "the app asked to be sent somewhere it did not register",
