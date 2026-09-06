@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 
 import { NewConversation } from "@/components/agent/new-conversation";
 import { deployment } from "@/lib/deployment";
-import { DEFAULT_MODEL, offered } from "@/lib/models";
+import { defaultModel, offered } from "@/lib/models";
 import { principal } from "@/lib/session";
 
 // A conversation not yet begun: the headline and the composer.
@@ -17,7 +17,7 @@ export default async function NewAgentPage() {
         label: m.label,
         claude: m.claude,
       }))}
-      defaultModel={models[0]?.id ?? DEFAULT_MODEL}
+      defaultModel={defaultModel()}
       faked={models.length === 0 && !deployment.production}
     />
   );

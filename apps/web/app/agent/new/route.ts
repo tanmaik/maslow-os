@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import { ensureFilesystem } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
-import { DEFAULT_MODEL, offered } from "@/lib/models";
+import { defaultModel, offered } from "@/lib/models";
 import { principal } from "@/lib/session";
 
 // A new conversation on the person's machine, on the model they picked.
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   const model =
     typeof asked.model === "string" && models.some((m) => m.id === asked.model)
       ? asked.model
-      : (models[0]?.id ?? DEFAULT_MODEL);
+      : defaultModel();
   const id = randomUUID();
   await createSession(p, { id, computerId: computer.id, model });
   return Response.json({ id });

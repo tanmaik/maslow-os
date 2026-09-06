@@ -20,10 +20,11 @@ const ADAPTER = path.join(
   "index.js",
 );
 const FAKE = path.join(here, "fake-agent.mjs");
-// The harness as the chroot sees it: the daemon's directory, bound inside.
+// The harness as the chroot sees it: the daemon's directory, bound inside
+// at /opt/maslow, where a vendor's software lives on a Debian.
 const ADAPTER_IN_OS =
-  "/computer/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js";
-const FAKE_IN_OS = "/computer/fake-agent.mjs";
+  "/opt/maslow/node_modules/@agentclientprotocol/claude-agent-acp/dist/index.js";
+const FAKE_IN_OS = "/opt/maslow/fake-agent.mjs";
 const IDLE = 30 * 60_000;
 // A wakeup the harness scheduled keeps it alive this long past its time, so
 // the turn it starts is not cut off.

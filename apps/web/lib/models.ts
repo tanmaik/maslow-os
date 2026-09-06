@@ -56,13 +56,24 @@ const anthropic = (
 });
 
 export const CATALOG: Model[] = [
-  openrouter("z-ai/glm-5.3-flash", "GLM-5.3 Flash", 0.07, 0.25, 0.01, 0.07),
-  anthropic("claude-haiku-4-5", "Claude Haiku 4.5", 1, 5),
   anthropic("claude-sonnet-5", "Claude Sonnet 5", 2, 10),
   anthropic("claude-opus-5", "Claude Opus 5", 5, 25),
+  anthropic("claude-haiku-4-5", "Claude Haiku 4.5", 1, 5),
+  openrouter("z-ai/glm-5.3-flash", "GLM-5.3 Flash", 0.07, 0.25, 0.01, 0.07),
 ];
 
-export const DEFAULT_MODEL = "z-ai/glm-5.3-flash";
+// Claude's own names, as OpenRouter lists the same models at the same
+// prices, read 2026-09-06.
+const AT_OPENROUTER: Record<string, string> = {
+  "claude-sonnet-5": "anthropic/claude-sonnet-5",
+  "claude-opus-5": "anthropic/claude-opus-5",
+  "claude-haiku-4-5": "anthropic/claude-haiku-4.5",
+};
+
+// The model a new conversation runs on: Claude, since the harness is
+// built for it, or else the first the deployment offers.
+export const defaultModel = () =>
+  offered().find((m) => m.claude)?.id ?? offered()[0]?.id ?? CATALOG[0]!.id;
 
 // What one org may spend on models in a month before the gate refuses. The
 // abuse limit, not a plan.
@@ -71,39 +82,45 @@ export const MODEL_CAP_USD = 200;
 export const providerOf = (id: string): Provider =>
   id.includes("/") ? "openrouter" : "anthropic";
 
-// The models this deployment can actually serve: those whose vendor it has
-// a key for.
+// The models this deployment can actually serve: Claude's from either
+// vendor, the rest from OpenRouter.
 export function offered(): Model[] {
   const m = deployment.models;
   if (m.kind === "none") return [];
   return CATALOG.filter((x) =>
-    x.provider === "anthropic" ? m.anthropic : m.openrouter,
+    x.provider === "anthropic" ? m.anthropic || m.openrouter : m.openrouter,
   );
 }
 
 export const modelById = (id: string): Model | undefined =>
   CATALOG.find((m) => m.id === id);
 
-// Where a request for this model goes, and with what key; null when the
-// deployment has no key for its vendor.
-export function routeFor(
-  id: string,
-): { provider: Provider; url: string; headers: Record<string, string> } | null {
+// Where a request for this model goes, with what key, and under what name
+// the vendor knows it; null when the deployment has no key for it. A
+// Claude model goes to Anthropic when there is a key for it, else to
+// OpenRouter under OpenRouter's name for it.
+export function routeFor(id: string): {
+  provider: Provider;
+  url: string;
+  headers: Record<string, string>;
+  model: string;
+} | null {
   const m = deployment.models;
   if (m.kind === "none") return null;
-  if (providerOf(id) === "anthropic")
-    return m.anthropic
-      ? {
-          provider: "anthropic",
-          url: "https://api.anthropic.com",
-          headers: { "x-api-key": m.anthropic },
-        }
-      : null;
-  return m.openrouter
+  if (providerOf(id) === "anthropic" && m.anthropic)
+    return {
+      provider: "anthropic",
+      url: "https://api.anthropic.com",
+      headers: { "x-api-key": m.anthropic },
+      model: id,
+    };
+  const at = providerOf(id) === "anthropic" ? AT_OPENROUTER[id] : id;
+  return m.openrouter && at
     ? {
         provider: "openrouter",
         url: "https://openrouter.ai/api",
         headers: { authorization: `Bearer ${m.openrouter}` },
+        model: at,
       }
     : null;
 }

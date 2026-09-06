@@ -11,7 +11,7 @@ import { deployment } from "@/lib/deployment";
 import {
   CATALOG,
   costOf,
-  DEFAULT_MODEL,
+  defaultModel,
   MODEL_CAP_USD,
   offered,
   providerOf,
@@ -146,14 +146,21 @@ async function forward(
         .map((m) => m.id)
         .join(", ")}.`,
     );
+  const named = model ?? defaultModel();
   const route = faked
-    ? { provider: providerOf(model ?? DEFAULT_MODEL), url: "", headers: {} }
-    : routeFor(model ?? DEFAULT_MODEL);
+    ? { provider: providerOf(named), url: "", headers: {}, model: named }
+    : routeFor(named);
   if (!route)
     return refuse(
       503,
       `This deployment has no key for the vendor of ${model}.`,
     );
+  // The vendor is told the name it knows the model by; the ledger keeps
+  // ours.
+  const sent =
+    body && route.model !== model
+      ? JSON.stringify({ ...asked, model: route.model })
+      : body;
 
   if (free) {
     if (faked)
@@ -174,7 +181,7 @@ async function forward(
     const up = await fetch(`${route.url}/${path}${search}`, {
       method: request.method,
       headers,
-      body,
+      body: sent,
     });
     // The body arrives decoded; only the headers that still describe it go
     // on.
@@ -231,7 +238,7 @@ async function forward(
       upstream = await fetch(`${route.url}/${path}${search}`, {
         method: request.method,
         headers,
-        body,
+        body: sent,
         signal: AbortSignal.timeout(maxDuration * 1000 - 5000),
       });
     } catch (err) {

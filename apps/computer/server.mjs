@@ -1420,8 +1420,11 @@ async function settle() {
     await run("mount", ["--rbind", `/${d}`, path.join(OS_ROOT, d)]);
   // The daemon's own directory, harness included, seen from inside: the
   // harness ships with the image and updates with it, never with the OS.
-  await fs.mkdir(path.join(OS_ROOT, "computer"), { recursive: true });
-  await run("mount", ["--bind", "/computer", path.join(OS_ROOT, "computer")]);
+  // The folder an earlier daemon bound ours at, empty since no mount
+  // outlives a boot, goes; a system made before is left plain too.
+  await fs.rmdir(path.join(OS_ROOT, "computer")).catch(() => {});
+  await fs.mkdir(path.join(OS_ROOT, "opt/maslow"), { recursive: true });
+  await run("mount", ["--bind", "/computer", path.join(OS_ROOT, "opt/maslow")]);
   // The deployment's own: its DNS and hosts, the sudo rule, the profile
   // and pip's setting, current from the image on every boot.
   for (const [file, mode] of [
@@ -1539,7 +1542,7 @@ async function reset(backedUp) {
   try {
     for (const s of sessions.values()) quietly(() => s.shell.kill());
     await agent.stopAll();
-    for (const d of ["dev", "sys", "proc", "computer"])
+    for (const d of ["dev", "sys", "proc", "opt/maslow"])
       await run("umount", ["-l", "-R", path.join(OS_ROOT, d)]);
     await fs.rm(path.join(MOUNT, ".os-ready"), { force: true });
     await fs.rename(OS_ROOT, OLD);
