@@ -63,8 +63,9 @@ const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
 // A page ends at a sort key and an id, under one order; the next page
-// starts after them, under the same order.
-type Cursor = { key: string; id: string; order: string };
+// starts after them, under the same order. A null key is the tail of
+// records that have no value to sort by.
+type Cursor = { key: string | null; id: string; order: string };
 const encode = (c: Cursor) =>
   Buffer.from(JSON.stringify(c)).toString("base64url");
 function decode(s: string, order: string): Cursor {
@@ -74,7 +75,11 @@ function decode(s: string, order: string): Cursor {
   } catch {
     // Not a cursor at all; refused below.
   }
-  if (typeof c?.key !== "string" || typeof c.id !== "string" || !isId(c.id)) {
+  if (
+    (typeof c?.key !== "string" && c?.key !== null) ||
+    typeof c.id !== "string" ||
+    !isId(c.id)
+  ) {
     throw new Invalid("that is not a cursor");
   }
   if (c.order !== order) throw new Invalid("that cursor is from another query");
@@ -82,14 +87,16 @@ function decode(s: string, order: string): Cursor {
 }
 
 // Whether a cursor's key can be cast to the column it is compared with.
-const keyFits = (type: string, key: string) =>
-  type === "timestamptz" || type === "date"
-    ? !Number.isNaN(Date.parse(key))
-    : type === "numeric"
-      ? Number.isFinite(Number(key))
-      : type === "boolean"
-        ? key === "true" || key === "false"
-        : true;
+const keyFits = (type: string, key: string | null) =>
+  key === null
+    ? true
+    : type === "timestamptz" || type === "date"
+      ? !Number.isNaN(Date.parse(key))
+      : type === "numeric"
+        ? Number.isFinite(Number(key))
+        : type === "boolean"
+          ? key === "true" || key === "false"
+          : true;
 
 const OPERATORS: Record<Exclude<Filter["op"], "in" | "contains">, string> = {
   eq: "=",
@@ -190,9 +197,10 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   let order = "coalesce(occurred_at, created_at)";
   let orderType = "timestamptz";
   let direction: "asc" | "desc" = "desc";
-  let keyOf = (r: RecordRow) => (r.occurred_at ?? r.created_at).toISOString();
+  let keyOf = (r: RecordRow): string | null =>
+    (r.occurred_at ?? r.created_at).toISOString();
   if (opts.orderBy) {
-    const { p, key, expr } = await field(opts.orderBy.property);
+    const { p, expr } = await field(opts.orderBy.property);
     if (p.type === "list") {
       throw new Invalid(`${opts.kind}.${p.name} is a list and has no order`);
     }
@@ -200,25 +208,27 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     if (!(wanted in DIRECTIONS)) {
       throw new Invalid(`"${String(wanted)}" is not a direction`);
     }
-    where.push(`props ->> ${key} is not null`);
     order = expr;
     orderType = sqlType[p.type];
     direction = DIRECTIONS[wanted];
-    keyOf = (r) => String(r.props[p.name]);
+    keyOf = (r) => (r.props[p.name] == null ? null : String(r.props[p.name]));
   }
   const orderName = `${scope}/${opts.kind ?? ""}/${opts.owner ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
   if (opts.cursor) {
     const c = decode(opts.cursor, orderName);
     if (!keyFits(orderType, c.key)) throw new Invalid("that is not a cursor");
+    const after = direction === "desc" ? "<" : ">";
     where.push(
-      `(${order}, id) ${direction === "desc" ? "<" : ">"} (${param(c.key)}::${orderType}, ${param(c.id)}::text)`,
+      c.key === null
+        ? `(${order} is null and id ${after} ${param(c.id)}::text)`
+        : `(${order} is null or (${order}, id) ${after} (${param(c.key)}::${orderType}, ${param(c.id)}::text))`,
     );
   }
 
   const { rows } = await q.query<RecordRow>(
     `select ${recordSelect} from records r
      where ${where.join("\n       and ")}
-     order by ${order} ${direction}, id ${direction}
+     order by ${order} ${direction} nulls last, id ${direction}
      limit ${param(limit + 1)}`,
     params,
   );

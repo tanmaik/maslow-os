@@ -130,6 +130,8 @@ export type Written = {
   // How many of them were new or changed, and how many edges were.
   changed: number;
   edges: number;
+  // What the call added to the vocabulary: "kind x", "field x.y", "verb v".
+  defined: string[];
 };
 
 // Writes records and edges as one author, defining any kinds and verbs the
@@ -147,10 +149,16 @@ export async function write(
   },
 ): Promise<Written> {
   const byName = (a: Definition, b: Definition) => a.name.localeCompare(b.name);
+  const defined: string[] = [];
   for (const k of [...(input.kinds ?? [])].sort(byName)) {
-    await defineKind(q, author, k);
+    const kind = await defineKind(q, author, k);
+    if (kind.created) defined.push(`kind ${kind.name}`);
+    defined.push(...kind.added.map((f) => `field ${kind.name}.${f}`));
   }
-  for (const v of input.verbs ?? []) await defineVerb(q, author, v);
+  for (const v of input.verbs ?? []) {
+    const verb = await defineVerb(q, author, v);
+    if (verb.created) defined.push(`verb ${verb.name}`);
+  }
   const known = await vocabulary(
     q,
     (input.records ?? []).map((r) => r.kind),
@@ -227,7 +235,7 @@ export async function write(
     );
     edges += result.rowCount ?? 0;
   }
-  return { records: ids, changed, edges };
+  return { records: ids, changed, edges, defined };
 }
 
 // Removes an edge, in the author's name. The log keeps what it said.

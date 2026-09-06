@@ -355,7 +355,9 @@ export async function smokeMcp(stack, signIn) {
   check(
     "write, idempotently",
     written.lines[0] === "1 record (1 changed), 0 edges changed" &&
+      written.lines[1] === "defined kind claim" &&
       same.lines[0] === "1 record (0 changed), 0 edges changed" &&
+      same.lines[1]?.startsWith(`${same.ids[0]} claim `) &&
       same.ids[0] === written.ids[0],
     `${written.lines[0]} then ${same.lines[0]}`,
   );
@@ -439,7 +441,7 @@ export async function smokeMcp(stack, signIn) {
     edited.lines[0]?.includes('{"strength":3}') &&
       retyped.refused &&
       retyped.text ===
-        "1 claim record holds a strength that is not a text, removed ones included; fix them first",
+        "strength of 1 claim record is not a text, removed ones included; fix them first",
     retyped.text,
   );
   const renamedField = await call(grant.access_token, "redefine", {
@@ -514,10 +516,35 @@ export async function smokeMcp(stack, signIn) {
         title: "A scrap",
         props: { grade: 2 },
       },
+      {
+        kind: "scrap",
+        layer: "derived",
+        source: "claude",
+        sourceRef: "scrap-2",
+        title: "An ungraded scrap",
+      },
     ],
   });
-  const scrapId = scrap.ids[0];
-  await call(grant.access_token, "remove", { ids: [scrapId] });
+  const [scrapId, ungradedId] = scrap.ids;
+  const graded = await call(grant.access_token, "read", {
+    kind: "scrap",
+    orderBy: { property: "grade", direction: "desc" },
+    limit: 1,
+  });
+  const tail = await call(grant.access_token, "read", {
+    kind: "scrap",
+    orderBy: { property: "grade", direction: "desc" },
+    cursor: graded.lines[0]?.match(/cursor=(\S+)/)?.[1],
+  });
+  check(
+    "ordering by a field keeps records that lack it, after the rest",
+    scrap.lines.includes("defined field scrap.grade") &&
+      graded.ids[0] === scrapId &&
+      tail.ids[0] === ungradedId &&
+      tail.lines[0] === "1 record",
+    `${graded.lines[0]} / ${tail.lines[0]}`,
+  );
+  await call(grant.access_token, "remove", { ids: [scrapId, ungradedId] });
   const scrapGone = await call(grant.access_token, "undefine", {
     kinds: ["scrap"],
   });
@@ -529,7 +556,7 @@ export async function smokeMcp(stack, signIn) {
   const back = await call(grant.access_token, "restore", { kinds: ["scrap"] });
   const withIt = await call(grant.access_token, "catalog", {});
   const restored = await call(grant.access_token, "restore", {
-    ids: [scrapId],
+    ids: [scrapId, ungradedId],
   });
   check(
     "a removed kind is hidden with its records and comes back before them",
@@ -543,7 +570,7 @@ export async function smokeMcp(stack, signIn) {
         `record ${scrapId} is of kind scrap, which is removed; restore the kind first` &&
       back.lines[0] === "restored kind scrap" &&
       withIt.lines.includes("  grade: number — How good.") &&
-      restored.lines[0] === `restored ${scrapId}`,
+      restored.lines[0] === `restored ${scrapId} ${ungradedId}`,
     `${scrapGone.text} / ${reuse.text} / ${tooSoon.text} / ${back.text} / ${restored.text}`,
   );
 

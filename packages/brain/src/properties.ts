@@ -91,12 +91,12 @@ export async function defineProperty(
   author: Author,
   kind: string,
   def: PropertyDefinition,
-): Promise<Property> {
+): Promise<Property & { created: boolean }> {
   checkDefinition(kind, def);
   if (!(await holdKind(q, kind, true))) {
     throw new NotFound(`"${kind}" is not a kind in your vocabulary`);
   }
-  await q.query(
+  const { rowCount } = await q.query(
     `insert into kind_properties
        (kind, name, type, description, required, options, author)
      values ($1, $2, $3, $4, $5, $6, $7)
@@ -116,7 +116,7 @@ export async function defineProperty(
      where kind = $1 and name = $2 and person_id = current_member()`,
     [kind, def.name],
   );
-  return toProperty(rows[0]!);
+  return { ...toProperty(rows[0]!), created: (rowCount ?? 0) > 0 };
 }
 
 // A real calendar day, written 2026-09-05.

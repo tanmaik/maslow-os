@@ -5,7 +5,7 @@ import { spend } from "@placeholder/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
-import { connections } from "./connections";
+import { connections, type Connection } from "./connections";
 import { embed, model } from "./embeddings";
 import * as lines from "./lines";
 import { PRICES } from "./prices";
@@ -206,6 +206,9 @@ const action = (a: Action) =>
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
+// How many steps of a plan, and how many pitfalls, an agent is told.
+const MOST_ADVICE = 4;
+
 // The brain as an MCP server for one session: each tool is one door, opened
 // in one transaction as the person, answered in lines, and a refusal is
 // handed back as a sentence for the agent to act on.
@@ -384,7 +387,9 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       const written = (a.records ?? []).map(
         (r, i) => `${w.records[i]} ${r.kind} src=${r.source}:${r.sourceRef}`,
       );
-      return [head, ...written].join("\n");
+      return [head, ...w.defined.map((d) => `defined ${d}`), ...written].join(
+        "\n",
+      );
     }),
   );
 
@@ -670,10 +675,15 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       },
       () =>
         refusing(async () => {
-          const list = await connections.list(s);
-          if (list.length === 0)
+          const best = new Map<string, Connection>();
+          for (const c of await connections.list(s)) {
+            const held = best.get(c.app);
+            if (!held || (c.status === "ACTIVE" && held.status !== "ACTIVE"))
+              best.set(c.app, c);
+          }
+          if (best.size === 0)
             return "no apps connected; the person connects them in settings";
-          return list
+          return [...best.values()]
             .map((c) => `${c.app} ${JSON.stringify(c.appName)} ${c.status}`)
             .join("\n");
         }),
@@ -694,10 +704,11 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
         const found = await tools.find(q, s, a.task, a.apps);
         if (found.actions.length === 0) return "no actions fit";
         const out = found.actions.map(action);
-        if (found.plan.length)
-          out.push("plan:", ...found.plan.map((p) => `  ${p}`));
+        const few = (items: string[]) =>
+          items.slice(0, MOST_ADVICE).map((p) => `  ${lines.cut(p, 160)}`);
+        if (found.plan.length) out.push("plan:", ...few(found.plan));
         if (found.pitfalls.length)
-          out.push("pitfalls:", ...found.pitfalls.map((p) => `  ${p}`));
+          out.push("pitfalls:", ...few(found.pitfalls));
         return out.join("\n");
       }),
     );

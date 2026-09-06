@@ -257,12 +257,7 @@ export const composio = {
       } | null;
       if (why?.error?.code === 1810)
         throw new Refused(`connect ${app} in settings first`);
-      return {
-        ok: false,
-        data: null,
-        error: why?.error?.message ?? "no such tool",
-        app,
-      };
+      return { ok: false, data: null, error: `no action ${slug}`, app };
     }
     if (!res.ok)
       throw new Error(

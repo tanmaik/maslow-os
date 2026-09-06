@@ -76,6 +76,8 @@ export async function redefine(
        set name = coalesce($2, name), description = coalesce($3, description),
            author = $4
        where name = $1 and person_id = current_member() and deleted_at is null
+         and (name, description) is distinct from
+             (coalesce($2, name), coalesce($3, description))
        returning ${verbColumns}`,
       [name, change.newName ?? null, change.description ?? null, author],
     )
@@ -87,8 +89,14 @@ export async function redefine(
       }
       throw err;
     });
-  if (!rows[0]) await refuse(q, what, name);
-  return toVerb(rows[0]!);
+  if (rows[0]) return toVerb(rows[0]);
+  const { rows: same } = await q.query<VerbRow>(
+    `select ${verbColumns} from ${TABLE[what]}
+     where name = $1 and person_id = current_member() and deleted_at is null`,
+    [name],
+  );
+  if (!same[0]) await refuse(q, what, name);
+  return toVerb(same[0]!);
 }
 
 // Hides one of the caller's kinds or verbs, with a kind's fields. Refused
@@ -198,7 +206,7 @@ export async function redefineProperty(
   ).length;
   if (misfits) {
     throw new Invalid(
-      `${misfits} ${kind} record${misfits === 1 ? " holds" : "s hold"} a ${name} that is not ${expected(will)}, removed ones included; fix them first`,
+      `${name} of ${misfits} ${kind} record${misfits === 1 ? "" : "s"} is not ${expected(will)}, removed ones included; fix them first`,
     );
   }
   const missing = values.filter((r) => r.live && r.value === null).length;
@@ -213,7 +221,7 @@ export async function redefineProperty(
     ).length;
     if (taken) {
       throw new Invalid(
-        `${taken} ${kind} record${taken === 1 ? " already holds" : "s already hold"} a ${will.name}; choose another name`,
+        `${taken} ${kind} record${taken === 1 ? " already has" : "s already have"} ${will.name}; choose another name`,
       );
     }
   }

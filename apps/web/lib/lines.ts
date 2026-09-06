@@ -9,7 +9,7 @@ const when = (d: Date | null | undefined) =>
   d ? d.toISOString().replace(/\.000Z$/, "Z") : "-";
 
 // A string cut to a length, with an ellipsis where it was cut.
-const cut = (s: string, most: number) =>
+export const cut = (s: string, most: number) =>
   s.length > most ? `${s.slice(0, most - 1)}…` : s;
 
 // JSON, with the two line separators JSON leaves raw written as escapes, so
@@ -164,6 +164,17 @@ const NOISE = new Set([
 ]);
 const brief = (v: unknown) => cut(quoted(v) ?? "null", 80);
 
+// Two texts cut to the stretch where they part, so a change deep in a body
+// shows instead of the same opening twice.
+function differing(a: string, b: string): [string, string] {
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  const from = Math.max(0, i - 20);
+  const window = (s: string) =>
+    quoted(`${from ? "…" : ""}${cut(s.slice(from), 60)}`);
+  return [window(a), window(b)];
+}
+
 // One change from the log: what, when, by whom, and only the fields that
 // moved.
 export function event(e: Event, me: string): string {
@@ -180,6 +191,13 @@ export function event(e: Event, me: string): string {
   }
   const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])]
     .filter((k) => !NOISE.has(k) && quoted(before[k]) !== quoted(after[k]))
-    .map((k) => `${k} ${brief(before[k])}→${brief(after[k])}`);
+    .map((k) => {
+      const [b, a] = [before[k], after[k]];
+      const [was, is] =
+        typeof b === "string" && typeof a === "string"
+          ? differing(b, a)
+          : [brief(b), brief(a)];
+      return `${k} ${was}→${is}`;
+    });
   return moved.length ? `${head}: ${moved.join("; ")}` : head;
 }

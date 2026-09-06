@@ -69,7 +69,7 @@ async function define(
   table: "record_kinds" | "edge_verbs",
   author: Author,
   { name, description }: Definition,
-): Promise<Verb> {
+): Promise<Verb & { created: boolean }> {
   if (!name.trim() || !plain(name) || !plain(description)) {
     throw new Invalid(
       "a kind or verb needs a name and a description that print",
@@ -80,7 +80,7 @@ async function define(
       `"${name}" needs a description: one sentence saying what it is`,
     );
   }
-  await q.query(
+  const { rowCount } = await q.query(
     `insert into ${table} (name, description, author) values ($1, $2, $3)
      on conflict (org_id, person_id, name) do nothing`,
     [name, description, author],
@@ -95,23 +95,26 @@ async function define(
       `${table === "record_kinds" ? "kind" : "verb"} ${name} is removed; restore it, or choose another name`,
     );
   }
-  return toVerb(rows[0]!);
+  return { ...toVerb(rows[0]!), created: (rowCount ?? 0) > 0 };
 }
 
 // Adds a kind to this person's vocabulary, with any fields it declares.
 // Defining one they have returns it unchanged; new fields on an existing
-// kind are added.
+// kind are added, and named as added.
 export async function defineKind(
   q: Query,
   author: Author,
   definition: KindDefinition,
-): Promise<Kind> {
+): Promise<Kind & { created: boolean; added: string[] }> {
   const kind = await define(q, "record_kinds", author, definition);
   const properties = [];
+  const added = [];
   for (const p of definition.properties ?? []) {
-    properties.push(await defineProperty(q, author, kind.name, p));
+    const property = await defineProperty(q, author, kind.name, p);
+    properties.push(property);
+    if (property.created) added.push(property.name);
   }
-  return { ...kind, properties, via: null };
+  return { ...kind, properties, via: null, added };
 }
 
 // Adds a verb to this person's vocabulary. Defining one they have returns
@@ -120,4 +123,5 @@ export const defineVerb = (
   q: Query,
   author: Author,
   definition: Definition,
-): Promise<Verb> => define(q, "edge_verbs", author, definition);
+): Promise<Verb & { created: boolean }> =>
+  define(q, "edge_verbs", author, definition);
