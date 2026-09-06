@@ -31,6 +31,7 @@ import { orgs } from "../packages/db/src/seed.ts";
 import { allow } from "../packages/db/src/throttle.ts";
 
 import { IDLE_MS, startFakeFly } from "./fake-fly.mjs";
+import { share } from "../packages/brain/src/index.ts";
 import { smokeBrain } from "./smoke-brain.mjs";
 import { smokeConnections } from "./smoke-connections.mjs";
 import { smokeDb } from "./smoke-db.mjs";
@@ -2014,6 +2015,70 @@ try {
           `${r.resource} ${r.q.toFixed(1)} ${r.unit} $${r.cost.toFixed(9)} x${r.n}`,
       )
       .join("; "),
+  );
+  // A record shared into a person's view is its owner's to pay for: the
+  // brain bytes on the meter are the person's own rows and nothing shared
+  // in, though the shared rows are in view.
+  const shareOrg = orgs.find(
+    (o) => o.id === "00000000-0000-4000-8000-000000000002",
+  );
+  const shareOwner = shareOrg.users.find(
+    (u) => u.id === "20000000-0000-4000-8000-000000000001",
+  );
+  await asPerson(
+    {
+      orgId: shareOrg.id,
+      personId: shareOwner.personId,
+      userId: shareOwner.id,
+    },
+    async (q) => {
+      const [record] = (
+        await q.query(
+          "select id from records where person_id = $1 and deleted_at is null limit 1",
+          [shareOwner.id],
+        )
+      ).rows;
+      await share(
+        q,
+        "smoke",
+        { record: record.id },
+        { kind: "member", id: "20000000-0000-4000-8000-000000000002" },
+        "view",
+      ).catch(() => {});
+    },
+  );
+  const ownBrain = await asOrg(
+    "00000000-0000-4000-8000-000000000002",
+    async (q) => {
+      const otto = "20000000-0000-4000-8000-000000000002";
+      await q.query("select set_config('app.member_id', $1, true)", [otto]);
+      const seen = (
+        await q.query(
+          "select count(*)::int as n from records where person_id <> $1",
+          [otto],
+        )
+      ).rows[0].n;
+      const own = Number(
+        (
+          await q.query(
+            `select coalesce((select sum(pg_column_size(r.*)) from records r where r.person_id = $1), 0)
+                  + coalesce((select sum(pg_column_size(e.*)) from edges e where e.person_id = $1), 0)
+                  + coalesce((select sum(pg_column_size(v.*)) from events v where v.person_id = $1), 0) as bytes`,
+            [otto],
+          )
+        ).rows[0].bytes,
+      );
+      const now = new Date();
+      const measured = (
+        await measure(q, otto, new Date(now.getTime() - 60_000), now)
+      ).find((m) => m.resource === "brain");
+      return { seen, own, live: measured?.live ?? 0 };
+    },
+  );
+  check(
+    "a record shared in is not on the reader's meter",
+    ownBrain.seen > 0 && ownBrain.own > 0 && ownBrain.live === ownBrain.own,
+    `${ownBrain.seen} shared in view; own ${ownBrain.own} bytes, metered ${ownBrain.live}`,
   );
   const liveMeter = await (
     await fetch(`${stack.url}/meter/live`, { headers: { cookie: ottoNow } })

@@ -48,15 +48,16 @@ const later = (a: Date, b: Date) => (a > b ? a : b);
 const RUNNING = new Set(["started", "reported", "start"]);
 const OFF = new Set(["stopped", "suspended", "stop", "failed", "destroyed"]);
 
-// The bytes the member's brain rows hold now: a point sample, since the
-// rows have no size history of their own, and the one scan of the brain
-// the meter makes.
+// The bytes the member's own brain rows hold now: a point sample, since
+// the rows have no size history of their own, and the one scan of the
+// brain the meter makes. What colleagues shared into their view is the
+// colleagues' to pay for, so only rows they own count.
 async function brainBytes(q: Query, userId: string): Promise<number> {
   return Number(
     (
       await q.query<{ bytes: string }>(
-        `select coalesce((select sum(pg_column_size(r.*)) from records r), 0)
-              + coalesce((select sum(pg_column_size(e.*)) from edges e), 0)
+        `select coalesce((select sum(pg_column_size(r.*)) from records r where r.person_id = $1), 0)
+              + coalesce((select sum(pg_column_size(e.*)) from edges e where e.person_id = $1), 0)
               + coalesce((select sum(pg_column_size(v.*)) from events v where v.person_id = $1), 0) as bytes`,
         [userId],
       )
