@@ -104,7 +104,10 @@ export function Uploader({ path }: { path: string }) {
         landing.delete(id);
         if (f)
           patch(row, {
-            error: `could not land on your disk: ${f.said ?? "no reason given"}; it is tried again within the hour`,
+            error:
+              f.state === "lost"
+                ? `lost: ${f.said ?? "the store no longer has it"}; remove it from your computer`
+                : `could not land on your disk: ${f.said ?? "no reason given"}; it is tried again within the hour`,
           });
       }
     }

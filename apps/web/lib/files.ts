@@ -17,6 +17,7 @@ import {
   forgetFileIn,
   landingFile,
   landingIn,
+  lostFile,
   readyFile,
   rejectFile,
   stagedAgain,
@@ -43,7 +44,13 @@ import { growFor, growHeld } from "./computer.ts";
 import { deployment } from "./deployment.ts";
 import { callIn, disk, DiskError, site, type Pull } from "./disk.ts";
 import { MAX_DISK_GB } from "./fly.ts";
-import { beginMultipart, completeMultipart, presign, remove } from "./s3.ts";
+import {
+  beginMultipart,
+  completeMultipart,
+  presign,
+  remove,
+  s3,
+} from "./s3.ts";
 
 // A file goes from the browser to the store in parts, then from the store
 // onto the person's disk, so it can be as large as the disk allows and
@@ -300,7 +307,21 @@ export async function landedOn(
   if (!f) return false;
   if (!outcome.ok) {
     console.error(`landing ${id}: ${outcome.error}`);
-    await stagedAgain(m.orgId, m.userId, id, outcome.error ?? "no reason");
+    // A source that answered 404 is asked about once more, here: bytes the
+    // store no longer has are lost, and nothing is tried again. A store
+    // that cannot say leaves the file staged, for the sweep.
+    let gone = false;
+    if (/answered 404$/.test(outcome.error ?? ""))
+      gone = await stored(f.key).then(
+        (there) => !there,
+        (err) => {
+          console.error(`landing ${id}: ${(err as Error).message}`);
+          return false;
+        },
+      );
+    if (gone)
+      await lostFile(m.orgId, m.userId, id, "the store no longer has it");
+    else await stagedAgain(m.orgId, m.userId, id, outcome.error ?? "no reason");
     return false;
   }
   try {
@@ -450,9 +471,31 @@ export async function dropBytes(f: {
   }
 }
 
-// Abandons an upload not yet whole: the bytes go, the row stays marked for
-// the meter. One already whole is on its way to the disk and is left to
-// land.
+// Whether the store still holds the bytes behind a key.
+// Only the store saying "not found" is an absence; any other trouble is
+// thrown, so nothing is given up on while the store is merely unwell.
+async function stored(key: string): Promise<boolean> {
+  const st = deployment.storage;
+  if (st.kind === "s3") {
+    const res = await s3(st, "HEAD", key);
+    if (res.ok) return true;
+    if (res.status === 404) return false;
+    throw new Error(`storage head → ${res.status}`);
+  }
+  if (st.kind === "local")
+    return fs.stat(localFilePath(key)).then(
+      () => true,
+      (err) => {
+        if ((err as { code?: string }).code === "ENOENT") return false;
+        throw err;
+      },
+    );
+  return false;
+}
+
+// Abandons an upload not yet whole, or one the store lost: the bytes go,
+// the row stays marked for the meter. One whole and on its way to the
+// disk is left to land.
 export async function abandon(p: Principal, id: string): Promise<boolean> {
   const f = await fileOf(p, id);
   if (!f || whole(f)) return false;

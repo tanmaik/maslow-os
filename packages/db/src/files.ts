@@ -11,7 +11,8 @@ export type StoredFile = {
   key: string;
   // Arriving in parts; being joined; whole in the store; being pulled
   // onto the disk by the machine.
-  state: "uploading" | "joining" | "ready" | "landing";
+  // lost: whole once, but the store no longer has it; nothing lands it.
+  state: "uploading" | "joining" | "ready" | "landing" | "lost";
   // Why the machine could not land it, when it could not.
   said: string | null;
   uploadId: string | null;
@@ -299,6 +300,23 @@ export async function landingIn(
           [id],
         )
       ).rows[0] ?? null
+    );
+  });
+}
+
+// A file the store no longer has: nothing will land it, so the sweep
+// stops asking, and the row says so until the person lets it go.
+export async function lostFile(
+  orgId: string,
+  userId: string,
+  id: string,
+  said: string,
+): Promise<void> {
+  await asOrg(orgId, async (q) => {
+    await q.query("select set_config('app.member_id', $1, true)", [userId]);
+    await q.query(
+      "update files set state = 'lost', said = $2 where id = $1 and state = 'landing'",
+      [id, said],
     );
   });
 }

@@ -1517,8 +1517,8 @@ try {
     );
   });
   // And one whose bytes are gone from the store cannot land: the machine
-  // says why, the row is staged again with the reason, and the page and
-  // the uploader's look say it.
+  // says why, the store is asked and has nothing, the row is lost with the
+  // reason, the page says so, and the person can let it go.
   const ghostId = crypto.randomUUID();
   await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
     await q.query("select set_config('app.member_id', $1, true)", [ottoId]);
@@ -1548,12 +1548,21 @@ try {
     if (!ghost?.said) await new Promise((r) => setTimeout(r, 250));
   }
   const ghostPage = await computerPage(ottoNow);
+  const letGo = await fetch(`${stack.url}/files/delete`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ upload: ghostId }),
+    redirect: "manual",
+  });
+  const ghostGone = !(await computerPage(ottoNow)).includes("ghost.txt");
   check(
-    "a landing that failed is staged again with why, and the page says so",
-    ghost?.state === "ready" &&
-      ghost.said === "the source answered 404" &&
-      ghostPage.includes("could not land: the source answered 404"),
-    `${JSON.stringify(ghost)}`,
+    "a landing the store lost is said so, tried no more, and can be let go",
+    ghost?.state === "lost" &&
+      ghost.said === "the store no longer has it" &&
+      ghostPage.includes("lost: the store no longer has it; remove it") &&
+      letGo.headers.get("location")?.includes("deleted=yes") &&
+      ghostGone,
+    `${JSON.stringify(ghost)} / ${letGo.status} ${letGo.headers.get("location")}`,
   );
   await asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
     await q.query("select set_config('app.member_id', $1, true)", [ottoId]);
