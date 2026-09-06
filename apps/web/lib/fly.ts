@@ -14,7 +14,9 @@ type MachineState =
   | "suspended"
   | "replacing"
   | "destroying"
-  | "destroyed";
+  | "destroyed"
+  // Fly could not run it: terminal, and never started again.
+  | "failed";
 
 // What Fly remembers happening to a machine, newest last.
 type MachineEvent = {
@@ -46,7 +48,7 @@ export const autostops = (m: Machine) =>
 // The bootstrap image: a whole Debian with node, git, gh, Claude Code
 // and the Vercel CLI, and the person's account in it, copied onto the
 // volume on first boot.
-export const IMAGE = "registry.fly.io/placeholder-computers:v16";
+export const IMAGE = "registry.fly.io/placeholder-computers:v19";
 // Every disk starts here; the operating system takes about a gigabyte of
 // it, and it doubles when it fills, to the cap.
 export const DISK_GB = 3;
@@ -63,7 +65,7 @@ function config() {
 // unrecorded one back to its row.
 export const volumeName = (computerId: string) =>
   `${config().namePrefix.replaceAll("-", "_")}c_${computerId.replaceAll("-", "").slice(0, 16)}`;
-const machineName = (computerId: string) =>
+export const machineName = (computerId: string) =>
   `${config().namePrefix}c-${computerId.slice(0, 8)}`;
 
 // The key one machine's links are signed with: the deployment's key

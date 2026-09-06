@@ -49,6 +49,8 @@ export const PRICES = {
 
 // What a size costs running all month.
 export const monthly = (size: string) => (PRICES.compute[size] ?? 0) * MONTH;
+// What a gigabyte of disk costs for a month, as the pages say it.
+export const GB_A_MONTH = PRICES.disk * MONTH;
 
 // Dollars as a person reads them: whole dollars from a dollar up, cents
 // below, and "under 1¢" for what would round to nothing.
@@ -61,15 +63,37 @@ export const dollars = (n: number) =>
         ? "under 1¢"
         : "$0";
 
-// A rate an hour, with a digit more than a price since rates are small.
+// A figure that is money already spent, which is never rounded to the
+// nearest dollar.
+export const spent = (n: number) =>
+  n >= 0.005 ? `$${n.toFixed(2)}` : n > 0 ? "under 1¢" : "$0";
+
+// A rate an hour, with a digit more than a price since rates are small,
+// and a word rather than three zeroes for one too small to write.
 export const rate = (n: number) =>
-  `$${n >= 1 ? n.toFixed(2) : n.toFixed(3)} / h`;
+  n >= 1
+    ? `$${n.toFixed(2)} / h`
+    : n >= 0.001
+      ? `$${n.toFixed(3)} / h`
+      : n > 0
+        ? "under $0.001 / h"
+        : "$0 / h";
 
 // A cost as the ledger holds it, for a table's cost column: four decimals.
 export const exact = (n: number) => `$${n.toFixed(4)}`;
 
 // A size taken apart: "shared-cpu-2x:2048" is two shared CPUs and 2048 MB,
 // "performance-2x:8192" two performance CPUs and 8192 MB.
+// A count of bytes as a person reads it, wherever bytes are shown.
+export const bytes = (n: number) =>
+  n < 1e3
+    ? `${n} B`
+    : n < 1e6
+      ? `${(n / 1e3).toFixed(0)} KB`
+      : n < 1e9
+        ? `${(n / 1e6).toFixed(1)} MB`
+        : `${(n / 1e9).toFixed(2)} GB`;
+
 export function parseSize(size: string) {
   const m = /^(shared|performance)(?:-cpu)?-(\d+)x:(\d+)$/.exec(size);
   if (!m) throw new Error(`${size} is not a machine size`);
@@ -81,3 +105,7 @@ export function sizeName(size: string): string {
   const { kind, cpus, memoryMb } = parseSize(size);
   return `${cpus} ${kind} CPU${cpus === 1 ? "" : "s"}, ${memoryMb / 1024} GB memory`;
 }
+
+// A size's memory alone: "2 GB".
+export const memoryGb = (size: string) =>
+  `${parseSize(size).memoryMb / 1024} GB`;

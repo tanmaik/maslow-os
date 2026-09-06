@@ -9,12 +9,23 @@ import path from "node:path";
 import { sizeFor } from "../apps/web/lib/computer.ts";
 import { measure } from "../apps/web/lib/meter.ts";
 import { KINDS } from "../apps/web/lib/orphans.ts";
-import { LADDER, PRICES, sizeName } from "../apps/web/lib/prices.ts";
+import {
+  dollars,
+  LADDER,
+  monthly,
+  PRICES,
+  rate,
+  sizeName,
+  spent,
+} from "../apps/web/lib/prices.ts";
 import {
   createSession,
+  foundOrg,
   membershipsOf,
+  personOf,
   signIn as admit,
 } from "../packages/db/src/auth.ts";
+import { KEPT } from "../packages/db/src/computers.ts";
 import { asEmail, asOrg, asPerson } from "../packages/db/src/index.ts";
 import { orgs } from "../packages/db/src/seed.ts";
 import { allow } from "../packages/db/src/throttle.ts";
@@ -795,6 +806,71 @@ try {
     notMine.status === 403,
     `answered ${notMine.status}`,
   );
+  // A person already in an org may found another of their own: they land
+  // in it as its owner, keep the orgs they were in, and its computer is
+  // made at that landing like any other first sign-in.
+  const madeOrg = await fetch(`${stack.url}/auth/new-org`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ name: "Otto's Own" }),
+    redirect: "manual",
+  });
+  const ottoOwn = madeOrg.headers
+    .get("set-cookie")
+    ?.match(/session=[^;]+/)?.[0];
+  const ownOrgId = ottoOwn?.replace("session=", "").split(".")[0];
+  const ownHome = ottoOwn ? await page(ottoOwn) : "";
+  const ownMember = ownOrgId
+    ? await asOrg(
+        ownOrgId,
+        async (q) => (await q.query("select id, role from users")).rows[0],
+      )
+    : null;
+  const ownComputer = ownMember ? await built(ownOrgId, ownMember.id) : null;
+  check(
+    "a person in an org founds another of their own, and lands in it with its computer",
+    madeOrg.status === 303 &&
+      !orgs.some((o) => o.id === ownOrgId) &&
+      ownMember?.role === "owner" &&
+      /<h1[^>]*>Otto&#x27;s Own/.test(ownHome) &&
+      ownHome.includes("Switch to Blue Whale Bakery") &&
+      fake.machines.get(ownComputer?.machine_id)?.state === "started",
+    `answered ${madeOrg.status}; ${ownHome.match(/<h1[^>]*>([^<]*)/)?.[1] ?? "no org"} as ${ownMember?.role}, machine ${fake.machines.get(ownComputer?.machine_id)?.state}`,
+  );
+
+  // The same form sent twice — a double click, a retry — lands in the org
+  // it already made rather than making a second one of the same name.
+  const madeAgain = await fetch(`${stack.url}/auth/new-org`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ name: "Otto's Own" }),
+    redirect: "manual",
+  });
+  const againOrgId = madeAgain.headers
+    .get("set-cookie")
+    ?.match(/session=([^;.]+)/)?.[1];
+  check(
+    "founding the same org twice makes one",
+    madeAgain.status === 303 && againOrgId === ownOrgId,
+    `answered ${madeAgain.status}; ${againOrgId} against ${ownOrgId}`,
+  );
+
+  // A name of spaces is no name: nothing is founded and the person is sent
+  // where the message is said.
+  const noName = await fetch(`${stack.url}/auth/new-org`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ name: "   " }),
+    redirect: "manual",
+  });
+  check(
+    "an org with no name is refused and said so",
+    noName.status === 303 &&
+      noName.headers.get("location")?.endsWith("/settings?org=name") &&
+      !noName.headers.get("set-cookie"),
+    `answered ${noName.status} to ${noName.headers.get("location")}`,
+  );
+
   // Inviting an address that already has an account adds a membership, not a
   // refusal: Vera invites Wile; Wile signs in and is in two orgs.
   const veraCookie = await signIn("30000000-0000-4000-8000-000000000001");
@@ -905,7 +981,7 @@ try {
     fake.machines.get(ottoRow.machine_id)?.state === "started",
     /data-state="started"/.test(ottoComputer),
     ottoComputer.includes("This folder is empty"),
-    / of 3\.0 GB used/.test(ottoComputer),
+    / of 3\.00 GB used/.test(ottoComputer),
   ];
   check(
     "opening the computer finds it made at sign-in, running, and shows the disk",
@@ -1291,10 +1367,10 @@ try {
   // page: refused with nothing changed when the backup could not be taken
   // (one is on its way), and again, after a backup of its own once the
   // last is old, because a laptop has no system to reset.
-  const withRow = (sql) =>
+  const withRow = (sql, more = []) =>
     asOrg("00000000-0000-4000-8000-000000000002", async (q) => {
       await q.query("select set_config('app.meter', 'sweep', true)");
-      await q.query(sql, [ottoId]);
+      await q.query(sql, [ottoId, ...more]);
     });
   // Yesterday's, as far as the hour and the day are concerned.
   const aged = () =>
@@ -1374,6 +1450,54 @@ try {
     (await computerPage(ottoNow)).includes('data-backups="3"'),
     "still three",
   );
+  // A window that spans the turn of a month is written as a row each side
+  // of it. A disk made after that turn belongs to the later row alone: the
+  // earlier one would have to start after it ended, which the meter must
+  // never write. A fresh org's computer, with a row from before the turn
+  // to continue from, is that case.
+  const meterOrg = await fetch(`${stack.url}/auth/new-org`, {
+    method: "POST",
+    headers: { cookie: ottoNow },
+    body: new URLSearchParams({ name: "Otto's Meter" }),
+    redirect: "manual",
+  });
+  const meterCookie = meterOrg.headers
+    .get("set-cookie")
+    ?.match(/session=[^;]+/)?.[0];
+  const meterOrgId = meterCookie?.replace("session=", "").split(".")[0];
+  const meterMember = await asOrg(
+    meterOrgId,
+    async (q) => (await q.query("select id from users")).rows[0],
+  );
+  await built(meterOrgId, meterMember.id);
+  await asOrg(meterOrgId, (q) =>
+    q.query(
+      `insert into usage (org_id, user_id, resource, unit, quantity, price, cost, from_at, to_at)
+       values ($1, $2, 'disk', 'gb_second', 0, 0, 0, now() - interval '50 days', now() - interval '40 days')`,
+      [meterOrgId, meterMember.id],
+    ),
+  );
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  const spans = await asOrg(
+    meterOrgId,
+    async (q) =>
+      (
+        await q.query(
+          `select count(*) filter (where to_at <= from_at)::int as inverted,
+                  count(*) filter (where resource = 'disk' and from_at > now() - interval '2 days')::int as disks
+             from usage where user_id = $1`,
+          [meterMember.id],
+        )
+      ).rows[0],
+  );
+  check(
+    "a disk made after the turn of a month is billed in the month it was made, and no row starts after it ends",
+    spans.inverted === 0 && spans.disks > 0,
+    `${spans.inverted} inverted, ${spans.disks} disk rows since it was made`,
+  );
+
   // A staged file whose landing was never heard of is landed by the
   // sweep, and a file of the person's own with the same name and size is
   // never taken for it: the upload lands beside it, under the next name.
@@ -1691,7 +1815,7 @@ try {
         liveMeter.active.reduce((n, a) => n + a.ratePerHour, 0),
       ) &&
       (await fetch(`${stack.url}/meter/live`)).status === 401,
-    `$${liveMeter.month?.toFixed(8)} this month, $${liveMeter.ratePerHour?.toFixed(8)}/h, ${liveMeter.active?.map((a) => a.what).join(", ")}`,
+    `$${liveMeter.month?.toFixed(8)} this month, $${liveMeter.ratePerHour?.toFixed(8)}/h, ${liveMeter.active?.map((a) => a.resource).join(", ")}`,
   );
   const usagePage = await (
     await fetch(`${stack.url}/usage`, { headers: { cookie: margeOwner } })
@@ -1862,6 +1986,21 @@ try {
       /data-state="started"/.test(afterLook),
     `${staleId} gone: ${!fake.machines.has(staleId)}; now ${afterStale} ${fake.machines.get(afterStale)?.state}`,
   );
+  // A machine Fly could not run is terminal: the next look lets go of it
+  // and makes another on the same disk, rather than leaving the person
+  // with a computer that never starts again.
+  const failedId = (await rowOf(bakeryOrg, ottoId)).machine_id;
+  fake.machines.get(failedId).state = "failed";
+  await computerPage(ottoNow);
+  const remade = await built(bakeryOrg, ottoId, { not: failedId });
+  check(
+    "a machine Fly has failed is replaced at the next look",
+    !fake.machines.has(failedId) &&
+      fake.machines.get(remade.machine_id)?.state === "started" &&
+      /data-state="started"/.test(await computerPage(ottoNow)),
+    `${failedId} gone: ${!fake.machines.has(failedId)}; now ${remade.machine_id} ${remade.state}`,
+  );
+
   // A report with the wrong secret, or for a machine we never made, is a 404.
   const [m1] = fake.machines.keys();
   const forged = await fetch(`${stack.url}/computer/report`, {
@@ -1912,16 +2051,30 @@ try {
   // each report is judged as it lands, behind the daemon's answer.
   const current = async () =>
     fake.machines.get((await rowOf(bakeryOrg, ottoId)).machine_id);
-  const press = async (said) => {
+  check(
+    "money is said as a person reads it",
+    dollars(6.02) === "$6" &&
+      dollars(0.42) === "$0.42" &&
+      dollars(0.001) === "under 1¢" &&
+      dollars(0) === "$0" &&
+      spent(6.02) === "$6.02" &&
+      rate(0.0083) === "$0.008 / h" &&
+      rate(0.0000137) === "under $0.001 / h" &&
+      dollars(monthly(LADDER[0])) === "$6",
+    `${dollars(monthly(LADDER[0]))} a month at the first rung`,
+  );
+  const press = async (said, expect = 200) => {
     const mc = await current();
-    await fetch(`http://127.0.0.1:${mc.port}/fs/pressure`, {
+    const answered = await fetch(`http://127.0.0.1:${mc.port}/fs/pressure`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${mc.env.COMPUTER_SECRET}`,
         "content-type": "application/json",
       },
       body: JSON.stringify(said),
-    }).catch(() => {});
+    }).catch(() => null);
+    if (answered && answered.status !== expect)
+      throw new Error(`pressure answered ${answered.status}`);
     return mc;
   };
   const replaced = (was) => built(bakeryOrg, ottoId, { not: was.id });
@@ -1929,6 +2082,39 @@ try {
     await sleep(ms);
     return (await rowOf(bakeryOrg, ottoId)).machine_id === was.id;
   };
+  // The ladder will not change a size twice inside half an hour, and will
+  // not come down until three hours of reports have actually spanned three
+  // hours. A smoke runs in seconds, so the record is aged instead: events
+  // are never updated, so aged copies replace them.
+  const ageResizes = async () => {
+    await withRow(
+      `insert into computer_events (computer_id, kind, size, disk_gb, at)
+         select computer_id, kind, size, disk_gb, at - interval '4 hours' from computer_events
+         where kind in ('resized', 'asked-bigger', 'short-of-memory', 'out-of-memory', 'room-to-spare') and at > now() - interval '1 hour'
+           and computer_id in (select id from computers where user_id = $1)`,
+    );
+    await withRow(
+      "delete from computer_events where kind in ('resized', 'asked-bigger', 'short-of-memory', 'out-of-memory', 'room-to-spare') and at > now() - interval '1 hour' and computer_id in (select id from computers where user_id = $1)",
+    );
+  };
+  // The reports the row keeps, spread back over the last four hours.
+  const ageReports = async () => {
+    for (const at of ["{reports}", "{loadAt}", "{memory,at}"])
+      await withRow(
+        `update computers set need = jsonb_set(need, $2::text[], (
+           select jsonb_agg(to_jsonb(to_char(
+             (now() - interval '4 hours' + (i * interval '6 minutes')) at time zone 'UTC',
+             'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')) order by i)
+           from generate_series(0, jsonb_array_length(need #> $2::text[]) - 1) i))
+         where user_id = $1 and need #> $2::text[] is not null`,
+        [at],
+      );
+  };
+  // What the usage page says of the runs, read before the record is aged.
+  const runsSay = async () =>
+    (
+      await fetch(`${stack.url}/usage`, { headers: { cookie: ottoNow } })
+    ).text();
   const resizes = () =>
     asOrg(
       bakeryOrg,
@@ -1977,6 +2163,17 @@ try {
       !/data-pending=/.test(figures),
     `cpu ${figures.match(/data-cpu="([^"]*)"/)?.[1]}, memory ${figures.match(/data-memory="([^"]*)"/)?.[1]}`,
   );
+  // A figure the machine would never report of itself is refused whole,
+  // so nothing pretends a share of memory below zero from then on.
+  const refusedPress = await press({ free: -1, load: 0.12 }, 400);
+  await sleep(500);
+  const stillFigures = await computerPage(ottoNow);
+  check(
+    "a pressure below zero is refused and the last report stands",
+    refusedPress && /data-memory="41"/.test(stillFigures),
+    `memory ${stillFigures.match(/data-memory="([^"]*)"/)?.[1]}`,
+  );
+
   // Short of memory while busy: more memory is on its way, offered now,
   // and the machine runs on until a quiet moment. A terminal open is not
   // a quiet moment either.
@@ -1989,7 +2186,7 @@ try {
       busy.state === "started" &&
       /data-wants="shared-cpu-2x:2048"/.test(pending) &&
       /data-pending="up"/.test(pending) &&
-      pending.includes("more memory is on its way") &&
+      pending.includes("it needs more memory") &&
       pending.includes("Restart with more memory now"),
     `wants ${pending.match(/data-wants="([^"]*)"/)?.[1] ?? "nothing"}, ${busy.state}, machine ${stillBusy ? "kept" : "replaced"}`,
   );
@@ -2071,6 +2268,10 @@ try {
       Math.abs(lastOld?.quantity - ran) < 1,
     `${ending.map((e) => e.kind).join(",")}; ${lastOld?.quantity?.toFixed(2)} s billed of ${ran.toFixed(2)} s run at the first size`,
   );
+  const saidAsked = (await runsSay()).includes(
+    "you restarted it with more memory",
+  );
+  await ageResizes();
   // Short of memory at a quiet moment: up a rung, so nothing ran out.
   const quietBefore = await current();
   await press({ free: 0.2, load: 0.1 });
@@ -2085,39 +2286,38 @@ try {
       !/data-wants=/.test(up2Page),
     `${up2.size}, ${up2Page.match(/data-sized-up="([^"]*)"/)?.[1] ?? "nothing said"}`,
   );
+  const saidShort = (await runsSay()).includes(
+    "it was short of memory and came back bigger",
+  );
+  await ageResizes();
   // A kill goes up at once, busy or not, two rungs when starved, never
   // past the top.
   const killedBefore = await current();
   await press({ free: 0.05, load: 0.9, oom: 1 });
   const up3 = await replaced(killedBefore);
-  const usageRuns = await (
-    await fetch(`${stack.url}/usage`, { headers: { cookie: ottoNow } })
-  ).text();
+  const saidOom = (await runsSay()).includes(
+    "it ran out of memory and came back bigger",
+  );
   check(
     "a kill goes up at once, two rungs when starved, never past the top; the usage page says why",
     up3.size === "performance-2x:8192" &&
       fake.machines.get(up3.machine_id)?.guest?.memory_mb === 8192 &&
-      usageRuns.includes("you restarted it with more memory") &&
-      usageRuns.includes("it was short of memory and came back bigger") &&
-      usageRuns.includes("it ran out of memory and came back bigger"),
-    `${up3.size}; ${(await resizes()).map((r) => r.size).join(" → ")}`,
+      saidAsked &&
+      saidShort &&
+      saidOom,
+    `${up3.size}; ${(await resizes()).map((r) => r.size).join(" → ")}; said ${[saidAsked && "asked", saidShort && "short", saidOom && "out"].filter(Boolean).join(", ")}`,
   );
-  // Three hours of room to spare comes down a rung, quietly — but never
-  // within three hours of the last change of size.
-  for (let i = 0; i < 36; i++) await press({ free: 0.8, load: 0.1 });
+  // Thirty-six reports fired in a moment are not three hours, and come
+  // down nothing; three hours of them, with a change of size three hours
+  // behind, come down a rung.
+  const burstBefore = await current();
+  for (let i = 0; i < KEPT; i++) await press({ free: 0.8, load: 0.1 });
+  const burstHeld = await unchanged(burstBefore);
+  await ageReports();
   const heldBefore = await current();
+  await press({ free: 0.8, load: 0.1 });
   const held = await unchanged(heldBefore);
-  // The changes of size were four hours ago, as far as the ladder knows:
-  // events are never updated, so aged copies replace them.
-  await withRow(
-    `insert into computer_events (computer_id, kind, size, disk_gb, at)
-       select computer_id, kind, size, disk_gb, at - interval '4 hours' from computer_events
-       where kind in ('resized', 'asked-bigger', 'short-of-memory', 'out-of-memory') and at > now() - interval '1 hour'
-         and computer_id in (select id from computers where user_id = $1)`,
-  );
-  await withRow(
-    "delete from computer_events where kind in ('resized', 'asked-bigger', 'short-of-memory', 'out-of-memory') and at > now() - interval '1 hour' and computer_id in (select id from computers where user_id = $1)",
-  );
+  await ageResizes();
   // The machine made next boots on a disk of one megabyte, for the pulls
   // below.
   fake.volumes.get(heldBefore.volume).size_gb = 0.001;
@@ -2129,13 +2329,12 @@ try {
   await press({ free: 0.8, load: 0.1 });
   const down = await replaced(heldBefore);
   const downPage = await computerPage(ottoNow);
-  const downRuns = await (
-    await fetch(`${stack.url}/usage`, { headers: { cookie: ottoNow } })
-  ).text();
+  const downRuns = await runsSay();
   const sizes = (await resizes()).map((r) => r.size);
   check(
     "three hours of room to spare comes down a rung, quietly, never within three hours of a change",
-    held &&
+    burstHeld &&
+      held &&
       down.size === "shared-cpu-4x:4096" &&
       fake.machines.get(down.machine_id)?.guest?.memory_mb === 4096 &&
       fake.machines.get(down.machine_id)?.volume === heldBefore.volume &&
@@ -2145,7 +2344,7 @@ try {
       sizes.join(",") ===
         "shared-cpu-2x:2048,shared-cpu-4x:4096,performance-2x:8192,shared-cpu-4x:4096" &&
       downRuns.includes("it had room to spare and came back smaller"),
-    `${held ? "held" : "changed"} within three hours; ${sizes.join(" → ")}`,
+    `burst ${burstHeld ? "held" : "changed"}, then ${held ? "held" : "changed"} within three hours; ${sizes.join(" → ")}; ${downRuns.includes("it had room to spare and came back smaller") ? "said why" : "said nothing"}`,
   );
   let diedWith;
   for (let i = 0; i < 40 && !diedWith?.gone; i++) {
@@ -2185,10 +2384,8 @@ try {
     computePrices.includes(PRICES.compute["shared-cpu-1x:1024"]) &&
       computePrices.includes(PRICES.compute["shared-cpu-2x:2048"]) &&
       computePrices.includes(PRICES.compute["performance-2x:8192"]) &&
-      nowBigger.active.some(
-        (a) => a.what === "4 shared CPUs, 4 GB memory running",
-      ),
-    `prices ${computePrices.join(", ")}; ${nowBigger.active.map((a) => a.what).join("; ")}`,
+      nowBigger.active.some((a) => a.resource === "compute"),
+    `prices ${computePrices.join(", ")}; ${nowBigger.active.map((a) => a.resource).join("; ")}`,
   );
   // A month of a computer's life, priced from its events alone: made, a
   // first machine that failed and went, placed, run, asleep, run again,
@@ -2450,6 +2647,7 @@ try {
   // one computer, and the page is back.
   const margeBefore = await rowOf(bakeryOrg, margeId);
   const machinesBeforeOff = fake.machines.size;
+  const volumesBeforeOff = fake.volumes.size;
   const turnedOff = await form("/computer/off", { path: "/" }, margeOwner);
   const offPage = await computerPage(margeOwner);
   await computerPage(margeOwner);
@@ -2475,13 +2673,24 @@ try {
       margeOff.machine_id === null &&
       offEvents.join(",") === "destroyed,powered-off" &&
       /data-state="powered-off"/.test(offPage) &&
-      offPage.includes(
-        "Your computer is powered off. Its disk and files are kept; only the disk is charged.",
-      ) &&
+      offPage.includes("You powered this off on") &&
+      offPage.includes("3 GB disk and everything on it are kept") &&
       offPage.includes("data-power-on") &&
       !liveOff.active.some((a) => a.resource === "compute") &&
       liveOff.active.some((a) => a.resource === "disk"),
     `${machinesBeforeOff} → ${fake.machines.size} machines; ${offEvents.join(",")}; ticking ${liveOff.active.map((a) => a.resource).join(", ")}`,
+  );
+  // A sweep while it is off makes nothing and starts nothing.
+  await fetch(`${stack.url}/meter/sweep`, {
+    headers: { authorization: "Bearer smoke" },
+  });
+  const sweptOff = await rowOf(bakeryOrg, margeId);
+  check(
+    "a sweep makes nothing for a computer its person powered off",
+    fake.machines.size === machinesBeforeOff - 1 &&
+      sweptOff.machine_id === null &&
+      sweptOff.off_at !== null,
+    `${fake.machines.size} machines; machine ${sweptOff.machine_id ?? "none"}`,
   );
   const turnedOn = await Promise.all(
     Array.from({ length: 6 }, () =>
@@ -2496,7 +2705,7 @@ try {
     "racing power-ons make one computer, on the same disk, and the page is back",
     turnedOn.every((r) => r.headers.get("location")?.includes("computer=on")) &&
       fake.machines.size === machinesBeforeOff &&
-      fake.volumes.size === volumesAtSignIn &&
+      fake.volumes.size === volumesBeforeOff &&
       margeOn.off_at === null &&
       fake.machines.get(margeOn.machine_id)?.volume === margeBefore.volume_id &&
       /data-state="started"/.test(onPage),
@@ -2542,14 +2751,14 @@ try {
   check(
     "the switch turned off stops the org's machines at the sweep, makes none at sign-in, and says so",
     acmeOff.headers.get("location")?.endsWith("computers=off") &&
-      acmeNotice.includes("Every machine in the org stops within the hour") &&
+      acmeNotice.includes("every machine in the org stops within the hour") &&
       wileMachine?.state === "stopped" &&
       (await rowOf(acmeOrg, wileId)).state === "stopped" &&
       fake.machines.size === machinesBeforeAcme + 1 &&
       (await computerPage(wile)).includes(
-        "Computers are off for this org: an owner turned them off",
+        "Computers are off for this org. You can turn them on again in",
       ),
-    `${acmeOff.headers.get("location")?.split("?")[1]}; notice ${acmeNotice.includes("Every machine in the org stops within the hour") ? "shown" : "missing"}; Wile's machine ${wileMachine?.state}, row ${(await rowOf(acmeOrg, wileId)).state}, ${fake.machines.size} machines; page ${(await computerPage(wile)).includes("an owner turned them off") ? "says off" : "does not say off"}`,
+    `${acmeOff.headers.get("location")?.split("?")[1]}; notice ${acmeNotice.includes("every machine in the org stops within the hour") ? "shown" : "missing"}; Wile's machine ${wileMachine?.state}, row ${(await rowOf(acmeOrg, wileId)).state}, ${fake.machines.size} machines`,
   );
   check(
     "a person's name is one across orgs",

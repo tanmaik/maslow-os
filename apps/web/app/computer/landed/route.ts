@@ -13,7 +13,11 @@ export async function POST(request: Request) {
   if (!isUuid(id)) return new Response(null, { status: 400 });
   await landedOn(m, id, {
     ok: body?.ok === true,
-    error: String(body?.error ?? "no reason given"),
+    // A machine's own words, cut to a sentence and stripped of anything
+    // that could forge a line in a log or grow a column without bound.
+    error: String(body?.error ?? "no reason given")
+      .replace(/[\u0000-\u001f\u007f]/g, " ")
+      .slice(0, 200),
   });
   return new Response(null, { status: 204 });
 }

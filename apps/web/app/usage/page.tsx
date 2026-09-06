@@ -1,5 +1,10 @@
 import { backupsOf } from "@placeholder/db/backups";
-import { computerOf, eventsOf } from "@placeholder/db/computers";
+import {
+  CAUSES_OF_SIZE,
+  computerOf,
+  eventsOf,
+  type Cause,
+} from "@placeholder/db/computers";
 import {
   brainByKind,
   picturesOf,
@@ -10,6 +15,8 @@ import {
 } from "@placeholder/db/usage";
 import { redirect } from "next/navigation";
 import { Fragment, type ReactNode } from "react";
+
+import { LocalTime } from "@/components/local-time";
 
 import {
   Table,
@@ -23,15 +30,17 @@ import { disk, DiskError } from "@/lib/disk";
 import { filesOf, whole } from "@/lib/files";
 import { live } from "@/lib/meter";
 import {
+  bytes,
   dollars,
   exact,
   LADDER,
+  memoryGb,
   MONTH,
   monthly,
-  parseSize,
   PRICES,
-  SOURCE,
   rate,
+  SOURCE,
+  spent,
 } from "@/lib/prices";
 import { principal } from "@/lib/session";
 
@@ -57,30 +66,25 @@ const amount = (unit: string, quantity: number) =>
     ? spell(quantity)
     : stored(unit === "gb_second" ? quantity : quantity / 1e9);
 
-const bytes = (n: number) =>
-  n < 1e3
-    ? `${n} B`
-    : n < 1e6
-      ? `${(n / 1e3).toFixed(0)} KB`
-      : n < 1e9
-        ? `${(n / 1e6).toFixed(1)} MB`
-        : `${(n / 1e9).toFixed(2)} GB`;
-
-const when = (d: Date) => d.toISOString().slice(0, 16).replace("T", " ");
-
-const CAUSE: Record<string, string> = {
+// Why a machine came back, in the person's words.
+const CAUSE: Record<Cause, string> = {
   opened: "you opened your computer",
   "link-dl": "a download link was followed",
   "link-term": "a terminal was opened",
   "link-p": "a preview was opened",
   backup: "the daily backup",
-  start: "we started it",
-  restart: "the disk grew and it booted again",
   "powered-on": "you powered it on",
+  "powered-off": "you powered it off",
   "out-of-memory": "it ran out of memory and came back bigger",
   "short-of-memory": "it was short of memory and came back bigger",
   "room-to-spare": "it had room to spare and came back smaller",
   "asked-bigger": "you restarted it with more memory",
+};
+
+// What we asked of Fly, which explains a run only when nothing better does.
+const REQUEST: Record<string, string> = {
+  start: "we started it",
+  restart: "the disk grew and it booted again",
 };
 
 // Every run of the machine this month: when it started, how long, what it
@@ -93,14 +97,35 @@ function sessions(
 ) {
   const clamp = (d: Date) => (d < from ? from : d);
   const out: { at: Date; seconds: number; cost: number; cause: string }[] = [];
-  let cause = "a request reached it";
+  const ANY = "a request reached it";
+  // A cause names the run it comes before, and is spent by that run. One
+  // written while a machine was already running goes with it when it
+  // stops — a page opened an hour ago does not explain the next run —
+  // unless it is a reason to make the machine again at another size,
+  // which is written while the old one still runs and names the new one.
+  let pending = ANY;
+  let holds = false;
+  let cause = ANY;
   let since: Date | null = null;
   let price = 0;
   for (const e of events) {
-    if (e.kind in CAUSE) cause = CAUSE[e.kind]!;
-    else if (e.kind === "started" && !since) {
+    if (e.kind in CAUSE) {
+      const sizing = CAUSES_OF_SIZE.includes(e.kind as Cause);
+      // A reason to make the machine again at another size is written
+      // while the old one still runs, and nothing ordinary that happens
+      // in the meantime displaces it; another such reason does.
+      if (sizing || !holds) {
+        pending = CAUSE[e.kind as Cause]!;
+        holds = sizing;
+      }
+    } else if (e.kind in REQUEST) {
+      if (pending === ANY) pending = REQUEST[e.kind]!;
+    } else if (e.kind === "started" && !since) {
       since = e.at;
       price = priceOf(e.size);
+      cause = pending;
+      pending = ANY;
+      holds = false;
     } else if (
       ["suspended", "stopped", "destroyed", "failed"].includes(e.kind) &&
       since
@@ -108,7 +133,7 @@ function sessions(
       const seconds = (e.at.getTime() - clamp(since).getTime()) / 1000;
       out.push({ at: since, seconds, cost: seconds * price, cause });
       since = null;
-      cause = "a request reached it";
+      if (!holds) pending = ANY;
     }
   }
   if (since) {
@@ -200,12 +225,16 @@ export default async function Usage() {
     ? [
         {
           key: "always-on",
-          what: `Runs until you power it off; ≈ ${dollars(monthly(size))} a month at ${parseSize(size).memoryMb / 1024} GB.`,
+          what: `Runs until you power it off; ≈ ${dollars(monthly(size))} a month at ${memoryGb(size)}.`,
         },
         ...(runs.length
           ? runs.map((r) => ({
               key: r.at.toISOString(),
-              what: `${when(r.at)}, ${spell(r.seconds)}, ${r.cause}`,
+              what: (
+                <>
+                  <LocalTime at={r.at} />, {spell(r.seconds)}, {r.cause}
+                </>
+              ),
               cost: exact(r.cost),
               attr: { "data-session": r.at.toISOString() },
             }))
@@ -251,7 +280,7 @@ export default async function Usage() {
             },
             {
               key: "free",
-              what: `free, of the ${bytes(onDisk.disk.total)} you are paying for`,
+              what: `free, of the ${bytes(onDisk.disk.total)} disk`,
               much: bytes(onDisk.disk.total - onDisk.disk.used),
             },
           ];
@@ -259,7 +288,11 @@ export default async function Usage() {
   const bucket: Detail[] = [
     ...backups.map((b) => ({
       key: `backup:${b.id}`,
-      what: `a backup of your disk, ${when(b.finishedAt!)}`,
+      what: (
+        <>
+          a backup of your disk, <LocalTime at={b.finishedAt!} />
+        </>
+      ),
       much: bytes(b.size ?? 0),
       attr: { "data-bucket-backup": b.id },
     })),
@@ -342,13 +375,21 @@ export default async function Usage() {
 
   return (
     <main className="space-y-6">
-      <h1 className="text-2xl font-semibold">Usage</h1>
+      <div>
+        <h1 className="text-2xl font-semibold">Usage</h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Nothing is charged yet. This is what your computer, your disk, your
+          backups and your brain would cost, at what the vendors charge us. It
+          is not everything: reading and writing the bucket, and the database
+          behind all of it, are not counted here.
+        </p>
+      </div>
 
       <div
         className="flex flex-wrap gap-x-8 gap-y-2"
         data-projection={projected}
       >
-        <Cell label="So far this month" value={dollars(ticking.month)} />
+        <Cell label="So far this month" value={spent(ticking.month)} />
         <Cell label="Right now" value={rate(ticking.ratePerHour)} />
         <Cell label="By month end" value={`≈ ${dollars(projected)}`} />
       </div>
@@ -384,7 +425,7 @@ export default async function Usage() {
               <TableRow data-usage={resource}>
                 <TableCell className="font-medium">{WHAT[resource]}</TableCell>
                 <TableCell className="font-mono tabular-nums">
-                  {line ? amount(line.unit, line.quantity) : "nothing yet"}
+                  {line ? amount(line.unit, line.quantity) : "not billed yet"}
                 </TableCell>
                 <TableCell className="text-muted-foreground">
                   {PRICE[resource]}
@@ -399,7 +440,8 @@ export default async function Usage() {
           {mine.length > 0 && (
             <TableRow>
               <TableCell colSpan={3} className="font-medium">
-                Together, this month
+                Billed so far this month. The strip above adds what the last
+                sweep has not billed yet.
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
                 {exact(mine.reduce((n, l) => n + l.cost, 0))}
@@ -408,10 +450,6 @@ export default async function Usage() {
           )}
         </TableBody>
       </Table>
-
-      <p className="text-muted-foreground text-sm">
-        Not counted yet: Neon compute, Tigris requests, Vercel, mail, sign-in.
-      </p>
 
       {org && (
         <Table>
@@ -449,7 +487,7 @@ export default async function Usage() {
             ))}
             <TableRow>
               <TableCell colSpan={2} className="font-medium">
-                Everyone, this month
+                Everyone, billed so far this month
               </TableCell>
               <TableCell className="text-right font-mono tabular-nums">
                 {exact(org.reduce((n, l) => n + l.cost, 0))}

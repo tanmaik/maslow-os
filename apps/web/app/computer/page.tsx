@@ -10,6 +10,7 @@ import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { Fragment } from "react";
 
+import { BiggerNow } from "@/components/bigger-now";
 import { ComputerActions } from "@/components/computer-actions";
 import { FileActions } from "@/components/file-actions";
 import { NewFolder } from "@/components/new-folder";
@@ -31,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { Terminal } from "@/components/terminal";
 import { Uploader } from "@/components/uploader";
+import { asOrg } from "@placeholder/db";
 import { backupsOf } from "@placeholder/db/backups";
 import {
   computerOf,
@@ -46,30 +48,21 @@ import { deployment } from "@/lib/deployment";
 import { disk, DiskError, type Tree } from "@/lib/disk";
 import { cleanPath, filesOf, whole } from "@/lib/files";
 import { live, sweepIfDue } from "@/lib/meter";
-import { dollars, parseSize, sizeName } from "@/lib/prices";
+import {
+  bytes,
+  GB_A_MONTH,
+  memoryGb,
+  monthly,
+  sizeName,
+  spent,
+} from "@/lib/prices";
 import { principal } from "@/lib/session";
 
-const gb = (n: number) =>
-  n < 1e3
-    ? `${n} B`
-    : n < 1e6
-      ? `${(n / 1e3).toFixed(0)} KB`
-      : n < 1e9
-        ? `${(n / 1e6).toFixed(1)} MB`
-        : `${(n / 1e9).toFixed(1)} GB`;
-
+// The states the page can show once the disk has answered: everything else
+// means the machine is up.
 const STATES: Record<string, string> = {
   started: "Running",
-  stopped: "Stopped",
-  suspended: "Stopped",
-  starting: "Starting",
-  stopping: "Stopping",
-  suspending: "Stopping",
-  created: "Built, not yet started",
-  building: "Being built",
   failed: "The build failed",
-  "no-compute": "Stopped",
-  "powered-off": "Powered off",
   unknown: "Fly is not answering",
 };
 
@@ -104,39 +97,47 @@ export default async function Computer({
   if (!(await computersAllowed(p)))
     return (
       <Note>
-        Computers are off for this org: an owner turned them off. An owner can
-        turn them on again in{" "}
-        <a href="/settings" className="underline">
-          Settings
-        </a>
-        .
+        {p.role === "owner" ? (
+          <>
+            Computers are off for this org. You can turn them on again in{" "}
+            <a href="/settings" className="underline">
+              Settings
+            </a>
+            .
+          </>
+        ) : (
+          <>
+            Computers are off for this org. Ask{" "}
+            {(await ownerNames(p.orgId)) || "an owner"} to turn them on.
+          </>
+        )}
       </Note>
     );
   const params = await searchParams;
   const at = cleanPath(params.path ?? "/") ?? "/";
+  // Read before anything can return early, so a refusal is never swallowed
+  // by the screen the person lands on.
+  const early = said(params);
   // A look at the computer is when the meter, the backups and the
   // stragglers catch up, wherever this runs.
   after(() => sweepIfDue());
-  // Why the machine may be woken next: this look.
-  const before = await computerOf(p);
-  if (before) await noteEvent(p.orgId, before, "opened");
-  let s = await status(p);
-  if (!s) {
-    await ensureFilesystem(p);
-    const made = await computerOf(p);
-    if (made) await noteEvent(p.orgId, made, "opened");
-    s = await status(p);
-  }
+  // Why the machine may be started next: this look.
+  const known = (await computerOf(p)) ?? (await ensureFilesystem(p));
+  if (known) await noteEvent(p.orgId, known, "opened");
+  const s = await status(p);
   if (!s)
     return <Note>Your filesystem could not be made. Try again shortly.</Note>;
   // Powered off by the person: the disk is kept and nothing is read from
   // it; one button powers it on.
   if (s.computer.offAt)
     return (
-      <Note>
+      <Note said={early} wrong={Boolean(params.error)}>
         <span data-state="powered-off">
-          Your computer is powered off. Its disk and files are kept; only the
-          disk is charged.
+          You powered this off on <LocalTime at={s.computer.offAt} />. Its{" "}
+          {s.computer.diskGb} GB disk and everything on it are kept, for about{" "}
+          {spent(s.computer.diskGb * GB_A_MONTH)} a month. The machine costs
+          nothing while it is off; your backups and your brain are charged as
+          always.
         </span>
         <form action="/computer/on" method="post" className="mt-4">
           <input type="hidden" name="path" value="/" />
@@ -219,7 +220,6 @@ export default async function Computer({
   const size = sizing(computer, lastResize?.at ?? null);
   const load = computer.need?.load?.at(-1);
   const free = computer.need?.memory?.free.at(-1);
-  const gbOf = (s: string) => `${parseSize(s).memoryMb / 1024} GB`;
   // A size-up in the last day is said, so nothing ran out unnoticed; a
   // size-down is quiet.
   const sizedUp =
@@ -230,14 +230,13 @@ export default async function Computer({
       : null;
   // Files still on their way to this folder, shown in it until they land.
   const arriving = uploads.files.filter((f) => f.path === at);
-  // The machine is awake now, having just answered.
+  // The disk answered, so the machine is running whatever Fly last said of
+  // it; only a state nothing can be served from survives.
   const state =
-    s.state === "no-compute" || s.state === "created" || s.state === "stopped"
-      ? "started"
-      : s.state;
+    s.state === "failed" || s.state === "unknown" ? s.state : "started";
   const latest = backups[0];
   const month = meter.month;
-  const notice = resetSaid ?? said(params);
+  const notice = resetSaid ?? early;
   const ago = (d: Date) => {
     const m = Math.round((Date.now() - d.getTime()) / 60000);
     return m < 60
@@ -300,7 +299,16 @@ export default async function Computer({
               </Breadcrumb>
               <span className="flex items-center gap-2">
                 <NewFolder at={at} />
-                <ComputerActions at={at} />
+                <ComputerActions
+                  at={at}
+                  backingUp={backups.some((b) => !b.finishedAt)}
+                  backedUp={
+                    latest?.finishedAt &&
+                    Date.now() - latest.finishedAt.getTime() < 3600_000
+                      ? ago(latest.finishedAt)
+                      : null
+                  }
+                />
               </span>
             </div>
 
@@ -354,7 +362,7 @@ export default async function Computer({
                         </a>
                       </TableCell>
                       <TableCell className="text-muted-foreground">
-                        {e.kind === "folder" ? "—" : gb(e.size)}
+                        {e.kind === "folder" ? "—" : bytes(e.size)}
                       </TableCell>
                       <TableCell className="text-muted-foreground">
                         {e.modified.slice(0, 10)}
@@ -385,7 +393,7 @@ export default async function Computer({
                       </span>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {gb(f.size)}
+                      {bytes(f.size)}
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {f.createdAt.toISOString().slice(0, 10)}
@@ -434,7 +442,7 @@ export default async function Computer({
                                 />
                                 <span>
                                   <LocalTime at={b.finishedAt!} /> (
-                                  {gb(b.size ?? 0)})
+                                  {bytes(b.size ?? 0)})
                                 </span>
                                 <Button
                                   type="submit"
@@ -462,7 +470,7 @@ export default async function Computer({
               <span className="text-foreground font-medium">Terminal</span>
               <span className="ml-4">Previews</span>
               {ports.length === 0 ? (
-                <span>nothing is listening yet</span>
+                <span>nothing is running here yet</span>
               ) : (
                 ports.map((port) => (
                   <a
@@ -506,36 +514,37 @@ export default async function Computer({
             ` · memory ${Math.round((1 - free) * 100)}% used`}
         </span>
         {size.up ? (
-          <form
-            action="/computer/bigger"
-            method="post"
-            className="flex items-center gap-2"
-            data-pending="up"
-          >
-            <input type="hidden" name="path" value={at} />
-            <span>more memory is on its way</span>
-            <Button type="submit" size="sm" variant="outline">
-              Restart with more memory now
-            </Button>
-          </form>
+          <span className="flex items-center gap-2" data-pending="up">
+            <span>
+              it needs more memory, and restarts itself when you are idle
+            </span>
+            <BiggerNow
+              at={at}
+              from={memoryGb(computer.size)}
+              to={memoryGb(size.up)}
+              was={monthly(computer.size)}
+              now={monthly(size.up)}
+            />
+          </span>
         ) : (
           sizedUp && (
             <span data-sized-up={sizedUp.size}>
-              sized up to {gbOf(sizedUp.size)} at <LocalTime at={sizedUp.at} />
+              sized up to {memoryGb(sizedUp.size)} at{" "}
+              <LocalTime at={sizedUp.at} />
               {sizedUp.why === "asked-bigger"
                 ? ", as you asked"
                 : " so nothing ran out"}
             </span>
           )
         )}
-        <span>{`${gb(space.used)} of ${gb(space.total)} used`}</span>
+        <span>{`${bytes(space.used)} of ${bytes(space.total)} used`}</span>
         <span>{place(computer.region)}</span>
-        <span data-backups={backups.length}>
-          {latest
-            ? `backed up ${ago(latest.finishedAt!)}, ${backups.length} kept`
-            : "not backed up yet"}
-        </span>
-        <span className="ml-auto">{dollars(month)} this month so far</span>
+        {latest && (
+          <span data-backups={backups.length}>
+            {`backed up ${ago(latest.finishedAt!)}, ${backups.length} kept`}
+          </span>
+        )}
+        <span className="ml-auto">{spent(month)} this month so far</span>
       </footer>
     </main>
   );
@@ -584,13 +593,41 @@ function Branch({
   );
 }
 
-function Note({ children }: { children: React.ReactNode }) {
+function Note({
+  children,
+  said,
+  wrong,
+}: {
+  children: React.ReactNode;
+  said?: string | null;
+  wrong?: boolean;
+}) {
   return (
     <main className="mx-auto max-w-3xl p-6">
       <h1 className="text-2xl font-semibold">Your computer</h1>
-      <p className="text-muted-foreground mt-2">{children}</p>
+      {said && (
+        <p
+          className={`mt-2 text-sm ${wrong ? "text-destructive" : "text-muted-foreground"}`}
+          data-notice
+        >
+          {said}
+        </p>
+      )}
+      <div className="text-muted-foreground mt-2">{children}</div>
     </main>
   );
+}
+
+// Who to ask, when only an owner can answer.
+async function ownerNames(orgId: string): Promise<string> {
+  const names = await asOrg(orgId, async (q) =>
+    (
+      await q.query<{ name: string }>(
+        "select name from users where role = 'owner' order by created_at limit 3",
+      )
+    ).rows.map((r) => r.name),
+  );
+  return names.join(" or ");
 }
 
 // What the address says happened, in words.
@@ -608,8 +645,11 @@ function said(params: Record<string, string | undefined>): string | null {
     "backup=started":
       "A backup is being taken. The bar below says when it is done.",
     "computer=on": "Your computer is powered on.",
+    "computer=off": "Your computer is powered off.",
     "bigger=done": "Restarted with more memory.",
     "bigger=top": "It is already at the biggest size there is.",
+    "bigger=unplaceable":
+      "There was no room for a bigger machine just now, so yours is back at the size it was. Try again in a few minutes.",
   };
   for (const [k, v] of Object.entries(params))
     if (v && table[`${k}=${v}`]) return table[`${k}=${v}`]!;

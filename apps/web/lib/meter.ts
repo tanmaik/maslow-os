@@ -1,19 +1,20 @@
 import { asMeter, asOrg, type Query } from "@placeholder/db";
 import {
   clearVolume,
-  computersAllowedIn,
   computersIn,
   knownComputers,
+  machineIsKnown,
+  setMachine,
 } from "@placeholder/db/computers";
 import { picturesIn, type Resource, type Unit } from "@placeholder/db/usage";
 
 import { deployment } from "./deployment.ts";
 import { sweepBackups } from "./backups.ts";
-import { upholdIn } from "./computer.ts";
+import { unpaid, upholdIn } from "./computer.ts";
 import { expireUploads, landStaged } from "./files.ts";
 import { settle } from "./orphans.ts";
-import { fly } from "./fly.ts";
-import { MONTH, PRICES, sizeName } from "./prices.ts";
+import { fly, machineName } from "./fly.ts";
+import { MONTH, PRICES } from "./prices.ts";
 
 // The meter. One measuring function reads what a member's things did
 // between two moments, in each vendor's own unit; the hourly sweep prices
@@ -292,35 +293,51 @@ async function membersOf(q: Query): Promise<string[]> {
 // Runs the sweep if none has run for an hour: from the page, so every
 // environment sweeps, cron or not. Production's cron is the backstop for
 // hours nobody looks.
-let sweeping: Promise<void> | null = null;
-export function sweepIfDue(): Promise<void> {
-  // One at a time in this process, and one at a time across every
-  // instance: the database holds the lock while a sweep runs, and its
-  // clock says whether an hour has passed.
-  if (!sweeping)
-    sweeping = (async () => {
-      await asMeter(async (q) => {
-        await q.query("select set_config('app.meter', 'sweep', true)");
-        const { locked } = (
-          await q.query<{ locked: boolean }>(
-            "select pg_try_advisory_xact_lock(hashtext('sweep')) as locked",
-          )
-        ).rows[0]!;
-        if (!locked) return;
-        const { due, now } = (
-          await q.query<{ due: boolean; now: Date }>(
-            "select coalesce(max(to_at) < now() - interval '1 hour', true) as due, now() as now from usage",
-          )
-        ).rows[0]!;
-        if (due) await sweep(now);
-      });
-    })()
-      .catch((err) => console.error(`sweep: ${(err as Error).message}`))
+// One sweep at a time in this process, and one at a time across every
+// instance: the database holds the lock while a sweep runs. `onlyIfDue`
+// asks its clock whether an hour has passed, which is what a page look
+// wants; the cron sweeps whenever it is called, holding the same lock.
+let sweeping: Promise<number> | null = null;
+let sweepingDueOnly = true;
+function swept(onlyIfDue: boolean): Promise<number> {
+  // A sweep the cron asked for is not answered by one a page look started
+  // and the clock may refuse: it waits for that to finish and then runs.
+  if (sweeping && sweepingDueOnly && !onlyIfDue)
+    return sweeping.then(() => swept(false));
+  if (!sweeping) {
+    sweepingDueOnly = onlyIfDue;
+    sweeping = asMeter(async (q) => {
+      await q.query("select set_config('app.meter', 'sweep', true)");
+      const { locked } = (
+        await q.query<{ locked: boolean }>(
+          "select pg_try_advisory_xact_lock(hashtext('sweep')) as locked",
+        )
+      ).rows[0]!;
+      if (!locked) return 0;
+      const { due, now } = (
+        await q.query<{ due: boolean; now: Date }>(
+          "select coalesce(max(to_at) < now() - interval '1 hour', true) as due, now() as now from usage",
+        )
+      ).rows[0]!;
+      return onlyIfDue && !due ? 0 : sweep(now);
+    })
+      .catch((err) => {
+        console.error(`sweep: ${(err as Error).message}`);
+        return 0;
+      })
       .finally(() => {
         sweeping = null;
       });
+  }
   return sweeping;
 }
+
+// Runs the sweep if none has run for an hour: from the page, so every
+// environment sweeps, cron or not.
+export const sweepIfDue = (): Promise<number> => swept(true);
+
+// Runs it now, for the cron, holding the same lock.
+export const sweepNow = (): Promise<number> => swept(false);
 
 // Fly's inventory against ours: a machine or volume in our app that no row
 // knows is an incident, said loudly; a volume a row names that Fly no
@@ -334,9 +351,35 @@ async function reconcile(): Promise<void> {
     fly.volumes(),
   ]);
   const known = await knownComputers();
-  for (const m of machines)
-    if ((m.name ?? "").startsWith(`${prefix}c-`) && !known.machines.has(m.id))
-      console.error(`incident: Fly machine ${m.id} (${m.name}) is unrecorded`);
+  // A machine's name carries only the first eight characters of the
+  // computer's id, so two computers can want the same name. A name that
+  // more than one machineless computer answers to names none of them.
+  const byName = new Map<string, { orgId: string; id: string } | null>();
+  for (const r of known.machineless) {
+    const name = machineName(r.id);
+    byName.set(name, byName.has(name) ? null : r);
+  }
+  for (const m of machines) {
+    if (!(m.name ?? "").startsWith(`${prefix}c-`) || known.machines.has(m.id))
+      continue;
+    console.error(`incident: Fly machine ${m.id} (${m.name}) is unrecorded`);
+    // Its name names one computer with no machine: this is a build that
+    // was cut off before it could be recorded, and it is adopted rather
+    // than remade. A name that names two, or none, is a machine nobody
+    // can safely be given, and it goes — adopting it into the wrong row
+    // would hand one person another's filesystem.
+    const owner = byName.get(m.name!);
+    const adopted = owner && (await setMachine(owner.orgId, owner.id, m.id));
+    if (adopted) {
+      console.error(`Fly machine ${m.id} adopted by ${owner.id}`);
+      continue;
+    }
+    // The list was read a moment ago. A build that recorded this machine
+    // since is why the adoption failed, and destroying it now would take
+    // away a machine somebody's row is pointing at.
+    if (await machineIsKnown(m.id)) continue;
+    await fly.destroyMachine(m.id).catch(unpaid("machine"));
+  }
   for (const v of volumes)
     if (
       v.name.startsWith(`${prefix.replaceAll("-", "_")}c_`) &&
@@ -355,7 +398,7 @@ async function reconcile(): Promise<void> {
 // it upholds each computer — what Fly did to it is on the record, one that
 // should be running is, one that should not is stopped — and lets go of
 // uploads nobody finished.
-export async function sweep(now = new Date()): Promise<number> {
+async function sweep(now = new Date()): Promise<number> {
   await reconcile().catch((err) =>
     console.error(`reconcile: ${(err as Error).message}`),
   );
@@ -376,10 +419,9 @@ export async function sweep(now = new Date()): Promise<number> {
     // One org, or one machine, failing does not stop the rest.
     try {
       if (deployment.computers.kind !== "none" && orgs.includes(orgId)) {
-        const on = await computersAllowedIn(orgId);
         for (const c of await computersIn(orgId))
           try {
-            await upholdIn(orgId, c, on);
+            await upholdIn(orgId, c);
           } catch (err) {
             console.error(`sweep ${c.id}: ${(err as Error).message}`);
           }
@@ -422,30 +464,54 @@ async function append(q: Query, orgId: string, userId: string, now: Date) {
   const fresh = now.getTime() - 3600_000;
   let n = 0;
   for (const t of new Set([fresh, ...lasts.values()])) {
-    const from = new Date(t);
+    let from = new Date(t);
     if (seconds(from, now) <= 0) continue;
-    const measures = (await measure(q, userId, from, now)).filter(
-      (m) => (lasts.get(m.resource) ?? fresh) === t,
-    );
-    for (const m of measures) {
-      await q.query(
-        "insert into usage (org_id, user_id, resource, unit, quantity, price, cost, from_at, to_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict do nothing",
-        [
-          orgId,
-          userId,
-          m.resource,
-          m.unit,
-          m.quantity,
-          m.price,
-          m.quantity * m.price,
-          m.from,
-          now,
-        ],
+    for (const to of ends(from, now)) {
+      const measures = (await measure(q, userId, from, to)).filter(
+        (m) => (lasts.get(m.resource) ?? fresh) === t,
       );
-      n++;
+      for (const m of measures) {
+        // A stretch that begins at or after this segment's end — a disk
+        // made after the turn of a month, when the row before it is older
+        // — belongs to the next segment, never to a row that starts after
+        // it ends.
+        if (m.from >= to) continue;
+        await q.query(
+          "insert into usage (org_id, user_id, resource, unit, quantity, price, cost, from_at, to_at) values ($1, $2, $3, $4, $5, $6, $7, $8, $9) on conflict do nothing",
+          [
+            orgId,
+            userId,
+            m.resource,
+            m.unit,
+            m.quantity,
+            m.price,
+            m.quantity * m.price,
+            m.from,
+            to,
+          ],
+        );
+        n++;
+      }
+      from = to;
     }
   }
   return n;
+}
+
+// Where a window is cut: the turn of every month it crosses, and its end.
+// A row that stays inside one month is that month's whole, so no figure
+// has to guess how much of a row fell after a date.
+function ends(from: Date, to: Date): Date[] {
+  const out: Date[] = [];
+  const turn = new Date(
+    Date.UTC(from.getUTCFullYear(), from.getUTCMonth() + 1, 1),
+  );
+  while (turn < to) {
+    out.push(new Date(turn));
+    turn.setUTCMonth(turn.getUTCMonth() + 1);
+  }
+  out.push(to);
+  return out;
 }
 
 // One member, now: what they cost until this moment, before their rows go.
@@ -462,7 +528,7 @@ export type Live = {
   month: number;
   // Dollars per hour: what everything ticking costs at this moment.
   ratePerHour: number;
-  active: { resource: Resource; what: string; ratePerHour: number }[];
+  active: { resource: Resource; ratePerHour: number }[];
 };
 
 // What one person costs right now.
@@ -478,7 +544,10 @@ export async function live(
     const billed = Number(
       (
         await q.query<{ cost: string }>(
-          "select coalesce(sum(cost * extract(epoch from (to_at - greatest(from_at, $2))) / nullif(extract(epoch from (to_at - from_at)), 0)), 0) as cost from usage where user_id = $1 and to_at > $2",
+          // A row written before the meter cut its rows at the turn of a
+          // month can straddle it, and counts the share of itself that
+          // falls in the month.
+          "select coalesce(sum(cost * case when from_at >= $2 then 1 else coalesce(extract(epoch from (to_at - $2)) / nullif(extract(epoch from (to_at - from_at)), 0), 1) end), 0) as cost from usage where user_id = $1 and to_at > $2",
           [p.userId, monthStart],
         )
       ).rows[0]!.cost,
@@ -497,7 +566,9 @@ export async function live(
     const brain = await brainBytes(q, p.userId);
     let unbilled = 0;
     for (const t of new Set([monthStart.getTime(), ...lasts.values()]))
-      unbilled += (await measure(q, p.userId, new Date(t), now, brain))
+      unbilled += (
+        await measure(q, p.userId, later(new Date(t), monthStart), now, brain)
+      )
         .filter((m) => (lasts.get(m.resource) ?? monthStart.getTime()) === t)
         .reduce((n, m) => n + m.quantity * m.price, 0);
     // What each resource is doing at this instant, from a short window: a
@@ -514,16 +585,6 @@ export async function live(
       .filter((m) => m.live > 0)
       .map((m) => ({
         resource: m.resource,
-        what:
-          m.resource === "compute"
-            ? `${sizeName(m.liveUnit)} running`
-            : m.resource === "rootfs"
-              ? `stopped machine's ${m.live} GB image`
-              : m.resource === "disk"
-                ? `${m.live} GB disk`
-                : m.resource === "bucket"
-                  ? `${human(m.live)} in the bucket`
-                  : `${human(m.live)} of brain`,
         ratePerHour: (m.resource === "compute" ? 1 : m.live) * m.price * 3600,
       }));
     return {
@@ -534,13 +595,6 @@ export async function live(
     };
   });
 }
-
-const human = (bytes: number) =>
-  bytes < 1e6
-    ? `${(bytes / 1e3).toFixed(1)} KB`
-    : bytes < 1e9
-      ? `${(bytes / 1e6).toFixed(1)} MB`
-      : `${(bytes / 1e9).toFixed(2)} GB`;
 
 // A quantity in a unit people read.
 export function amount(resource: string, unit: string, quantity: number) {

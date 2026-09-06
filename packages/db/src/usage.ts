@@ -15,6 +15,9 @@ export type Line = {
 
 // Every line of the org's usage since a moment, by member and resource,
 // with the member's name where they are still one; or one member's lines.
+// The meter cuts a row at the turn of a month, so a row that ended after
+// the moment lies wholly after it; one written before it did counts the
+// share of itself that falls after.
 async function lines(
   p: Principal,
   since: Date,
@@ -26,8 +29,15 @@ async function lines(
       (
         await q.query<Line>(
           `select u.user_id as "userId", m.name, u.resource, u.unit,
-                  sum(u.quantity)::float8 as quantity, sum(u.cost)::float8 as cost
-             from usage u left join users m on m.id = u.user_id
+                  sum(u.quantity * share)::float8 as quantity,
+                  sum(u.cost * share)::float8 as cost
+             from usage u
+             left join users m on m.id = u.user_id
+             cross join lateral (
+               select case when u.from_at >= $1 then 1 else coalesce(
+                 extract(epoch from (u.to_at - $1))
+                 / nullif(extract(epoch from (u.to_at - u.from_at)), 0), 1) end as share
+             ) s
             where u.to_at > $1 and ($2::uuid is null or u.user_id = $2)
             group by u.user_id, m.name, u.resource, u.unit
             order by m.name nulls last, u.resource`,

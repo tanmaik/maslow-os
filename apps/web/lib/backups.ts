@@ -74,10 +74,21 @@ export async function partUrl(
   partNumber: number,
 ): Promise<string | null> {
   const b = await backupInProgress(m, id);
-  // No more parts than the disk could fill, at the machine's part size.
-  const most = Math.ceil((m.diskGb * 1e9 * 2) / (16 * 1024 * 1024));
-  if (!b || !(partNumber >= 1 && partNumber <= Math.min(10000, most)))
-    return null;
+  // No more parts than the disk could fill, at the size the machine cuts
+  // them: sixteen mebibytes, or larger on a disk too big to fit in ten
+  // thousand of those.
+  const MIN_PART = 16 * 1024 * 1024;
+  const most = Math.min(
+    10_000,
+    Math.ceil(
+      (m.diskGb * 1e9 * 2) /
+        Math.max(
+          MIN_PART,
+          Math.ceil((m.diskGb * 1e9 * 2) / 10_000 / MIN_PART) * MIN_PART,
+        ),
+    ),
+  );
+  if (!b || !(partNumber >= 1 && partNumber <= most)) return null;
   if (deployment.storage.kind === "s3")
     return presign(deployment.storage, "PUT", b.key, {
       partNumber: String(partNumber),

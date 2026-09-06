@@ -56,7 +56,9 @@ memory 41% used" — and, for a day after a size-up, "sized up to 2 GB at
 
 **The meter follows.** Every event carries the size it happened at, so each
 running stretch is priced at the size that began it, and a month that
-spans a resize is right.
+spans a resize is right. The sweep cuts its rows at the turn of a month, so
+a month's figure is the sum of that month's rows and never a guessed share
+of one that straddles the date.
 
 Reversed: up only, and only when a look found the machine off (2026-09-04,
 earlier the same day).

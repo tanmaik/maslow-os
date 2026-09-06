@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { asEmail, asOrg, asSignIn } from "./index.ts";
+import { asEmail, asOrg, asSignIn, type Query } from "./index.ts";
 
 // What an identity provider vouches for. A last name is optional.
 export type Identity = {
@@ -64,16 +64,19 @@ export async function signIn(identity: Identity): Promise<Principal> {
   }
 }
 
+// A person as the rows hold them, before any org is known.
+type Person = {
+  id: string;
+  firstName: string;
+  lastName: string | null;
+  avatar_key: string | null;
+};
+
 async function admit(identity: Identity): Promise<Principal> {
   const email = identity.email.toLowerCase();
   const { person, invitedTo } = await asEmail(email, async (q) => {
     let person = (
-      await q.query<{
-        id: string;
-        firstName: string;
-        lastName: string | null;
-        avatar_key: string | null;
-      }>(
+      await q.query<Person>(
         'select id, first_name as "firstName", last_name as "lastName", avatar_key from people where email = $1',
         [email],
       )
@@ -132,43 +135,123 @@ async function admit(identity: Identity): Promise<Principal> {
     });
   }
 
-  // Land in the newest membership, or found an org of one. The email is
-  // locked while deciding, so sign-ins racing for one email found one org.
+  // Land in the newest membership, or found an org of one. Deciding and
+  // founding happen under one hold of the email's lock, so sign-ins racing
+  // for one email land in one org rather than founding two.
   const orgId = randomUUID();
   const userId = randomUUID();
   return asSignIn(email, orgId, async (q) => {
     await q.query("select pg_advisory_xact_lock(hashtext($1))", [email]);
-    const m = (
+    const landed = (
       await q.query<{ id: string; org_id: string; role: Role }>(
         "select id, org_id, role from users where email = $1 order by created_at desc limit 1",
         [email],
       )
     ).rows[0];
-    if (m)
+    if (landed)
       return {
         personId: person.id,
-        orgId: m.org_id,
-        userId: m.id,
-        role: m.role,
+        orgId: landed.org_id,
+        userId: landed.id,
+        role: landed.role,
       };
-    await q.query(
-      "insert into orgs (id, slug, name, principal_id) values ($1, $2, $3, $4)",
-      [orgId, orgId, fullName(person), userId],
-    );
-    await q.query(
-      "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, $7, 'owner')",
-      [
-        userId,
-        orgId,
-        person.id,
-        email,
-        person.firstName,
-        person.lastName,
-        person.avatar_key,
-      ],
-    );
-    return { personId: person.id, orgId, userId, role: "owner" };
+    return found(q, person, email, orgId, userId);
   });
+}
+
+// The org and the membership themselves, on a connection that already
+// holds the email's lock.
+async function found(
+  q: Query,
+  person: Pick<Person, "id" | "firstName" | "lastName" | "avatar_key">,
+  email: string,
+  orgId: string,
+  userId: string,
+  name?: string,
+): Promise<Principal> {
+  await q.query(
+    "insert into orgs (id, slug, name, principal_id) values ($1, $2, $3, $4)",
+    [orgId, orgId, name?.trim() || fullName(person), userId],
+  );
+  await q.query(
+    "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, $7, 'owner')",
+    [
+      userId,
+      orgId,
+      person.id,
+      email,
+      person.firstName,
+      person.lastName,
+      person.avatar_key,
+    ],
+  );
+  return { personId: person.id, orgId, userId, role: "owner" as const };
+}
+
+// A person founds an org: the org, and their membership in it as its owner
+// and its principal. Named as they asked, or after them. Under the same
+// email lock admission takes, so two founding at once make one org — the
+// first sign-in's, or the second tab's, never both.
+export async function foundOrg(
+  person: Pick<Person, "id" | "firstName" | "lastName" | "avatar_key">,
+  email: string,
+  name?: string,
+): Promise<Principal> {
+  const orgId = randomUUID();
+  const userId = randomUUID();
+  const wanted = name?.trim() || fullName(person);
+  return asSignIn(email, orgId, async (q) => {
+    await q.query("select pg_advisory_xact_lock(hashtext($1))", [email]);
+    // A second click, a retry, a second tab: an org of this name founded
+    // by this person a moment ago is the one they asked for, not a reason
+    // to make another. Each candidate's name is read inside its own org,
+    // since a scope sees one org's rows.
+    const lately = (
+      await q.query<{ id: string; org_id: string }>(
+        "select id, org_id from users where email = $1 and role = 'owner' and created_at > now() - interval '1 minute' order by created_at desc",
+        [email],
+      )
+    ).rows;
+    for (const r of lately) {
+      await q.query("select set_config('app.org_id', $1, true)", [r.org_id]);
+      const same = (
+        await q.query(
+          "select 1 from orgs where principal_id = $1 and name = $2",
+          [r.id, wanted],
+        )
+      ).rowCount;
+      if (same) {
+        return {
+          personId: person.id,
+          orgId: r.org_id,
+          userId: r.id,
+          role: "owner" as const,
+        };
+      }
+    }
+    await q.query("select set_config('app.org_id', $1, true)", [orgId]);
+    return found(q, person, email, orgId, userId, wanted);
+  });
+}
+
+// The person behind a membership, and the address they sign in with, for
+// founding another org of their own.
+export async function personOf(
+  p: Principal,
+): Promise<{ person: Person; email: string } | null> {
+  const email = await emailOf(p);
+  if (!email) return null;
+  const person = await asEmail(
+    email,
+    async (q) =>
+      (
+        await q.query<Person>(
+          'select id, first_name as "firstName", last_name as "lastName", avatar_key from people where email = $1',
+          [email],
+        )
+      ).rows[0],
+  );
+  return person ? { person, email } : null;
 }
 
 // Every org the person is in, newest first. Memberships are read as the

@@ -7,13 +7,13 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { dollars, rate, SOURCE } from "@/lib/prices";
+import { dollars, rate, SOURCE, spent } from "@/lib/prices";
 
 type Live = {
   at: string;
   month: number;
   ratePerHour: number;
-  active: { resource: string; what: string; ratePerHour: number }[];
+  active: { resource: string; ratePerHour: number }[];
 };
 
 // What the month comes to if the rate of the last minute holds.
@@ -23,9 +23,10 @@ const projected = (month: number, ratePerHour: number) => {
   return month + (ratePerHour * (end - now.getTime())) / 3600_000;
 };
 
-// The cost of being here, as one figure: the month at this rate. Reads
-// the meter every ten seconds; hover for the month so far, the rate, and
-// the top three sources.
+// The cost of being here, as one labelled figure: what this person's
+// computer, disk, bucket and brain would come to this month at this rate.
+// Reads the meter every ten seconds; hover for what it counts, the month
+// so far, the rate and the top three sources. Nobody is billed yet.
 export function LiveMeter() {
   const [live, setLive] = useState<Live | null>(null);
 
@@ -71,13 +72,12 @@ export function LiveMeter() {
           />
         }
       >
-        {estimate < 0.005
-          ? "under 1¢ / month"
-          : `≈ ${dollars(estimate)} / month`}
+        {`Yours · ≈ ${dollars(estimate)} / month`}
       </HoverCardTrigger>
-      <HoverCardContent align="end" className="w-64 text-sm">
+      <HoverCardContent align="start" side="bottom" className="w-72 text-sm">
+        <p className="mb-2 font-medium">What you are using</p>
         <ul className="space-y-1">
-          {row("So far this month", dollars(live.month))}
+          {row("So far this month", spent(live.month))}
           {row("Right now", rate(live.ratePerHour))}
           {top.map((a) =>
             row(
@@ -86,6 +86,9 @@ export function LiveMeter() {
             ),
           )}
         </ul>
+        <p className="text-muted-foreground mt-2 text-xs">
+          Nothing is charged yet.
+        </p>
       </HoverCardContent>
     </HoverCard>
   );

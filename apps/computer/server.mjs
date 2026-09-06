@@ -53,7 +53,17 @@ let busy = OS_ROOT ? "Your computer is being set up; a minute." : null;
 // landing says how it went: beside the report.
 const BACKUP_URL = REPORT_URL.replace(/\/report$/, "/backup");
 const LANDED_URL = REPORT_URL.replace(/\/report$/, "/landed");
-const PART = 16 * 1024 * 1024;
+// A store takes ten thousand parts at most, so a part is sixteen
+// mebibytes or, on a disk too large for that, whatever size lets a full
+// one — twice over, since an archive can be no bigger — fit in them.
+const PARTS = 10_000;
+const MIN_PART = 16 * 1024 * 1024;
+// The largest volume the app will extend a disk to. A capacity that
+// cannot be read is taken to be this, since parts are only ever too small
+// once — at part 10,001, with the archive half sent.
+const MAX_DISK_BYTES = 500 * 1e9;
+const partSize = (total) =>
+  Math.max(MIN_PART, Math.ceil(total / PARTS / MIN_PART) * MIN_PART);
 // How we speak to the app: as this machine, with its secret.
 const AS_ME = {
   authorization: `Bearer ${COMPUTER_SECRET}`,
@@ -91,14 +101,15 @@ async function disk() {
 // What the machine has and needs, each where the kernel says it, left out
 // where it does not: memory in bytes and how much is available, how many
 // processes were killed for want of it since boot, the one-minute load
-// over its cores, and how many terminals are open on it. A laptop's kernel
-// speaks for the laptop, not the machine it stands in for, which says what
-// it is told to.
+// over its cores, how many terminals are open on it and how many files are
+// still landing. A laptop's kernel speaks for the laptop, not the machine
+// it stands in for, which says what it is told to.
 let pretend = null;
 async function need() {
   const out = {
     load: os.loadavg()[0] / os.availableParallelism(),
     terminals: [...sessions.values()].filter((s) => s.ws).length,
+    landings: landings.size,
   };
   if (DISK_GB) {
     if (pretend) {
@@ -316,6 +327,8 @@ async function backupCall(step, body) {
 async function backup() {
   const { id } = await backupCall("begin", {});
   const parts = [];
+  const { total } = await disk();
+  const PART = partSize(total ? total * 2 : MAX_DISK_BYTES);
   const tar = spawn("tar", ["-C", ROOT, "-czf", "-", "."], {
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -645,6 +658,10 @@ async function pull(id, target, url, size, landing = { landed: false }) {
 // whole size is held against the disk's room until the file is in place,
 // so pulls accepted together cannot together overrun it; on a real disk
 // the bytes written so far count twice until then, which errs safe.
+// What the operating system last measured, and for how long that stands.
+const OS_SIZE_FOR = 10 * 60_000;
+let osSize = { bytes: 0, at: 0 };
+
 const landings = new Map();
 // The same landings by the id the app gave each, so an id owns the file
 // it is putting in place and no second call can take its name or its
@@ -813,17 +830,23 @@ async function handle(req, res) {
 
   // What is on the disk, biggest first: every folder and file under the
   // root by what it holds, a couple of levels down, and where the
-  // operating system lives, what it and its installs take.
+  // operating system lives, what it and its installs take. One budget of
+  // entries covers the whole reading, so no part of it can walk a whole
+  // Debian unbounded; the operating system's own size is remembered for a
+  // while, since it changes with installs, not with edits.
   if (url.pathname === "/fs/du" && req.method === "GET") {
     const sizes = new Map();
     let budget = 200_000;
+    const spend = () => {
+      if (budget-- <= 0)
+        throw new Refused(413, "The disk holds more than can be sized here.");
+    };
     const walk = async (dir) => {
       let total = 0;
       for (const e of await fs
         .readdir(dir, { withFileTypes: true })
         .catch(() => [])) {
-        if (budget-- <= 0)
-          throw new Refused(413, "The disk holds more than can be sized here.");
+        spend();
         const p = path.join(dir, e.name);
         if (e.isSymbolicLink()) continue;
         if (e.isDirectory()) total += await walk(p);
@@ -844,6 +867,7 @@ async function handle(req, res) {
       for (const e of await fs
         .readdir(dir, { withFileTypes: true })
         .catch(() => [])) {
+        spend();
         const p = path.join(dir, e.name);
         if (e.isFile())
           files.push({
@@ -854,13 +878,14 @@ async function handle(req, res) {
       }
     };
     await findFiles(ROOT, 0);
-    let os = 0;
-    if (OS_ROOT) {
+    let os = osSize.at > Date.now() - OS_SIZE_FOR ? osSize.bytes : 0;
+    if (OS_ROOT && !os) {
       const walkOs = async (dir) => {
         let total = 0;
         for (const e of await fs
           .readdir(dir, { withFileTypes: true })
           .catch(() => [])) {
+          spend();
           const p = path.join(dir, e.name);
           if (
             p === ROOT ||
@@ -875,6 +900,7 @@ async function handle(req, res) {
         return total;
       };
       os = await walkOs(OS_ROOT);
+      osSize = { bytes: os, at: Date.now() };
     }
     return json(200, {
       home,
@@ -894,8 +920,25 @@ async function handle(req, res) {
   // from now on — the share of memory free, the load over its cores, the
   // count killed — and to say it at once.
   if (url.pathname === "/fs/pressure" && req.method === "POST" && DISK_GB) {
-    const { free = 0.03, load = 0.1, oom = 0 } = await readJson(req);
-    pretend = { free, load, oom };
+    const b = await readJson(req);
+    // A figure it would not report of itself is refused whole, so what is
+    // pretended is always something the app takes.
+    const num = (x, fallback, most = Infinity) =>
+      x === undefined
+        ? fallback
+        : Number.isFinite(x) && x >= 0 && x <= most
+          ? x
+          : null;
+    const said = {
+      free: num(b.free, 0.03, 1),
+      load: num(b.load, 0.1),
+      oom: num(b.oom, 0),
+    };
+    if (Object.values(said).some((v) => v === null))
+      return json(400, {
+        error: "free, load and oom are numbers no less than zero",
+      });
+    pretend = said;
     await report();
     return json(200, { ok: true });
   }
@@ -1433,6 +1476,8 @@ async function reset(backedUp) {
   // home is not taken out from under one.
   if (landings.size || restoring) throw new Refused(409, LANDING_NOW);
   busy = "Your computer's system is being reset; a minute.";
+  // The system about to go is not the one to report the size of.
+  osSize = { bytes: 0, at: 0 };
   try {
     for (const s of sessions.values()) quietly(() => s.shell.kill());
     for (const d of ["dev", "sys", "proc"])

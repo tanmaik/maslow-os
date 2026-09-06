@@ -22,8 +22,18 @@ import {
 
 // What can be done to the computer as a whole: back the home up now, reset
 // the system around it, or power it off. A reset and a power-off ask first,
-// and say what stays.
-export function ComputerActions({ at }: { at: string }) {
+// and say what stays. An item that would be refused is not offered:
+// `backingUp` says one is on its way, `backedUp` how long ago the last one
+// finished, since one an hour is the limit.
+export function ComputerActions({
+  at,
+  backedUp,
+  backingUp,
+}: {
+  at: string;
+  backedUp: string | null;
+  backingUp: boolean;
+}) {
   const [asking, setAsking] = useState<"reset" | "off" | null>(null);
   return (
     <>
@@ -35,9 +45,18 @@ export function ComputerActions({ at }: { at: string }) {
           Computer
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem render={<button type="submit" form="backup-now" />}>
-            Back up now
-          </DropdownMenuItem>
+          {backingUp ? (
+            <DropdownMenuItem disabled>Backing up…</DropdownMenuItem>
+          ) : backedUp ? (
+            <DropdownMenuItem disabled>Backed up {backedUp}</DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem
+              nativeButton={false}
+              render={<button type="submit" form="backup-now" />}
+            >
+              Back up now
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={() => setAsking("off")}>
             Power off…
@@ -86,9 +105,10 @@ export function ComputerActions({ at }: { at: string }) {
           <DialogHeader>
             <DialogTitle>Power off your computer?</DialogTitle>
             <DialogDescription>
-              Every shell closes and whatever is running stops. Your disk and
-              files are kept, and nothing but the disk is charged while it is
-              off. Power it on again any time; it takes a minute.
+              Every terminal closes and whatever is running stops. Your disk and
+              files are kept, and the machine costs nothing while it is off —
+              your disk, your backups and your brain are charged as always.
+              Power it on again any time; it takes a minute.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -110,16 +130,18 @@ export function ComputerActions({ at }: { at: string }) {
           <DialogHeader>
             <DialogTitle>Reset the system?</DialogTitle>
             <DialogDescription>
-              Kept: your home folder, which is everything this page shows, with
-              every sign-in, setting and install of your own in it. A backup of
-              it is taken first, unless one was taken within the hour. Replaced:
-              the operating system around it and everything installed into it
-              with apt. It takes a minute or two, and every shell closes.
+              Do this when the system around your files is broken. Your home
+              folder stays — everything this page shows, with your sign-ins and
+              settings in it — and we back it up first, unless a backup from the
+              last hour is already there to fall back on. The operating system
+              around it is replaced with a fresh one, so anything you installed
+              system-wide goes and has to be installed again. It takes a minute
+              or two, and every terminal closes.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setAsking(null)}>
-              Keep it
+              Leave it alone
             </Button>
             <Button variant="destructive" type="submit" form="reset-system">
               Reset the system

@@ -1,5 +1,12 @@
 import type { Principal } from "@placeholder/db/auth";
-import { computersIn } from "@placeholder/db/computers";
+import {
+  computerOfIn,
+  computersAllowedIn,
+  computersIn,
+  leaseIn,
+  principalIn,
+  release,
+} from "@placeholder/db/computers";
 import {
   beginFile,
   claimJoin,
@@ -32,7 +39,7 @@ import { Readable } from "node:stream";
 import path from "node:path";
 
 import type { Machine } from "./backups.ts";
-import { growFor, growIn } from "./computer.ts";
+import { growFor, growHeld } from "./computer.ts";
 import { deployment } from "./deployment.ts";
 import { callIn, disk, DiskError, site, type Pull } from "./disk.ts";
 import { MAX_DISK_GB } from "./fly.ts";
@@ -264,7 +271,7 @@ export async function complete(
       await disk.pull(p, pull);
     } catch (err) {
       if (!(err instanceof DiskError && err.status === 507)) throw err;
-      if (!(await growFor(p))) throw err;
+      if (!(await growFor(p, size))) throw err;
       await disk.pull(p, pull);
     }
   } catch (err) {
@@ -316,14 +323,26 @@ export async function landedOn(
 export async function landStaged(orgId: string, now: Date): Promise<void> {
   const stragglers = await stagedIn(orgId, new Date(now.getTime() - 120_000));
   if (stragglers.length === 0) return;
+  if (!(await computersAllowedIn(orgId))) return;
   const computers = new Map(
     (await computersIn(orgId)).map((c) => [c.userId, c]),
   );
   for (const f of stragglers) {
-    const c = computers.get(f.userId);
-    if (!c?.machineId) continue;
+    const known = computers.get(f.userId);
+    if (!known) continue;
+    // Reaching a machine starts it, so nothing is reached that should not
+    // be running: not an org whose computers are off, not a computer its
+    // person powered off, not a membership that has ended. Each is read on
+    // the row as it is under the lease, so a change committing while the
+    // sweep walks is never overtaken. Busy is the next sweep's business.
+    const held = await leaseIn(orgId, known.id);
+    if (!held) continue;
     const p = { orgId, userId: f.userId } as Principal;
     try {
+      const c = await computerOfIn(orgId, known.id);
+      if (!c?.machineId || c.offAt) continue;
+      if (!(await computersAllowedIn(orgId))) continue;
+      if (!(await principalIn(orgId, c.userId))) continue;
       const { landed } = await callIn<{ landed: boolean }>(
         orgId,
         c,
@@ -367,13 +386,16 @@ export async function landStaged(orgId: string, now: Date): Promise<void> {
           await pull();
         } catch (err) {
           if (!(err instanceof DiskError && err.status === 507)) throw err;
-          if (!(await growIn(orgId, c))) throw err;
+          if (!c.volumeId) throw err;
+          if (!(await growHeld(orgId, c.id, f.size))) throw err;
           await pull();
         }
         break;
       }
     } catch (err) {
       console.error(`landing ${f.id}: ${(err as Error).message}`);
+    } finally {
+      await release(orgId, known.id, held);
     }
   }
 }

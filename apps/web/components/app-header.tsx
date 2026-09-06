@@ -1,6 +1,7 @@
 import { asOrg } from "@placeholder/db";
 import { membershipsOf } from "@placeholder/db/auth";
 
+import { NewOrg } from "@/components/new-org";
 import { Button } from "@/components/ui/button";
 import { principal } from "@/lib/session";
 
@@ -47,6 +48,7 @@ export async function AppHeader() {
             ))}
           </form>
         )}
+        <NewOrg />
       </div>
       <nav className="flex items-center gap-1">
         <Button

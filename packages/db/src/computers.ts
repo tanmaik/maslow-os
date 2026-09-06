@@ -1,16 +1,22 @@
 import { asMachine, asMeter, asOrg, asPerson } from "./index.ts";
+import { allowOn } from "./throttle.ts";
 import type { Principal } from "./auth.ts";
 
 // What a machine last said it had and needed: its memory and the share of
 // it free at each of the last three hours' reports, newest last; what the
 // kernel killed for want of memory since boot; the one-minute load over its
 // cores at each of those reports; how many terminals were open at the last.
+// Each figure carries when it was said, since a report may leave one out
+// and the hours a figure speaks for are its own, not the reports'.
 type Need = {
   at: string;
-  memory?: { total: number; free: number[] };
+  reports?: string[];
+  memory?: { total: number; free: number[]; at?: string[] };
   oom?: number;
   load?: number[];
+  loadAt?: string[];
   terminals?: number;
+  landings?: number;
 };
 
 // What a machine says of itself in one report.
@@ -20,10 +26,12 @@ export type Said = {
   oom?: number;
   load?: number;
   terminals?: number;
+  landings?: number;
 };
 
-// Thirty-six reports, five minutes apart, is three hours.
-export const KEPT = 36;
+// Forty reports, five minutes apart, is three hours and a quarter: enough
+// that three hours of them are in hand even when one arrives late.
+export const KEPT = 40;
 
 export type Computer = {
   id: string;
@@ -87,11 +95,13 @@ export async function setOff(
   id: string,
   off: boolean,
 ): Promise<void> {
-  await asOrg(p.orgId, (q) =>
-    q.query("update computers set off_at = $2 where id = $1", [
-      id,
-      off ? new Date() : null,
-    ]),
+  // Their own and no colleague's, at the database's clock like every other
+  // moment on the row.
+  await asPerson(p, (q) =>
+    q.query(
+      "update computers set off_at = case when $2 then now() end where id = $1 and user_id = $3",
+      [id, off, p.userId],
+    ),
   );
 }
 
@@ -160,12 +170,12 @@ export async function setVolume(
 // Records the machine; false when the row is gone (a purge landed first),
 // in which case the caller must not keep the machine.
 export async function setMachine(
-  p: Principal,
+  orgId: string,
   id: string,
   machineId: string,
 ): Promise<boolean> {
   return asOrg(
-    p.orgId,
+    orgId,
     async (q) =>
       (
         await q.query(
@@ -192,7 +202,7 @@ export type Cause =
   | "short-of-memory"
   | "room-to-spare"
   | "asked-bigger";
-const CAUSES_OF_SIZE: Cause[] = [
+export const CAUSES_OF_SIZE: Cause[] = [
   "out-of-memory",
   "short-of-memory",
   "room-to-spare",
@@ -244,7 +254,8 @@ export async function report(
   machineId: string,
   secret: string,
   said: Said,
-): Promise<{ orgId: string; id: string } | null> {
+  limit: { hits: number; seconds: number },
+): Promise<{ orgId: string; id: string } | "too-often" | null> {
   return asMachine(machineId, secret, async (q) => {
     const c = (
       await q.query<{
@@ -253,22 +264,39 @@ export async function report(
         size: string;
         disk_gb: number;
         need: Need | null;
+        off_at: Date | null;
       }>(
-        "select id, org_id, size, disk_gb, need from computers where machine_id = $1 for update",
+        "select id, org_id, size, disk_gb, need, off_at from computers where machine_id = $1 for update",
         [machineId],
       )
     ).rows[0];
     if (!c) return null;
-    // A metric the report leaves out keeps the history it had.
+    // Whose machine this is decides its allowance, and the allowance is
+    // spent before anything is written, so a report over the limit leaves
+    // no mark at all. Counted on this connection: taking a second one
+    // while this holds the row is how a pool deadlocks on itself.
+    if (!(await allowOn(q, `report:${c.id}`, limit.hits, limit.seconds)))
+      return "too-often" as const;
+    const now = new Date().toISOString();
+    // How many terminals are open, and how many files are landing, are
+    // states, and are kept when a report leaves them out; what the kernel
+    // killed is the report's own count, so one machine's kills never speak
+    // for the hours after them. When each report arrived is kept too, so
+    // three hours of reports can be told from a burst of them.
     const need: Need = {
-      at: new Date().toISOString(),
-      oom: said.oom ?? c.need?.oom,
+      at: now,
+      reports: [...(c.need?.reports ?? []), now].slice(-KEPT),
+      oom: said.oom,
       terminals: said.terminals ?? c.need?.terminals,
+      landings: said.landings ?? c.need?.landings,
       load: c.need?.load,
+      loadAt: c.need?.loadAt,
       memory: c.need?.memory,
     };
-    if (said.load !== undefined)
+    if (said.load !== undefined) {
       need.load = [...(c.need?.load ?? []), said.load].slice(-KEPT);
+      need.loadAt = [...(c.need?.loadAt ?? []), now].slice(-KEPT);
+    }
     if (said.memory)
       need.memory = {
         total: said.memory.total,
@@ -276,6 +304,7 @@ export async function report(
           ...(c.need?.memory?.free ?? []),
           Math.round((said.memory.available / said.memory.total) * 1000) / 1000,
         ].slice(-KEPT),
+        at: [...(c.need?.memory?.at ?? []), now].slice(-KEPT),
       };
     const kept = await q.query(
       "update computers set seen_at = now(), disk_used = $1, disk_total = $2, need = $3 where id = $4 and machine_id = $5",
@@ -289,11 +318,13 @@ export async function report(
     );
     if (!kept.rowCount) return null;
     // A report is proof the machine was running at that moment, for the
-    // meter, whether or not anyone looked.
-    await q.query(
-      "insert into computer_events (org_id, computer_id, kind, size, disk_gb) select org_id, id, 'reported', $2, $3 from computers where id = $1",
-      [c.id, c.size, c.disk_gb],
-    );
+    // meter, whether or not anyone looked — unless the person powered the
+    // computer off, when a report still in flight must not turn it back on.
+    if (!c.off_at)
+      await q.query(
+        "insert into computer_events (org_id, computer_id, kind, size, disk_gb) select org_id, id, 'reported', $2, $3 from computers where id = $1 on conflict do nothing",
+        [c.id, c.size, c.disk_gb],
+      );
     return { orgId: c.org_id, id: c.id };
   });
 }
@@ -371,11 +402,11 @@ export async function release(
 
 // The filesystem grew: the new size is what the meter charges from now.
 export async function setDiskGb(
-  p: Principal,
+  orgId: string,
   c: Computer,
   diskGb: number,
 ): Promise<void> {
-  await asOrg(p.orgId, async (q) => {
+  await asOrg(orgId, async (q) => {
     await q.query("update computers set disk_gb = $1 where id = $2", [
       diskGb,
       c.id,
@@ -406,24 +437,66 @@ export async function resize(
   });
 }
 
-// Remembers the state Fly reports. A change is an event; the same state
-// seen twice, by two readers at once, is one.
+// The states the meter replays: everything that says a machine was on or
+// off, whoever said it.
+const METERED = [
+  "started",
+  "reported",
+  "start",
+  "stopped",
+  "suspended",
+  "stop",
+  "failed",
+  "destroyed",
+];
+
+// Remembers the state Fly reports, while the row still names the machine
+// that state is of, so a late reading cannot speak for the next machine. A
+// change the meter reads is an event, judged against the last one written
+// rather than the column, so a state noted twice around a state nobody
+// noted still closes what it opened; the same state seen twice by two
+// readers is one.
 export async function noteState(
   orgId: string,
   c: Computer,
   state: string,
 ): Promise<void> {
   await asOrg(orgId, async (q) => {
-    const changed = await q.query(
-      "update computers set state = $1 where id = $2 and state is distinct from $1",
-      [state, c.id],
+    // The update holds the row for the rest of the transaction, so two
+    // readers noting the same state serialise and the second sees what the
+    // first wrote. A request that no longer speaks for the row's machine
+    // touches nothing and says nothing.
+    const kept = await q.query(
+      "update computers set state = $1 where id = $2 and machine_id is not distinct from $3",
+      [state, c.id, c.machineId],
     );
-    if (!changed.rowCount) return;
+    if (!kept.rowCount) return;
+    // Only what the meter replays is an event; a state it does not read is
+    // the column's business alone.
+    if (!METERED.includes(state)) return;
     await q.query(
-      "insert into computer_events (computer_id, kind, size, disk_gb) values ($1, $2, $3, $4)",
-      [c.id, state, c.size, c.diskGb],
+      `insert into computer_events (computer_id, kind, size, disk_gb)
+       select $1, $2, $3, $4
+       where (select kind from computer_events where computer_id = $1 and kind = any($5) order by at desc, id desc limit 1) is distinct from $2
+       on conflict do nothing`,
+      [c.id, state, c.size, c.diskGb, METERED],
     );
   });
+}
+
+// How many times the disk has been extended in the last day, for the
+// ceiling on how fast one can grow.
+export async function growthsToday(orgId: string, id: string): Promise<number> {
+  return asOrg(
+    orgId,
+    async (q) =>
+      (
+        await q.query<{ n: number }>(
+          "select count(*)::int as n from computer_events where computer_id = $1 and kind = 'extended' and at > now() - interval '1 day'",
+          [id],
+        )
+      ).rows[0]!.n,
+  );
 }
 
 // Fly's own record of a machine's starts and stops, each once, at the
@@ -464,10 +537,12 @@ export async function computerOfIn(
   );
 }
 
-// Every machine and volume any org's rows name, for the sweep.
+// Every machine and volume any org's rows name, and every computer that
+// names no machine, for the sweep.
 export async function knownComputers(): Promise<{
   machines: Set<string>;
   volumes: Map<string, { orgId: string; id: string }>;
+  machineless: { orgId: string; id: string }[];
 }> {
   return asMeter(async (q) => {
     await q.query("select set_config('app.meter', 'sweep', true)");
@@ -490,7 +565,25 @@ export async function knownComputers(): Promise<{
             : [],
         ),
       ),
+      machineless: rows
+        .filter((r) => !r.machine_id)
+        .map((r) => ({ orgId: r.org_id, id: r.id })),
     };
+  });
+}
+
+// Whether any computer names this machine, for the sweep deciding whether
+// an unrecorded one is really unrecorded.
+export async function machineIsKnown(machineId: string): Promise<boolean> {
+  return asMeter(async (q) => {
+    await q.query("select set_config('app.meter', 'sweep', true)");
+    return Boolean(
+      (
+        await q.query("select 1 from computers where machine_id = $1", [
+          machineId,
+        ])
+      ).rowCount,
+    );
   });
 }
 
