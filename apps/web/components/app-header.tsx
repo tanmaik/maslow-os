@@ -1,5 +1,6 @@
 import { asOrg } from "@placeholder/db";
-import { membershipsOf } from "@placeholder/db/auth";
+import { membershipsByEmail } from "@placeholder/db/auth";
+import Link from "next/link";
 
 import { NewOrg } from "@/components/new-org";
 import { Button } from "@/components/ui/button";
@@ -21,16 +22,16 @@ export async function AppHeader() {
         )
       ).rows[0]?.name,
     })),
-    membershipsOf(p),
+    membershipsByEmail(p.email),
   ]);
   const others = memberships.filter((m) => m.userId !== p.userId);
 
   return (
     <header className="mb-6 flex h-8 items-center justify-between gap-2 overflow-x-auto whitespace-nowrap">
       <div className="flex items-center gap-1">
-        <a href="/" className="px-2 text-base font-semibold">
+        <Link href="/" className="px-2 text-base font-semibold">
           {orgName}
-        </a>
+        </Link>
         {others.length > 0 && (
           <form action="/auth/switch" method="post" className="flex gap-1">
             {others.map((m) => (
@@ -55,7 +56,7 @@ export async function AppHeader() {
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<a href="/brain" />}
+          render={<Link href="/brain" />}
         >
           Brain
         </Button>
@@ -63,7 +64,7 @@ export async function AppHeader() {
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<a href="/settings" />}
+          render={<Link href="/settings" />}
         >
           Settings
         </Button>

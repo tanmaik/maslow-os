@@ -252,6 +252,12 @@ button, input, dialog or table, and no other component library. Styling is
 Tailwind on shadcn's theme tokens. The typeface is the system one; no font is
 fetched from anywhere.
 
+A click shows the next page at once. Every link is `next/link`, so a click
+swaps only what changed and the page it points at is fetched before the
+click; a `loading.tsx` gives a page its shape while its rows are read. What
+a page does not need to show its first row — the graph beside the records —
+is fetched after the page is on screen, never carried inside it.
+
 ## Metering and billing
 
 Every unit of consumption is recorded from the first day — bytes held in

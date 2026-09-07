@@ -44,8 +44,8 @@ which is also the only point WorkOS charges per org.
 
 Admission needs to find a person by email before any org is known. Rather than
 a privileged path, a second policy on `users` and `invitations` lets a
-connection that names `app.email` see the rows carrying that email, and nothing
-else. Settings are the app's claims; policies exist so a `where` cannot be
+connection that names `app.email` see the rows carrying that email and the
+names of the orgs those memberships are in, and nothing else. Settings are the app's claims; policies exist so a `where` cannot be
 forgotten, not to defend against the app.
 
 ## No name is asked for

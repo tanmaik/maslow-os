@@ -1,4 +1,5 @@
 import { asOrg } from "@placeholder/db";
+import Link from "next/link";
 
 import { after } from "next/server";
 
@@ -40,12 +41,12 @@ export default async function Page({
       <p className="text-muted-foreground">
         {members} {members === 1 ? "member" : "members"}
         {me && ` · you are ${me.name}`}. Invite people and manage the org in{" "}
-        <a href="/settings" className="underline">
+        <Link href="/settings" className="underline">
           settings
-        </a>
+        </Link>
         .
       </p>
-      <Button nativeButton={false} render={<a href="/brain" />}>
+      <Button nativeButton={false} render={<Link href="/brain" />}>
         Open the brain
       </Button>
     </main>

@@ -1,6 +1,5 @@
 import {
   aliasesOf,
-  catalog,
   edgesOf,
   get,
   graph,
@@ -13,7 +12,8 @@ import {
   type Event,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
-import { groupsOf } from "@placeholder/db/groups";
+import { groupsIn } from "@placeholder/db/groups";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { DateField } from "@/components/date-field";
@@ -47,7 +47,7 @@ import { FieldInputs } from "../../fields";
 import { authorText, cell, percent, recordHref, verbText } from "../../format";
 import { BrainGraph } from "../../graph/lazy";
 import { Split } from "../../graph/split";
-import { peopleOf } from "../../people";
+import { vocabulary } from "../../catalog";
 import { Sharing } from "../../sharing";
 import { TypeIcon, TypeMark } from "../../type-icon";
 
@@ -63,66 +63,62 @@ export default async function Page({
   if (!p) redirect("/");
   const { id } = await params;
   if (!isId(id)) notFound();
-  const found = await asPerson(p, async (db) => {
-    const [record] = await get(db, [id]);
-    if (!record) return null;
-    const aliases = new Set(await aliasesOf(db, id));
-    const edges = await edgesOf(db, id);
-    const others = await get(
-      db,
-      [...new Set(edges.flatMap((e) => [e.fromId, e.toId]))].filter(
-        (x) => !aliases.has(x),
-      ),
-    );
-    // The live record at the end of the chain of merges, if this is not it.
-    let winner = record.mergedInto
-      ? (await get(db, [record.mergedInto]))[0]
-      : undefined;
-    while (winner?.mergedInto) {
-      winner = (await get(db, [winner.mergedInto]))[0];
-    }
-    // Every record the person can see, for the link picker.
-    const all: BrainRecord[] = [];
-    for (let cursor: string | null = null; ;) {
-      const page = await read(db, { scope: "all", limit: 200, cursor });
-      all.push(...page.records);
-      cursor = page.cursor;
-      if (!cursor) break;
-    }
-    const vocabulary = await catalog(db);
-    return {
-      record,
-      aliases,
-      edges,
-      others: new Map(others.map((r) => [r.id, r])),
-      winner,
-      type: vocabulary.types.find(
-        (t) => t.name === record.type && t.ownerId === record.ownerId,
-      ),
-      verbs: vocabulary.verbs,
-      events: await history(db, { of: id }),
-      near: await graph(db, [id]),
-      shares: await sharesOf(db, { record: id }),
-      all,
-      people: await peopleOf(db),
-    };
-  });
+  const [{ types, verbs, people }, found] = await Promise.all([
+    vocabulary(p),
+    asPerson(p, async (db) => {
+      const [record] = await get(db, [id]);
+      if (!record) return null;
+      const aliases = new Set(await aliasesOf(db, id));
+      const edges = await edgesOf(db, id);
+      const others = await get(
+        db,
+        [...new Set(edges.flatMap((e) => [e.fromId, e.toId]))].filter(
+          (x) => !aliases.has(x),
+        ),
+      );
+      // The live record at the end of the chain of merges, if this is not it.
+      let winner = record.mergedInto
+        ? (await get(db, [record.mergedInto]))[0]
+        : undefined;
+      while (winner?.mergedInto) {
+        winner = (await get(db, [winner.mergedInto]))[0];
+      }
+      // Every record the person can see, for the link picker.
+      const all: BrainRecord[] = [];
+      for (let cursor: string | null = null; ;) {
+        const page = await read(db, { scope: "all", limit: 200, cursor });
+        all.push(...page.records);
+        cursor = page.cursor;
+        if (!cursor) break;
+      }
+      return {
+        record,
+        aliases,
+        edges,
+        others: new Map(others.map((r) => [r.id, r])),
+        winner,
+        events: await history(db, { of: id }),
+        near: await graph(db, [id]),
+        shares: await sharesOf(db, { record: id }),
+        all,
+        groups: await groupsIn(db),
+      };
+    }),
+  ]);
   if (!found) notFound();
-  const groups = await groupsOf(p);
   const {
     record: r,
     aliases,
     edges,
     others,
     winner,
-    type,
-    verbs,
     events,
     near,
     shares,
     all,
-    people,
+    groups,
   } = found;
+  const type = types.find((t) => t.name === r.type && t.ownerId === r.ownerId);
   const canEdit = r.access === "edit" || r.access === "owner";
   const isOwner = r.access === "owner";
   const who = (author: string) => authorText(author, people);
@@ -189,9 +185,9 @@ export default async function Page({
                 </>
               )}
               {". "}
-              <a href="/brain/activity" className="underline">
+              <Link href="/brain/activity" className="underline">
                 All changes to the brain
-              </a>
+              </Link>
             </TableCell>
           </TableRow>
         </TableBody>
@@ -303,12 +299,12 @@ export default async function Page({
       {r.mergedInto && (
         <p className="text-muted-foreground border-l-2 pl-3 text-sm">
           Merged into{" "}
-          <a
+          <Link
             href={recordHref(winner?.id ?? r.mergedInto)}
             className="underline"
           >
             {winner?.title || r.mergedInto}
-          </a>
+          </Link>
           . Reads follow the pointer; unmerging brings this one back.
         </p>
       )}
@@ -350,9 +346,9 @@ function Links({
     aliases.has(id) ? (
       <span className="text-muted-foreground">this {record.type}</span>
     ) : (
-      <a href={recordHref(id)} className="font-medium hover:underline">
+      <Link href={recordHref(id)} className="font-medium hover:underline">
         {others.get(id)?.title || "(untitled)"}
-      </a>
+      </Link>
     );
   return (
     <Table>

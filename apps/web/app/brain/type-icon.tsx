@@ -15,6 +15,7 @@ import {
   UserIcon,
   UsersIcon,
 } from "lucide-react";
+import Link from "next/link";
 
 import { cn } from "@/lib/utils";
 
@@ -87,9 +88,12 @@ export function TypeMark({
   );
   const classes = cn("inline-flex items-center gap-1.5", className);
   return link ? (
-    <a href={typeHref(type, owner)} className={cn(classes, "hover:underline")}>
+    <Link
+      href={typeHref(type, owner)}
+      className={cn(classes, "hover:underline")}
+    >
       {inner}
-    </a>
+    </Link>
   ) : (
     <span className={classes}>{inner}</span>
   );

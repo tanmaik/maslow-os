@@ -14,7 +14,7 @@ export {
 } from "./read.ts";
 export { recall, remember, stale } from "./recall.ts";
 export { revert } from "./revert.ts";
-export { share, sharesOf, unshare } from "./share.ts";
+export { share, sharesOf, typeSharesOf, unshare } from "./share.ts";
 export { exportBrain, importBrain } from "./transfer.ts";
 export type * from "./types.ts";
 export {

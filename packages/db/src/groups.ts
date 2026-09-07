@@ -28,34 +28,36 @@ type GroupRow = { id: string; name: string; description: string };
 type MemberRow = { group_id: string | null; id: string; name: string };
 
 // The org's groups with their members, Everyone first.
-export async function groupsOf(p: Principal): Promise<Group[]> {
-  return asPerson(p, async (q) => {
-    const groups = await q.query<GroupRow>(
-      "select id, name, description from groups order by name",
-    );
-    const members = await q.query<MemberRow>(
-      `select gm.group_id, u.id, u.name from users u
+export const groupsOf = (p: Principal): Promise<Group[]> =>
+  asPerson(p, groupsIn);
+
+// The same, inside a transaction already running as a person.
+export async function groupsIn(q: Query): Promise<Group[]> {
+  const groups = await q.query<GroupRow>(
+    "select id, name, description from groups order by name",
+  );
+  const members = await q.query<MemberRow>(
+    `select gm.group_id, u.id, u.name from users u
        left join group_members gm on gm.member_id = u.id
        order by u.name`,
-    );
-    const everyone = new Map(members.rows.map((m) => [m.id, m]));
-    return [
-      {
-        id: EVERYONE,
-        name: "Everyone",
-        description: "Every current member of the org.",
-        everyone: true,
-        members: [...everyone.values()].map(({ id, name }) => ({ id, name })),
-      },
-      ...groups.rows.map((g) => ({
-        ...g,
-        everyone: false,
-        members: members.rows
-          .filter((m) => m.group_id === g.id)
-          .map(({ id, name }) => ({ id, name })),
-      })),
-    ];
-  });
+  );
+  const everyone = new Map(members.rows.map((m) => [m.id, m]));
+  return [
+    {
+      id: EVERYONE,
+      name: "Everyone",
+      description: "Every current member of the org.",
+      everyone: true,
+      members: [...everyone.values()].map(({ id, name }) => ({ id, name })),
+    },
+    ...groups.rows.map((g) => ({
+      ...g,
+      everyone: false,
+      members: members.rows
+        .filter((m) => m.group_id === g.id)
+        .map(({ id, name }) => ({ id, name })),
+    })),
+  ];
 }
 
 // Refuses unless the actor is an owner of the org.

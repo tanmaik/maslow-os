@@ -200,6 +200,7 @@ async function setProfile(
         ...values,
       ]);
     }
+    await q.query("select set_config('app.email', '', true)");
   });
 }
 
@@ -342,6 +343,7 @@ export async function restoreMember(
         [past.email],
       )
     ).rows[0]!;
+    await q.query("select set_config('app.email', '', true)");
     // The photo the hidden copy held, replaced meanwhile, is let go of.
     if (past.avatar_key && past.avatar_key !== person.avatar_key)
       await owePicture(q, p.orgId, past.avatar_key);

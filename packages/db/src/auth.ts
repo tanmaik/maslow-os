@@ -204,32 +204,24 @@ export async function foundOrg(
     await q.query("select pg_advisory_xact_lock(hashtext($1))", [email]);
     // A second click, a retry, a second tab: an org of this name founded
     // by this person a moment ago is the one they asked for, not a reason
-    // to make another. Each candidate's name is read inside its own org,
-    // since a scope sees one org's rows.
-    const lately = (
+    // to make another.
+    const same = (
       await q.query<{ id: string; org_id: string }>(
-        "select id, org_id from users where email = $1 and role = 'owner' and created_at > now() - interval '1 minute' order by created_at desc",
-        [email],
+        `select u.id, u.org_id from users u join orgs o on o.id = u.org_id
+         where u.email = $1 and o.principal_id = u.id and o.name = $2
+           and u.created_at > now() - interval '1 minute'
+         order by u.created_at desc limit 1`,
+        [email, wanted],
       )
-    ).rows;
-    for (const r of lately) {
-      await q.query("select set_config('app.org_id', $1, true)", [r.org_id]);
-      const same = (
-        await q.query(
-          "select 1 from orgs where principal_id = $1 and name = $2",
-          [r.id, wanted],
-        )
-      ).rowCount;
-      if (same) {
-        return {
-          personId: person.id,
-          orgId: r.org_id,
-          userId: r.id,
-          role: "owner" as const,
-        };
-      }
+    ).rows[0];
+    if (same) {
+      return {
+        personId: person.id,
+        orgId: same.org_id,
+        userId: same.id,
+        role: "owner" as const,
+      };
     }
-    await q.query("select set_config('app.org_id', $1, true)", [orgId]);
     return found(q, person, email, orgId, userId, wanted);
   });
 }
@@ -255,33 +247,26 @@ export async function personOf(
 }
 
 // Every org the person is in, newest first. Memberships are read as the
-// person's email; each org's name is read inside that org, since no scope
-// sees every org at once.
+// person's email.
 export async function membershipsOf(p: Principal): Promise<Membership[]> {
   const email = await emailOf(p);
-  if (!email) return [];
-  const rows = await asEmail(
+  return email ? membershipsByEmail(email) : [];
+}
+
+// Every membership carrying one email, newest first, each with its org's
+// name: one query, as a sign-in sees them.
+export async function membershipsByEmail(email: string): Promise<Membership[]> {
+  return asEmail(
     email,
     async (q) =>
       (
-        await q.query<{ id: string; org_id: string; role: Role }>(
-          "select id, org_id, role from users where email = $1 order by created_at desc",
+        await q.query<Membership>(
+          `select u.id as "userId", u.org_id as "orgId", u.role, o.name as "orgName"
+           from users u join orgs o on o.id = u.org_id
+           where u.email = $1 order by u.created_at desc`,
           [email],
         )
       ).rows,
-  );
-  return Promise.all(
-    rows.map(async (r) => ({
-      userId: r.id,
-      orgId: r.org_id,
-      role: r.role,
-      orgName: await asOrg(
-        r.org_id,
-        async (q) =>
-          (await q.query<{ name: string }>("select name from orgs")).rows[0]!
-            .name,
-      ),
-    })),
   );
 }
 
@@ -312,8 +297,9 @@ export async function switchTo(
     : null;
 }
 
-// A session and the app holding it, when it is not a browser's.
-export type Session = Principal & { client: string | null };
+// A session, the email behind it, and the app holding it when it is not a
+// browser's.
+export type Session = Principal & { email: string; client: string | null };
 
 // Opens a session and returns the token its holder will keep, or null if
 // the membership is no longer the person's. A browser's session names no
@@ -348,9 +334,10 @@ export async function resolveSession(
         user_id: string;
         person_id: string;
         role: Role;
+        email: string;
         client: string | null;
       }>(
-        "select s.user_id, s.client, u.person_id, u.role from sessions s join users u on u.id = s.user_id where s.id = $1",
+        "select s.user_id, s.client, u.person_id, u.role, u.email from sessions s join users u on u.id = s.user_id where s.id = $1",
         [id],
       )
     ).rows.at(0),
@@ -361,6 +348,7 @@ export async function resolveSession(
         orgId: orgId!,
         userId: row.user_id,
         role: row.role,
+        email: row.email,
         client: row.client,
       }
     : null;

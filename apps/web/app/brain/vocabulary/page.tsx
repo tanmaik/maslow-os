@@ -1,11 +1,6 @@
-import {
-  catalog,
-  sharesOf,
-  type BrainType,
-  type Share,
-} from "@placeholder/brain";
+import { typeSharesOf, type BrainType } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
-import { groupsOf } from "@placeholder/db/groups";
+import { groupsIn } from "@placeholder/db/groups";
 import { redirect } from "next/navigation";
 
 import { FormDialog } from "@/components/form-dialog";
@@ -31,9 +26,9 @@ import {
 } from "@/components/ui/table";
 import { principal } from "@/lib/session";
 
+import { vocabulary } from "../catalog";
 import { DatatypeBadge } from "../datatype-badge";
 import { sharedGroups, verbText } from "../format";
-import { peopleOf } from "../people";
 import { Sharing } from "../sharing";
 import { TypeIcon, TypeMark } from "../type-icon";
 
@@ -53,15 +48,13 @@ const DATATYPES = [
 export default async function Page() {
   const p = await principal();
   if (!p) redirect("/");
-  const { types, verbs, people, shares } = await asPerson(p, async (db) => {
-    const vocabulary = await catalog(db);
-    const shares = new Map<string, Share[]>();
-    for (const t of vocabulary.types) {
-      if (t.own) shares.set(t.id, await sharesOf(db, { type: t.id }));
-    }
-    return { ...vocabulary, people: await peopleOf(db), shares };
-  });
-  const groups = await groupsOf(p);
+  const [{ types, verbs, people }, { shares, groups }] = await Promise.all([
+    vocabulary(p),
+    asPerson(p, async (db) => ({
+      shares: await typeSharesOf(db),
+      groups: await groupsIn(db),
+    })),
+  ]);
   const mine = types.filter((t) => t.own);
   const shared = sharedGroups(types, people);
   const members = [...people].map(([id, name]) => ({ id, name }));

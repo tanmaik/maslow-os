@@ -94,7 +94,19 @@ export async function smokeDb({ pgPort }) {
           const who = await identity(q);
           assert.equal(who.email, bakery.users[0].email);
           assert.ok(!who.org && !who.person && !who.member);
-          assert.equal((await q.query("select id from orgs")).rowCount, 0);
+          // An email sees the orgs it belongs to and no other.
+          const ids = (rows) => rows.map((r) => r.id).sort();
+          assert.deepEqual(
+            ids((await q.query("select id from orgs")).rows),
+            ids(
+              (
+                await q.query(
+                  "select distinct org_id as id from users where email = $1",
+                  [bakery.users[0].email],
+                )
+              ).rows,
+            ),
+          );
         });
       },
     );

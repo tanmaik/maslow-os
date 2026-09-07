@@ -1,6 +1,4 @@
 import {
-  catalog,
-  graph,
   Invalid,
   read,
   type BrainRecord,
@@ -10,6 +8,7 @@ import {
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { ChevronDownIcon, ChevronUpIcon, SearchIcon } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { DateField } from "@/components/date-field";
@@ -38,12 +37,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { principal } from "@/lib/session";
 
+import { vocabulary } from "./catalog";
 import { DatatypeBadge } from "./datatype-badge";
 import { FieldInputs } from "./fields";
 import { cell, recordHref } from "./format";
-import { BrainGraph } from "./graph/lazy";
 import { Split } from "./graph/split";
-import { peopleOf } from "./people";
+import { WholeGraph } from "./graph/whole";
 import { TypeIcon, TypeMark } from "./type-icon";
 
 // The query the table shows: a type or all, whose when the type is shared
@@ -80,10 +79,7 @@ export default async function Page({
       Array.isArray(v) ? v[0] : v,
     ]),
   ) as Params;
-  const { types, people } = await asPerson(p, async (db) => ({
-    ...(await catalog(db)),
-    people: await peopleOf(db),
-  }));
+  const { types, people } = await vocabulary(p);
   const mine = types.filter((t) => t.own);
   const type = types.find(
     (t) =>
@@ -117,10 +113,10 @@ export default async function Page({
   const dir = params.dir === "asc" ? "asc" : "desc";
   const scope =
     params.scope === "shared" || params.scope === "all" ? params.scope : "mine";
-  let page, whole;
+  let page;
   try {
-    ({ page, whole } = await asPerson(p, async (db) => ({
-      page: await read(db, {
+    page = await asPerson(p, (db) =>
+      read(db, {
         scope,
         type: type?.name,
         owner: type && !type.own ? type.ownerId : undefined,
@@ -132,8 +128,7 @@ export default async function Page({
         includeDeleted: params.deleted === "1",
         cursor: params.cursor,
       }),
-      whole: type ? null : await graph(db),
-    })));
+    );
   } catch (err) {
     // A cursor from another query, or none at all: the first page.
     if (err instanceof Invalid && params.cursor) redirect(href({}));
@@ -143,7 +138,7 @@ export default async function Page({
     const active = (params.sort ?? "when") === name;
     const nextDir = active && dir === "desc" ? "asc" : "desc";
     return (
-      <a
+      <Link
         href={href({ sort: name === "when" ? undefined : name, dir: nextDir })}
         className="inline-flex items-center gap-1 hover:underline"
       >
@@ -154,7 +149,7 @@ export default async function Page({
           ) : (
             <ChevronDownIcon className="size-3" />
           ))}
-      </a>
+      </Link>
     );
   };
 
@@ -257,9 +252,9 @@ export default async function Page({
       {page.records.length === 0 && types.length === 0 ? (
         <p className="text-muted-foreground text-sm">
           This brain is empty. Write a note, or define a type in{" "}
-          <a href="/brain/vocabulary" className="underline">
+          <Link href="/brain/vocabulary" className="underline">
             vocabulary
-          </a>{" "}
+          </Link>{" "}
           to start a table.
         </p>
       ) : (
@@ -306,15 +301,15 @@ export default async function Page({
           variant="outline"
           size="sm"
           nativeButton={false}
-          render={<a href={href({ cursor: page.cursor })} />}
+          render={<Link href={href({ cursor: page.cursor })} />}
         >
           Next page
         </Button>
       )}
     </>
   );
-  if (!whole) return <div className="space-y-4">{view}</div>;
-  return <Split graph={<BrainGraph graph={whole} />}>{view}</Split>;
+  if (type) return <div className="space-y-4">{view}</div>;
+  return <Split graph={<WholeGraph />}>{view}</Split>;
 }
 
 // A record as a row. The whole row opens it; its type opens the type's
@@ -333,12 +328,12 @@ function Row({
       className={`relative ${r.deletedAt ? "text-muted-foreground" : ""}`}
     >
       <TableCell className="max-w-xs whitespace-normal">
-        <a
+        <Link
           href={recordHref(r.id)}
           className="font-medium after:absolute after:inset-0 hover:underline"
         >
           {r.title || "(untitled)"}
-        </a>
+        </Link>
         {r.deletedAt && (
           <Badge variant="outline" className="ml-2">
             {r.mergedInto ? "merged" : "deleted"}

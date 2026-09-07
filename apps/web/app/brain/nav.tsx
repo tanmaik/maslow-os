@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -32,7 +33,7 @@ function View({
       size="sm"
       className={`shrink-0 justify-start ${type ? "md:ml-3" : ""}`}
       nativeButton={false}
-      render={<a href={href} />}
+      render={<Link href={href} />}
     >
       {type && <TypeIcon type={type} />}
       {children}

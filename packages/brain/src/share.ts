@@ -79,6 +79,22 @@ export async function sharesOf(q: Query, on: Target): Promise<Share[]> {
   return rows.map(toShare);
 }
 
+// Every share on every type the current member owns, by type.
+export async function typeSharesOf(q: Query): Promise<Map<string, Share[]>> {
+  const { rows } = await q.query<ShareRow>(
+    `select ${columns} from shares
+     where type_id in (select id from types where person_id = current_member())
+     order by type_id, subject, level, id`,
+  );
+  const byType = new Map<string, Share[]>();
+  for (const row of rows) {
+    const shares = byType.get(row.type_id!) ?? [];
+    shares.push(toShare(row));
+    byType.set(row.type_id!, shares);
+  }
+  return byType;
+}
+
 // Lets a member, a group or everyone do this much with a record, or with
 // every record of a type. Sharing again with the same subject changes the
 // level.

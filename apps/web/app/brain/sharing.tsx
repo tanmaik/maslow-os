@@ -1,3 +1,5 @@
+"use client";
+
 import type { Share, Subject, Target } from "@placeholder/brain";
 import type { Group } from "@placeholder/db/groups";
 

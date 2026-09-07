@@ -32,13 +32,18 @@ async function scoped<T>(
   try {
     // A pooled connection may arrive carrying whatever a previous holder
     // set at session level; nothing set outside this transaction may
-    // speak for it.
-    await client.query("reset all");
-    await client.query("begin");
+    // speak for it. The reset, the transaction and its scope go in one
+    // round trip: statements sent together after a begin stay in it.
+    const scope = Object.entries(settings).map(
+      ([name, value]) =>
+        `set_config(${client.escapeLiteral(name)}, ${client.escapeLiteral(value)}, true)`,
+    );
     await client.query(
-      `select set_config(name, value, true)
-       from unnest($1::text[], $2::text[]) as settings(name, value)`,
-      [Object.keys(settings), Object.values(settings)],
+      [
+        "reset all",
+        "begin",
+        ...(scope.length ? [`select ${scope.join(", ")}`] : []),
+      ].join("; "),
     );
     const result = await fn(client);
     await client.query("commit");

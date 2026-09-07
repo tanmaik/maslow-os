@@ -3,6 +3,7 @@ import {
   deleteSession,
   resolveSession,
   type Principal,
+  type Session,
 } from "@placeholder/db/auth";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
@@ -30,10 +31,12 @@ export const noticed = (to: string, notice: string) =>
 // Who the current request acts as, or null when nobody is signed in. Looked
 // up once per request, however many components ask. A session an app holds
 // opens the brain, never the site.
-export const principal = cache(async (): Promise<Principal | null> => {
-  const s = await resolveSession((await cookies()).get(SESSION)?.value);
-  return s && s.client === null ? s : null;
-});
+export const principal = cache(
+  async (): Promise<Omit<Session, "client"> | null> => {
+    const s = await resolveSession((await cookies()).get(SESSION)?.value);
+    return s && s.client === null ? s : null;
+  },
+);
 
 // Opens a session for p and sends the browser to `to` holding it. If the
 // membership was removed in the meantime, the browser goes there as it was.

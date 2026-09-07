@@ -1,6 +1,6 @@
 import "./globals.css";
 
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import { Analytics } from "@/components/analytics";
 import { AppHeader } from "@/components/app-header";
@@ -19,7 +19,9 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-dvh px-4 py-6 pb-16 sm:px-6 lg:px-8">
-        <AppHeader />
+        <Suspense fallback={p && <div className="mb-6 h-8" />}>
+          <AppHeader />
+        </Suspense>
         {children}
         <DevToolbar />
         <Analytics

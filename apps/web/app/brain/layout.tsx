@@ -1,12 +1,10 @@
-import { catalog } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { principal } from "@/lib/session";
 
+import { vocabulary } from "./catalog";
 import { sharedGroups, typeHref } from "./format";
-import { peopleOf } from "./people";
 import { BrainNav } from "./nav";
 
 // The signed-in person's brain, as a database with views: a rail of views
@@ -14,10 +12,7 @@ import { BrainNav } from "./nav";
 export default async function Layout({ children }: { children: ReactNode }) {
   const p = await principal();
   if (!p) redirect("/");
-  const { types, people } = await asPerson(p, async (db) => ({
-    ...(await catalog(db)),
-    people: await peopleOf(db),
-  }));
+  const { types, people } = await vocabulary(p);
   const shared = sharedGroups(types, people).map((g) => ({
     owner: g.owner,
     types: g.types.map((t) => ({

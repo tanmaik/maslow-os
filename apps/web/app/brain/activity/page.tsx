@@ -1,5 +1,6 @@
 import { history, type Event } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
@@ -121,9 +122,9 @@ export default async function Page({
                 <TableCell>{e.action}</TableCell>
                 <TableCell className="max-w-xs truncate">
                   {s.href ? (
-                    <a href={s.href} className="hover:underline">
+                    <Link href={s.href} className="hover:underline">
                       {s.label}
-                    </a>
+                    </Link>
                   ) : (
                     s.label
                   )}
@@ -148,7 +149,7 @@ export default async function Page({
           variant="outline"
           size="sm"
           nativeButton={false}
-          render={<a href={`/brain/activity?before=${last.seq}`} />}
+          render={<Link href={`/brain/activity?before=${last.seq}`} />}
         >
           Older
         </Button>
