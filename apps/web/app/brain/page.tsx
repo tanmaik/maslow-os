@@ -1,10 +1,13 @@
 import {
+  get,
   Invalid,
   read,
+  requestsOf,
   type BrainRecord,
   type BrainType,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
+import { groupsIn } from "@placeholder/db/groups";
 import { SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -26,6 +29,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { principal } from "@/lib/session";
 
+import { Asks } from "./asks";
 import { vocabulary } from "./catalog";
 import { FieldInputs } from "./fields";
 import { cell, recordHref } from "./format";
@@ -79,16 +83,27 @@ export default async function Page({
     return `/brain${s ? `?${s}` : ""}`;
   };
 
-  let page;
+  let page, asks, asked, groups;
   try {
-    page = await asPerson(p, (db) =>
-      read(db, {
-        type: type?.name,
-        owner: type?.ownerId,
-        query: params.q || undefined,
-        cursor: params.cursor,
-      }),
-    );
+    ({ page, asks, asked, groups } = await asPerson(p, async (db) => {
+      const asks = await requestsOf(db);
+      return {
+        page: await read(db, {
+          type: type?.name,
+          owner: type?.ownerId,
+          query: params.q || undefined,
+          cursor: params.cursor,
+        }),
+        asks,
+        asked: await get(
+          db,
+          asks.flatMap((a) =>
+            a.items.flatMap((it) => ("record" in it ? [it.record] : [])),
+          ),
+        ),
+        groups: asks.length ? await groupsIn(db) : [],
+      };
+    }));
   } catch (err) {
     // A cursor from another query, or none at all: the first page.
     if (err instanceof Invalid && params.cursor) redirect(href({}));
@@ -99,6 +114,13 @@ export default async function Page({
 
   const view = (
     <>
+      <Asks
+        asks={asks}
+        records={new Map(asked.map((r) => [r.id, r]))}
+        types={types}
+        people={people}
+        groups={groups}
+      />
       <div className="flex flex-wrap items-center gap-2">
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
           {type && <TypeIcon type={type.name} className="size-5" />}

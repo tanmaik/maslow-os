@@ -1,4 +1,11 @@
 // The brain: what a person knows, behind one read door and one write door.
+export {
+  acceptRequest,
+  askToShare,
+  declineRequest,
+  requestsOf,
+  type ShareRequest,
+} from "./ask.ts";
 export { catalog, defineType } from "./catalog.ts";
 export { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
 export { ID, isId } from "./ids.ts";

@@ -1,4 +1,10 @@
-import type { BrainRecord, BrainType, Edge, Event } from "@placeholder/brain";
+import type {
+  BrainRecord,
+  BrainType,
+  Edge,
+  Event,
+  Person,
+} from "@placeholder/brain";
 
 // How the brain reads to an agent: one line per thing, the id first, then
 // only what is there.
@@ -115,10 +121,17 @@ export const field = (f: {
   `${f.name}: ${f.options ? `enum(${f.options.map(token).join("|")})` : f.datatype}${f.required ? ", required" : ""}`;
 
 // The vocabulary: the person's own types with their fields, then the types
-// colleagues shared in, each naming whose it is, then the verbs in use.
-export function catalog(types: BrainType[], verbs: string[]): string {
+// colleagues shared in, each naming whose it is, then the verbs in use, then
+// who is in the org, each by the email an ask names them by.
+export function catalog(
+  types: BrainType[],
+  verbs: string[],
+  people: Person[],
+  me: string,
+): string {
   const own = types.filter((t) => t.own);
   const shared = types.filter((t) => !t.own);
+  const named = new Map(people.map((p) => [p.id, p]));
   const lines = [`types (${own.length} yours):`];
   for (const t of own) {
     lines.push(token(t.name));
@@ -127,11 +140,20 @@ export function catalog(types: BrainType[], verbs: string[]): string {
   if (shared.length) {
     lines.push(`shared in (${shared.length}):`);
     for (const t of shared) {
-      lines.push(`${token(t.name)} owner=${t.ownerId}`);
+      const owner = named.get(t.ownerId);
+      lines.push(
+        `${token(t.name)} owner=${owner ? token(owner.email) : t.ownerId}`,
+      );
       for (const p of t.properties) lines.push(`  ${field(p)}`);
     }
   }
   lines.push(`verbs in use (${verbs.length}): ${verbs.map(token).join(" ")}`);
+  lines.push(`people (${people.length}):`);
+  for (const p of people) {
+    lines.push(
+      `${token(p.name)} ${token(p.email)}${p.id === me ? " (the person)" : ""}`,
+    );
+  }
   return lines.join("\n");
 }
 

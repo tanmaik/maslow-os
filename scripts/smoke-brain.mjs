@@ -139,12 +139,15 @@ export async function smokeBrain(stack) {
       }),
     );
     check(
-      "a colleague sees neither the records nor the vocabulary",
+      "a colleague sees neither the records nor the vocabulary, and both see the org",
       orgOnly.records.length === 0 &&
         colleague.page.records.length === 0 &&
         colleague.vocab.types.length === 0 &&
-        colleague.vocab.verbs.length === 0,
-      `${colleague.page.records.length} records, ${colleague.vocab.types.length} types, ${colleague.vocab.verbs.length} verbs`,
+        colleague.vocab.verbs.length === 0 &&
+        acme.users.every((u) =>
+          colleague.vocab.people.some((p) => p.id === u.id),
+        ),
+      `${colleague.page.records.length} records, ${colleague.vocab.types.length} types, ${colleague.vocab.verbs.length} verbs, ${colleague.vocab.people.length} people`,
     );
 
     // A type is shared whole with the org, or opened one record at a time;
@@ -1315,6 +1318,121 @@ export async function smokeBrain(stack) {
     );
     const gone = (await as(otto)((q) => brain.get(q, [privateNote]))).length;
     check("unshare takes it away", gone === 0, `${gone} records`);
+
+    // The agent asks; the owner decides. Nothing is shared by an ask, a
+    // colleague cannot ask on the owner's behalf, and accepting makes the
+    // shares in the owner's name while declining makes none.
+    const asked = await as(marge)(async (q) => {
+      const ask = await brain.askToShare(q, {
+        records: [privateNote],
+        to: ["editor@sharing.test", "everyone"],
+        level: "view",
+        reason: "Otto is picking up the levain this week.",
+      });
+      const nobody = await attempt(() =>
+        brain.askToShare(q, {
+          records: [privateNote],
+          to: ["nobody@sharing.test"],
+          level: "view",
+          reason: "x",
+        }),
+      );
+      const tooMuch = await attempt(() =>
+        brain.askToShare(q, {
+          records: [privateNote],
+          to: ["everyone"],
+          level: "edit",
+          reason: "x",
+        }),
+      );
+      return { ask, nobody, tooMuch, waiting: await brain.requestsOf(q) };
+    });
+    const askedByOther = await as(otto)((q) =>
+      attempt(() =>
+        brain.askToShare(q, {
+          records: [privateNote],
+          to: ["viewer@sharing.test"],
+          level: "view",
+          reason: "x",
+        }),
+      ),
+    );
+    const beforeAnswer = (await as(otto)((q) => brain.get(q, [privateNote])))
+      .length;
+    const declined = await as(marge)(async (q) => {
+      await brain.declineRequest(q, asked.ask.id);
+      return (await brain.requestsOf(q)).length;
+    });
+    const stillHidden = (await as(otto)((q) => brain.get(q, [privateNote])))
+      .length;
+    const made = await as(marge)(async (q) => {
+      const again = await brain.askToShare(q, {
+        records: [privateNote],
+        to: ["editor@sharing.test"],
+        level: "view",
+        reason: "Otto is picking up the levain this week.",
+      });
+      return brain.acceptRequest(q, again.id);
+    });
+    const nowSeen = (await as(otto)((q) => brain.get(q, [privateNote]))).length;
+    // An ask that names something removed since shares what is left.
+    const stale = await as(marge)(async (q) => {
+      const [gone] = (
+        await brain.write(q, { records: [noteOf("ask-gone", "Soon gone")] })
+      ).records;
+      const ask = await brain.askToShare(q, {
+        records: [gone, privateNote],
+        to: ["viewer@sharing.test"],
+        level: "view",
+        reason: "x",
+      });
+      await brain.remove(q, gone);
+      const made = await brain.acceptRequest(q, ask.id);
+      await brain.unshare(
+        q,
+        { record: privateNote },
+        { who: "member", id: pim.userId },
+      );
+      // A group deleted since is left out too, and the ask still clears.
+      const rota = await groupsDoor.defineGroup(marge, "Rota", "");
+      const toRota = await brain.askToShare(q, {
+        records: [privateNote],
+        to: ["Rota"],
+        level: "view",
+        reason: "x",
+      });
+      await groupsDoor.deleteGroup(marge, rota);
+      const toNobody = await brain.acceptRequest(q, toRota.id);
+      return {
+        made,
+        toNobody,
+        left: (await brain.requestsOf(q)).length,
+      };
+    });
+    check(
+      "the agent asks to share and the owner decides",
+      asked.ask.subjects.length === 2 &&
+        asked.waiting.length === 1 &&
+        asked.nobody === "NotFound" &&
+        asked.tooMuch === "Invalid" &&
+        askedByOther === "NotFound" &&
+        beforeAnswer === 0 &&
+        declined === 0 &&
+        stillHidden === 0 &&
+        made === 1 &&
+        nowSeen === 1 &&
+        stale.made === 1 &&
+        stale.toNobody === 0 &&
+        stale.left === 0,
+      `removed since shares ${stale.made}, deleted group ${stale.toNobody}; asked ${asked.waiting.length}, unknown ${asked.nobody}, everyone at edit ${asked.tooMuch}, colleague asks ${askedByOther}, seen ${beforeAnswer}/${stillHidden}/${nowSeen}`,
+    );
+    await as(marge)((q) =>
+      brain.unshare(
+        q,
+        { record: privateNote },
+        { who: "member", id: otto.userId },
+      ),
+    );
 
     // Export and import.
     const owner = new pg.Client({

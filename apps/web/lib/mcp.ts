@@ -77,7 +77,7 @@ function instructions(a: About | null, client: string | null): string {
 
 A brain is a graph of what a person knows: records, the links between them, and a log of every change. It is a mind, not a mirror: write what you concluded, with a confidence and an edge back to a stub of what it rests on (the app, its own id, and enough to cite it), never a copy of a mailbox or a calendar.
 
-Types are this person's own vocabulary, and it starts empty. Reuse a name before defining one; a record of an undefined type is refused. Define a type in the same write call. A type may declare fields; values then live in props and must fit. Reshape it later with redefine and undefine. A verb is any word an edge carries; nothing defines it. The catalog also lists types colleagues shared into this brain, each with its owner: read them as you read the person's own, and never write to them.
+Types are this person's own vocabulary, and it starts empty. Reuse a name before defining one; a record of an undefined type is refused. Define a type in the same write call. A type may declare fields; values then live in props and must fit. Reshape it later with redefine and undefine. A verb is any word an edge carries; nothing defines it. The catalog also lists types colleagues shared into this brain, each with its owner: read them as you read the person's own, and never write to them. You cannot share; share asks the person, who accepts or declines on their brain's pages.
 
 A record from an app carries the app as source and the app's own id as sourceRef, and the same pair written twice is one record; a record written without them is filed as source brain with a fresh ref. Ids are ten characters; carry them exactly.
 
@@ -231,12 +231,12 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "catalog",
     {
       description:
-        "The person's vocabulary: every type they defined with its fields, the types colleagues shared into this brain, each with its owner, and the verbs edges carry. Reuse before defining; write only to your own types.",
+        "The person's vocabulary: every type they defined with its fields, the types colleagues shared into this brain, each with its owner, the verbs edges carry, and who is in the org, by name and email. Reuse before defining; write only to your own types; name people by email when you ask to share.",
       annotations: { readOnlyHint: true },
     },
     door(async (q) => {
-      const { types, verbs } = await brain.catalog(q);
-      return lines.catalog(types, verbs);
+      const { types, verbs, people } = await brain.catalog(q);
+      return lines.catalog(types, verbs, people, s.userId);
     }),
   );
 
@@ -432,6 +432,38 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       for (const id of a.edges ?? []) await brain.restoreEdge(q, id);
       if (a.edges?.length) out.push(`restored edges ${a.edges.join(" ")}`);
       return out.join("\n") || "nothing to restore";
+    }),
+  );
+
+  server.registerTool(
+    "share",
+    {
+      description:
+        "Asks the person to share records or types of theirs with colleagues: what, with whom (everyone, a colleague's email, or a group's name), at what level, and why. Nothing is shared until the person accepts the ask on their brain's pages; they see the reason. One ask carries many items to many people.",
+      inputSchema: {
+        records: ids.optional(),
+        types: z
+          .array(z.string())
+          .max(20)
+          .optional()
+          .describe("the person's own types, by name"),
+        to: z
+          .array(z.string())
+          .min(1)
+          .max(20)
+          .describe(
+            "emails from the catalog, group names, or the word everyone for the org",
+          ),
+        level: z.enum(["view", "edit", "owner"]),
+        reason: z
+          .string()
+          .max(1000)
+          .describe("why, in a sentence the person reads"),
+      },
+    },
+    door(async (q, a) => {
+      const ask = await brain.askToShare(q, a);
+      return `asked ${ask.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`;
     }),
   );
 

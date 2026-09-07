@@ -134,15 +134,28 @@ export default async function Page({
       {isOwner && (
         <form action={action} method="post">
           {r.mergedInto ? (
-            <Button variant="outline" size="sm" name="intent" value="unmerge">
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              name="intent"
+              value="unmerge"
+            >
               Unmerge
             </Button>
           ) : r.deletedAt ? (
-            <Button variant="outline" size="sm" name="intent" value="restore">
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              name="intent"
+              value="restore"
+            >
               Restore
             </Button>
           ) : (
             <Button
+              type="submit"
               variant="ghost"
               size="sm"
               name="intent"
@@ -250,6 +263,7 @@ function Links({
               <form action={action} method="post" className="ml-auto">
                 <input type="hidden" name="edge" value={e.id} />
                 <Button
+                  type="submit"
                   variant="ghost"
                   size="xs"
                   name="intent"

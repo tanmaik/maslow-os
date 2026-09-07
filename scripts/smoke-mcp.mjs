@@ -28,6 +28,7 @@ const DOORS = [
   "edit",
   "remove",
   "restore",
+  "share",
   "unlink",
   "merge",
   "unmerge",
@@ -319,10 +320,14 @@ export async function smokeMcp(stack, signIn) {
   );
   const vocabulary = await call(grant.access_token, "catalog", {});
   check(
-    "the catalog is Wile's own vocabulary",
+    "the catalog is Wile's own vocabulary, and says who is in the org",
     /^types \([1-9]\d* yours\):$/.test(vocabulary.lines[0] ?? "") &&
-      !vocabulary.lines.some((l) => l.startsWith("shared in")),
-    vocabulary.lines[0] ?? vocabulary.text,
+      !vocabulary.lines.some((l) => l.startsWith("shared in")) &&
+      vocabulary.lines.some((l) => /^people \([2-9]\d*\):$/.test(l)) &&
+      vocabulary.lines.includes(`"Road Runner" ${orgs[0].users[1].email}`) &&
+      vocabulary.lines.some((l) => l.endsWith("(the person)")),
+    vocabulary.lines.filter((l) => /^people|@/.test(l)).join(" | ") ||
+      vocabulary.text,
   );
   const badSince = await call(grant.access_token, "read", {
     since: "yesterday",
@@ -752,13 +757,31 @@ export async function smokeMcp(stack, signIn) {
     type: "lift",
     limit: 1,
   });
+  // The agent's share only asks; the colleague sees nothing until the
+  // person accepts.
+  const asked = await call(grant.access_token, "share", {
+    records: [claimId],
+    to: [orgs[0].users[1].email],
+    level: "view",
+    reason: "Road Runner should know what Wile owes.",
+  });
+  const notYet = await call(colleagueGrant.access_token, "get", {
+    ids: [claimId],
+  });
+  check(
+    "share asks, and shares nothing until the person accepts",
+    /^asked \S+: 1 item to 1 party at view; the person decides$/.test(
+      asked.lines[0] ?? "",
+    ) && notYet.text === "no records",
+    `${asked.lines[0]} / ${notYet.text}`,
+  );
   const notTheirs = await call(colleagueGrant.access_token, "redefine", {
     types: [{ name: "lift", newName: "lifts" }],
   });
   check(
     "a colleague's catalog is their own and what was shared",
     theirs.lines.includes("shared in (1):") &&
-      lift === `lift owner=${orgs[0].users[0].id}` &&
+      lift === `lift owner=${orgs[0].users[0].email}` &&
       !theirs.lines.some((l) => l.startsWith("person ")) &&
       lifts.lines[0] === "3 records" &&
       shared.lines[0] === "1 record, nearest first" &&

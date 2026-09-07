@@ -11,14 +11,15 @@ import {
   type PropertyRow,
   type TypeRow,
 } from "./rows.ts";
-import type { BrainType, Property, Query } from "./types.ts";
+import type { BrainType, Person, Property, Query } from "./types.ts";
 
 // This person's vocabulary: every type they defined, with the fields each
 // declares, and the types colleagues have shared into this brain, each
-// saying whose it is; then every verb an edge they can see carries.
+// saying whose it is; every verb an edge they can see carries; and who is
+// in the org, as it stands now.
 export async function catalog(
   q: Query,
-): Promise<{ types: BrainType[]; verbs: string[] }> {
+): Promise<{ types: BrainType[]; verbs: string[]; people: Person[] }> {
   const types = await q.query<TypeRow & { own: boolean }>(
     `select ${typeColumns}, person_id = current_member() as own
      from types where deleted_at is null
@@ -29,6 +30,9 @@ export async function catalog(
   );
   const verbs = await q.query<{ verb: string }>(
     "select distinct verb from edges where deleted_at is null order by verb",
+  );
+  const people = await q.query<Person>(
+    "select id, name, email from users order by name",
   );
   const fields = new Map<string, Property[]>();
   for (const row of properties.rows) {
@@ -46,6 +50,7 @@ export async function catalog(
       own: t.own,
     })),
     verbs: verbs.rows.map((v) => v.verb),
+    people: people.rows,
   };
 }
 

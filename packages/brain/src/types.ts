@@ -37,6 +37,9 @@ export type Property = {
   ownerId: string;
 };
 
+// One member of the org, as the agent may name them when it asks to share.
+export type Person = { id: string; name: string; email: string };
+
 // One type a record can be, with the fields it declares: the reader's own,
 // or a colleague's shared into this brain.
 export type BrainType = {
@@ -88,7 +91,14 @@ export type Event = {
   n: number;
   at: Date;
   subject:
-    "record" | "edge" | "type" | "verb" | "property" | "share" | "member";
+    | "record"
+    | "edge"
+    | "type"
+    | "verb"
+    | "property"
+    | "share"
+    | "request"
+    | "member";
   subjectId: string;
   action: "created" | "updated" | "deleted";
   // Who made the change: "seed", "person:<id>" or "model:<app>".
