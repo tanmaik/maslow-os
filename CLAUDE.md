@@ -166,7 +166,8 @@ The most any path gives a member is what they may do; there are no deny
 rules. Everyone is every current member and is not a row. Editors change;
 owners also share, remove and merge; everyone can only be given view. Org
 owners manage groups, not content. The log says who gave a share, person or
-agent. What is shared into a brain is listed beside the person's own types,
+agent. A reader sees everything they may see unless they narrow it: what is
+shared with a person is as present to them and their agent as their own. What is shared into a brain is listed beside the person's own types,
 grouped by whose it is and how it was opened: the whole type or some
 records, to everyone or to them.
 

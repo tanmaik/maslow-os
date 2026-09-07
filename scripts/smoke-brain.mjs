@@ -189,7 +189,7 @@ export async function smokeBrain(stack) {
           type: "commitment",
           owner: acme.users[0].id,
         }),
-        own: await brain.read(q, { type: "commitment" }),
+        unnamed: await brain.read(q, { type: "commitment" }),
         beep: (await brain.get(q, [opened.beep.id]))[0],
         people: await brain.read(q, {
           type: "person",
@@ -208,11 +208,11 @@ export async function smokeBrain(stack) {
         seen.commitment.properties.length === 2 &&
         seen.theirs.records.length === opened.commitments &&
         opened.commitments > 0 &&
-        seen.own.records.length === 0 &&
+        seen.unnamed.records.length === opened.commitments &&
         seen.vocab.verbs.length === 0 &&
         opened.shares.length === 1 &&
         opened.shares[0].on.type === opened.commitment.id,
-      `${seen.theirs.records.length} of Wile's commitments, ${seen.own.records.length} of Road Runner's, ${seen.commitment?.properties.length} fields`,
+      `${seen.theirs.records.length} of Wile's commitments, ${seen.unnamed.records.length} named without an owner, ${seen.commitment?.properties.length} fields`,
     );
     check(
       "a record shared alone opens it and its type, and no other record of it",
@@ -481,7 +481,6 @@ export async function smokeBrain(stack) {
         from: { source: "seed", sourceRef: "person:wile" },
         verb: "owes",
         to: { source: "seed", sourceRef: "person:beep" },
-        props: { what: "batch 7 rocket skates" },
         confidence: 0.8,
         occurredAt: "2026-08-28T15:04:00Z",
       };
@@ -496,7 +495,6 @@ export async function smokeBrain(stack) {
       "an edge carries strength and time",
       detail.seeded.length === 1 &&
         detail.seeded[0].confidence === 0.8 &&
-        detail.seeded[0].props.what === "batch 7 rocket skates" &&
         detail.seeded[0].occurredAt instanceof Date &&
         detail.same.edges === 0 &&
         detail.stronger.edges === 1 &&
@@ -532,7 +530,6 @@ export async function smokeBrain(stack) {
             to: { source: "seed", sourceRef: "person:beep" },
             confidence: 0.95,
             occurredAt: "2026-08-28T15:04:00Z",
-            props: { what: "batch 7 rocket skates" },
           },
         ],
       });

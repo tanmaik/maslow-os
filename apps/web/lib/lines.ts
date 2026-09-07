@@ -76,12 +76,11 @@ export function record(
   return `${head}\n${shown}`;
 }
 
-// An edge as a sentence: from, verb, to, and what it carries.
+// An edge as a sentence: from, verb, to, how sure, since when.
 export function edge(e: Edge): string {
   const parts = [e.id, e.fromId, token(e.verb), e.toId];
   if (e.confidence !== null) parts.push(`c=${e.confidence}`);
   if (e.occurredAt) parts.push(when(e.occurredAt));
-  if (some(e.props)) parts.push(quoted(e.props));
   return parts.join(" ");
 }
 
@@ -103,7 +102,6 @@ export function edgeFrom(
   ];
   if (e.confidence !== null) parts.push(`c=${e.confidence}`);
   if (e.occurredAt) parts.push(when(e.occurredAt));
-  if (some(e.props)) parts.push(quoted(e.props));
   return `  ${parts.join(" ")}`;
 }
 
@@ -127,7 +125,7 @@ export function catalog(types: BrainType[], verbs: string[]): string {
     for (const p of t.properties) lines.push(`  ${field(p)}`);
   }
   if (shared.length) {
-    lines.push(`shared in (${shared.length}), read with owner=…:`);
+    lines.push(`shared in (${shared.length}):`);
     for (const t of shared) {
       lines.push(`${token(t.name)} owner=${t.ownerId}`);
       for (const p of t.properties) lines.push(`  ${field(p)}`);

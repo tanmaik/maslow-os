@@ -76,7 +76,6 @@ export type Edge = {
   fromId: string;
   verb: string;
   toId: string;
-  props: Record<string, unknown>;
   confidence: number | null;
   occurredAt: Date | null;
   createdAt: Date;
@@ -120,7 +119,6 @@ export type EdgeInput = {
   from: Ref;
   verb: string;
   to: Ref;
-  props?: Record<string, unknown>;
   confidence?: number | null;
   occurredAt?: Date | string | null;
 };

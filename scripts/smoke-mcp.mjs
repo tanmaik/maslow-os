@@ -757,7 +757,7 @@ export async function smokeMcp(stack, signIn) {
   });
   check(
     "a colleague's catalog is their own and what was shared",
-    theirs.lines.includes("shared in (1), read with owner=…:") &&
+    theirs.lines.includes("shared in (1):") &&
       lift === `lift owner=${orgs[0].users[0].id}` &&
       !theirs.lines.some((l) => l.startsWith("person ")) &&
       lifts.lines[0] === "3 records" &&

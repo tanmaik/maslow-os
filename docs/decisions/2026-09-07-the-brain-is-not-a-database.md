@@ -37,9 +37,22 @@ called shares, and verbs are no longer rows.
   write and the export keep working and no page has to invent one.
 - **Two seed types.** `file` and `tile` came from the computer's library
   and the board, both gone.
+- **Extra values on a link.** A link carried a bag of free values beside
+  its verb, confidence and time, declared nowhere and read nowhere. A link
+  is the sentence: this, verb, that, how sure, since when.
 - **Edit by version.** With no version on a record, an edit applies. Two
   people editing one record at the same moment is not a case the product
   has; the log still holds every version.
+
+## What a reader sees by default
+
+A read answers with everything the person may see, their own and what
+colleagues shared with them; "mine" and "shared" narrow it. A type matches
+by name across everyone visible, and owner narrows to one person's. The
+door does not guess whose type a name means: the catalog says who owns
+what, and the agent decides. A field is one person's declaration, so
+filtering or ordering by one reads that person's records: the owner's when
+named, else the person's own.
 
 ## Who a change is by
 

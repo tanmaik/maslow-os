@@ -130,7 +130,6 @@ export const seeds: Record<
         from: ref("seed", "person:wile"),
         verb: "owes",
         to: ref("seed", "person:beep"),
-        props: { what: "batch 7 rocket skates" },
         confidence: 0.8,
         occurredAt: at("2026-08-28T15:04:00Z"),
       },

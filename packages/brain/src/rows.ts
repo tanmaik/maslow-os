@@ -73,14 +73,13 @@ export const toProperty = (p: PropertyRow): Property => ({
 });
 
 export const edgeColumns =
-  "id, from_id, verb, to_id, props, confidence, occurred_at, created_at";
+  "id, from_id, verb, to_id, confidence, occurred_at, created_at";
 
 export type EdgeRow = {
   id: string;
   from_id: string;
   verb: string;
   to_id: string;
-  props: Record<string, unknown>;
   confidence: number | null;
   occurred_at: Date | null;
   created_at: Date;
@@ -91,7 +90,6 @@ export const toEdge = (e: EdgeRow): Edge => ({
   fromId: e.from_id,
   verb: e.verb,
   toId: e.to_id,
-  props: e.props,
   confidence: e.confidence,
   occurredAt: e.occurred_at,
   createdAt: e.created_at,

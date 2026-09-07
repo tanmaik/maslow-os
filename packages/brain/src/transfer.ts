@@ -44,7 +44,6 @@ export type Snapshot = {
     from: { source: string; sourceRef: string };
     verb: string;
     to: { source: string; sourceRef: string };
-    props: Record<string, unknown>;
     confidence: number | null;
     occurredAt: string | null;
   }[];
@@ -68,7 +67,6 @@ type ShareExportRow = {
 
 type EdgeExportRow = {
   verb: string;
-  props: Record<string, unknown>;
   confidence: number | null;
   occurred_at: Date | null;
   from_source: string;
@@ -95,7 +93,7 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
      order by r.created_at, r.id`,
   );
   const edges = await q.query<EdgeExportRow>(
-    `select e.verb, e.props, e.confidence, e.occurred_at,
+    `select e.verb, e.confidence, e.occurred_at,
             f.source as from_source, f.source_ref as from_ref,
             t.source as to_source, t.source_ref as to_ref
      from edges e
@@ -153,7 +151,6 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       from: { source: e.from_source, sourceRef: e.from_ref },
       verb: e.verb,
       to: { source: e.to_source, sourceRef: e.to_ref },
-      props: e.props,
       confidence: e.confidence,
       occurredAt: e.occurred_at?.toISOString() ?? null,
     })),
@@ -245,7 +242,6 @@ const isEdgeEntry = (v: unknown) =>
   isRef(v.from) &&
   isRef(v.to) &&
   isText(v.verb) &&
-  isObject(v.props) &&
   isConfidence(v.confidence) &&
   isTime(v.occurredAt);
 

@@ -23,11 +23,11 @@ import type {
 } from "./types.ts";
 
 export type ReadOptions = {
-  // Whose records, when no type is named: the reader's own, what others
-  // shared with them, or both.
+  // Whose records: everything the reader may see, their own, or what others
+  // shared with them.
   scope?: "mine" | "shared" | "all";
-  // One person's type: the reader's own, or with owner, one shared into
-  // this brain by that member.
+  // Records of every type with this name the reader may see; owner narrows
+  // to one person's.
   type?: string;
   owner?: string;
   // A person record's id: only records linked to it by an edge.
@@ -36,7 +36,9 @@ export type ReadOptions = {
   until?: Date;
   // Plain words, quoted phrases and -exclusions, as a search box takes them.
   query?: string;
-  // Conditions on the type's declared fields; need a type.
+  // Conditions on the type's declared fields; need a type. A field is one
+  // person's declaration, so filtering or ordering by one reads that
+  // person's records: the owner's, or the reader's own.
   where?: Filter[];
   // Order by a declared field instead of by time; needs a type. Records
   // without the field are left out.
@@ -109,7 +111,7 @@ const DIRECTIONS = { asc: "asc", desc: "desc" } as const;
 // record carries its source and ref, so a caller can cite it.
 export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const scope = opts.scope ?? "mine";
+  const scope = opts.scope ?? "all";
   if (!["mine", "shared", "all"].includes(scope)) {
     throw new Invalid(`"${String(scope)}" is not a scope`);
   }
@@ -139,26 +141,39 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     "($5::timestamptz is null or coalesce(occurred_at, created_at) >= $5)",
     "($6::timestamptz is null or coalesce(occurred_at, created_at) < $6)",
     "($7::text is null or search @@ websearch_to_tsquery('english', $7))",
-    opts.type
+    scope === "mine"
+      ? "person_id = current_member()"
+      : scope === "shared"
+        ? "person_id <> current_member()"
+        : "true",
+    opts.where?.length || opts.orderBy
       ? "person_id = coalesce($3, current_member())"
-      : scope === "mine"
-        ? "person_id = current_member()"
-        : scope === "shared"
-          ? "person_id <> current_member()"
-          : "true",
+      : "true",
   ];
   const param = (value: unknown) => `$${params.push(value)}`;
 
-  // Declared fields are read out of props and compared as their type. The
+  // Declared fields are read out of props and compared as their type: the
+  // owner's declaration when one is named, else the reader's own. The
   // field's name is one parameter, whichever way it is read.
   let form: Map<string, Property> | null = null;
   const field = async (name: string) => {
     if (!opts.type) throw new Invalid(`filtering by "${name}" needs a type`);
     form ??= await propertiesOf(q, opts.type, opts.owner);
     const p = form.get(name);
-    if (!p) throw new Invalid(`${opts.type} has no field "${name}"`);
+    if (!p) {
+      throw new Invalid(
+        `${opts.type} has no field "${name}" in ${opts.owner ? "that" : "your"} vocabulary${opts.owner ? "" : "; a colleague's needs owner"}`,
+      );
+    }
+    // Cast only where the declaration holds, whatever order the database
+    // tests the conditions in.
     const key = param(p.name);
-    return { p, key, expr: `(props ->> ${key})::${sqlType[p.datatype]}` };
+    return {
+      p,
+      key,
+      expr: `(case when person_id = coalesce($3, current_member())
+        then props ->> ${key} end)::${sqlType[p.datatype]}`,
+    };
   };
   // A filter's value must be what the field says, so the database never
   // sees a cast it cannot make.
@@ -307,7 +322,7 @@ const STANDING = `
     select id, at as winner from up where merged_into is null
   ), resolved as (
     select distinct on (wf.winner, e.verb, wt.winner)
-      e.id, wf.winner as from_id, e.verb, wt.winner as to_id, e.props,
+      e.id, wf.winner as from_id, e.verb, wt.winner as to_id,
       e.confidence, e.occurred_at, e.created_at
     from edges e
     join winner wf on wf.id = e.from_id

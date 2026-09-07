@@ -97,12 +97,11 @@ export async function revert(q: Query, n: number): Promise<string> {
       }
       const result = await q.query(
         `update edges
-         set verb = $2, props = $3::jsonb, confidence = $4, occurred_at = $5
+         set verb = $2, confidence = $3, occurred_at = $4
          where id = $1 and person_id = current_member()`,
         [
           id,
           text(before, "verb"),
-          JSON.stringify(before.props ?? {}),
           before.confidence ?? null,
           before.occurred_at ?? null,
         ],

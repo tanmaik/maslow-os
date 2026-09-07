@@ -77,7 +77,7 @@ function instructions(a: About | null, client: string | null): string {
 
 A brain is a graph of what a person knows: records, the links between them, and a log of every change. It is a mind, not a mirror: write what you concluded, with a confidence and an edge back to a stub of what it rests on (the app, its own id, and enough to cite it), never a copy of a mailbox or a calendar.
 
-Types are this person's own vocabulary, and it starts empty. Reuse a name before defining one; a record of an undefined type is refused. Define a type in the same write call. A type may declare fields; values then live in props and must fit. Reshape it later with redefine and undefine. A verb is any word an edge carries; nothing defines it. The catalog also lists types colleagues shared into this brain, each with its owner: read those with owner named, never write to them.
+Types are this person's own vocabulary, and it starts empty. Reuse a name before defining one; a record of an undefined type is refused. Define a type in the same write call. A type may declare fields; values then live in props and must fit. Reshape it later with redefine and undefine. A verb is any word an edge carries; nothing defines it. The catalog also lists types colleagues shared into this brain, each with its owner: read them as you read the person's own, and never write to them.
 
 A record from an app carries the app as source and the app's own id as sourceRef, and the same pair written twice is one record; a record written without them is filed as source brain with a fresh ref. Ids are ten characters; carry them exactly.
 
@@ -137,7 +137,6 @@ const edge = z.object({
   from: ref,
   verb: z.string(),
   to: ref,
-  props: props.optional(),
   confidence: confidence.optional(),
   occurredAt: instant.optional(),
 });
@@ -245,20 +244,20 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "read",
     {
       description:
-        "Records, newest first by when they happened, one per line with the first line of the body beneath. Filter by type, time, a person record they link to, and full-text query (words, quoted phrases, -exclusions). A type is one person's: the caller's own, or with owner, one shared into this brain. where and orderBy work on a type's declared fields and need a type. Pages by cursor. detail full gives whole bodies.",
+        "Records, newest first by when they happened, one per line with the first line of the body beneath. Filter by type, time, a person record they link to, and full-text query (words, quoted phrases, -exclusions). A type matches by name across everyone the person may see; owner narrows to one person's. where and orderBy need a type and read one person's records by their declared fields: the owner's, or the person's own. Pages by cursor. detail full gives whole bodies.",
       inputSchema: {
         scope: z
           .enum(["mine", "shared", "all"])
           .optional()
           .describe(
-            "with no type: the person's own records, what others shared, or both",
+            "everything the person may see (the default), their own, or what others shared",
           ),
         type: z.string().optional(),
         owner: z
           .string()
           .uuid()
           .optional()
-          .describe("with type: the member whose type it is, from the catalog"),
+          .describe("with type: one person's records of it, from the catalog"),
         person: id.optional().describe("a person record's id"),
         since: moment.optional(),
         until: moment.optional(),

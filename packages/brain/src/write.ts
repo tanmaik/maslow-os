@@ -199,23 +199,14 @@ export async function write(
     await need(q, fromId, "edit");
     await need(q, toId, "view");
     const result = await q.query(
-      `insert into edges
-           (from_id, verb, to_id, props, confidence, occurred_at)
-         values ($1, $2, $3, $4::jsonb, $5::real, $6::timestamptz)
+      `insert into edges (from_id, verb, to_id, confidence, occurred_at)
+         values ($1, $2, $3, $4::real, $5::timestamptz)
          on conflict (org_id, from_id, verb, to_id) do update set
-           props = excluded.props, confidence = excluded.confidence,
+           confidence = excluded.confidence,
            occurred_at = excluded.occurred_at, deleted_at = null
-         where (edges.props, edges.confidence, edges.occurred_at, edges.deleted_at)
-           is distinct from
-               (excluded.props, excluded.confidence, excluded.occurred_at, null)`,
-      [
-        fromId,
-        e.verb,
-        toId,
-        JSON.stringify(e.props ?? {}),
-        e.confidence ?? null,
-        e.occurredAt ?? null,
-      ],
+         where (edges.confidence, edges.occurred_at, edges.deleted_at)
+           is distinct from (excluded.confidence, excluded.occurred_at, null)`,
+      [fromId, e.verb, toId, e.confidence ?? null, e.occurredAt ?? null],
     );
     edges += result.rowCount ?? 0;
   }

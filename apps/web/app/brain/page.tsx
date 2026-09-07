@@ -112,14 +112,14 @@ export default async function Page({
   );
   const dir = params.dir === "asc" ? "asc" : "desc";
   const scope =
-    params.scope === "shared" || params.scope === "all" ? params.scope : "mine";
+    params.scope === "shared" || params.scope === "mine" ? params.scope : "all";
   let page;
   try {
     page = await asPerson(p, (db) =>
       read(db, {
         scope,
         type: type?.name,
-        owner: type && !type.own ? type.ownerId : undefined,
+        owner: type?.ownerId,
         query: params.q || undefined,
         where,
         orderBy: sortField
