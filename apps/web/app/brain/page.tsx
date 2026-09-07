@@ -3,29 +3,18 @@ import {
   read,
   type BrainRecord,
   type BrainType,
-  type Filter,
-  type Property,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
-import { ChevronDownIcon, ChevronUpIcon, SearchIcon } from "lucide-react";
+import { SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { DateField } from "@/components/date-field";
 import { FormDialog } from "@/components/form-dialog";
 import { LocalTime } from "@/components/local-time";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -38,33 +27,23 @@ import { Textarea } from "@/components/ui/textarea";
 import { principal } from "@/lib/session";
 
 import { vocabulary } from "./catalog";
-import { DatatypeBadge } from "./datatype-badge";
 import { FieldInputs } from "./fields";
 import { cell, recordHref } from "./format";
 import { Split } from "./graph/split";
 import { WholeGraph } from "./graph/whole";
 import { TypeIcon, TypeMark } from "./type-icon";
 
-// The query the table shows: a type or all, whose when the type is shared
-// into this brain, a search, one value per enum field, a sort column and
-// direction, and where the page starts.
+// What the list shows: everything, or one type, whose when the type is a
+// colleague's, a search, and where the page starts.
 type Params = {
-  scope?: "mine" | "shared" | "all";
   type?: string;
   from?: string;
   q?: string;
-  sort?: string;
-  dir?: "asc" | "desc";
   cursor?: string;
-  deleted?: string;
-  [filter: `f.${string}`]: string | undefined;
 };
 
-const sortable = (p: Property) => p.datatype !== "list";
-
-// The signed-in person's records as a table beside the graph of everything.
-// Picking a type adds its declared fields as columns, sortable and
-// filterable, and leaves the graph to the whole view.
+// Everything this brain knows, beside the graph of it; or one type, with
+// its fields as columns.
 export default async function Page({
   searchParams,
 }: {
@@ -88,7 +67,6 @@ export default async function Page({
   );
   if (params.type && !type) redirect("/brain");
   const properties = type?.properties ?? [];
-  const enums = properties.filter((f) => f.datatype === "enum");
 
   // The same view with one parameter changed.
   const href = (changes: Partial<Params>) => {
@@ -101,31 +79,13 @@ export default async function Page({
     return `/brain${s ? `?${s}` : ""}`;
   };
 
-  const where: Filter[] = enums.flatMap((f) => {
-    const v = params[`f.${f.name}`];
-    return v && f.options?.includes(v)
-      ? [{ property: f.name, op: "eq" as const, value: v }]
-      : [];
-  });
-  const sortField = properties.find(
-    (f) => f.name === params.sort && sortable(f),
-  );
-  const dir = params.dir === "asc" ? "asc" : "desc";
-  const scope =
-    params.scope === "shared" || params.scope === "mine" ? params.scope : "all";
   let page;
   try {
     page = await asPerson(p, (db) =>
       read(db, {
-        scope,
         type: type?.name,
         owner: type?.ownerId,
         query: params.q || undefined,
-        where,
-        orderBy: sortField
-          ? { property: sortField.name, direction: dir }
-          : undefined,
-        includeDeleted: params.deleted === "1",
         cursor: params.cursor,
       }),
     );
@@ -134,56 +94,32 @@ export default async function Page({
     if (err instanceof Invalid && params.cursor) redirect(href({}));
     throw err;
   }
-  const sortLink = (name: string, label: string) => {
-    const active = (params.sort ?? "when") === name;
-    const nextDir = active && dir === "desc" ? "asc" : "desc";
-    return (
-      <Link
-        href={href({ sort: name === "when" ? undefined : name, dir: nextDir })}
-        className="inline-flex items-center gap-1 hover:underline"
-      >
-        {label}
-        {active &&
-          (dir === "asc" ? (
-            <ChevronUpIcon className="size-3" />
-          ) : (
-            <ChevronDownIcon className="size-3" />
-          ))}
-      </Link>
-    );
-  };
+  const whose = (r: BrainRecord) =>
+    r.ownerId === p.userId ? null : (people.get(r.ownerId) ?? "someone");
 
   const view = (
     <>
-      <div className="space-y-1">
+      <div className="flex flex-wrap items-center gap-2">
         <h1 className="flex items-center gap-2 text-2xl font-semibold">
           {type && <TypeIcon type={type.name} className="size-5" />}
-          {type ? type.name : "Records"}
+          {type ? type.name : "Brain"}
         </h1>
-        <p className="text-muted-foreground text-sm">
-          {type && !type.own
-            ? `${people.get(type.ownerId) ?? "Someone no longer here"}'s, shared with you.`
-            : "Everything this brain knows, newest first."}
-        </p>
+        {type && !type.own && (
+          <span className="text-muted-foreground text-sm">
+            {people.get(type.ownerId) ?? "someone"}&apos;s, shared with you
+          </span>
+        )}
+        <span className="flex-1" />
+        {(!type || type.own) && (
+          <NewRecord type={type ?? mine.find((t) => t.name === "note")} />
+        )}
       </div>
-      <form method="get" className="flex flex-wrap items-center gap-2">
+      <form method="get" className="flex items-center gap-2">
         {type && <input type="hidden" name="type" value={type.name} />}
         {type && !type.own && (
           <input type="hidden" name="from" value={type.ownerId} />
         )}
-        {!type && (
-          <Select name="scope" defaultValue={scope}>
-            <SelectTrigger aria-label="Whose">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="mine">Mine</SelectItem>
-              <SelectItem value="shared">Shared with me</SelectItem>
-              <SelectItem value="all">Everything I can see</SelectItem>
-            </SelectContent>
-          </Select>
-        )}
-        <div className="relative w-full sm:w-64">
+        <div className="relative w-full sm:w-72">
           <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
           <Input
             name="q"
@@ -192,70 +128,13 @@ export default async function Page({
             className="pl-8"
           />
         </div>
-        {!type && mine.length > 0 && (
-          <Select name="type" defaultValue="">
-            <SelectTrigger aria-label="Type">
-              <SelectValue placeholder="Any type" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Any type</SelectItem>
-              {mine.map((t) => (
-                <SelectItem key={t.id} value={t.name}>
-                  <TypeIcon type={t.name} />
-                  {t.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-        {enums.map((f) => (
-          <Select
-            key={f.id}
-            name={`f.${f.name}`}
-            defaultValue={params[`f.${f.name}`] ?? ""}
-          >
-            <SelectTrigger aria-label={f.name}>
-              <SelectValue placeholder={`Any ${f.name}`} />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="">Any {f.name}</SelectItem>
-              {f.options?.map((o) => (
-                <SelectItem key={o} value={o}>
-                  {o}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        ))}
-        <Label className="text-muted-foreground gap-1.5 font-normal">
-          <Checkbox
-            name="deleted"
-            value="1"
-            defaultChecked={params.deleted === "1"}
-          />
-          Show deleted
-        </Label>
-        <Button type="submit" variant="outline" size="sm">
-          Apply
-        </Button>
-        <span className="text-muted-foreground text-sm">
-          {page.records.length}
-          {page.cursor ? "+" : ""} {type ? type.name : "record"}
-          {page.records.length === 1 ? "" : "s"}
-        </span>
-        <span className="flex-1" />
-        {(!type || type.own) && (
-          <NewRecord type={type ?? mine.find((t) => t.name === "note")} />
-        )}
       </form>
 
-      {page.records.length === 0 && types.length === 0 ? (
+      {page.records.length === 0 && !params.q ? (
         <p className="text-muted-foreground text-sm">
-          This brain is empty. Write a note, or define a type in{" "}
-          <Link href="/brain/vocabulary" className="underline">
-            vocabulary
-          </Link>{" "}
-          to start a table.
+          {type
+            ? `No ${type.name}s yet.`
+            : "This brain is empty. Write a note, or let your agent start."}
         </p>
       ) : (
         <Table>
@@ -264,24 +143,49 @@ export default async function Page({
               <TableHead>Title</TableHead>
               {type ? (
                 properties.map((f) => (
-                  <TableHead key={f.id}>
-                    <span className="inline-flex items-center gap-1.5">
-                      {sortable(f) ? sortLink(f.name, f.name) : f.name}
-                      <DatatypeBadge datatype={f.datatype} />
-                    </span>
-                  </TableHead>
+                  <TableHead key={f.id}>{f.name}</TableHead>
                 ))
               ) : (
                 <TableHead>Type</TableHead>
               )}
-              <TableHead className="hidden sm:table-cell">
-                {sortLink("when", "When")}
-              </TableHead>
+              <TableHead className="hidden sm:table-cell">When</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {page.records.map((r) => (
-              <Row key={r.id} r={r} type={type} me={p.userId} />
+              <TableRow key={r.id} className="relative">
+                <TableCell className="max-w-xs whitespace-normal">
+                  <Link
+                    href={recordHref(r.id)}
+                    className="font-medium after:absolute after:inset-0 hover:underline"
+                  >
+                    {r.title || "(untitled)"}
+                  </Link>
+                  {whose(r) && (
+                    <span className="text-muted-foreground ml-2 text-xs">
+                      {whose(r)}&apos;s
+                    </span>
+                  )}
+                </TableCell>
+                {type ? (
+                  properties.map((f) => (
+                    <TableCell key={f.id} className="max-w-48 truncate">
+                      {cell(r.props[f.name], f)}
+                    </TableCell>
+                  ))
+                ) : (
+                  <TableCell>
+                    <TypeMark
+                      type={r.type}
+                      owner={r.ownerId === p.userId ? undefined : r.ownerId}
+                      className="relative z-10"
+                    />
+                  </TableCell>
+                )}
+                <TableCell className="text-muted-foreground hidden whitespace-nowrap sm:table-cell">
+                  <LocalTime at={r.occurredAt} fallback="—" />
+                </TableCell>
+              </TableRow>
             ))}
             {page.records.length === 0 && (
               <TableRow>
@@ -303,7 +207,7 @@ export default async function Page({
           nativeButton={false}
           render={<Link href={href({ cursor: page.cursor })} />}
         >
-          Next page
+          More
         </Button>
       )}
     </>
@@ -312,64 +216,8 @@ export default async function Page({
   return <Split graph={<WholeGraph />}>{view}</Split>;
 }
 
-// A record as a row. The whole row opens it; its type opens the type's
-// table, which is its owner's.
-function Row({
-  r,
-  type,
-  me,
-}: {
-  r: BrainRecord;
-  type?: BrainType;
-  me: string;
-}) {
-  return (
-    <TableRow
-      className={`relative ${r.deletedAt ? "text-muted-foreground" : ""}`}
-    >
-      <TableCell className="max-w-xs whitespace-normal">
-        <Link
-          href={recordHref(r.id)}
-          className="font-medium after:absolute after:inset-0 hover:underline"
-        >
-          {r.title || "(untitled)"}
-        </Link>
-        {r.deletedAt && (
-          <Badge variant="outline" className="ml-2">
-            {r.mergedInto ? "merged" : "deleted"}
-          </Badge>
-        )}
-        {r.access !== "owner" && (
-          <Badge variant="secondary" className="ml-2">
-            shared, {r.access}
-          </Badge>
-        )}
-      </TableCell>
-      {type ? (
-        type.properties.map((f) => (
-          <TableCell key={f.id} className="max-w-48 truncate">
-            {cell(r.props[f.name], f)}
-          </TableCell>
-        ))
-      ) : (
-        <TableCell>
-          <TypeMark
-            type={r.type}
-            owner={r.ownerId === me ? undefined : r.ownerId}
-            className="relative z-10"
-          />
-        </TableCell>
-      )}
-      <TableCell className="text-muted-foreground hidden whitespace-nowrap sm:table-cell">
-        <LocalTime at={r.occurredAt} fallback="—" />
-      </TableCell>
-    </TableRow>
-  );
-}
-
-// A row added by hand: a note when no type is chosen, otherwise a record of
-// the type with its declared fields. A note has fields once someone has
-// declared them.
+// A record written by hand: a note, or one of the type being looked at,
+// with its fields.
 function NewRecord({ type }: { type?: BrainType }) {
   const name = type?.name ?? "note";
   return (
@@ -381,7 +229,7 @@ function NewRecord({ type }: { type?: BrainType }) {
           <Input id="title" name="title" required autoFocus />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="body">Body, markdown</Label>
+          <Label htmlFor="body">Body</Label>
           <Textarea id="body" name="body" rows={6} />
         </div>
         <FieldInputs properties={type?.properties ?? []} />

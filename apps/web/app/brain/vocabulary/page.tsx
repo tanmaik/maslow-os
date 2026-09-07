@@ -3,298 +3,115 @@ import { asPerson } from "@placeholder/db";
 import { groupsIn } from "@placeholder/db/groups";
 import { redirect } from "next/navigation";
 
-import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { principal } from "@/lib/session";
 
 import { vocabulary } from "../catalog";
-import { DatatypeBadge } from "../datatype-badge";
-import { sharedGroups, verbText } from "../format";
+import { sharedGroups } from "../format";
 import { Sharing } from "../sharing";
-import { TypeIcon, TypeMark } from "../type-icon";
+import { TypeMark } from "../type-icon";
 
-const DATATYPES = [
-  "text",
-  "number",
-  "boolean",
-  "date",
-  "datetime",
-  "enum",
-  "list",
-] as const;
-
-// This person's vocabulary: every type they defined with the fields it
-// declares and who it is shared with; the types colleagues have shared into
-// this brain, grouped by who owns them; and the verbs their links carry. A person adds to their own here.
+// The types of thing this brain holds, each with what it records and who may
+// see it; then the types colleagues have shared in. The agent shapes them; a
+// person decides who sees them.
 export default async function Page() {
   const p = await principal();
   if (!p) redirect("/");
-  const [{ types, verbs, people }, { shares, groups }] = await Promise.all([
-    vocabulary(p),
-    asPerson(p, async (db) => ({
-      shares: await typeSharesOf(db),
-      groups: await groupsIn(db),
-    })),
-  ]);
+  const { types, people } = await vocabulary(p);
   const mine = types.filter((t) => t.own);
-  const shared = sharedGroups(types, people);
+  const { shares, groups } = await asPerson(p, async (db) => ({
+    shares: await typeSharesOf(db),
+    groups: await groupsIn(db),
+  }));
   const members = [...people].map(([id, name]) => ({ id, name }));
 
   return (
     <>
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Vocabulary</h1>
+        <h1 className="text-2xl font-semibold">Types</h1>
         <p className="text-muted-foreground text-sm">
-          The types of thing this brain holds. They are yours: a colleague sees
-          a type, and every record of it, once you share it.
+          The kinds of thing this brain holds. Yours until you share one; a
+          colleague who has a type shares every record of it with you.
         </p>
       </div>
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-medium">Types</h2>
-          <div className="flex gap-2">
-            <DefineType />
-            {mine.length > 0 && <AddField types={mine.map((t) => t.name)} />}
-          </div>
+      {mine.length === 0 ? (
+        <p className="text-muted-foreground text-sm">
+          Nothing yet. The first note, or the agent&apos;s first record, starts
+          one.
+        </p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {mine.map((t) => (
+            <TypeCard key={t.id} type={t}>
+              <Sharing
+                on={{ type: t.id }}
+                owner
+                ownerName="you"
+                shares={shares.get(t.id) ?? []}
+                groups={groups}
+                members={members}
+                compact
+              />
+            </TypeCard>
+          ))}
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Type</TableHead>
-              <TableHead>Fields</TableHead>
-              <TableHead>Sharing</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {mine.map((t) => (
-              <TableRow key={t.id}>
-                <TableCell className="max-w-48 align-top font-medium whitespace-normal">
-                  <TypeMark type={t.name} />
-                </TableCell>
-                <TableCell className="align-top whitespace-normal">
-                  <Fields type={t} />
-                </TableCell>
-                <TableCell className="min-w-48 align-top whitespace-normal">
-                  <Sharing
-                    on={{ type: t.id }}
-                    owner
-                    ownerName="you"
-                    shares={shares.get(t.id) ?? []}
-                    groups={groups}
-                    members={members}
-                  />
-                </TableCell>
-              </TableRow>
-            ))}
-            {mine.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={3} className="text-muted-foreground">
-                  No types yet. Whoever writes the first record of a type
-                  defines it.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </section>
-
-      {shared.map((g) => (
+      )}
+      {sharedGroups(types, people).map((g) => (
         <section key={g.ownerId} className="space-y-3">
-          <h2 className="font-medium">
-            {g.owner}
-            {"'s types, shared with you"}
+          <h2 className="text-muted-foreground text-sm">
+            {g.owner}&apos;s, shared with you
           </h2>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Type</TableHead>
-                <TableHead>Fields</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {g.types.map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="max-w-48 align-top font-medium whitespace-normal">
-                    <TypeMark type={t.name} owner={t.ownerId} />
-                  </TableCell>
-                  <TableCell className="align-top whitespace-normal">
-                    <Fields type={t} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {g.types.map((t) => (
+              <TypeCard key={t.id} type={t} owner={t.ownerId} />
+            ))}
+          </div>
         </section>
       ))}
-
-      <section className="space-y-3">
-        <h2 className="font-medium">Verbs</h2>
-        <p className="text-muted-foreground text-sm">
-          The words links carry. A verb is whatever a link says; there is
-          nothing to define.
-        </p>
-        {verbs.length > 0 ? (
-          <p className="flex flex-wrap gap-1.5">
-            {verbs.map((v) => (
-              <Badge key={v} variant="outline">
-                {verbText(v)}
-              </Badge>
-            ))}
-          </p>
-        ) : (
-          <p className="text-muted-foreground text-sm">No links yet.</p>
-        )}
-      </section>
     </>
   );
 }
 
-// The fields a type declares, each with its datatype.
-function Fields({ type }: { type: BrainType }) {
-  if (type.properties.length === 0) {
-    return <span className="text-muted-foreground">any</span>;
-  }
+// One type: its name, what a record of it holds, and, in a corner, who may
+// see it.
+function TypeCard({
+  type: t,
+  owner,
+  children,
+}: {
+  type: BrainType;
+  owner?: string;
+  children?: React.ReactNode;
+}) {
   return (
-    <dl className="space-y-2">
-      {type.properties.map((f) => (
-        <dt key={f.id} className="flex flex-wrap items-center gap-1.5">
-          <span className="font-medium">{f.name}</span>
-          <DatatypeBadge datatype={f.datatype} />
-          {f.required && <Badge variant="secondary">required</Badge>}
-          {f.options?.map((o) => (
-            <Badge key={o} variant="outline">
-              {o}
+    <Card className="gap-3 py-4">
+      <CardHeader className="px-4">
+        <CardTitle className="text-base">
+          <TypeMark type={t.name} owner={owner} />
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-wrap gap-1.5 px-4">
+        {t.properties.length === 0 ? (
+          <span className="text-muted-foreground text-sm">
+            a title and words
+          </span>
+        ) : (
+          t.properties.map((f) => (
+            <Badge key={f.id} variant="secondary" className="font-normal">
+              {f.name}
+              {f.required && <span className="text-muted-foreground">*</span>}
             </Badge>
-          ))}
-        </dt>
-      ))}
-    </dl>
-  );
-}
-
-// A name: all a type is.
-function DefineType() {
-  return (
-    <FormDialog
-      trigger="Define a type"
-      title="Define a type"
-      description="A type of record this brain can hold, like person or commitment."
-    >
-      <form
-        action="/brain/vocabulary/define"
-        method="post"
-        className="grid gap-3"
-      >
-        <input type="hidden" name="what" value="type" />
-        <div className="space-y-1">
-          <Label htmlFor="type-name">Name</Label>
-          <Input
-            id="type-name"
-            name="name"
-            required
-            autoFocus
-            placeholder="commitment"
-          />
-        </div>
-        <div>
-          <Button type="submit">Define</Button>
-        </div>
-      </form>
-    </FormDialog>
-  );
-}
-
-// A field on a type's form: its name and what it holds.
-function AddField({ types }: { types: string[] }) {
-  return (
-    <FormDialog
-      trigger="Add a field"
-      title="Add a field"
-      description="A field every record of a type can carry, checked when it is written."
-    >
-      <form
-        action="/brain/vocabulary/define"
-        method="post"
-        className="grid gap-3"
-      >
-        <input type="hidden" name="what" value="field" />
-        <div className="space-y-1">
-          <Label htmlFor="field-type">Type</Label>
-          <Select name="type" defaultValue={types[0]!}>
-            <SelectTrigger id="field-type" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {types.map((t) => (
-                <SelectItem key={t} value={t}>
-                  <TypeIcon type={t} />
-                  {t}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="field-name">Name</Label>
-          <Input
-            id="field-name"
-            name="name"
-            pattern="[a-z][a-z0-9_]*"
-            placeholder="due_date"
-            required
-            autoFocus
-          />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="field-datatype">Holds</Label>
-          <Select name="datatype" defaultValue="text">
-            <SelectTrigger id="field-datatype" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {DATATYPES.map((d) => (
-                <SelectItem key={d} value={d}>
-                  <DatatypeBadge datatype={d} />
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="field-options">Options, for an enum</Label>
-          <Input
-            id="field-options"
-            name="options"
-            placeholder="open, done, dropped"
-          />
-        </div>
-        <Label className="gap-1.5 font-normal">
-          <Checkbox name="required" value="1" />
-          Required
-        </Label>
-        <div>
-          <Button type="submit">Add</Button>
-        </div>
-      </form>
-    </FormDialog>
+          ))
+        )}
+      </CardContent>
+      {children && <CardFooter className="px-4">{children}</CardFooter>}
+    </Card>
   );
 }

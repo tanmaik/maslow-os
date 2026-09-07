@@ -3,7 +3,7 @@ import { isValid, parseISO } from "date-fns";
 
 // A form field's text as the value its declared field says, or undefined
 // when empty so the write door can see a required field is missing.
-function coerce(p: Property, raw: string): unknown {
+export function fieldValue(p: Property, raw: string): unknown {
   const s = raw.trim();
   if (s === "") return undefined;
   switch (p.datatype) {
@@ -36,7 +36,7 @@ export function propsFrom(
   for (const p of properties) {
     const raw = form.get(`p.${p.name}`);
     if (typeof raw !== "string") continue;
-    const v = coerce(p, raw);
+    const v = fieldValue(p, raw);
     if (v !== undefined) props[p.name] = v;
   }
   return props;

@@ -242,36 +242,57 @@ export type Patch = {
   type?: string;
   title?: string;
   body?: string;
+  // New props replace the old; fields change one value at a time on top
+  // of what is there, and a null takes that value away.
   props?: Record<string, unknown>;
+  fields?: Record<string, unknown>;
   // Null takes the time away; absent leaves it.
   occurredAt?: Date | string | null;
   confidence?: number | null;
 };
 
-// Changes a record. New props replace the old and must fit the type's form.
+// Changes a record. What it will hold must fit the type's form. The type
+// is held first and then the row, the order every door takes, and the row
+// is held while its props are read and rewritten, so two changes to
+// different fields at once both land.
 export async function edit(
   q: Query,
   id: string,
   patch: Patch,
 ): Promise<BrainRecord> {
   await need(q, id, "edit");
-  const current = await q.query<{
+  const ROW =
+    "select type, props, person_id from records where id = $1 and deleted_at is null";
+  const changesForm = Boolean(patch.props || patch.fields || patch.type);
+  type Row = {
     type: string;
     props: Record<string, unknown>;
     person_id: string;
-  }>(
-    "select type, props, person_id from records where id = $1 and deleted_at is null",
-    [id],
-  );
-  if (!current.rows[0]) throw new NotFound(`record ${id} is not in this brain`);
-  if (patch.props || patch.type) {
-    const type = patch.type ?? current.rows[0].type;
-    check(
-      type,
-      patch.props ?? current.rows[0].props,
-      await propertiesOf(q, type, current.rows[0].person_id, true),
-    );
+  };
+  let form: Map<string, Property> | null = null;
+  let current: Row | undefined;
+  for (;;) {
+    const peek = (await q.query<Row>(ROW, [id])).rows[0];
+    if (!peek) throw new NotFound(`record ${id} is not in this brain`);
+    form = changesForm
+      ? await propertiesOf(q, patch.type ?? peek.type, peek.person_id, true)
+      : null;
+    // The row is held only while it is still of the type held; moved
+    // meanwhile, the type is held again before the row is tried.
+    current = (
+      await q.query<Row>(`${ROW} and type = $2 for update`, [id, peek.type])
+    ).rows[0];
+    if (current) break;
   }
+  let props = patch.props;
+  if (patch.fields) {
+    props = { ...(patch.props ?? current.props) };
+    for (const [name, value] of Object.entries(patch.fields)) {
+      if (value === null || value === undefined) delete props[name];
+      else props[name] = value;
+    }
+  }
+  if (form) check(patch.type ?? current.type, props ?? current.props, form);
   const { rows } = await q.query<RecordRow>(
     `update records set
        type = coalesce($2, type),
@@ -288,7 +309,7 @@ export async function edit(
       patch.type ?? null,
       patch.title ?? null,
       patch.body ?? null,
-      patch.props ? JSON.stringify(patch.props) : null,
+      props ? JSON.stringify(props) : null,
       patch.occurredAt ?? null,
       patch.occurredAt !== undefined,
       patch.confidence ?? null,

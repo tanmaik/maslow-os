@@ -1,5 +1,4 @@
 import {
-  catalog,
   edit,
   Forbidden,
   get,
@@ -10,6 +9,7 @@ import {
   restore,
   unlink,
   unmerge,
+  type Patch,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { NextResponse } from "next/server";
@@ -17,12 +17,15 @@ import { NextResponse } from "next/server";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
+import { vocabulary } from "../../../catalog";
 import { recordHref } from "../../../format";
-import { confidenceFrom, instantFrom, propsFrom } from "../../../props";
+import { confidenceFrom, fieldValue, instantFrom } from "../../../props";
 
-// Changes one record the way the form asked: edited, deleted, restored,
-// unmerged, or one of its links removed. An edit posts the declared fields;
-// what the record holds beyond them stays.
+// Changes one record the way the form asked: deleted, restored, unmerged,
+// one of its links removed, or edited. An edit changes only what was
+// posted: a title, a body, a field, when it happened, how sure; a field
+// posted empty is taken away, and the door merges fields under a lock. A browser posting a form is sent back to the
+// record; a page saving as it goes asks for JSON and gets a bare answer.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -33,6 +36,7 @@ export async function POST(
   if (!isId(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
   const intent = String(form.get("intent") ?? "edit");
+  const bare = request.headers.get("accept")?.includes("application/json");
 
   try {
     await asPerson(p, async (db) => {
@@ -47,24 +51,32 @@ export async function POST(
       }
       const [current] = await get(db, [id]);
       if (!current) throw new NotFound(`record ${id} is not in this brain`);
+      const patch: Patch = {};
+      if (form.has("title")) {
+        patch.title = String(form.get("title")).trim();
+        if (!patch.title) throw new Invalid("A record needs a title.");
+      }
+      if (form.has("body")) patch.body = String(form.get("body")).trim();
       const declared =
-        (await catalog(db)).types.find(
+        (await vocabulary(p)).types.find(
           (t) => t.name === current.type && t.ownerId === current.ownerId,
         )?.properties ?? [];
-      const title = String(form.get("title") ?? "").trim();
-      if (!title) throw new Invalid("A record needs a title.");
-      const kept = Object.fromEntries(
-        Object.entries(current.props).filter(
-          ([name]) => !declared.some((d) => d.name === name),
-        ),
-      );
-      await edit(db, id, {
-        title,
-        body: String(form.get("body") ?? "").trim(),
-        props: { ...kept, ...propsFrom(form, declared) },
-        occurredAt: instantFrom(form.get("occurred_at")),
-        confidence: confidenceFrom(form.get("confidence")),
-      });
+      const posted = declared.filter((f) => form.has(`p.${f.name}`));
+      if (posted.length) {
+        patch.fields = Object.fromEntries(
+          posted.map((f) => [
+            f.name,
+            fieldValue(f, String(form.get(`p.${f.name}`))) ?? null,
+          ]),
+        );
+      }
+      if (form.has("occurred_at")) {
+        patch.occurredAt = instantFrom(form.get("occurred_at"));
+      }
+      if (form.has("confidence")) {
+        patch.confidence = confidenceFrom(form.get("confidence"));
+      }
+      if (Object.keys(patch).length) await edit(db, id, patch);
     });
   } catch (err) {
     if (err instanceof Invalid || err instanceof NotFound) {
@@ -75,5 +87,6 @@ export async function POST(
     }
     throw err;
   }
+  if (bare) return new Response(null, { status: 204 });
   return NextResponse.redirect(`${origin(request)}${recordHref(id)}`, 303);
 }

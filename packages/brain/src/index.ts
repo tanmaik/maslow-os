@@ -34,4 +34,5 @@ export {
   unlink,
   unmerge,
   write,
+  type Patch,
 } from "./write.ts";

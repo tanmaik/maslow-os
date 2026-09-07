@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/select";
 
 import { cell } from "./format";
-import { DatatypeBadge } from "./datatype-badge";
 
 // One input per declared field, named p.<field>, holding what the record
 // has: a select for a choice, a calendar for a day, a number for a number.
@@ -41,7 +40,6 @@ export function FieldInputs({
           <div key={p.id} className="space-y-1">
             <Label htmlFor={id} className="inline-flex items-center gap-1.5">
               {p.name}
-              <DatatypeBadge datatype={p.datatype} />
               {p.required && <span className="text-muted-foreground">*</span>}
             </Label>
             {choices ? (

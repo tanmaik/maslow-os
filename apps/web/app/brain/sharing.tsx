@@ -22,7 +22,7 @@ const value = (s: Subject) =>
 
 // Who a record or a type is shared with, and, for its owner, a way to share
 // it with a person, a group or everyone at a level. Sharing a type shares
-// every record of it.
+// every record of it. Compact, it is one quiet line.
 export function Sharing({
   on,
   owner,
@@ -30,6 +30,7 @@ export function Sharing({
   shares,
   groups,
   members,
+  compact = false,
 }: {
   on: Target;
   owner: boolean;
@@ -37,6 +38,7 @@ export function Sharing({
   shares: Share[];
   groups: Group[];
   members: { id: string; name: string }[];
+  compact?: boolean;
 }) {
   const what = "type" in on ? "type" : "record";
   const target =
@@ -51,12 +53,24 @@ export function Sharing({
         : (members.find((m) => m.id === s.id)?.name ??
           "someone no longer here");
   return (
-    <div className="space-y-2">
-      <p className="text-muted-foreground text-sm">
-        Owned by {ownerName}
-        {shares.length > 0 && (
+    <div
+      className={
+        compact
+          ? "flex w-full items-center justify-between gap-2 text-xs"
+          : "space-y-2 text-sm"
+      }
+    >
+      <p className="text-muted-foreground">
+        {shares.length === 0 ? (
+          ownerName === "you" ? (
+            "Only you can see this."
+          ) : (
+            `${ownerName}'s.`
+          )
+        ) : (
           <>
-            {" · shared with "}
+            {ownerName === "you" ? "Yours" : `${ownerName}'s`}
+            {", shared with "}
             {shares.map((g, i) => (
               <span key={g.id}>
                 {i > 0 && ", "}
@@ -69,6 +83,7 @@ export function Sharing({
       {owner && (
         <FormDialog
           trigger="Share"
+          variant={compact ? "ghost" : "outline"}
           title={`Share this ${what}`}
           description={
             what === "type"

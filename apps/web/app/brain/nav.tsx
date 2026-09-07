@@ -42,8 +42,8 @@ function View({
 }
 
 // The brain's views: every record, one view per type of the person's own,
-// the types shared into this brain grouped by owner, then the vocabulary
-// and the log. The current one is marked.
+// the types shared into this brain grouped by owner, then the types page.
+// The current one is marked.
 export function BrainNav({
   types,
   shared,
@@ -85,10 +85,7 @@ export function BrainNav({
       ))}
       <Separator className="my-2 hidden md:block" />
       <View href="/brain/vocabulary" current={current}>
-        Vocabulary
-      </View>
-      <View href="/brain/activity" current={current}>
-        Activity
+        Types
       </View>
     </nav>
   );

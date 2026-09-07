@@ -2,7 +2,7 @@
 
 import { format, isValid, parseISO, set } from "date-fns";
 import { CalendarIcon } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -26,19 +26,21 @@ function instant(day: Date, clock: string): Date | undefined {
 
 // A day, or a day and a time, picked from a calendar and posted as one
 // input: 2026-09-04 for a day, an instant for a time. Left untouched, it
-// posts exactly what it was given.
+// posts exactly what it was given. onChange hears each new value.
 export function DateField({
   id,
   name,
   defaultValue,
   time = false,
   required = false,
+  onChange,
 }: {
   id: string;
   name: string;
   defaultValue?: string;
   time?: boolean;
   required?: boolean;
+  onChange?: (value: string) => void;
 }) {
   const given = defaultValue ? parseISO(defaultValue) : undefined;
   const initial = given && isValid(given) ? given : undefined;
@@ -58,6 +60,13 @@ export function DateField({
       : time
         ? picked.toISOString()
         : format(picked, DAY);
+  const heard = useRef(value);
+  useEffect(() => {
+    if (value !== heard.current) {
+      heard.current = value;
+      onChange?.(value);
+    }
+  }, [value, onChange]);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <input

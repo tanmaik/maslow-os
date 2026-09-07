@@ -73,15 +73,3 @@ export function typeColor(type: string): string {
 
 // A verb as words: rests_on reads "rests on".
 export const verbText = (verb: string) => verb.replace(/_/g, " ");
-
-// Who an author string names, with people by their names. "seed" stays
-// itself; a model or job says which.
-export function authorText(author: string, people: Map<string, string>) {
-  const [who, ...rest] = author.split(":");
-  const id = rest.join(":");
-  if (who === "person") return people.get(id) ?? "someone no longer here";
-  if (who === "model") return `the model, ${id}`;
-  if (who === "job") return `a job, ${id}`;
-  if (who === "seed") return "the example data";
-  return author;
-}

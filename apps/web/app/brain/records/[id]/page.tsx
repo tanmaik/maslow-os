@@ -3,24 +3,19 @@ import {
   edgesOf,
   get,
   graph,
-  history,
   isId,
   read,
   sharesOf,
   type BrainRecord,
   type Edge,
-  type Event,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { groupsIn } from "@placeholder/db/groups";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
-import { DateField } from "@/components/date-field";
 import { FormDialog } from "@/components/form-dialog";
 import { HowSure } from "@/components/how-sure";
-import { LocalTime } from "@/components/local-time";
-import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,29 +26,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
 import { principal } from "@/lib/session";
 
-import { DatatypeBadge } from "../../datatype-badge";
-import { FieldInputs } from "../../fields";
-import { authorText, cell, percent, recordHref, verbText } from "../../format";
+import { vocabulary } from "../../catalog";
+import { recordHref, verbText } from "../../format";
 import { BrainGraph } from "../../graph/lazy";
 import { Split } from "../../graph/split";
-import { vocabulary } from "../../catalog";
 import { Sharing } from "../../sharing";
 import { TypeIcon, TypeMark } from "../../type-icon";
+import { Document } from "./document";
+import { Properties } from "./properties";
 
-// One record as a page to read: its body, with everything about it beside
-// the graph around it: fields, origin, links read as sentences, history,
-// and the ways to change it.
+// One record as a document to read and write in place, with what it holds
+// beside it under the graph around it: its fields, when, how sure, who may
+// see it, and its links read as sentences.
 export default async function Page({
   params,
 }: {
@@ -86,7 +73,7 @@ export default async function Page({
       // Every record the person can see, for the link picker.
       const all: BrainRecord[] = [];
       for (let cursor: string | null = null; ;) {
-        const page = await read(db, { scope: "all", limit: 200, cursor });
+        const page = await read(db, { limit: 200, cursor });
         all.push(...page.records);
         cursor = page.cursor;
         if (!cursor) break;
@@ -97,7 +84,6 @@ export default async function Page({
         edges,
         others: new Map(others.map((r) => [r.id, r])),
         winner,
-        events: await history(db, { of: id }),
         near: await graph(db, [id]),
         shares: await sharesOf(db, { record: id }),
         all,
@@ -112,190 +98,76 @@ export default async function Page({
     edges,
     others,
     winner,
-    events,
     near,
     shares,
     all,
     groups,
   } = found;
   const type = types.find((t) => t.name === r.type && t.ownerId === r.ownerId);
-  const canEdit = r.access === "edit" || r.access === "owner";
+  const canEdit = (r.access === "edit" || r.access === "owner") && !r.deletedAt;
   const isOwner = r.access === "owner";
-  const who = (author: string) => authorText(author, people);
-  const properties = type?.properties ?? [];
-  const undeclared = Object.keys(r.props).filter(
-    (k) => !properties.some((f) => f.name === k),
-  );
   const action = `${recordHref(r.id)}/change`;
 
-  const details = (
-    <>
-      <Table>
-        <TableBody>
-          {properties.map((f) => (
-            <TableRow key={f.id}>
-              <TableHead className="w-44">
-                <span className="inline-flex items-center gap-1.5">
-                  {f.name}
-                  <DatatypeBadge datatype={f.datatype} />
-                </span>
-              </TableHead>
-              <TableCell className="whitespace-normal">
-                {cell(r.props[f.name], f)}
-              </TableCell>
-            </TableRow>
-          ))}
-          {undeclared.map((k) => (
-            <TableRow key={k}>
-              <TableHead className="w-44">{k}</TableHead>
-              <TableCell className="whitespace-normal">
-                {cell(r.props[k])}
-              </TableCell>
-            </TableRow>
-          ))}
-          <TableRow>
-            <TableHead className="w-44">
-              <span className="inline-flex items-center gap-1.5">
-                When
-                <DatatypeBadge datatype="datetime" />
-              </span>
-            </TableHead>
-            <TableCell className="text-muted-foreground">
-              <LocalTime at={r.occurredAt} fallback="no time" />
-            </TableCell>
-          </TableRow>
-          {r.confidence !== null && (
-            <TableRow>
-              <TableHead>How sure</TableHead>
-              <TableCell>{percent(r.confidence)}</TableCell>
-            </TableRow>
-          )}
-          <TableRow>
-            <TableHead title="When this record was made and last changed">
-              <span className="inline-flex items-center gap-1.5">
-                Changed
-                <DatatypeBadge datatype="datetime" />
-              </span>
-            </TableHead>
-            <TableCell className="text-muted-foreground whitespace-normal">
-              made <LocalTime at={r.createdAt} />
-              {r.updatedAt > r.createdAt && (
-                <>
-                  , last changed <LocalTime at={r.updatedAt} />
-                </>
-              )}
-              {". "}
-              <Link href="/brain/activity" className="underline">
-                All changes to the brain
-              </Link>
-            </TableCell>
-          </TableRow>
-        </TableBody>
-      </Table>
-
+  const aside = (
+    <div className="space-y-6">
+      <Properties
+        id={r.id}
+        fields={type?.properties ?? []}
+        values={r.props}
+        occurredAt={r.occurredAt?.toISOString() ?? null}
+        confidence={r.confidence}
+        canEdit={canEdit}
+      />
+      <Separator />
       <Sharing
         on={{ record: r.id }}
-        owner={isOwner}
-        ownerName={people.get(r.ownerId) ?? "someone no longer here"}
+        owner={isOwner && !r.deletedAt}
+        ownerName={
+          r.ownerId === p.userId
+            ? "you"
+            : (people.get(r.ownerId) ?? "someone no longer here")
+        }
         shares={shares}
         groups={groups}
         members={[...people].map(([id, name]) => ({ id, name }))}
       />
-
-      {!r.deletedAt && canEdit && (
-        <div className="flex flex-wrap gap-2">
-          <FormDialog trigger="Edit" title={`Edit ${r.title || "this record"}`}>
-            <form action={action} method="post" className="grid gap-3">
-              <div className="space-y-1">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  name="title"
-                  defaultValue={r.title}
-                  required
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="body">Body, markdown</Label>
-                <Textarea
-                  id="body"
-                  name="body"
-                  defaultValue={r.body}
-                  rows={8}
-                />
-              </div>
-              <FieldInputs properties={properties} values={r.props} />
-              <div className="space-y-1">
-                <Label htmlFor="occurred_at">When</Label>
-                <DateField
-                  id="occurred_at"
-                  name="occurred_at"
-                  time
-                  defaultValue={r.occurredAt?.toISOString()}
-                />
-              </div>
-              <HowSure
-                id="confidence"
-                name="confidence"
-                defaultValue={
-                  r.confidence === null ? null : Math.round(r.confidence * 100)
-                }
-              />
-              <div>
-                <Button type="submit">Save</Button>
-              </div>
-            </form>
-          </FormDialog>
-          <LinkForm record={r} verbs={verbs} candidates={all} />
-        </div>
+      {isOwner && (
+        <form action={action} method="post">
+          {r.mergedInto ? (
+            <Button variant="outline" size="sm" name="intent" value="unmerge">
+              Unmerge
+            </Button>
+          ) : r.deletedAt ? (
+            <Button variant="outline" size="sm" name="intent" value="restore">
+              Restore
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              name="intent"
+              value="delete"
+              className="text-muted-foreground"
+            >
+              Delete
+            </Button>
+          )}
+        </form>
       )}
-
-      <Links
-        record={r}
-        aliases={aliases}
-        edges={edges}
-        others={others}
-        action={action}
-        canEdit={canEdit && !r.deletedAt}
-      />
-      <History events={events} who={who} />
-    </>
+    </div>
   );
 
   return (
     <Split
       graph={<BrainGraph graph={near} focus={winner?.id ?? r.id} />}
-      aside={details}
-      graphSize={45}
+      aside={aside}
+      graphSize={42}
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="text-2xl font-semibold">{r.title || "(untitled)"}</h1>
-          <TypeMark
-            type={r.type}
-            owner={r.ownerId === p.userId ? undefined : r.ownerId}
-            className="text-muted-foreground text-sm"
-          />
-        </div>
-        {isOwner && (
-          <form action={action} method="post">
-            {r.mergedInto ? (
-              <Button variant="outline" size="sm" name="intent" value="unmerge">
-                Unmerge
-              </Button>
-            ) : r.deletedAt ? (
-              <Button variant="outline" size="sm" name="intent" value="restore">
-                Restore
-              </Button>
-            ) : (
-              <Button variant="ghost" size="sm" name="intent" value="delete">
-                Delete
-              </Button>
-            )}
-          </form>
-        )}
-      </div>
-
+      <TypeMark
+        type={r.type}
+        owner={r.ownerId === p.userId ? undefined : r.ownerId}
+        className="text-muted-foreground text-sm"
+      />
       {r.mergedInto && (
         <p className="text-muted-foreground border-l-2 pl-3 text-sm">
           Merged into{" "}
@@ -305,28 +177,31 @@ export default async function Page({
           >
             {winner?.title || r.mergedInto}
           </Link>
-          . Reads follow the pointer; unmerging brings this one back.
+          .
         </p>
       )}
       {r.deletedAt && !r.mergedInto && (
         <p className="text-muted-foreground border-l-2 pl-3 text-sm">
-          Deleted <LocalTime at={r.deletedAt} />. Its history stays.
+          Deleted.
         </p>
       )}
-
-      {r.body ? (
-        <Markdown>{r.body}</Markdown>
-      ) : (
-        <p className="text-muted-foreground text-sm">
-          Nothing written here yet. Edit to add a body.
-        </p>
-      )}
+      <Document id={r.id} title={r.title} body={r.body} canEdit={canEdit} />
+      <Links
+        record={r}
+        aliases={aliases}
+        edges={edges}
+        others={others}
+        action={action}
+        canEdit={canEdit}
+        verbs={verbs}
+        candidates={all}
+      />
     </Split>
   );
 }
 
 // Every link touching the record, or anything merged into it, read as a
-// sentence: who did what to whom.
+// sentence, and a way to add one.
 function Links({
   record,
   aliases,
@@ -334,6 +209,8 @@ function Links({
   others,
   action,
   canEdit,
+  verbs,
+  candidates,
 }: {
   record: BrainRecord;
   aliases: Set<string>;
@@ -341,6 +218,8 @@ function Links({
   others: Map<string, BrainRecord>;
   action: string;
   canEdit: boolean;
+  verbs: string[];
+  candidates: BrainRecord[];
 }) {
   const name = (id: string) =>
     aliases.has(id) ? (
@@ -351,53 +230,40 @@ function Links({
       </Link>
     );
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Links</TableHead>
-          <TableHead>How sure</TableHead>
-          <TableHead>When</TableHead>
-          <TableHead />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {edges.map((e) => (
-          <TableRow key={e.id}>
-            <TableCell className="whitespace-normal">
-              {name(e.fromId)} {verbText(e.verb)} {name(e.toId)}
-            </TableCell>
-            <TableCell className="text-muted-foreground">
-              {percent(e.confidence)}
-            </TableCell>
-            <TableCell className="text-muted-foreground whitespace-nowrap">
-              <LocalTime at={e.occurredAt ?? e.createdAt} />
-            </TableCell>
-            <TableCell className="text-right">
-              {canEdit && (
-                <form action={action} method="post">
-                  <input type="hidden" name="edge" value={e.id} />
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    name="intent"
-                    value="unlink"
-                  >
-                    Unlink
-                  </Button>
-                </form>
-              )}
-            </TableCell>
-          </TableRow>
-        ))}
-        {edges.length === 0 && (
-          <TableRow>
-            <TableCell colSpan={4} className="text-muted-foreground">
-              Linked to nothing yet.
-            </TableCell>
-          </TableRow>
+    <section className="space-y-2 pt-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-muted-foreground text-sm">Links</h2>
+        {canEdit && (
+          <LinkForm record={record} verbs={verbs} candidates={candidates} />
         )}
-      </TableBody>
-    </Table>
+      </div>
+      {edges.length === 0 && (
+        <p className="text-muted-foreground text-sm">Linked to nothing yet.</p>
+      )}
+      <ul className="space-y-1 text-sm">
+        {edges.map((e) => (
+          <li key={e.id} className="group flex items-baseline gap-2">
+            <span className="whitespace-normal">
+              {name(e.fromId)} {verbText(e.verb)} {name(e.toId)}
+            </span>
+            {canEdit && (
+              <form action={action} method="post" className="ml-auto">
+                <input type="hidden" name="edge" value={e.id} />
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  name="intent"
+                  value="unlink"
+                  className="text-muted-foreground opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                >
+                  Unlink
+                </Button>
+              </form>
+            )}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -418,6 +284,7 @@ function LinkForm({
       trigger="Link"
       title="Link to another record"
       description="A link is a sentence: this record, a verb, another record."
+      variant="ghost"
     >
       {others.length === 0 ? (
         <p className="text-muted-foreground text-sm">
@@ -483,38 +350,5 @@ function LinkForm({
         </form>
       )}
     </FormDialog>
-  );
-}
-
-function History({
-  events,
-  who,
-}: {
-  events: Event[];
-  who: (author: string) => string;
-}) {
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>History</TableHead>
-          <TableHead />
-          <TableHead>By</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {events.map((e) => (
-          <TableRow key={e.seq}>
-            <TableCell className="text-muted-foreground whitespace-nowrap">
-              <LocalTime at={e.at} />
-            </TableCell>
-            <TableCell>{e.action}</TableCell>
-            <TableCell className="text-muted-foreground whitespace-normal">
-              {who(e.author)}
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
   );
 }
