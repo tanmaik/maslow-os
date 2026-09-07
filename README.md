@@ -51,21 +51,6 @@ Uploaded images live in an S3-compatible bucket named by `STORAGE_ENDPOINT`,
 `STORAGE_SECRET_KEY`. Without them a checkout uses a directory and a preview
 refuses uploads.
 
-Claude Code runs on the person's computer, from its terminal, and reaches
-its model through the app, never with a key of its own: `OPENROUTER_API_KEY`
-serves the one model in the catalog. Without it a pretend model answers and
-the pill says so. The person's brain is in Claude Code's settings at home,
-written by the machine at every boot; it knocks as the machine, so what it
-reads and writes is the person's and the log says the agent did it. On a
-laptop the machine is a process beside the app, with the same daemon and
-gateway as on Fly, because a machine on Fly cannot call a laptop back. Real machines are
-exercised on the preview; to make them from a laptop anyway, for work on the
-machine itself:
-
-```
-COMPUTERS=fly pnpm dev
-```
-
 Analytics, replay and error tracking go to PostHog when `POSTHOG_KEY` is
 set: every page seen, click, error and replay, as whoever is signed in,
 tagged local, preview or production. One PostHog project serves all three,
@@ -73,29 +58,12 @@ and its filter counts only production. Without the key nothing is reported
 and the pill says so.
 
 Production refuses to start without WorkOS, mail, storage, analytics, or the
-sweep's `CRON_SECRET`; with computers, without `LINK_SECRET` too.
-
-## The machine image
-
-Every computer boots from the image `IMAGE` names in `apps/web/lib/fly.ts`.
-When the daemon in `apps/computer` changes, the label goes up by one and the
-image is built and pushed from a laptop with your own Fly login, since the
-dev token reaches only the preview app and no production credential leaves
-production:
-
-```
-cd apps/computer && fly deploy --build-only --push --remote-only --image-label vN
-```
-
-`vN` is one more than the label `IMAGE` names today. Machines are made
-through the Machines API, never by `fly deploy`; the push and the change to
-`IMAGE` land in the same pull request, the push first, so no machine is ever
-made from an image that does not exist.
+sweep's `CRON_SECRET`.
 
 ## Dev secrets
 
-`.env.development` holds every dev secret — WorkOS, Resend, the bucket, the
-preview Fly app, Composio — encrypted, in the repo. One private key decrypts
+`.env.development` holds every dev secret — WorkOS, Resend, the bucket,
+Composio, Voyage — encrypted, in the repo. One private key decrypts
 it. On a laptop, being on the Vercel team is the access:
 
 ```
@@ -129,6 +97,6 @@ pnpm dev          # the stack for a browser; PORT=3999 pnpm dev picks the port
 
 Every run owns its data under `.local`, so two at once and a run after a run
 do not touch each other. The smoke and `check:db` reach routes and tables;
-only a browser reaches the pill, the graph and the terminal, and only a real
-key reaches a vendor. What a reviewer still walks by hand is in
+only a browser reaches the pill and the graph, and only a real key reaches
+a vendor. What a reviewer still walks by hand is in
 [REVIEW.md](REVIEW.md).

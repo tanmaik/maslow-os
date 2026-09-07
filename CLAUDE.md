@@ -15,7 +15,7 @@ Industries serves its stakeholders; the code is how.
 Speak plainly. No jargon, no acronym or vendor term without saying what it
 is the first time, no phrase whose point is its cleverness. The person
 reading is running the company, not the code: say what a change means for
-the customer, the org and the computer before saying how it is built.
+the customer, the org and the brain before saying how it is built.
 
 Teach as you go. When a term, a tool or a trade-off comes up, explain it
 in a sentence right there, in the words of the product, so the reader
@@ -30,8 +30,7 @@ sees only that message has the whole picture.
 
 Node 24 to develop on, 22.18 as the floor: where importing `.ts` arrived.
 pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for hosting. Neon
-for the managed database. Fly for managed machines, and Tigris through Fly
-for object storage.
+for the managed database. Tigris, through Fly, for object storage.
 
 ## Local
 
@@ -47,9 +46,8 @@ Install scripts are off. A package earns a place in `pnpm-workspace.yaml`'s
 allow-list only after its script has been read and found to do one small
 thing.
 
-Machines in development are plain processes in a scratch directory. No Docker:
-nesting containers is unreliable inside cloud agents, and a machine that starts
-without a daemon starts everywhere.
+No Docker: nesting containers is unreliable inside cloud agents, and what
+starts without a daemon starts everywhere.
 
 Every checkout is self-contained — its own database, its own ports picked free
 at start, nothing shared with another checkout. Ten worktrees are ten
@@ -185,8 +183,8 @@ product names none. The page asks Composio what is connected each time it is
 shown, and says so when Composio does not answer. In production a finished
 sign-in activates only once we have vouched for who did it. Access to a person's apps
 ends with their membership: a membership that ends or an org that is deleted
-owes its accounts to Composio the way it owes its machines to Fly, in the
-same transaction. Composio's managed OAuth
+owes its accounts to Composio in the same transaction. Composio's managed
+OAuth
 apps sign people in until a customer needs our name on the consent screen.
 The agent reaches those apps through three MCP tools, apps, find and run,
 never a tool per action.
@@ -205,9 +203,9 @@ development stays visible on screen for as long as it is active.
 **In production there is no fallback.** A missing credential stops the app
 from starting. Nothing degrades quietly, and no error is swallowed.
 
-The hourly sweep — the meter, the backups, the stragglers, the orphans —
-runs from the app when an hour has passed since the last, in every
-environment, and from a cron in production as the backstop.
+The hourly sweep — the meter and the orphans — runs from the app when an
+hour has passed since the last, in every environment, and from a cron in
+production as the backstop.
 
 **"Download my data"** gives a person what is theirs, and today that is
 their brain: an export that imports into any brain, as the importer. Nobody's
@@ -216,121 +214,40 @@ additive, so an org is rebuilt one person at a time. No production credential
 ever leaves production; only files travel.
 
 Local runs on the dev-tier keys in `.env.development` — WorkOS staging,
-Resend to founders only, the preview Fly app and the bucket — and the
-synthetic seed: three orgs with obviously distinguishable data. Whatever is
-not there is faked, and `pnpm dev` and the pill say which. A laptop's
-computers live in the preview Fly app and its objects under a `dev/` prefix
-in the dev bucket — a bucket of its own, with keys of its own, so nothing
-outside production holds production's — named for the checkout, and the nightly reap purges them:
-tomorrow makes new ones. A machine cannot reach a laptop, so its reports and
-backups fail there and say so; `pnpm dev` therefore runs the machine as a
-process beside the app, the same daemon and gateway at one address,
-and makes real ones only when told to. A preview is the same: a Neon branch off an
-empty parent — never off production — migrated and seeded on deploy, on
-preview keys. The per-PR workflow is the only thing that builds a preview:
-database first, then deploy, and both die with the pull request; its machines
-are real, in a Fly app of their own, made when first used and destroyed with
-the pull request. Outside production a dev sign-in exists — pick a seeded
-person, no email — visibly flagged like every fake and impossible in
-production.
+Resend to founders only, and the bucket — and the synthetic seed: three
+orgs with obviously distinguishable data. Whatever is not there is faked,
+and `pnpm dev` and the pill say which. A laptop's objects live under a
+`dev/` prefix in the dev bucket — a bucket of its own, with keys of its
+own, so nothing outside production holds production's — and the nightly
+reap purges them: tomorrow makes new ones. A preview is the same: a Neon
+branch off an empty parent — never off production — migrated and seeded on
+deploy, on preview keys. The per-PR workflow is the only thing that builds
+a preview: database first, then deploy, and both die with the pull request.
+Outside production a dev sign-in exists — pick a seeded person, no email —
+visibly flagged like every fake and impossible in production.
 
-## The machine
+## The computer
 
-Breakage is made cheap rather than prevented — a machine you cannot break is a
-machine you cannot use. The person's home folder is their computer: every
-shell runs there as an ordinary user, with sudo for the package managers
-alone, and the system around the home can be reset from the image at any
-time, after a backup, with the home untouched. That is cheap because of two
-layers:
-
-- **The image** is only a bootstrap — enough to start and hand off. It almost
-  never changes. It carries a whole Debian with node, git, gh, Claude Code
-  and the Vercel CLI, and that is what is copied onto the volume.
-- **The volume** is the computer. It holds the whole operating system, copied
-  there on first boot and switched to on every boot after. Installs, config,
-  files: all of it persists, because it is a real machine. The daemon updates
-  itself here, and security updates run here on a schedule. A volume lives on
-  one physical host, so durability is not automatic: the machine archives
-  it into the bucket once a day, seven are kept, and an empty disk can be
-  put back from one. Volumes
-  auto-extend at a threshold and cap at 500GB.
-
-A person's files are their home in the operating system on the volume,
-and nowhere else; every shell runs inside that operating system, so what
-is installed or signed into stays. The Computer page is that home, read
-from the machine. An upload is staged
-in the bucket only until the machine has pulled it onto the disk. The page
-has a shell on the disk, and every port the machine listens on is a
-preview a browser can open; both come from the machine itself, by links
-signed with that machine's own key, made from the deployment's secret and
-the machine's name. A link naming another machine is replayed to it
-unread, so a forged link costs a wake and buys nothing. A machine's secret
-is its owner's, never the org's.
-
-Every machine and volume on Fly is recorded in our database with the org and
-person it belongs to, at creation, before it is used. A sweep reconciles Fly's
-inventory against ours; anything Fly has that we do not is an incident.
-
-A person's computer is provisioned and powered on at their first sign-in,
-runs until they power it off — or an owner turns the org's computers off —
-and powers back on when they ask; nothing puts it to sleep. Powered off,
-the disk alone is kept and charged, and the hourly sweep finishes a
-power-off that failed partway. A machine on an image that is not the image
-is replaced whatever it is doing, on the same disk.
-
-Nobody chooses a size. The machine reports what it has and needs, and the
-ladder goes both ways from that: up aggressively, at the next quiet moment
-or at once after a kill; down conservatively, after three hours of room to
-spare. A change of size is a cold boot on the same disk, so it waits for a
-quiet moment — no terminal open, load low — and the person can ask for
-more memory now. Downloads never force it: disk grows live.
-
-**A machine must be correct when it comes back cold.** On any boot the
-daemon brings back everything that was up — agents, servers, jobs — from its
-record of what was running, and agents continue from their transcripts.
-Nothing the user started stays down.
-
-## Claude Code on the computer
-
-There is no chat page. The agent is Claude Code, installed on every
-computer and run from its terminal, and everything it keeps — transcripts,
-settings, permissions — is a file in the person's home, backed up with it
-and resumed with Claude Code's own `--resume`. It ships in the image beside
-the daemon and is bound into the operating system at boot, so it updates
-with the image and the OS stays the person's; a copy the person installs at
-home comes first on their path.
-
-Models are reached through a gateway in the app: the machine holds no
-vendor key and speaks to the gateway as itself, with its own secret as the
-bearer token Claude Code sends, which every shell on the machine carries,
-so `claude` needs no sign-in. One model is offered, and Claude Code is told
-what to make of it by a setting the deployment manages on the machine.
-Every call is a row before it is made and is settled with what it cost when
-the answer ends, so no token is bought without a row; a call the app lost
-track of is settled by the sweep as it stood and marked lost. A call is its
-person's to read, and the org sees what each member used through the usage
-ledger. The org has a cap a month and a person a cap an hour, both checked
-at the door. Any vendor that speaks the Anthropic protocol is a route in
-that gateway, so a model or a vendor is added in the app alone. The brain
-is in Claude Code's settings at home, rewritten at every boot, knocked on
-as the machine, which the door lets in as the person the machine belongs
-to. Without a key, production has no model and boots; anywhere else a
-pretend model answers and nothing is spent.
+There is none today. What was here — a Fly machine with a volume per
+person, its daemon, uploads staged through the bucket, daily backups,
+Claude Code on it behind a model gateway — came out on 2026-09-07, with
+every table and page it had. It comes back deliberately, as SSH and SFTP
+to a machine that spins up and down and sizes itself, and not before. The
+keys it used stay in the environment stores, unread.
 
 ## Interface
 
 Every component is shadcn, and every shadcn component is installed under
 `apps/web/components/ui`. Nothing is hand-rolled beside them: no bespoke
-button, input, dialog or table, and no other component library. The one
-thing beside them is the terminal, xterm.js, because a terminal emulator is
-not a component. Styling is
+button, input, dialog or table, and no other component library. Styling is
 Tailwind on shadcn's theme tokens. The typeface is the system one; no font is
 fetched from anywhere.
 
 ## Metering and billing
 
-Every unit of consumption is recorded from the first day — disk held, compute
-run at a recorded size, tokens spent — whether or not anyone is charged yet.
+Every unit of consumption is recorded from the first day — bytes held in
+the bucket and the brain, vectors made, actions run — whether or not anyone
+is charged yet, and whether or not anyone reads it yet: nothing shows it.
 Measurement and price stay separate, so prices are set later from real usage.
 Every metered figure is reconciled against the vendor's own bill.
 

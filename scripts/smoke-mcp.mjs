@@ -7,6 +7,7 @@ import { createServer } from "node:http";
 import { createRequire } from "node:module";
 
 import { ID } from "../packages/brain/src/ids.ts";
+import { asOrg } from "../packages/db/src/index.ts";
 import { orgs } from "../packages/db/src/seed.ts";
 
 // The SDK is the web app's; the smoke borrows it to be the client.
@@ -689,13 +690,23 @@ export async function smokeMcp(stack, signIn) {
       short.text === "missing body",
     `${apps.lines[0]} / ${fits.lines[0]} / ${unconnected.text} / ${named.text}`,
   );
-  const charged = (await page(`${base}/usage`, wile)).match(
-    /data-usage="actions"[\s\S]*?(\d+) actions?/,
-  );
+  // What Wile spent, as the ledger holds it: nothing shows it yet.
+  const spent = (resource) =>
+    asOrg(
+      orgs[0].id,
+      async (q) =>
+        (
+          await q.query(
+            "select coalesce(sum(quantity), 0)::float8 as q from usage where user_id = $1 and resource = $2",
+            [orgs[0].users[0].id, resource],
+          )
+        ).rows[0].q,
+    );
+  const charged = await spent("actions");
   check(
     "every action is on the meter: the search and the run",
-    charged?.[1] === "2",
-    charged ? `${charged[1]} actions` : "no Apps line on the usage page",
+    charged === 2,
+    `${charged} actions`,
   );
 
   // Recall finds a record by what it is about, catching up the vectors of
@@ -718,13 +729,11 @@ export async function smokeMcp(stack, signIn) {
     wordless.refused && wordless.text === "a question needs a word",
     wordless.text,
   );
-  const metered = (await page(`${base}/usage`, wile)).match(
-    /data-usage="vectors"[\s\S]*?(\d[\d,]*) tokens/,
-  );
+  const metered = await spent("vectors");
   check(
     "every token recall spent is on the meter",
-    Number(metered?.[1]?.replace(/,/g, "")) > 0,
-    metered ? `${metered[1]} tokens` : "no Recall line on the usage page",
+    metered > 0,
+    `${metered} tokens`,
   );
 
   // Another org's Claude sees nothing of Wile's.

@@ -4,7 +4,6 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { NextResponse } from "next/server";
 
 import { about, brainServer, type About } from "@/lib/mcp";
-import { machineFrom, personBehindMachine } from "@/lib/machine";
 import { origin } from "@/lib/origin";
 
 // A stranger, or a token whose membership is gone, is told where to sign in.
@@ -19,17 +18,12 @@ const refused = (request: Request) =>
     },
   );
 
-// Who is knocking: the person's own machine, speaking as itself; or an
-// app holding a
-// session as a bearer token. A browser's session opens the site, never
-// this.
+// Who is knocking: an app holding a session as a bearer token. A
+// browser's session opens the site, never this.
 async function whoever(request: Request): Promise<Session | null> {
   const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/i);
   const session = await resolveSession(token?.[1]);
-  if (session) return session.client === null ? null : session;
-  const machine = machineFrom(request);
-  if (!machine) return null;
-  return personBehindMachine(machine.machineId, machine.secret);
+  return session && session.client !== null ? session : null;
 }
 
 // The brain as an MCP server. Every request stands alone, answered in one

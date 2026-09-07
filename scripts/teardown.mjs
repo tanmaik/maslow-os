@@ -1,16 +1,14 @@
-// Tears an environment's costly things down: every machine and volume in
-// the Fly app, or every object under a prefix of the bucket, or the local
-// stack's data. Nothing here asks twice; the production prefix needs
-// --production said out loud.
+// Tears an environment's costly things down: every object under a prefix
+// of the bucket, or the local stack's data. Nothing here asks twice; the
+// production prefix needs --production said out loud.
 //
-//   node scripts/teardown.mjs fly                 FLY_API_TOKEN, FLY_COMPUTERS_APP
 //   node scripts/teardown.mjs bucket preview/     STORAGE_* (preview/ prefixes only)
 //   node scripts/teardown.mjs bucket orgs/ --production
 //   node scripts/teardown.mjs local
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { destroyMachines, emptyPrefix } from "./purge.mjs";
+import { emptyPrefix } from "./purge.mjs";
 import { root } from "./stack.mjs";
 
 const [what, arg, flag] = process.argv.slice(2);
@@ -19,15 +17,6 @@ const need = (k) =>
   (() => {
     throw new Error(`${k} is not set`);
   })();
-
-async function fly() {
-  const app = need("FLY_COMPUTERS_APP");
-  const gone = await destroyMachines(
-    { token: need("FLY_API_TOKEN"), app, api: process.env.FLY_API_HOST },
-    "",
-  );
-  console.log(`fly: ${gone} machines and volumes gone from ${app}`);
-}
 
 async function bucket() {
   const prefix = arg;
@@ -53,12 +42,12 @@ async function bucket() {
 async function local() {
   for (const dir of [".local", path.join("apps", "web", ".local")])
     await fs.rm(path.join(root, dir), { recursive: true, force: true });
-  console.log("local: database, machines, uploads and files removed");
+  console.log("local: database and uploads removed");
 }
 
-const run = { fly, bucket, local }[what];
+const run = { bucket, local }[what];
 if (!run) {
-  console.error("usage: teardown fly | bucket <prefix> [--production] | local");
+  console.error("usage: teardown bucket <prefix> [--production] | local");
   process.exit(2);
 }
 await run();

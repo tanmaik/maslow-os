@@ -3,11 +3,9 @@ packages:
   - packages/*
 
 # Install scripts are off unless listed. The Postgres packages recreate the
-# symlinks npm strips from their library directory; node-pty uses its
-# prebuilt binary or compiles its own pty module, and nothing else.
+# symlinks npm strips from their library directory, and nothing else.
 onlyBuiltDependencies:
   - "@embedded-postgres/darwin-arm64"
   - "@embedded-postgres/darwin-x64"
   - "@embedded-postgres/linux-arm64"
   - "@embedded-postgres/linux-x64"
-  - node-pty

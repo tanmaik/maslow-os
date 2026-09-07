@@ -30,9 +30,9 @@ export async function POST(request: Request) {
 
   try {
     const userId = form.get("remove");
-    // A removal owes their compute a stop; a purge owes everything of
-    // theirs the vendors hold. Both are written with the rows, under the
-    // owner's lock, and paid right after; the sweep pays what refused.
+    // A removal owes their accounts at Composio; a purge owes everything
+    // of theirs the vendors hold. Both are written with the rows, under
+    // the owner's lock, and paid right after; the sweep pays what refused.
     if (typeof userId === "string") {
       const outcome = await removeMember(p, userId);
       if (outcome === "removed") await settle(p.orgId);

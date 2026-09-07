@@ -2,29 +2,16 @@ import { asOrg } from "@placeholder/db";
 import { pictureInUse } from "@placeholder/db/settings";
 
 import { connections } from "./connections.ts";
-import { deployment } from "./deployment.ts";
-import { dropBytes } from "./files.ts";
-import { fly } from "./fly.ts";
-import { remove } from "./s3.ts";
 import { storage } from "./storage.ts";
 
-// Pays what removals, purges and replacements owe the vendors: stops or
-// destroys machines, destroys volumes, deletes objects, pictures and
-// unfinished uploads, deletes an ended membership's accounts at Composio.
-// Each debt is forgotten only once it is paid; one that refuses is tried
-// again by the next call, and the sweep calls for every org every hour.
-type Orphan = { id: string; kind: string; ref: string; extra: string | null };
+// Pays what removals and purges owe the vendors: deletes pictures from
+// the store, deletes an ended membership's accounts at Composio. Each debt
+// is forgotten only once it is paid; one that refuses is tried again by
+// the next call, and the sweep calls for every org every hour.
+type Orphan = { id: string; kind: string; ref: string };
 
 // Every debt this pays; the database refuses any other kind.
-export const KINDS = [
-  "stop",
-  "machine",
-  "volume",
-  "accounts",
-  "picture",
-  "object",
-  "upload",
-] as const;
+export const KINDS = ["accounts", "picture"] as const;
 
 export async function settle(orgId: string): Promise<number> {
   const owed = await asOrg(
@@ -32,13 +19,13 @@ export async function settle(orgId: string): Promise<number> {
     async (q) =>
       (
         await q.query<Orphan>(
-          "select id, kind, ref, extra from orphans order by created_at",
+          "select id, kind, ref from orphans order by created_at",
         )
       ).rows,
   );
   let paid = 0;
   for (const o of owed) {
-    // Claimed just before paying: a restore that forgave a stop meanwhile
+    // Claimed just before paying: a restore that forgave a debt meanwhile
     // has deleted the row, and the claim finds nothing.
     const claimed = await asOrg(
       orgId,
@@ -64,20 +51,7 @@ export async function settle(orgId: string): Promise<number> {
 }
 
 async function pay(orgId: string, o: Orphan): Promise<void> {
-  const st = deployment.storage;
   switch (o.kind) {
-    case "stop":
-      if (deployment.computers.kind === "none") return;
-      if (await fly.machine(o.ref)) await fly.stop(o.ref);
-      return;
-    case "machine":
-      if (deployment.computers.kind === "none") return;
-      await fly.destroyMachine(o.ref);
-      return;
-    case "volume":
-      if (deployment.computers.kind === "none") return;
-      await fly.destroyVolume(o.ref);
-      return;
     case "accounts":
       await connections.forgetMember(o.ref);
       return;
@@ -85,18 +59,5 @@ async function pay(orgId: string, o: Orphan): Promise<void> {
       // A shared picture stays until the last to show it lets it go.
       if (!(await pictureInUse(orgId, o.ref))) await storage.delete(o.ref);
       return;
-    case "object":
-    case "upload": {
-      if (st.kind === "s3") {
-        await remove(st, o.ref, o.kind === "upload" ? o.extra : null);
-      } else if (st.kind === "local") {
-        await dropBytes({
-          key: o.ref,
-          state: o.kind === "upload" ? "uploading" : "ready",
-          uploadId: o.extra,
-        });
-      }
-      return;
-    }
   }
 }

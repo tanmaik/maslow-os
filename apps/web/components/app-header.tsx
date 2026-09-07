@@ -55,14 +55,6 @@ export async function AppHeader() {
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<a href="/computer" />}
-        >
-          Computer
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
           render={<a href="/brain" />}
         >
           Brain
@@ -74,14 +66,6 @@ export async function AppHeader() {
           render={<a href="/settings" />}
         >
           Settings
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
-          nativeButton={false}
-          render={<a href="/usage" />}
-        >
-          Usage
         </Button>
         <form action="/auth/sign-out" method="post">
           <Button variant="ghost" size="sm" type="submit">

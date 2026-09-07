@@ -23,32 +23,6 @@ export type Storage =
   | { kind: "local"; dir: string }
   | { kind: "none" };
 
-// Computers are Fly machines in one Fly app of ours, or nothing.
-export type Computers =
-  | {
-      kind: "fly";
-      token: string;
-      app: string;
-      region: string;
-      // The Machines API, where machines report on themselves, and the
-      // hostname Fly's proxy answers for the app, through which a machine
-      // is reached by id.
-      api: string;
-      report: string;
-      host: string;
-      // A domain of ours with a wildcard certificate on the app: every
-      // machine gets its own origin, <machine>.<domain>, so what one
-      // person's preview runs cannot reach another's downloads or shell.
-      domain: string | null;
-      // What each machine's own link key is made from, with its name: a
-      // link is checked by the machine it names and by nobody else.
-      linkSecret: string | null;
-      // Every machine and volume name starts with this; a preview's names
-      // carry its pull request, so the reap can find them.
-      namePrefix: string;
-    }
-  | { kind: "none" };
-
 // Product analytics go to PostHog, or nowhere. The key is the project token:
 // write-only, made to be given to a browser.
 export type Analytics = { kind: "posthog"; key: string } | { kind: "none" };
@@ -65,12 +39,6 @@ export type Embeddings =
 export type Connections =
   | { kind: "composio"; apiKey: string; api: string }
   | { kind: "fake" }
-  | { kind: "none" };
-
-// The models Claude Code on a computer may run on, reached through our
-// gateway with one key per vendor; or none, and a pretend model answers.
-export type Models =
-  | { kind: "gateway"; anthropic: string | null; openrouter: string | null }
   | { kind: "none" };
 
 // Production is the live Vercel environment or any box that is not a
@@ -132,57 +100,6 @@ function storage(): Storage {
   return { kind: "local", dir: process.env.UPLOADS_DIR ?? ".local/uploads" };
 }
 
-// A computer costs money, so a deployment has them only when told about a
-// Fly app: production's own, or a preview's app of its own with names that
-// carry the pull request. Half a configuration refuses to start rather than
-// quietly having none.
-function computers(): Computers {
-  const {
-    FLY_API_TOKEN: token,
-    FLY_COMPUTERS_APP: app,
-    LINK_SECRET: linkSecret,
-  } = process.env;
-  if (!token && !app) return { kind: "none" };
-  if (!token || !app)
-    throw new Error(
-      "Computers need both FLY_API_TOKEN and FLY_COMPUTERS_APP, or neither.",
-    );
-  // Production refuses to start without the key each machine's own link
-  // key is derived from; elsewhere the key is read when a link is made,
-  // since a preview's build is not given the deployment's shared values.
-  if (production && !linkSecret)
-    throw new Error(
-      "Computers need LINK_SECRET, the key their link keys come from.",
-    );
-  const site = process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  const report =
-    process.env.FLY_REPORT_URL ??
-    (site ? `https://${site}/computer/report` : undefined);
-  if (!report)
-    throw new Error(
-      "Computers report to FLY_REPORT_URL, which is not set and cannot be guessed here.",
-    );
-  return {
-    kind: "fly",
-    token,
-    app,
-    region: process.env.FLY_REGION ?? "sjc",
-    api: process.env.FLY_API_HOST ?? "https://api.machines.dev",
-    report,
-    host: process.env.FLY_MACHINES_HOST ?? `https://${app}.fly.dev`,
-    domain: process.env.FLY_MACHINES_DOMAIN ?? null,
-    linkSecret: linkSecret ?? null,
-    // A preview must name its machines for the pull request, or they land
-    // among production's and nothing can tell them apart.
-    namePrefix:
-      process.env.VERCEL && !production && !process.env.FLY_NAME_PREFIX
-        ? (() => {
-            throw new Error("Preview computers need FLY_NAME_PREFIX.");
-          })()
-        : (process.env.FLY_NAME_PREFIX ?? ""),
-  };
-}
-
 function analytics(): Analytics {
   const key = process.env.POSTHOG_KEY;
   if (key) return { kind: "posthog", key };
@@ -219,20 +136,8 @@ function connections(): Connections {
   return production ? { kind: "none" } : { kind: "fake" };
 }
 
-// The models Claude Code runs on: real with a key for the vendor that
-// serves the catalog, OpenRouter. Without one there are none: in production
-// no model, and anywhere else a pretend one. An Anthropic key alone offers
-// no model, and rides along for a bare Claude id.
-function models(): Models {
-  const { ANTHROPIC_API_KEY: anthropic, OPENROUTER_API_KEY: openrouter } =
-    process.env;
-  if (openrouter)
-    return { kind: "gateway", anthropic: anthropic ?? null, openrouter };
-  return { kind: "none" };
-}
-
-// The sweep is what meters, backs up and cleans; production without its
-// cron's secret would run none of it and say nothing.
+// The sweep is what meters and cleans; production without its cron's
+// secret would run none of it and say nothing.
 if (production && !process.env.CRON_SECRET)
   throw new Error("Production needs CRON_SECRET for the hourly sweep.");
 
@@ -248,9 +153,7 @@ export const deployment = {
   // signed in as with one click.
   seededSignIn: !production,
   storage: storage(),
-  computers: computers(),
   connections: connections(),
-  models: models(),
   embeddings: embeddings(),
   https,
   identity: identityProvider(),

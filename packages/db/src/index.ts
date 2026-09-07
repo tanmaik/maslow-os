@@ -138,18 +138,6 @@ export function asSignIn<T>(
   return scoped({ "app.email": email, "app.org_id": orgId }, fn);
 }
 
-// Runs fn as one machine reporting on itself: its own computers row only.
-export function asMachine<T>(
-  machineId: string,
-  secret: string,
-  fn: (q: Query) => Promise<T>,
-): Promise<T> {
-  return scoped(
-    { "app.machine_id": machineId, "app.machine_secret": secret },
-    fn,
-  );
-}
-
 // Runs fn as the meter's sweep: every org's id, nothing else.
 export function asMeter<T>(fn: (q: Query) => Promise<T>): Promise<T> {
   return scoped({ "app.meter": "sweep" }, fn);

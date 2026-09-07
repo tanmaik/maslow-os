@@ -1,5 +1,4 @@
 import { agentsOf } from "@placeholder/db/auth";
-import { computersIn } from "@placeholder/db/computers";
 import { groupsOf } from "@placeholder/db/groups";
 import { orgOf } from "@placeholder/db/settings";
 import { redirect } from "next/navigation";
@@ -33,35 +32,15 @@ import {
 import { ImageInput } from "@/components/image-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Agents } from "@/app/settings/agents";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { Connections } from "@/app/settings/connections";
-import { ComputersSwitch } from "@/app/settings/computers-switch";
 import { Groups } from "@/app/settings/groups";
 import { connections } from "@/lib/connections";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
-import { amount } from "@/lib/meter";
-import { DISK_GB } from "@/lib/fly";
-import {
-  dollars,
-  exact,
-  GB_A_MONTH,
-  LADDER,
-  monthly,
-  SOURCE,
-  spent,
-} from "@/lib/prices";
 import { principal } from "@/lib/session";
-import { usageOfOrg } from "@placeholder/db/usage";
 import { storage } from "@/lib/storage";
 
 // What the last save left to say, by the query it redirected with.
@@ -82,7 +61,6 @@ type Notice = {
     | "member"
     | "gone";
   invite?: "sent" | "pending" | "member";
-  computers?: "on" | "off";
   group?: "saved" | "deleted" | "gone";
   connection?: "connected" | "failed" | "disconnected" | "gone" | "unanswered";
   agent?: "disconnected" | "gone";
@@ -92,10 +70,6 @@ type Notice = {
 
 const NOTICES: Record<string, string> = {
   "org=saved": "Saved.",
-  "computers=on":
-    "Computers are on. Everyone in the org gets theirs, running, the next time they sign in or open their computer.",
-  "computers=off":
-    "Computers are off. Nothing new is made, and every machine in the org stops within the hour. Disks are kept, and cost, until a member is purged.",
   "org=name": "The org needs a name of up to 80 characters.",
   "org=image":
     "That file can't be the logo. A PNG, JPEG or WebP under 2 MB always works.",
@@ -173,19 +147,6 @@ export default async function Settings({
   const me = members.find((m) => m.id === p.userId)!;
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
-  const monthStart = new Date();
-  monthStart.setUTCDate(1);
-  monthStart.setUTCHours(0, 0, 0, 0);
-  const usage = owner ? await usageOfOrg(p, monthStart) : [];
-  const total = usage.reduce((n, l) => n + l.cost, 0);
-  // Disks are charged by the gigabyte, and they grow, so the card says the
-  // rate and what the org's own disks come to at it.
-  const disks =
-    owner && deployment.computers.kind !== "none"
-      ? (await computersIn(p.orgId))
-          .filter((c) => c.volumeId)
-          .reduce((n, c) => n + c.diskGb, 0)
-      : 0;
   const uploads = deployment.storage.kind !== "none";
 
   return (
@@ -247,26 +208,6 @@ export default async function Settings({
               </form>
             </CardContent>
           </Card>
-          {deployment.computers.kind !== "none" && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Computers</CardTitle>
-                <CardDescription>
-                  {org.computers
-                    ? `Every member gets a computer the first time they sign in, and it runs until they power it off — about ${dollars(monthly(LADDER[0]!))} a month each while it runs, plus ${spent(GB_A_MONTH)} per GB of disk a month, whether it runs or not. ${disks ? `The disks in this org hold ${disks} GB, about ${spent(disks * GB_A_MONTH)} a month; a new one` : "A disk"} starts at ${DISK_GB} GB, about ${spent(DISK_GB * GB_A_MONTH)} a month.`
-                    : `Off. No machine runs or is made for anyone in this org. Disks are kept, and cost ${spent(GB_A_MONTH)} per GB a month${disks ? `, ${disks} GB in all` : ""}, until a member is purged.`}
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ComputersSwitch on={org.computers} members={members.length} />
-                {said("computers") && (
-                  <p className="text-muted-foreground mt-3 text-sm" data-notice>
-                    {said("computers")}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          )}
         </>
       )}
 
@@ -608,49 +549,6 @@ export default async function Settings({
           </CardContent>
         </Card>
       )}
-      {owner && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Usage this month</CardTitle>
-            <CardDescription>
-              What each person is using. Nothing is charged yet. Total so far:{" "}
-              <span data-usage-total={total}>{spent(total)}</span>.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Person</TableHead>
-                  <TableHead>Resource</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Cost</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {usage.map((l) => (
-                  <TableRow key={`${l.userId}-${l.resource}`}>
-                    <TableCell>{l.name ?? "purged member"}</TableCell>
-                    <TableCell>{SOURCE[l.resource] ?? l.resource}</TableCell>
-                    <TableCell>
-                      {amount(l.resource, l.unit, l.quantity)}
-                    </TableCell>
-                    <TableCell>{exact(l.cost)}</TableCell>
-                  </TableRow>
-                ))}
-                {usage.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-muted-foreground">
-                      Nothing metered yet this month.
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
-
       <Connections
         enabled={connections.enabled}
         connections={connected}

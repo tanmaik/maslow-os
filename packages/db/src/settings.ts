@@ -6,8 +6,6 @@ export type Org = {
   name: string;
   logoKey: string | null;
   principalId: string;
-  // Whether members get computers, in production; an owner's switch.
-  computers: boolean;
 };
 export type Member = {
   id: string;
@@ -84,7 +82,7 @@ export async function orgOf(p: Principal): Promise<{
   return asOrg(p.orgId, async (q) => {
     const org = (
       await q.query<Org>(
-        'select id, name, logo_key as "logoKey", principal_id as "principalId", computers from orgs',
+        'select id, name, logo_key as "logoKey", principal_id as "principalId" from orgs',
       )
     ).rows[0]!;
     const members = (
@@ -109,11 +107,6 @@ export async function orgOf(p: Principal): Promise<{
       : [];
     return { org, members, invited, past };
   });
-}
-
-// Switches the org's computers on or off. Owners only.
-export async function setComputers(p: Principal, on: boolean): Promise<void> {
-  await asOwner(p, (q) => q.query("update orgs set computers = $1", [on]));
 }
 
 export async function renameOrg(p: Principal, name: string): Promise<void> {
@@ -239,12 +232,6 @@ async function endMembership(q: Query, id: string): Promise<boolean> {
     )
   ).rows[0];
   if (!leaving) return false;
-  // Their compute is owed a stop; the route tries at once, the sweep until
-  // it is stopped. A restore forgives it.
-  await q.query(
-    "insert into orphans (org_id, kind, ref) select org_id, 'stop', machine_id from computers where user_id = $1 and machine_id is not null",
-    [id],
-  );
   // Access to their apps ends with the membership; brought back, they
   // connect again.
   await q.query(
@@ -313,21 +300,7 @@ export async function deleteOrg(
     // Everything the vendors hold for the org is owed before its rows go,
     // in the same transaction: nothing that costs money is left unrecorded.
     await q.query(
-      `insert into orphans (org_id, kind, ref)
-         select org_id, 'machine', machine_id from computers where machine_id is not null
-       union all
-         select org_id, 'volume', volume_id from computers where volume_id is not null
-       union all
-         select id, 'picture', logo_key from orgs where logo_key is not null`,
-    );
-    await q.query("select set_config('app.meter', 'sweep', true)");
-    await q.query(
-      `insert into orphans (org_id, kind, ref, extra)
-         select org_id, case when upload_id is not null then 'upload' else 'object' end, key, upload_id
-           from files where deleted_at is null
-       union all
-         select org_id, case when upload_id is not null then 'upload' else 'object' end, key, upload_id
-           from backups where deleted_at is null`,
+      "insert into orphans (org_id, kind, ref) select id, 'picture', logo_key from orgs where logo_key is not null",
     );
     await seeingPast(q);
     await q.query(
@@ -383,10 +356,6 @@ export async function restoreMember(
         person.avatar_at,
       ],
     );
-    await q.query(
-      "delete from orphans where kind = 'stop' and ref in (select machine_id from computers where user_id = $1)",
-      [id],
-    );
     // A debt for their apps not yet paid is forgiven with them.
     await q.query(
       "delete from orphans where kind = 'accounts' and ref = $1::text",
@@ -427,33 +396,6 @@ export async function purgeMember(
     );
     if (!past.rowCount) return "gone";
     await q.query("select set_config('app.member_id', $1, true)", [id]);
-    // Everything of theirs the vendors hold is owed before its row goes.
-    await q.query(
-      `insert into orphans (org_id, kind, ref)
-         select org_id, 'machine', machine_id from computers where user_id = $1 and machine_id is not null
-       union all
-         select org_id, 'volume', volume_id from computers where user_id = $1 and volume_id is not null`,
-      [id],
-    );
-    await q.query(
-      `insert into orphans (org_id, kind, ref, extra)
-         select org_id, case when state = 'uploading' and upload_id is not null then 'upload' else 'object' end, key, upload_id
-           from files where user_id = $1 and deleted_at is null`,
-      [id],
-    );
-    await q.query(
-      `insert into orphans (org_id, kind, ref, extra)
-         select org_id, case when upload_id is not null then 'upload' else 'object' end, key, upload_id
-           from backups where user_id = $1 and deleted_at is null`,
-      [id],
-    );
-    await q.query("delete from files where user_id = $1", [id]);
-    await q.query("delete from backups where user_id = $1", [id]);
-    await q.query(
-      "delete from computer_events where computer_id in (select id from computers where user_id = $1)",
-      [id],
-    );
-    await q.query("delete from computers where user_id = $1", [id]);
     await q.query("select purge_member($1)", [id]);
     return "purged";
   });

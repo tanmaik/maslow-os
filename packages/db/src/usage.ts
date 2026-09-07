@@ -1,16 +1,7 @@
-import { asOrg, asPerson, type Query } from "./index.ts";
-import type { Principal } from "./auth.ts";
+import type { Query } from "./index.ts";
 
-export type Resource =
-  | "compute"
-  | "rootfs"
-  | "disk"
-  | "bucket"
-  | "brain"
-  | "tokens"
-  | "vectors"
-  | "actions";
-export type Unit = "second" | "gb_second" | "byte_second" | "token" | "run";
+export type Resource = "bucket" | "brain" | "vectors" | "actions";
+export type Unit = "byte_second" | "token" | "run";
 
 // Records what a person just spent at a vendor, in the vendor's unit, at
 // the price on its list, and what it was for, at the instant it happened.
@@ -35,72 +26,6 @@ export async function spend(
   );
 }
 
-export type Line = {
-  userId: string;
-  name: string | null;
-  resource: Resource;
-  // The model, for tokens; null for everything else.
-  model: string | null;
-  unit: Unit;
-  quantity: number;
-  cost: number;
-};
-
-// Every line of the org's usage since a moment, by member and resource,
-// with the member's name where they are still one; or one member's lines.
-// The meter cuts a row at the turn of a month, so a row that ended after
-// the moment lies wholly after it; one written before it did counts the
-// share of itself that falls after.
-async function lines(
-  p: Principal,
-  since: Date,
-  userId: string | null,
-): Promise<Line[]> {
-  return asOrg(
-    p.orgId,
-    async (q) =>
-      (
-        await q.query<Line>(
-          `select u.user_id as "userId", m.name, u.resource, u.model, u.unit,
-                  sum(u.quantity * share)::float8 as quantity,
-                  sum(u.cost * share)::float8 as cost
-             from usage u
-             left join users m on m.id = u.user_id
-             cross join lateral (
-               select case when u.from_at >= $1 then 1 else coalesce(
-                 extract(epoch from (u.to_at - $1))
-                 / nullif(extract(epoch from (u.to_at - u.from_at)), 0), 1) end as share
-             ) s
-            where u.to_at > $1 and ($2::uuid is null or u.user_id = $2)
-            group by u.user_id, m.name, u.resource, u.model, u.unit
-            order by m.name nulls last, u.resource, u.model`,
-          [since, userId],
-        )
-      ).rows,
-  );
-}
-
-export const usageOfOrg = (p: Principal, since: Date) => lines(p, since, null);
-export const usageOfMember = (p: Principal, since: Date) =>
-  lines(p, since, p.userId);
-
-// What the person's brain holds, by kind, biggest first: the bytes their
-// records and links occupy.
-export async function brainByKind(
-  p: Principal,
-): Promise<{ kind: string; records: number; bytes: number }[]> {
-  return asPerson(
-    p,
-    async (q) =>
-      (
-        await q.query<{ kind: string; records: number; bytes: number }>(
-          `select kind, count(*)::int as records, sum(pg_column_size(r.*))::float8 as bytes
-             from records r where person_id = current_member() group by kind order by bytes desc limit 20`,
-        )
-      ).rows,
-  );
-}
-
 export type Picture = {
   kind: "photo" | "logo";
   size: number;
@@ -122,6 +47,3 @@ export async function picturesIn(q: Query, userId: string): Promise<Picture[]> {
     )
   ).rows;
 }
-
-export const picturesOf = (p: Principal) =>
-  asOrg(p.orgId, (q) => picturesIn(q, p.userId));

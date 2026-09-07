@@ -6,7 +6,7 @@ import { sweepNow } from "@/lib/meter";
 export const maxDuration = 300;
 
 // The hourly sweep, called by Vercel's cron with the secret it was given:
-// the backstop for hours nobody looks at their computer. Without a secret
+// the backstop for hours nobody opens a page. Without a secret
 // there is no sweep; it never runs for a stranger. It takes the same lock
 // a page look does, so the cron and a page never sweep at once.
 export async function GET(request: Request) {

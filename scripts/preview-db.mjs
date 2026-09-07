@@ -6,12 +6,12 @@
 //   down --pr N
 //   reap                       remove whatever no open pull request owns
 //   reap-dev                   remove what laptops made, with only the
-//                              Fly and storage keys
+//                              storage keys
 import { createHmac } from "node:crypto";
 import { parseArgs } from "node:util";
 
 import { ids } from "./ids.mjs";
-import { destroyMachines, emptyPrefix as emptyIn } from "./purge.mjs";
+import { emptyPrefix as emptyIn } from "./purge.mjs";
 
 const {
   positionals: [command],
@@ -115,22 +115,9 @@ async function sql(uri, query) {
   return (await r.json()).rows ?? [];
 }
 
-const keys = [
-  "DATABASE_URL",
-  "DATABASE_OWNER_URL",
-  "STORAGE_PREFIX",
-  "FLY_API_TOKEN",
-  "FLY_COMPUTERS_APP",
-  "FLY_NAME_PREFIX",
-  "FLY_REPORT_URL",
-];
+const keys = ["DATABASE_URL", "DATABASE_OWNER_URL", "STORAGE_PREFIX"];
 // Previews share the bucket under a prefix of their own, emptied with them.
 const prefixFor = (n) => `preview/pr-${n}/`;
-// Previews make real computers in a Fly app of their own, every machine and
-// volume named for the pull request, destroyed with it. The token is scoped
-// to that app and nothing else.
-const flyPreviewApp = "placeholder-computers-preview";
-const flyNamePrefixFor = (n) => `pr${n}-`;
 // Vercel's branch alias: the daemon reports there, whichever deployment is
 // current for the branch.
 const branchUrlFor = (projectName, branch, teamSlug) =>
@@ -201,31 +188,10 @@ async function up() {
   // The team's slug is part of every branch URL; the preview token cannot
   // read the team, so the workflow says it.
   const teamSlug = need("VERCEL_TEAM_SLUG");
-  const flyToken = process.env.FLY_PREVIEW_TOKEN;
-  if (!flyToken) {
-    console.log("fly: no FLY_PREVIEW_TOKEN, this preview has no computers");
-    await removeRows(
-      (await envs()).filter(
-        (e) =>
-          stampedFor(pr)(e) && e.gitBranch === ref && e.key.startsWith("FLY_"),
-      ),
-    );
-  }
   for (const [key, value] of [
     ["DATABASE_URL", app.toString()],
     ["DATABASE_OWNER_URL", owner],
     ["STORAGE_PREFIX", prefixFor(pr)],
-    ...(flyToken
-      ? [
-          ["FLY_API_TOKEN", flyToken],
-          ["FLY_COMPUTERS_APP", flyPreviewApp],
-          ["FLY_NAME_PREFIX", flyNamePrefixFor(pr)],
-          [
-            "FLY_REPORT_URL",
-            `${branchUrlFor(projectName, ref, teamSlug)}/computer/report`,
-          ],
-        ]
-      : []),
   ]) {
     await vercel("POST", `/v10/projects/${project()}/env?upsert=true`, {
       key,
@@ -274,26 +240,6 @@ async function emptyPrefix(prefix) {
   );
 }
 
-// Destroys every machine and volume named for a pull request, or for
-// whatever prefix is given, in the preview Fly app, when this run holds
-// that app's token.
-async function destroyComputers(prNumber, named = null) {
-  const token = process.env.FLY_PREVIEW_TOKEN;
-  if (!token) {
-    console.log(
-      `fly: no FLY_PREVIEW_TOKEN, ${named ?? `pr${prNumber}`} computers left as is`,
-    );
-    return;
-  }
-  const gone = await destroyMachines(
-    { token, app: flyPreviewApp },
-    named ?? flyNamePrefixFor(prNumber),
-  );
-  console.log(
-    `fly: ${gone} of ${named ?? `pr${prNumber}`}'s machines and volumes destroyed`,
-  );
-}
-
 // Every preview deployment of the project(), oldest last.
 async function previewDeployments() {
   const all = [];
@@ -323,13 +269,12 @@ async function removeDeployments(branches) {
   );
 }
 
-// Removes the pull request's rows, objects, computers and deployments, then
-// its branch if it still exists.
+// Removes the pull request's rows, objects and deployments, then its
+// branch if it still exists.
 async function down(prNumber = pr, branch = undefined) {
   const rows = (await envs()).filter(stampedFor(prNumber));
   await removeRows(rows);
   await emptyPrefix(prefixFor(prNumber));
-  await destroyComputers(prNumber);
   const headRef =
     prNumber === pr && ref
       ? ref
@@ -353,12 +298,10 @@ async function down(prNumber = pr, branch = undefined) {
 const gh = async (p) =>
   call("https://api.github.com", need("GITHUB_TOKEN"), "GET", p);
 
-// Everything a laptop made today: machines, volumes and objects named
-// dev-…, gone every night, made again tomorrow. Its own command, so it
-// can be run by hand with only the Fly and storage keys.
+// Everything a laptop made today: objects under dev/, gone every night,
+// made again tomorrow. Its own command, so it can be run by hand with
+// only the storage keys.
 async function reapDev() {
-  if (process.env.FLY_PREVIEW_TOKEN) await destroyComputers(null, "dev-");
-  else console.log("fly: no FLY_PREVIEW_TOKEN, dev computers left as is");
   if (process.env.STORAGE_ACCESS_KEY && process.env.STORAGE_SECRET_KEY)
     await emptyPrefix("dev/");
   else console.log("storage: no keys, dev objects left as is");
@@ -381,28 +324,6 @@ async function reap() {
   }
 
   await reapDev();
-
-  // Machines and volumes of any pull request that is not open, whether or
-  // not its branch survived.
-  if (process.env.FLY_PREVIEW_TOKEN) {
-    const r = await fetch(
-      `https://api.machines.dev/v1/apps/${flyPreviewApp}/volumes`,
-      { headers: { authorization: `Bearer ${process.env.FLY_PREVIEW_TOKEN}` } },
-    );
-    const numbers = new Set(
-      (await r.json())
-        .map((v) => /^pr(\d+)_/.exec(v.name)?.[1])
-        .filter(Boolean),
-    );
-    for (const n of numbers) {
-      const p = await gh(`/repos/${repo}/pulls/${n}`).catch((e) =>
-        e.status === 404 ? null : Promise.reject(e),
-      );
-      if (p?.state === "open") continue;
-      await destroyComputers(Number(n));
-      swept++;
-    }
-  }
 
   const live = new Set(existing.map((b) => b.id));
   const orphaned = (await envs()).filter(

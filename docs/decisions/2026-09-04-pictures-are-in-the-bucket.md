@@ -5,8 +5,7 @@ metered like everything else in it.
 
 A photo or logo is saved with its size and the moment, on the person's row
 and every membership's copy for the photo, on the org for the logo. The
-meter reads them as it reads files and backups: byte-seconds over the window,
-and live bytes. A photo is the member's, on their line. The logo belongs to
+meter reads them as byte-seconds over the window, and live bytes. A photo is the member's, on their line. The logo belongs to
 the org, and the org's owner pays for the org, so it is on the principal's
 line: whoever holds the org pays for its logo, and it moves with a handover.
 

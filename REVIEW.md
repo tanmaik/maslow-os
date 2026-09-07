@@ -17,23 +17,22 @@ however good the rest is.
   all connect as the restricted `app` role, and a database role is created
   with SQL, never through Neon's API.
 - **No query without a scope.** Every read and write goes through `asOrg`,
-  `asPerson`, `asSelf`, `asEmail`, `asSignIn`, `asMachine`, `asMeter` or
-  `asThrottle`; a table without row-level security, or a policy loosened to
+  `asPerson`, `asSelf`, `asEmail`, `asSignIn`, `asMeter` or `asThrottle`; a table without row-level security, or a policy loosened to
   make a query work, is a finding.
 - **No fallback in production.** A missing credential stops the app from
   starting, in `apps/web/lib/deployment.ts`; nothing degrades quietly, and no
   error is swallowed into a log and forgotten.
-- **No resource that costs money without a row.** A machine, a volume or an
-  object is recorded with its org and person before it is used, and a
-  removal writes what it owes to `orphans` in the same transaction.
+- **No resource that costs money without a row.** An object is recorded
+  with its org and person before it is used, and a removal writes what it
+  owes to `orphans` in the same transaction.
 - **No table's shape changes after deploy.** A migration is a new file from
   `pnpm migration:new`; one that was applied is never edited.
 - **No primitive beside shadcn.** Every button, input, dialog and table is
   from `apps/web/components/ui`, and the screens are composed of them; no
   other component library, no hand-rolled primitive, no font fetched from
-  anywhere. The terminal is the one exception.
+  anywhere.
 - **No preview off production.** A preview's database is a Neon branch off
-  the empty parent; its bucket, Fly app and keys are the dev tier's, never
+  the empty parent; its bucket and keys are the dev tier's, never
   production's.
 
 ## Always
@@ -80,9 +79,7 @@ What every pull request is checked for.
   target if a preview needs it.
 - **Production.** Every new value is set on Vercel's production target
   before merge, and `deployment.ts` refuses to start without it. A change
-  that runs a machine or a cron says how production's is scheduled.
-- **The machine.** A change to `apps/computer` ships a new image tag in
-  `IMAGE`, and the sweep replaces machines on the old one.
+  that runs a cron says how production's is scheduled.
 
 ### The data holds
 
@@ -101,8 +98,8 @@ What every pull request is checked for.
   so in a sentence and nothing is left half done; the next call converges.
 - Two requests at once make one thing: a lease, a claim or a unique index
   is what says so, never a check followed by a write.
-- What a browser or a machine sends is checked before it is trusted: a
-  path, a name, a size, an id, a signature.
+- What a browser or an app sends is checked before it is trusted: a name,
+  a size, an id, a signature.
 - A test that failed once and passed on retry is a race in the code, not in
   the test; the fix is in the code.
 
@@ -114,14 +111,14 @@ easy to miss.
 In the code:
 
 - A helper copied into a second file instead of shared: the S3 signer, the
-  bucket purge, the machine call. One implementation, imported.
+  bucket purge. One implementation, imported.
 - A value the app reads from `process.env` outside `deployment.ts`, or a
   fallback that hides its absence.
-- A name Fly or the bucket sees that does not carry the checkout or the
-  pull request, so the reap cannot find it.
+- A name the bucket sees that does not carry the checkout or the pull
+  request, so the reap cannot find it.
 - A test that shares a directory with `pnpm dev` or with its own last run:
-  the smoke's database, machines and store all live under `.local/smoke`
-  and are wiped at start.
+  the smoke's database and store live under `.local/smoke` and are wiped
+  at start.
 - A comment that explains history: why this was chosen, what was tried,
   what broke. It goes to `docs/decisions/` or nowhere.
 - A shadcn component edited by hand rather than reinstalled.
@@ -153,4 +150,4 @@ In how it was made, for an agent as much as a person:
 - **An answer nobody could follow.** Several sessions stalled on "what is
   going on" and "tell me exactly what we have added". A change is
   explained in the words of the product — the person, the org, the
-  computer — in a paragraph, before any of its parts.
+  brain — in a paragraph, before any of its parts.

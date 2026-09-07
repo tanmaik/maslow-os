@@ -1,7 +1,10 @@
 import { asOrg } from "@placeholder/db";
 
+import { after } from "next/server";
+
 import { SignIn, notice, type Notice } from "@/components/sign-in";
 import { Button } from "@/components/ui/button";
+import { sweepIfDue } from "@/lib/meter";
 import { principal } from "@/lib/session";
 
 type Member = { id: string; name: string; email: string };
@@ -16,6 +19,8 @@ export default async function Page({
   const said = notice(await searchParams);
   const p = await principal();
   if (!p) return <SignIn said={said} />;
+  // A look at the site is what runs the hourly sweep outside production.
+  after(() => sweepIfDue());
 
   const { orgName, members, me } = await asOrg(p.orgId, async (q) => {
     const rows = (
@@ -40,9 +45,6 @@ export default async function Page({
         </a>
         .
       </p>
-      <Button nativeButton={false} render={<a href="/computer" />}>
-        Open your computer
-      </Button>
       <Button nativeButton={false} render={<a href="/brain" />}>
         Open the brain
       </Button>

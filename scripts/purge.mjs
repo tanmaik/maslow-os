@@ -1,6 +1,6 @@
-// What a purge does at a vendor: empties a prefix of the bucket, or
-// destroys every machine and volume in a Fly app named with a prefix. The
-// preview lifecycle, the nightly reap and teardown all purge this way.
+// What a purge does at the bucket: empties a prefix, and aborts every
+// upload begun there. The preview lifecycle, the nightly reap and teardown
+// all purge this way.
 import { s3, unescapeXml } from "../apps/web/lib/s3.ts";
 
 // Removes every object under the prefix, and every upload begun there and
@@ -62,56 +62,4 @@ export async function emptyPrefix(cfg, prefix) {
     };
   }
   return removed;
-}
-
-// Destroys the app's machines whose names start with the prefix, waiting
-// for each to go, then its volumes, whose names carry the same prefix with
-// underscores. An empty prefix is the whole app. Returns how many went.
-export async function destroyMachines(
-  { token, app, api = "https://api.machines.dev" },
-  prefix,
-) {
-  const call = async (method, path, allow404 = false) => {
-    const r = await fetch(`${api}/v1/apps/${app}${path}`, {
-      method,
-      headers: { authorization: `Bearer ${token}` },
-    });
-    if (r.status === 404 && allow404) return null;
-    if (!r.ok) throw new Error(`fly ${method} ${path} → ${r.status}`);
-    return r.json();
-  };
-  let gone = 0;
-  for (const m of (await call("GET", "/machines")).filter((m) =>
-    m.name.startsWith(prefix),
-  )) {
-    await call("DELETE", `/machines/${m.id}?force=true`, true);
-    let still;
-    for (let i = 0; i < 60; i++) {
-      still = await call("GET", `/machines/${m.id}`, true);
-      if (!still || still.state === "destroyed") break;
-      await new Promise((r) => setTimeout(r, 1000));
-    }
-    if (still && still.state !== "destroyed")
-      throw new Error(`fly: machine ${m.id} did not go within a minute`);
-    gone++;
-  }
-  // A volume detaches a moment after its machine is gone.
-  for (const v of (await call("GET", "/volumes")).filter((v) =>
-    v.name.startsWith(prefix.replaceAll("-", "_")),
-  )) {
-    let last;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        await call("DELETE", `/volumes/${v.id}`, true);
-        last = null;
-        break;
-      } catch (err) {
-        last = err;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
-    }
-    if (last) throw last;
-    gone++;
-  }
-  return gone;
 }

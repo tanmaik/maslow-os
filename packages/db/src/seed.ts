@@ -54,7 +54,6 @@ export const orgs = [
     id: "00000000-0000-4000-8000-000000000001",
     slug: "acme-rockets",
     name: "Acme Rockets",
-    computers: false,
     users: [
       {
         ...person("10000000-0000-4000-8000-000000000001"),
@@ -70,9 +69,6 @@ export const orgs = [
     id: "00000000-0000-4000-8000-000000000002",
     slug: "blue-whale-bakery",
     name: "Blue Whale Bakery",
-    // Only the bakery has computers on, so both sides of the switch are
-    // seen; an org founded by a sign-in starts on.
-    computers: true,
     users: [
       {
         ...person("20000000-0000-4000-8000-000000000001"),
@@ -92,7 +88,6 @@ export const orgs = [
     id: "00000000-0000-4000-8000-000000000003",
     slug: "chartreuse-observatory",
     name: "Chartreuse Observatory",
-    computers: false,
     users: [
       {
         ...person("30000000-0000-4000-8000-000000000001"),
@@ -121,8 +116,8 @@ export async function seed(url: string): Promise<void> {
     }
     for (const org of orgs) {
       await client.query(
-        "insert into orgs (id, slug, name, principal_id, computers) values ($1, $2, $3, $4, $5) on conflict (id) do update set computers = excluded.computers",
-        [org.id, org.slug, org.name, org.users[0].id, org.computers],
+        "insert into orgs (id, slug, name, principal_id) values ($1, $2, $3, $4) on conflict (id) do nothing",
+        [org.id, org.slug, org.name, org.users[0].id],
       );
       for (const [i, u] of org.users.entries()) {
         await client.query(

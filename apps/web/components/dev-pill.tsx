@@ -23,10 +23,8 @@ type Props = {
     | "mail"
     | "analytics"
     | "storage"
-    | "computers"
     | "connections"
-    | "embeddings"
-    | "models",
+    | "embeddings",
     string | null
   >;
   signedIn: boolean;

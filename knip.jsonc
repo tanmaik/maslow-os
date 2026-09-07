@@ -14,13 +14,6 @@
       // Agentation's sync server, run by the developer's own MCP config.
       "ignoreDependencies": ["agentation-mcp"],
     },
-    "apps/computer": {
-      "entry": ["server.mjs"],
-      "includeEntryExports": true,
-      // Claude Code, run by the person from their shell, bound in from the
-      // image inside the operating system.
-      "ignoreDependencies": ["@anthropic-ai/claude-code"],
-    },
     // A package's doors are entry files; what they export still has to be
     // used by someone.
     "packages/*": {
