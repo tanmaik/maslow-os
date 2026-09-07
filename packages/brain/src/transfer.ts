@@ -1,4 +1,4 @@
-import { catalog, defineKind, defineVerb } from "./catalog.ts";
+import { catalog, defineType } from "./catalog.ts";
 import { Invalid } from "./errors.ts";
 import { defineProperty } from "./properties.ts";
 import {
@@ -8,39 +8,28 @@ import {
   type EventRow,
   type RecordRow,
 } from "./rows.ts";
-import { share } from "./share.ts";
-import type {
-  Access,
-  Author,
-  Event,
-  Layer,
-  PropertyType,
-  Query,
-} from "./types.ts";
+import { share, sharesOf } from "./share.ts";
+import type { Access, Datatype, Event, Query, Subject } from "./types.ts";
 import { merge, write } from "./write.ts";
 
 // One person's brain as a file: their vocabulary, every live record and edge
-// of their own, the shares they gave, and their log. Edges name their ends by
-// source and ref, never by id; shares name a record the same way, a kind by
+// of their own, the shares on them, and their log. Edges name their ends by
+// source and ref, never by id; shares name a record the same way, a type by
 // name, people by email and groups by name, so the file imports into any
 // brain. What colleagues shared into this brain stays out: it is theirs.
 export type Snapshot = {
   format: "maslow-brain/1";
   exportedAt: string;
-  kinds: { name: string; description: string; author: Author }[];
+  types: { name: string }[];
   properties: {
-    kind: string;
+    type: string;
     name: string;
-    type: PropertyType;
-    description: string;
+    datatype: Datatype;
     required: boolean;
     options: string[] | null;
-    author: Author;
   }[];
-  verbs: { name: string; description: string; author: Author }[];
   records: {
-    kind: string;
-    layer: Layer;
+    type: string;
     source: string;
     sourceRef: string;
     title: string;
@@ -48,7 +37,6 @@ export type Snapshot = {
     props: Record<string, unknown>;
     occurredAt: string | null;
     confidence: number | null;
-    author: Author;
     // Set when this record was merged into the one named.
     mergedInto: { source: string; sourceRef: string } | null;
   }[];
@@ -59,26 +47,21 @@ export type Snapshot = {
     props: Record<string, unknown>;
     confidence: number | null;
     occurredAt: string | null;
-    source: string;
-    sourceRef: string | null;
-    author: Author;
   }[];
-  grants: {
-    on: { source: string; sourceRef: string } | { kind: string };
+  shares: {
+    on: { source: string; sourceRef: string } | { type: string };
     subject: "everyone" | { group: string } | { member: string };
     level: Access;
-    author: Author;
   }[];
   events: Event[];
 };
 
-type GrantExportRow = {
+type ShareExportRow = {
   source: string | null;
   source_ref: string | null;
-  kind: string | null;
+  type: string | null;
   subject: "everyone" | "group" | "member";
   level: Access;
-  author: string;
   group_name: string | null;
   member_email: string | null;
 };
@@ -88,9 +71,6 @@ type EdgeExportRow = {
   props: Record<string, unknown>;
   confidence: number | null;
   occurred_at: Date | null;
-  source: string;
-  source_ref: string | null;
-  author: string;
   from_source: string;
   from_ref: string;
   to_source: string;
@@ -99,8 +79,7 @@ type EdgeExportRow = {
 
 export async function exportBrain(q: Query): Promise<Snapshot> {
   const vocabulary = await catalog(q);
-  const kinds = vocabulary.kinds.filter((k) => !k.via);
-  const verbs = vocabulary.verbs;
+  const types = vocabulary.types.filter((t) => t.own);
   // Live records and the aliases merged into them; plainly deleted ones stay out.
   const records = await q.query<
     RecordRow & { into_source: string | null; into_ref: string | null }
@@ -116,8 +95,7 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
      order by r.created_at, r.id`,
   );
   const edges = await q.query<EdgeExportRow>(
-    `select e.verb, e.props, e.confidence, e.occurred_at, e.source,
-            e.source_ref, e.author,
+    `select e.verb, e.props, e.confidence, e.occurred_at,
             f.source as from_source, f.source_ref as from_ref,
             t.source as to_source, t.source_ref as to_ref
      from edges e
@@ -129,47 +107,37 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
        and (t.deleted_at is null or t.merged_into is not null)
      order by e.created_at, e.id`,
   );
-  const grants = await q.query<GrantExportRow>(
-    `select r.source, r.source_ref, k.name as kind, g.subject, g.level,
-            g.author, gr.name as group_name, u.email as member_email
-     from grants g
-     left join records r on r.id = g.record_id
-     left join record_kinds k on k.id = g.kind_id
-     left join groups gr on gr.id = g.group_id
-     left join users u on u.id = g.member_id
-     where coalesce(r.person_id, k.person_id) = current_member()
-       and r.deleted_at is null
-       and g.author = 'person:' || current_member()::text
-     order by g.created_at, g.id`,
+  const shares = await q.query<ShareExportRow>(
+    `select r.source, r.source_ref, t.name as type, s.subject, s.level,
+            gr.name as group_name, u.email as member_email
+     from shares s
+     left join records r on r.id = s.record_id
+     left join types t on t.id = s.type_id
+     left join groups gr on gr.id = s.group_id
+     left join users u on u.id = s.member_id
+     where coalesce(r.person_id, t.person_id) = current_member()
+       and (s.record_id is null or r.deleted_at is null)
+     order by s.id`,
   );
   const events = await q.query<EventRow>(
     `select ${eventColumns} from events
      where person_id = current_member() order by seq`,
   );
-  const strip = ({ name, description, author }: (typeof verbs)[number]) => ({
-    name,
-    description,
-    author,
-  });
   return {
     format: "maslow-brain/1",
     exportedAt: new Date().toISOString(),
-    kinds: kinds.map(strip),
-    properties: kinds.flatMap((k) =>
-      k.properties.map((p) => ({
-        kind: k.name,
+    types: types.map(({ name }) => ({ name })),
+    properties: types.flatMap((t) =>
+      t.properties.map((p) => ({
+        type: t.name,
         name: p.name,
-        type: p.type,
-        description: p.description,
+        datatype: p.datatype,
         required: p.required,
         options: p.options,
-        author: p.author,
       })),
     ),
-    verbs: verbs.map(strip),
     records: records.rows.map((r) => ({
-      kind: r.kind,
-      layer: r.layer,
+      type: r.type,
       source: r.source,
       sourceRef: r.source_ref,
       title: r.title,
@@ -177,7 +145,6 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       props: r.props,
       occurredAt: r.occurred_at?.toISOString() ?? null,
       confidence: r.confidence,
-      author: r.author,
       mergedInto: r.into_source
         ? { source: r.into_source, sourceRef: r.into_ref! }
         : null,
@@ -189,28 +156,24 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       props: e.props,
       confidence: e.confidence,
       occurredAt: e.occurred_at?.toISOString() ?? null,
-      source: e.source,
-      sourceRef: e.source_ref,
-      author: e.author,
     })),
-    grants: grants.rows.flatMap((g) => {
+    shares: shares.rows.flatMap((s) => {
       const subject =
-        g.subject === "everyone"
+        s.subject === "everyone"
           ? "everyone"
-          : g.subject === "group" && g.group_name
-            ? { group: g.group_name }
-            : g.subject === "member" && g.member_email
-              ? { member: g.member_email }
+          : s.subject === "group" && s.group_name
+            ? { group: s.group_name }
+            : s.subject === "member" && s.member_email
+              ? { member: s.member_email }
               : null;
       return subject
         ? [
             {
-              on: g.kind
-                ? { kind: g.kind }
-                : { source: g.source!, sourceRef: g.source_ref! },
+              on: s.type
+                ? { type: s.type }
+                : { source: s.source!, sourceRef: s.source_ref! },
               subject,
-              level: g.level,
-              author: g.author,
+              level: s.level,
             },
           ]
         : [];
@@ -220,13 +183,12 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
 }
 
 export type Imported = {
-  kinds: number;
+  types: number;
   properties: number;
-  verbs: number;
   records: number;
   edges: number;
   merges: number;
-  grants: number;
+  shares: number;
 };
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -238,9 +200,8 @@ const isConfidence = (v: unknown) =>
   v === null || (typeof v === "number" && v >= 0 && v <= 1);
 const isRef = (v: unknown) =>
   isObject(v) && isText(v.source) && isText(v.sourceRef);
-const isNamed = (v: unknown) =>
-  isObject(v) && isText(v.name) && isText(v.description);
-const TYPES = new Set<string>([
+const isNamed = (v: unknown) => isObject(v) && isText(v.name);
+const DATATYPES = new Set<string>([
   "text",
   "number",
   "boolean",
@@ -251,45 +212,39 @@ const TYPES = new Set<string>([
 ]);
 const isProperty = (v: unknown) =>
   isObject(v) &&
-  isText(v.kind) &&
-  isText(v.name) &&
   isText(v.type) &&
-  TYPES.has(v.type) &&
-  isText(v.description) &&
+  isText(v.name) &&
+  isText(v.datatype) &&
+  DATATYPES.has(v.datatype) &&
   typeof v.required === "boolean" &&
   (v.options === null || (Array.isArray(v.options) && v.options.every(isText)));
 const isRecordEntry = (v: unknown) =>
   isObject(v) &&
   isRef(v) &&
-  isText(v.kind) &&
-  (v.layer === "source" || v.layer === "derived") &&
+  isText(v.type) &&
   isText(v.title) &&
   isText(v.body) &&
   isObject(v.props) &&
   isTime(v.occurredAt) &&
   isConfidence(v.confidence) &&
-  (v.layer === "derived" || v.confidence === null) &&
   (v.mergedInto === null || isRef(v.mergedInto));
 const LEVELS = new Set<string>(["view", "edit", "owner"]);
-const isGrantEntry = (v: unknown) =>
+const isShareEntry = (v: unknown) =>
   isObject(v) &&
   isObject(v.on) &&
-  (isRef(v.on) || isText(v.on.kind)) &&
+  (isRef(v.on) || isText(v.on.type)) &&
   (v.subject === "everyone" ||
     (isObject(v.subject) &&
       Object.keys(v.subject).length === 1 &&
       (isText(v.subject.group) || isText(v.subject.member)))) &&
   isText(v.level) &&
   LEVELS.has(v.level) &&
-  (v.subject !== "everyone" || v.level === "view") &&
-  isText(v.author);
+  (v.subject !== "everyone" || v.level === "view");
 const isEdgeEntry = (v: unknown) =>
   isObject(v) &&
   isRef(v.from) &&
   isRef(v.to) &&
   isText(v.verb) &&
-  isText(v.source) &&
-  (v.sourceRef === null || isText(v.sourceRef)) &&
   isObject(v.props) &&
   isConfidence(v.confidence) &&
   isTime(v.occurredAt);
@@ -301,49 +256,42 @@ function isSnapshot(file: unknown): file is Snapshot {
   const every = (v: unknown, ok: (x: unknown) => boolean) =>
     Array.isArray(v) && v.every(ok);
   return (
-    every(file.kinds, isNamed) &&
-    every(file.verbs, isNamed) &&
-    every(file.properties ?? [], isProperty) &&
+    every(file.types, isNamed) &&
+    every(file.properties, isProperty) &&
     every(file.records, isRecordEntry) &&
     every(file.edges, isEdgeEntry) &&
-    every(file.grants ?? [], isGrantEntry)
+    every(file.shares, isShareEntry)
   );
 }
 
 // Adds a snapshot to this brain through the same doors any write uses, as
 // the person importing it, and counts what was new or changed. The file's
-// authors and events describe the brain it came from; this brain logs its own.
+// events describe the brain it came from; this brain logs its own.
 export async function importBrain(
   q: Query,
-  author: Author,
   snapshot: unknown,
 ): Promise<Imported> {
   if (!isSnapshot(snapshot)) throw new Invalid("that is not a brain file");
   const count = (c: Awaited<ReturnType<typeof catalog>>) => {
-    const mine = c.kinds.filter((k) => !k.via);
+    const mine = c.types.filter((t) => t.own);
     return {
-      kinds: mine.length,
-      properties: mine.reduce((n, k) => n + k.properties.length, 0),
-      verbs: c.verbs.length,
+      types: mine.length,
+      properties: mine.reduce((n, t) => n + t.properties.length, 0),
     };
   };
   const before = count(await catalog(q));
-  for (const k of snapshot.kinds) await defineKind(q, author, k);
-  for (const p of snapshot.properties ?? []) {
-    await defineProperty(q, author, p.kind, {
-      ...p,
-      options: p.options ?? undefined,
-    });
+  for (const t of snapshot.types) await defineType(q, t);
+  for (const p of snapshot.properties) {
+    await defineProperty(q, p.type, { ...p, options: p.options ?? undefined });
   }
-  for (const v of snapshot.verbs) await defineVerb(q, author, v);
   const after = count(await catalog(q));
   let records = 0;
   for (const r of snapshot.records) {
-    records += (await write(q, author, { records: [r] })).changed;
+    records += (await write(q, { records: [r] })).changed;
   }
   let edges = 0;
   for (const e of snapshot.edges) {
-    edges += (await write(q, author, { edges: [e] })).edges;
+    edges += (await write(q, { edges: [e] })).edges;
   }
   let merges = 0;
   const byRef = async (ref: { source: string; sourceRef: string }) =>
@@ -358,53 +306,55 @@ export async function importBrain(
     const loser = await byRef(r);
     const winner = await byRef(r.mergedInto);
     if (!loser || !winner || loser.merged_into === winner.id) continue;
-    await merge(q, author, winner.id, loser.id);
+    await merge(q, winner.id, loser.id);
     merges += 1;
   }
-  // A share lands where its record or kind, its group or its person is here.
-  const ownKind = async (name: string) =>
+  // A share lands where its record or type, its group or its person is here.
+  const ownType = async (name: string) =>
     (
       await q.query<{ id: string }>(
-        "select id from record_kinds where name = $1 and person_id = current_member()",
+        "select id from types where name = $1 and person_id = current_member()",
         [name],
       )
     ).rows[0];
-  let grants = 0;
-  for (const g of snapshot.grants ?? []) {
+  let shares = 0;
+  for (const s of snapshot.shares) {
     const target =
-      "kind" in g.on ? await ownKind(g.on.kind) : await byRef(g.on);
+      "type" in s.on ? await ownType(s.on.type) : await byRef(s.on);
     if (!target) continue;
-    const on = "kind" in g.on ? { kind: target.id } : { record: target.id };
-    let subject:
-      | { kind: "everyone" }
-      | { kind: "group"; id: string }
-      | { kind: "member"; id: string }
-      | null = null;
-    if (g.subject === "everyone") subject = { kind: "everyone" };
-    else if ("group" in g.subject) {
+    const on = "type" in s.on ? { type: target.id } : { record: target.id };
+    let subject: Subject | null = null;
+    if (s.subject === "everyone") subject = { who: "everyone" };
+    else if ("group" in s.subject) {
       const found = await q.query<{ id: string }>(
         "select id from groups where name = $1",
-        [g.subject.group],
+        [s.subject.group],
       );
-      if (found.rows[0]) subject = { kind: "group", id: found.rows[0].id };
+      if (found.rows[0]) subject = { who: "group", id: found.rows[0].id };
     } else {
       const found = await q.query<{ id: string }>(
         "select id from users where email = $1",
-        [g.subject.member],
+        [s.subject.member],
       );
-      if (found.rows[0]) subject = { kind: "member", id: found.rows[0].id };
+      if (found.rows[0]) subject = { who: "member", id: found.rows[0].id };
     }
     if (!subject) continue;
-    await share(q, author, on, subject, g.level);
-    grants += 1;
+    const had = (await sharesOf(q, on)).some(
+      (x) =>
+        x.level === s.level &&
+        x.subject.who === subject.who &&
+        ("id" in x.subject ? x.subject.id : null) ===
+          ("id" in subject ? subject.id : null),
+    );
+    await share(q, on, subject, s.level);
+    if (!had) shares += 1;
   }
   return {
-    kinds: after.kinds - before.kinds,
+    types: after.types - before.types,
     properties: after.properties - before.properties,
-    verbs: after.verbs - before.verbs,
     records,
     edges,
     merges,
-    grants,
+    shares,
   };
 }

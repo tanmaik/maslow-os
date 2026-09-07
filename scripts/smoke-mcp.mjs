@@ -314,13 +314,13 @@ export async function smokeMcp(stack, signIn) {
     "read is Wile's brain only, a line each",
     mine.rows.length >= acme.records.length &&
       mine.lines[0] === `${mine.rows.length} records` &&
-      mine.rows.every((l) => / v\d+/.test(l) && !l.includes(" shared:")),
+      mine.rows.every((l) => !l.includes(" shared:")),
     `${mine.rows.length} records, all Wile's`,
   );
   const vocabulary = await call(grant.access_token, "catalog", {});
   check(
     "the catalog is Wile's own vocabulary",
-    /^kinds \([1-9]\d* yours\):$/.test(vocabulary.lines[0] ?? "") &&
+    /^types \([1-9]\d* yours\):$/.test(vocabulary.lines[0] ?? "") &&
       !vocabulary.lines.some((l) => l.startsWith("shared in")),
     vocabulary.lines[0] ?? vocabulary.text,
   );
@@ -333,30 +333,29 @@ export async function smokeMcp(stack, signIn) {
     badSince.text.replace(/\s+/g, " ").slice(0, 80),
   );
   const claim = {
-    kind: "claim",
-    layer: "derived",
+    type: "claim",
     source: "claude",
     sourceRef: "smoke-1",
     title: "Wile owes Road Runner an anvil",
     confidence: 0.8,
   };
-  const undefinedKind = await call(grant.access_token, "write", {
+  const undefinedType = await call(grant.access_token, "write", {
     records: [claim],
   });
   check(
-    "an undefined kind is refused with a sentence",
-    undefinedKind.refused && /define it/.test(undefinedKind.text),
-    undefinedKind.text,
+    "an undefined type is refused with a sentence",
+    undefinedType.refused && /define it/.test(undefinedType.text),
+    undefinedType.text,
   );
   const written = await call(grant.access_token, "write", {
-    kinds: [{ name: "claim", description: "Something the model concluded." }],
+    types: [{ name: "claim" }],
     records: [claim],
   });
   const same = await call(grant.access_token, "write", { records: [claim] });
   check(
     "write, idempotently",
     written.lines[0] === "1 record (1 changed), 0 edges changed" &&
-      written.lines[1] === "defined kind claim" &&
+      written.lines[1] === "defined type claim" &&
       same.lines[0] === "1 record (0 changed), 0 edges changed" &&
       same.lines[1]?.startsWith(`${same.ids[0]} claim `) &&
       same.ids[0] === written.ids[0],
@@ -377,7 +376,6 @@ export async function smokeMcp(stack, signIn) {
         from: { id: claimId },
         verb: "rests_on",
         to: { id: restsOn },
-        source: "claude",
         confidence: 0.9,
       },
     ],
@@ -389,7 +387,6 @@ export async function smokeMcp(stack, signIn) {
     linked.lines[0]?.endsWith("1 edge changed") &&
       got.lines[0]?.startsWith(`${claimId} claim `) &&
       got.lines[0].includes(`"Wile owes`) &&
-      got.lines[0].includes(" by=Claude") &&
       link?.includes(`${restsOn} "`) &&
       link.includes("c=0.9"),
     link ?? got.text,
@@ -410,13 +407,7 @@ export async function smokeMcp(stack, signIn) {
     `${hidden.text} / ${relinked.text}`,
   );
   const retitled = await call(grant.access_token, "edit", {
-    changes: [
-      {
-        id: claimId,
-        version: Number(relinkedGet.lines[0].match(/ v(\d+)/)?.[1]),
-        title: "Wile owes Road Runner two anvils",
-      },
-    ],
+    changes: [{ id: claimId, title: "Wile owes Road Runner two anvils" }],
   });
   const ownLog = await call(grant.access_token, "history", {
     of: claimId,
@@ -464,25 +455,21 @@ export async function smokeMcp(stack, signIn) {
   );
 
   // The vocabulary bends after the fact: a field is added, renamed and
-  // retyped only as far as its values allow, a kind is renamed with its
+  // retyped only as far as its values allow, a type is renamed with its
   // records, and neither leaves while anything depends on it.
   await call(grant.access_token, "write", {
-    kinds: [
+    types: [
       {
         name: "claim",
-        description: "Something the model concluded.",
-        properties: [
-          { name: "strength", type: "number", description: "How strong." },
-        ],
+        properties: [{ name: "strength", datatype: "number" }],
       },
     ],
   });
-  const version = Number(backAgain.lines[0].match(/ v(\d+)/)?.[1]);
   const edited = await call(grant.access_token, "edit", {
-    changes: [{ id: claimId, version, props: { strength: 3 } }],
+    changes: [{ id: claimId, props: { strength: 3 } }],
   });
   const retyped = await call(grant.access_token, "redefine", {
-    fields: [{ kind: "claim", name: "strength", type: "text" }],
+    fields: [{ type: "claim", name: "strength", datatype: "text" }],
   });
   check(
     "a field is not retyped over values that would not fit",
@@ -493,80 +480,62 @@ export async function smokeMcp(stack, signIn) {
     retyped.text,
   );
   const renamedField = await call(grant.access_token, "redefine", {
-    fields: [{ kind: "claim", name: "strength", newName: "weight" }],
-    kinds: [{ name: "claim", newName: "conclusion" }],
+    fields: [{ type: "claim", name: "strength", newName: "weight" }],
+    types: [{ name: "claim", newName: "conclusion" }],
   });
   const conclusions = await call(grant.access_token, "read", {
-    kind: "conclusion",
+    type: "conclusion",
   });
   check(
-    "a kind and a field are renamed and their records follow",
-    renamedField.lines.includes(
-      "kind conclusion — Something the model concluded.",
-    ) &&
-      renamedField.lines.includes("claim.weight: number — How strong.") &&
+    "a type and a field are renamed and their records follow",
+    renamedField.lines.includes("type claim → conclusion") &&
+      renamedField.lines.includes("claim.weight: number") &&
       conclusions.ids[0] === claimId &&
       conclusions.rows[0].includes('{"weight":3}'),
     conclusions.rows[0] ?? conclusions.text,
   );
   const stuck = await call(grant.access_token, "undefine", {
-    kinds: ["conclusion"],
+    types: ["conclusion"],
   });
   const dropped = await call(grant.access_token, "undefine", {
-    fields: [{ kind: "conclusion", name: "weight" }],
+    fields: [{ type: "conclusion", name: "weight" }],
   });
-  // The rename and the drop each moved the record's version along.
   const now = await call(grant.access_token, "get", { ids: [claimId] });
   const moved = await call(grant.access_token, "edit", {
-    changes: [
-      {
-        id: claimId,
-        version: Number(now.lines[0].match(/ v(\d+)/)?.[1]),
-        kind: "note",
-        props: {},
-      },
-    ],
+    changes: [{ id: claimId, type: "note", props: {} }],
   });
   const gone = await call(grant.access_token, "undefine", {
-    kinds: ["conclusion"],
+    types: ["conclusion"],
   });
   check(
-    "a kind leaves only once nothing live is of it; a field takes its values",
+    "a type leaves only once nothing live is of it; a field takes its values",
     stuck.refused &&
       stuck.text ===
         "records are still conclusion; change or remove them first" &&
       dropped.lines[0] === "removed field conclusion.weight from 1 record" &&
       !now.lines[0].includes("weight") &&
       moved.lines[0]?.startsWith(`${claimId} note `) &&
-      gone.lines[0] === "removed kind conclusion",
+      gone.lines[0] === "removed type conclusion",
     `${stuck.text} / ${dropped.text} / ${moved.lines[0]} / ${gone.text}`,
   );
 
-  // A removed kind is hidden, not erased: it leaves the catalog, its name
+  // A removed type is hidden, not erased: it leaves the catalog, its name
   // stays its own, a removed record of it waits for it, and restore brings
   // it back as it was, with its fields.
   const scrap = await call(grant.access_token, "write", {
-    kinds: [
-      {
-        name: "scrap",
-        description: "A throwaway kind.",
-        properties: [
-          { name: "grade", type: "number", description: "How good." },
-        ],
-      },
+    types: [
+      { name: "scrap", properties: [{ name: "grade", datatype: "number" }] },
     ],
     records: [
       {
-        kind: "scrap",
-        layer: "derived",
+        type: "scrap",
         source: "claude",
         sourceRef: "scrap-1",
         title: "A scrap",
         props: { grade: 2 },
       },
       {
-        kind: "scrap",
-        layer: "derived",
+        type: "scrap",
         source: "claude",
         sourceRef: "scrap-2",
         title: "An ungraded scrap",
@@ -575,12 +544,12 @@ export async function smokeMcp(stack, signIn) {
   });
   const [scrapId, ungradedId] = scrap.ids;
   const graded = await call(grant.access_token, "read", {
-    kind: "scrap",
+    type: "scrap",
     orderBy: { property: "grade", direction: "desc" },
     limit: 1,
   });
   const tail = await call(grant.access_token, "read", {
-    kind: "scrap",
+    type: "scrap",
     orderBy: { property: "grade", direction: "desc" },
     cursor: graded.lines[0]?.match(/cursor=(\S+)/)?.[1],
   });
@@ -594,11 +563,11 @@ export async function smokeMcp(stack, signIn) {
   );
   await call(grant.access_token, "remove", { ids: [scrapId, ungradedId] });
   const scrapGone = await call(grant.access_token, "undefine", {
-    kinds: ["scrap"],
+    types: ["scrap"],
   });
   const without = await call(grant.access_token, "catalog", {});
   const reuse = await call(grant.access_token, "write", {
-    kinds: [{ name: "scrap", description: "Another scrap." }],
+    types: [{ name: "scrap" }],
   });
   const tooSoon = await call(grant.access_token, "restore", { ids: [scrapId] });
   const scrapLog = await call(grant.access_token, "history", {
@@ -608,32 +577,32 @@ export async function smokeMcp(stack, signIn) {
   const tooSoonBack = await call(grant.access_token, "revert", {
     changes: [Number(scrapLog.lines[1]?.match(/^#(\d+) /)?.[1])],
   });
-  const back = await call(grant.access_token, "restore", { kinds: ["scrap"] });
+  const back = await call(grant.access_token, "restore", { types: ["scrap"] });
   const withIt = await call(grant.access_token, "catalog", {});
   const restored = await call(grant.access_token, "restore", {
     ids: [scrapId, ungradedId],
   });
   check(
-    "a removed kind is hidden with its records and comes back before them",
-    scrapGone.lines[0] === "removed kind scrap" &&
-      !without.lines.some((l) => l.startsWith("scrap ")) &&
+    "a removed type is hidden with its records and comes back before them",
+    scrapGone.lines[0] === "removed type scrap" &&
+      !without.lines.some((l) => l === "scrap") &&
       reuse.refused &&
       reuse.text ===
-        "kind scrap is removed; restore it, or choose another name" &&
+        "type scrap is removed; restore it, or choose another name" &&
       tooSoon.refused &&
       tooSoon.text ===
-        `record ${scrapId} is of kind scrap, which is removed; restore the kind first` &&
+        `record ${scrapId} is a scrap, which is removed; restore the type first` &&
       tooSoonBack.refused &&
       tooSoonBack.text === tooSoon.text &&
-      back.lines[0] === "restored kind scrap" &&
-      withIt.lines.includes("  grade: number — How good.") &&
+      back.lines[0] === "restored type scrap" &&
+      withIt.lines.includes("  grade: number") &&
       restored.lines[0] === `restored ${scrapId} ${ungradedId}`,
     `${scrapGone.text} / ${reuse.text} / ${tooSoon.text} / ${back.text} / ${restored.text}`,
   );
 
   // A name that would forge a line is refused.
   const forged = await call(grant.access_token, "write", {
-    kinds: [{ name: "note removed", description: "Forgery." }],
+    types: [{ name: "note removed" }],
   });
   check(
     "a forged name is refused",
@@ -749,7 +718,7 @@ export async function smokeMcp(stack, signIn) {
     across.text,
   );
 
-  // A colleague's Claude sees the colleague's own kinds and the one kind
+  // A colleague's Claude sees the colleague's own types and the one type
   // Wile shared with the org, read as Wile's and never reshaped by them.
   const roadRunner = await signIn(orgs[0].users[1].id);
   const colleagueCode = (
@@ -765,7 +734,7 @@ export async function smokeMcp(stack, signIn) {
   check(
     "the log shows a colleague the share that reached them, and who joined",
     theirLog.lines.some((l) =>
-      / share \S+ created by=colleague: kind lift to everyone at view$/.test(l),
+      / share \S+ created by=colleague: type lift to everyone at view$/.test(l),
     ) &&
       theirLog.lines.some((l) => / member \S+ created by=/.test(l)) &&
       !theirLog.lines.some((l) =>
@@ -775,28 +744,27 @@ export async function smokeMcp(stack, signIn) {
   );
   const lift = theirs.lines.find((l) => l.startsWith("lift owner="));
   const lifts = await call(colleagueGrant.access_token, "read", {
-    kind: "lift",
+    type: "lift",
     owner: orgs[0].users[0].id,
   });
   const shared = await call(colleagueGrant.access_token, "recall", {
     question: "a barbell exercise",
-    kind: "lift",
+    type: "lift",
     limit: 1,
   });
   const notTheirs = await call(colleagueGrant.access_token, "redefine", {
-    kinds: [{ name: "lift", newName: "lifts" }],
+    types: [{ name: "lift", newName: "lifts" }],
   });
   check(
     "a colleague's catalog is their own and what was shared",
     theirs.lines.includes("shared in (1), read with owner=…:") &&
-      lift ===
-        `lift owner=${orgs[0].users[0].id} whole kind, to everyone — ${lift?.split(" — ")[1]}` &&
+      lift === `lift owner=${orgs[0].users[0].id}` &&
       !theirs.lines.some((l) => l.startsWith("person ")) &&
       lifts.lines[0] === "3 records" &&
       shared.lines[0] === "1 record, nearest first" &&
       lifts.ids.includes(shared.lines[1]?.split(" ")[1]) &&
       notTheirs.refused &&
-      notTheirs.text === "lift is a colleague's kind; only they change it",
+      notTheirs.text === "lift is a colleague's type; only they change it",
     `${theirs.lines[0]}; ${lift ?? theirs.text}; ${lifts.lines[0]}; ${shared.lines[0]}; ${notTheirs.text}`,
   );
 

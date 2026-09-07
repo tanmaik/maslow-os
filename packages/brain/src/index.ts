@@ -1,11 +1,10 @@
 // The brain: what a person knows, behind one read door and one write door.
-export { catalog, defineKind, defineVerb } from "./catalog.ts";
+export { catalog, defineType } from "./catalog.ts";
 export { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
 export { ID, isId } from "./ids.ts";
 export { defineProperty } from "./properties.ts";
 export {
   aliasesOf,
-  changes,
   edgesOf,
   get,
   graph,
@@ -15,15 +14,16 @@ export {
 } from "./read.ts";
 export { recall, remember, stale } from "./recall.ts";
 export { revert } from "./revert.ts";
-export { grantsOf, share, unshare } from "./share.ts";
+export { share, sharesOf, unshare } from "./share.ts";
 export { exportBrain, importBrain } from "./transfer.ts";
 export type * from "./types.ts";
 export {
-  redefine,
   redefineProperty,
   removeProperty,
-  restoreDefinition,
-  undefine,
+  removeType,
+  renameType,
+  renameVerb,
+  restoreType,
 } from "./vocabulary.ts";
 export {
   edit,

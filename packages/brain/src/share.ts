@@ -1,5 +1,5 @@
 import { Forbidden, Invalid, NotFound } from "./errors.ts";
-import type { Access, Author, Grant, Query, Subject, Target } from "./types.ts";
+import type { Access, Query, Share, Subject, Target } from "./types.ts";
 
 const RANK: Record<Access, number> = { view: 1, edit: 2, owner: 3 };
 
@@ -22,108 +22,101 @@ export async function need(q: Query, id: string, level: Access) {
   }
 }
 
-// Refuses unless the current member may see the kind, or for a share, owns
-// it: a kind is shared by whoever defined it and nobody else.
-async function needKind(q: Query, id: string, level: "view" | "owner") {
+// Refuses unless the current member may see the type, or for a share, owns
+// it: a type is shared by whoever defined it and nobody else.
+async function needType(q: Query, id: string, level: "view" | "owner") {
   const { rows } = await q.query<{ own: boolean }>(
-    "select person_id = current_member() as own from record_kinds where id = $1",
+    "select person_id = current_member() as own from types where id = $1",
     [id],
   );
-  if (!rows[0]) throw new NotFound(`kind ${id} is not in this brain`);
+  if (!rows[0]) throw new NotFound(`type ${id} is not in this brain`);
   if (level === "owner" && !rows[0].own) {
-    throw new Forbidden("only the kind's owner shares it");
+    throw new Forbidden("only the type's owner shares it");
   }
 }
 
 const allowed = (q: Query, on: Target, level: "view" | "owner") =>
-  "record" in on ? need(q, on.record, level) : needKind(q, on.kind, level);
+  "record" in on ? need(q, on.record, level) : needType(q, on.type, level);
 
-type GrantRow = {
+type ShareRow = {
   id: string;
   record_id: string | null;
-  kind_id: string | null;
-  subject: Subject["kind"];
+  type_id: string | null;
+  subject: Subject["who"];
   member_id: string | null;
   group_id: string | null;
   level: Access;
-  author: string;
-  created_at: Date;
 };
 
-const toGrant = (g: GrantRow): Grant => ({
-  id: g.id,
-  on: g.record_id ? { record: g.record_id } : { kind: g.kind_id! },
+const toShare = (s: ShareRow): Share => ({
+  id: s.id,
+  on: s.record_id ? { record: s.record_id } : { type: s.type_id! },
   subject:
-    g.subject === "everyone"
-      ? { kind: "everyone" }
-      : g.subject === "group"
-        ? { kind: "group", id: g.group_id! }
-        : { kind: "member", id: g.member_id! },
-  level: g.level,
-  author: g.author,
-  createdAt: g.created_at,
+    s.subject === "everyone"
+      ? { who: "everyone" }
+      : s.subject === "group"
+        ? { who: "group", id: s.group_id! }
+        : { who: "member", id: s.member_id! },
+  level: s.level,
 });
 
-const columns =
-  "id, record_id, kind_id, subject, member_id, group_id, level, author, created_at";
+const columns = "id, record_id, type_id, subject, member_id, group_id, level";
 
 const recordId = (on: Target) => ("record" in on ? on.record : null);
-const kindId = (on: Target) => ("kind" in on ? on.kind : null);
-const memberId = (s: Subject) => (s.kind === "member" ? s.id : null);
-const groupId = (s: Subject) => (s.kind === "group" ? s.id : null);
+const typeId = (on: Target) => ("type" in on ? on.type : null);
+const memberId = (s: Subject) => (s.who === "member" ? s.id : null);
+const groupId = (s: Subject) => (s.who === "group" ? s.id : null);
 
-// Every share on a record or a kind, for anyone who can see it.
-export async function grantsOf(q: Query, on: Target): Promise<Grant[]> {
+// Every share on a record or a type, for anyone who can see it.
+export async function sharesOf(q: Query, on: Target): Promise<Share[]> {
   await allowed(q, on, "view");
-  const { rows } = await q.query<GrantRow>(
-    `select ${columns} from grants
-     where record_id is not distinct from $1 and kind_id is not distinct from $2
-     order by created_at, id`,
-    [recordId(on), kindId(on)],
+  const { rows } = await q.query<ShareRow>(
+    `select ${columns} from shares
+     where record_id is not distinct from $1 and type_id is not distinct from $2
+     order by subject, level, id`,
+    [recordId(on), typeId(on)],
   );
-  return rows.map(toGrant);
+  return rows.map(toShare);
 }
 
 // Lets a member, a group or everyone do this much with a record, or with
-// every record of a kind. Sharing again with the same subject changes the
+// every record of a type. Sharing again with the same subject changes the
 // level.
 export async function share(
   q: Query,
-  author: Author,
   on: Target,
   subject: Subject,
   level: Access,
-): Promise<Grant> {
+): Promise<Share> {
   await allowed(q, on, "owner");
   if (!(level in RANK)) throw new Invalid(`"${String(level)}" is not a level`);
-  if (subject.kind === "everyone" && level !== "view") {
+  if (subject.who === "everyone" && level !== "view") {
     throw new Invalid("everyone can only be given view");
   }
   const { rows } = await q
-    .query<GrantRow>(
-      `insert into grants
-         (record_id, kind_id, subject, member_id, group_id, level, author)
-       values ($1, $2, $3, $4, $5, $6, $7)
-       on conflict (org_id, record_id, kind_id, subject, member_id, group_id)
-         do update set level = excluded.level, author = excluded.author
+    .query<ShareRow>(
+      `insert into shares
+         (record_id, type_id, subject, member_id, group_id, level)
+       values ($1, $2, $3, $4, $5, $6)
+       on conflict (org_id, record_id, type_id, subject, member_id, group_id)
+         do update set level = excluded.level
        returning ${columns}`,
       [
         recordId(on),
-        kindId(on),
-        subject.kind,
+        typeId(on),
+        subject.who,
         memberId(subject),
         groupId(subject),
         level,
-        author,
       ],
     )
     .catch((err) => {
       if ((err as { code?: string }).code === "23503") {
-        throw new NotFound(`no such ${subject.kind} in this org`);
+        throw new NotFound(`no such ${subject.who} in this org`);
       }
       throw err;
     });
-  return toGrant(rows[0]!);
+  return toShare(rows[0]!);
 }
 
 // Takes a share away. Taking away one that is not there changes nothing.
@@ -134,16 +127,16 @@ export async function unshare(
 ): Promise<void> {
   await allowed(q, on, "owner");
   await q.query(
-    `delete from grants
+    `delete from shares
      where record_id is not distinct from $1
-       and kind_id is not distinct from $2
+       and type_id is not distinct from $2
        and subject = $3
        and member_id is not distinct from $4
        and group_id is not distinct from $5`,
     [
       recordId(on),
-      kindId(on),
-      subject.kind,
+      typeId(on),
+      subject.who,
       memberId(subject),
       groupId(subject),
     ],

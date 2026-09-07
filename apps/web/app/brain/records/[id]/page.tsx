@@ -3,15 +3,14 @@ import {
   catalog,
   edgesOf,
   get,
-  grantsOf,
   graph,
   history,
   isId,
   read,
+  sharesOf,
   type BrainRecord,
   type Edge,
   type Event,
-  type Verb,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { groupsOf } from "@placeholder/db/groups";
@@ -43,21 +42,14 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { principal } from "@/lib/session";
 
+import { DatatypeBadge } from "../../datatype-badge";
 import { FieldInputs } from "../../fields";
-import {
-  authorText,
-  cell,
-  percent,
-  recordHref,
-  sourceText,
-  verbText,
-} from "../../format";
+import { authorText, cell, percent, recordHref, verbText } from "../../format";
 import { BrainGraph } from "../../graph/lazy";
 import { Split } from "../../graph/split";
-import { KindIcon, KindMark } from "../../kind-icon";
 import { peopleOf } from "../../people";
 import { Sharing } from "../../sharing";
-import { TypeBadge } from "../../type-badge";
+import { TypeIcon, TypeMark } from "../../type-icon";
 
 // One record as a page to read: its body, with everything about it beside
 // the graph around it: fields, origin, links read as sentences, history,
@@ -104,13 +96,13 @@ export default async function Page({
       edges,
       others: new Map(others.map((r) => [r.id, r])),
       winner,
-      kind: vocabulary.kinds.find(
-        (k) => k.name === record.kind && k.ownerId === record.ownerId,
+      type: vocabulary.types.find(
+        (t) => t.name === record.type && t.ownerId === record.ownerId,
       ),
       verbs: vocabulary.verbs,
       events: await history(db, { of: id }),
       near: await graph(db, [id]),
-      grants: await grantsOf(db, { record: id }),
+      shares: await sharesOf(db, { record: id }),
       all,
       people: await peopleOf(db),
     };
@@ -123,18 +115,18 @@ export default async function Page({
     edges,
     others,
     winner,
-    kind,
+    type,
     verbs,
     events,
     near,
-    grants,
+    shares,
     all,
     people,
   } = found;
   const canEdit = r.access === "edit" || r.access === "owner";
   const isOwner = r.access === "owner";
   const who = (author: string) => authorText(author, people);
-  const properties = kind?.properties ?? [];
+  const properties = type?.properties ?? [];
   const undeclared = Object.keys(r.props).filter(
     (k) => !properties.some((f) => f.name === k),
   );
@@ -146,10 +138,10 @@ export default async function Page({
         <TableBody>
           {properties.map((f) => (
             <TableRow key={f.id}>
-              <TableHead className="w-44" title={f.description}>
+              <TableHead className="w-44">
                 <span className="inline-flex items-center gap-1.5">
                   {f.name}
-                  <TypeBadge type={f.type} />
+                  <DatatypeBadge datatype={f.datatype} />
                 </span>
               </TableHead>
               <TableCell className="whitespace-normal">
@@ -169,43 +161,29 @@ export default async function Page({
             <TableHead className="w-44">
               <span className="inline-flex items-center gap-1.5">
                 When
-                <TypeBadge type="datetime" />
+                <DatatypeBadge datatype="datetime" />
               </span>
             </TableHead>
             <TableCell className="text-muted-foreground">
               <LocalTime at={r.occurredAt} fallback="no time" />
             </TableCell>
           </TableRow>
-          <TableRow>
-            <TableHead title="Where this came from and who wrote it">
-              <span className="inline-flex items-center gap-1.5">
-                Origin
-                <TypeBadge type="text" />
-              </span>
-            </TableHead>
-            <TableCell className="whitespace-normal">
-              {r.layer === "derived" ? (
-                <>
-                  concluded by {who(r.author)}
-                  {r.confidence !== null && `, ${percent(r.confidence)} sure`}
-                </>
-              ) : (
-                <>
-                  {sourceText(r.source, r.sourceRef)}, by {who(r.author)}
-                </>
-              )}
-            </TableCell>
-          </TableRow>
+          {r.confidence !== null && (
+            <TableRow>
+              <TableHead>How sure</TableHead>
+              <TableCell>{percent(r.confidence)}</TableCell>
+            </TableRow>
+          )}
           <TableRow>
             <TableHead title="When this record was made and last changed">
               <span className="inline-flex items-center gap-1.5">
                 Changed
-                <TypeBadge type="datetime" />
+                <DatatypeBadge datatype="datetime" />
               </span>
             </TableHead>
             <TableCell className="text-muted-foreground whitespace-normal">
               made <LocalTime at={r.createdAt} />
-              {r.version > 1 && (
+              {r.updatedAt > r.createdAt && (
                 <>
                   , last changed <LocalTime at={r.updatedAt} />
                 </>
@@ -223,7 +201,7 @@ export default async function Page({
         on={{ record: r.id }}
         owner={isOwner}
         ownerName={people.get(r.ownerId) ?? "someone no longer here"}
-        grants={grants}
+        shares={shares}
         groups={groups}
         members={[...people].map(([id, name]) => ({ id, name }))}
       />
@@ -232,7 +210,6 @@ export default async function Page({
         <div className="flex flex-wrap gap-2">
           <FormDialog trigger="Edit" title={`Edit ${r.title || "this record"}`}>
             <form action={action} method="post" className="grid gap-3">
-              <input type="hidden" name="version" value={r.version} />
               <div className="space-y-1">
                 <Label htmlFor="title">Title</Label>
                 <Input
@@ -261,17 +238,13 @@ export default async function Page({
                   defaultValue={r.occurredAt?.toISOString()}
                 />
               </div>
-              {r.layer === "derived" && (
-                <HowSure
-                  id="confidence"
-                  name="confidence"
-                  defaultValue={
-                    r.confidence === null
-                      ? null
-                      : Math.round(r.confidence * 100)
-                  }
-                />
-              )}
+              <HowSure
+                id="confidence"
+                name="confidence"
+                defaultValue={
+                  r.confidence === null ? null : Math.round(r.confidence * 100)
+                }
+              />
               <div>
                 <Button type="submit">Save</Button>
               </div>
@@ -302,8 +275,8 @@ export default async function Page({
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="flex flex-wrap items-baseline gap-3">
           <h1 className="text-2xl font-semibold">{r.title || "(untitled)"}</h1>
-          <KindMark
-            kind={r.kind}
+          <TypeMark
+            type={r.type}
             owner={r.ownerId === p.userId ? undefined : r.ownerId}
             className="text-muted-foreground text-sm"
           />
@@ -375,7 +348,7 @@ function Links({
 }) {
   const name = (id: string) =>
     aliases.has(id) ? (
-      <span className="text-muted-foreground">this {record.kind}</span>
+      <span className="text-muted-foreground">this {record.type}</span>
     ) : (
       <a href={recordHref(id)} className="font-medium hover:underline">
         {others.get(id)?.title || "(untitled)"}
@@ -432,14 +405,15 @@ function Links({
   );
 }
 
-// A new link from or to this record, on one of the person's own verbs.
+// A new link from or to this record, under any verb; the ones in use are
+// offered.
 function LinkForm({
   record,
   verbs,
   candidates,
 }: {
   record: BrainRecord;
-  verbs: Verb[];
+  verbs: string[];
   candidates: BrainRecord[];
 }) {
   const others = candidates.filter((c) => c.id !== record.id);
@@ -449,13 +423,9 @@ function LinkForm({
       title="Link to another record"
       description="A link is a sentence: this record, a verb, another record."
     >
-      {verbs.length === 0 ? (
+      {others.length === 0 ? (
         <p className="text-muted-foreground text-sm">
-          A link needs a verb. Define one in{" "}
-          <a href="/brain/vocabulary" className="underline">
-            vocabulary
-          </a>
-          .
+          Nothing else to link to yet.
         </p>
       ) : (
         <form
@@ -471,28 +441,28 @@ function LinkForm({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="out">
-                  this {record.kind} … the other
+                  this {record.type} … the other
                 </SelectItem>
                 <SelectItem value="in">
-                  the other … this {record.kind}
+                  the other … this {record.type}
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
           <div className="space-y-1">
             <Label htmlFor="verb">Verb</Label>
-            <Select name="verb" defaultValue={verbs[0]!.name}>
-              <SelectTrigger id="verb" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {verbs.map((v) => (
-                  <SelectItem key={v.id} value={v.name}>
-                    {verbText(v.name)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Input
+              id="verb"
+              name="verb"
+              list="verbs"
+              placeholder="attended"
+              required
+            />
+            <datalist id="verbs">
+              {verbs.map((v) => (
+                <option key={v} value={v} />
+              ))}
+            </datalist>
           </div>
           <div className="space-y-1">
             <Label htmlFor="other">The other record</Label>
@@ -503,7 +473,7 @@ function LinkForm({
               <SelectContent>
                 {others.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
-                    <KindIcon kind={c.kind} />
+                    <TypeIcon type={c.type} />
                     {c.title || "(untitled)"}
                   </SelectItem>
                 ))}

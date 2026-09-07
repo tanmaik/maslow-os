@@ -27,14 +27,13 @@ export async function POST(
 
   try {
     await asPerson(p, (db) =>
-      write(db, `person:${p.userId}`, {
+      write(db, {
         edges: [
           {
             from: { id: out ? id : other },
             verb,
             to: { id: out ? other : id },
             confidence: confidenceFrom(form.get("confidence")),
-            source: "person",
           },
         ],
       }),

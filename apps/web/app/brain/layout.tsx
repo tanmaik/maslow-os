@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 
 import { principal } from "@/lib/session";
 
-import { kindHref, sharedGroups } from "./format";
+import { sharedGroups, typeHref } from "./format";
 import { peopleOf } from "./people";
 import { BrainNav } from "./nav";
 
@@ -14,23 +14,22 @@ import { BrainNav } from "./nav";
 export default async function Layout({ children }: { children: ReactNode }) {
   const p = await principal();
   if (!p) redirect("/");
-  const { kinds, people } = await asPerson(p, async (db) => ({
+  const { types, people } = await asPerson(p, async (db) => ({
     ...(await catalog(db)),
     people: await peopleOf(db),
   }));
-  const shared = sharedGroups(kinds, people).map((g) => ({
+  const shared = sharedGroups(types, people).map((g) => ({
     owner: g.owner,
-    how: g.how,
-    kinds: g.kinds.map((k) => ({
-      name: k.name,
-      href: kindHref(k.name, k.ownerId),
+    types: g.types.map((t) => ({
+      name: t.name,
+      href: typeHref(t.name, t.ownerId),
     })),
   }));
 
   return (
     <div className="gap-6 md:grid md:grid-cols-[11rem_minmax(0,1fr)]">
       <BrainNav
-        kinds={kinds.filter((k) => !k.via).map((k) => k.name)}
+        types={types.filter((t) => t.own).map((t) => t.name)}
         shared={shared}
       />
       <main className="mt-4 min-w-0 space-y-4 md:mt-0">{children}</main>

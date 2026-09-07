@@ -139,27 +139,35 @@ citation to a copy. A question the brain cannot answer is answered outside
 it, and the answer and what it rests on are written so the next time is a
 read.
 
-Kinds and verbs are the person's own vocabulary, open to them and their
-agent, each with a description and an author. Every person's starts empty:
-whoever writes the first record of a kind defines it, with a description, in
-the same call, and a record of an undefined kind is refused, never stored.
-Two people in one org may each define a `note`, and they are two kinds. A
-kind may declare its fields as rows, never as columns: values stay in one
-JSON column and the doors check and query them by the declaration. Nothing
-changes a table's shape after deploy.
+Types are the person's own vocabulary, open to them and their agent. A type
+is a name and the fields it declares, nothing more: no description, since
+the name is what a model needs. Every person's starts empty: whoever writes
+the first record of a type defines it in the same call, and a record of an
+undefined type is refused, never stored. Two people in one org may each
+define a `note`, and they are two types. A type may declare its fields as
+rows, never as columns: values stay in one JSON column and the doors check
+and query them by the declaration. Nothing changes a table's shape after
+deploy. A verb is the word on an edge and nothing else: not defined, not
+described, not a row.
+
+The brain is not a database for people to look at. A table holds only what
+the product reads at runtime; who wrote a row and when is the log's to say,
+and no table carries an author, a version or a definition's date. A change
+made through any door is logged in the name of the transaction that made
+it: the person, or the app connected as them.
 
 Records, edges and the vocabulary are the person's. A record is owned by
 whoever wrote it, always, and seen by nobody else until its owner shares it:
 with a person, a group, or everyone in the org, at view, edit or owner. A
-kind is shared the same way, and a share on a kind reaches every record of
-it; a record shared alone brings its kind into view with it. The owner stays
-the owner: only they write records of their kind or change what it declares.
+type is shared the same way, and a share on a type reaches every record of
+it; a record shared alone brings its type into view with it. The owner stays
+the owner: only they write records of their type or change what it declares.
 The most any path gives a member is what they may do; there are no deny
 rules. Everyone is every current member and is not a row. Editors change;
 owners also share, remove and merge; everyone can only be given view. Org
-owners manage groups, not content. A share records who gave it, person or
-agent. What is shared into a brain is listed beside the person's own kinds,
-grouped by whose it is and how it was opened: the whole kind or some
+owners manage groups, not content. The log says who gave a share, person or
+agent. What is shared into a brain is listed beside the person's own types,
+grouped by whose it is and how it was opened: the whole type or some
 records, to everyone or to them.
 
 One read door and one write door, in `packages/brain`; nothing else touches

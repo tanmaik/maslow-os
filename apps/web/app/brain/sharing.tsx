@@ -1,4 +1,4 @@
-import type { Grant, Subject, Target } from "@placeholder/brain";
+import type { Share, Subject, Target } from "@placeholder/brain";
 import type { Group } from "@placeholder/db/groups";
 
 import { FormDialog } from "@/components/form-dialog";
@@ -16,35 +16,35 @@ import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 
 // A subject as a form value and back: "everyone", "group:<id>", "member:<id>".
 const value = (s: Subject) =>
-  s.kind === "everyone" ? "everyone" : `${s.kind}:${s.id}`;
+  s.who === "everyone" ? "everyone" : `${s.who}:${s.id}`;
 
-// Who a record or a kind is shared with, and, for its owner, a way to share
-// it with a person, a group or everyone at a level. Sharing a kind shares
+// Who a record or a type is shared with, and, for its owner, a way to share
+// it with a person, a group or everyone at a level. Sharing a type shares
 // every record of it.
 export function Sharing({
   on,
   owner,
   ownerName,
-  grants,
+  shares,
   groups,
   members,
 }: {
   on: Target;
   owner: boolean;
   ownerName: string;
-  grants: Grant[];
+  shares: Share[];
   groups: Group[];
   members: { id: string; name: string }[];
 }) {
-  const what = "kind" in on ? "kind" : "record";
+  const what = "type" in on ? "type" : "record";
   const target =
-    "kind" in on
-      ? { name: "kind", value: on.kind }
+    "type" in on
+      ? { name: "type", value: on.type }
       : { name: "record", value: on.record };
   const name = (s: Subject) =>
-    s.kind === "everyone"
+    s.who === "everyone"
       ? "Everyone"
-      : s.kind === "group"
+      : s.who === "group"
         ? (groups.find((g) => g.id === s.id)?.name ?? "a group no longer here")
         : (members.find((m) => m.id === s.id)?.name ??
           "someone no longer here");
@@ -52,10 +52,10 @@ export function Sharing({
     <div className="space-y-2">
       <p className="text-muted-foreground text-sm">
         Owned by {ownerName}
-        {grants.length > 0 && (
+        {shares.length > 0 && (
           <>
             {" · shared with "}
-            {grants.map((g, i) => (
+            {shares.map((g, i) => (
               <span key={g.id}>
                 {i > 0 && ", "}
                 {name(g.subject)} <Badge variant="outline">{g.level}</Badge>
@@ -69,8 +69,8 @@ export function Sharing({
           trigger="Share"
           title={`Share this ${what}`}
           description={
-            what === "kind"
-              ? "Who may see every record of this kind, change them, or do everything with them. The most any path gives someone is what they can do."
+            what === "type"
+              ? "Who may see every record of this type, change them, or do everything with them. The most any path gives someone is what they can do."
               : "Who may see it, change it, or do everything with it. The most any path gives someone is what they can do."
           }
         >
@@ -120,10 +120,10 @@ export function Sharing({
               <Button type="submit">Share</Button>
             </div>
           </form>
-          {grants.length > 0 && (
+          {shares.length > 0 && (
             <Table>
               <TableBody>
-                {grants.map((g) => (
+                {shares.map((g) => (
                   <TableRow key={g.id}>
                     <TableCell>{name(g.subject)}</TableCell>
                     <TableCell>

@@ -24,7 +24,7 @@ const PAGE = 50;
 const SUBJECTS: Record<Event["subject"], string> = {
   record: "record",
   edge: "link",
-  kind: "kind",
+  type: "type",
   verb: "verb",
   property: "field",
   share: "share",
@@ -44,7 +44,7 @@ function subjectOf(e: Event): { label: string; href?: string } {
     case "edge":
       return { label: name("verb") };
     case "property":
-      return { label: `${name("kind")}.${name("name")}` };
+      return { label: `${name("type")}.${name("name")}` };
     case "share": {
       const to =
         name("subject") === "group"
@@ -52,7 +52,7 @@ function subjectOf(e: Event): { label: string; href?: string } {
           : name("subject") === "member"
             ? "a colleague"
             : "everyone";
-      const what = name("kind") ? `kind ${name("kind")}` : name("record");
+      const what = name("type") ? `type ${name("type")}` : name("record");
       return {
         label: `${what} to ${to} at ${name("level")}`,
         href: name("record_id") ? recordHref(name("record_id")) : undefined,

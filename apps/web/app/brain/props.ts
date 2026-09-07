@@ -6,7 +6,7 @@ import { isValid, parseISO } from "date-fns";
 function coerce(p: Property, raw: string): unknown {
   const s = raw.trim();
   if (s === "") return undefined;
-  switch (p.type) {
+  switch (p.datatype) {
     case "number": {
       const n = Number(s);
       if (!Number.isFinite(n)) throw new Invalid(`${p.name} must be a number`);

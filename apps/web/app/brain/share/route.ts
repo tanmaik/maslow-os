@@ -19,24 +19,24 @@ import { recordHref } from "../format";
 
 // A subject as the form names it: "everyone", "group:<id>" or "member:<id>".
 function subjectFrom(value: string): Subject | null {
-  if (value === "everyone") return { kind: "everyone" };
-  const [kind, id] = value.split(":");
-  if ((kind === "group" || kind === "member") && id && isUuid(id)) {
-    return { kind, id };
+  if (value === "everyone") return { who: "everyone" };
+  const [who, id] = value.split(":");
+  if ((who === "group" || who === "member") && id && isUuid(id)) {
+    return { who, id };
   }
   return null;
 }
 
-// What the form is sharing: a record or a kind, by id.
+// What the form is sharing: a record or a type, by id.
 function targetFrom(form: FormData): Target | null {
   const record = String(form.get("record") ?? "");
-  const kind = String(form.get("kind") ?? "");
+  const type = String(form.get("type") ?? "");
   if (isId(record)) return { record };
-  if (isUuid(kind)) return { kind };
+  if (isUuid(type)) return { type };
   return null;
 }
 
-// Shares a record or a kind with a person, a group or everyone at a level,
+// Shares a record or a type with a person, a group or everyone at a level,
 // or takes a share away. The owner only.
 export async function POST(request: Request) {
   const p = await principal();
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
   try {
     await asPerson(p, async (db) => {
       if (form.get("intent") === "unshare") await unshare(db, on, subject);
-      else await share(db, `person:${p.userId}`, on, subject, level);
+      else await share(db, on, subject, level);
     });
   } catch (err) {
     if (err instanceof Invalid || err instanceof NotFound) {

@@ -1,13 +1,13 @@
 import { Conflict, Invalid, NotFound } from "./errors.ts";
-import { check, defineProperty, holdKind, propertiesOf } from "./properties.ts";
+import { check, defineProperty, holdType, propertiesOf } from "./properties.ts";
 import { eventColumns, toEvent, type EventRow } from "./rows.ts";
-import type { Author, PropertyType, Query } from "./types.ts";
+import type { Datatype, Query } from "./types.ts";
 import {
-  redefine,
   redefineProperty,
   removeProperty,
-  restoreDefinition,
-  undefine,
+  removeType,
+  renameType,
+  restoreType,
 } from "./vocabulary.ts";
 import { remove, restore, restoreEdge, unlink } from "./write.ts";
 
@@ -18,11 +18,7 @@ import { remove, restore, restoreEdge, unlink } from "./write.ts";
 
 type Row = Record<string, unknown>;
 
-export async function revert(
-  q: Query,
-  author: Author,
-  n: number,
-): Promise<string> {
+export async function revert(q: Query, n: number): Promise<string> {
   const { rows } = await q.query<EventRow>(
     `select ${eventColumns} from events
      where person_id = current_member() and n = $1`,
@@ -41,7 +37,6 @@ export async function revert(
       `#${n} is not the latest change to that ${e.subject}; walk back #${later.rows[0].n} first`,
     );
   }
-  await q.query("select set_config('app.author', $1, true)", [author]);
   const before = (e.before ?? {}) as Row;
   const after = (e.after ?? {}) as Row;
   const id = e.subjectId;
@@ -50,29 +45,29 @@ export async function revert(
   switch (e.subject) {
     case "record": {
       if (e.action === "created") {
-        await remove(q, author, id);
+        await remove(q, id);
         return `removed record ${id}`;
       }
       if (e.action === "deleted") {
-        await restore(q, author, id);
+        await restore(q, id);
         return `restored record ${id}`;
       }
-      const kind = text(before, "kind");
-      if (!(await holdKind(q, kind, false))) {
-        throw new Invalid(`kind ${kind} is removed; restore it first`);
+      const type = text(before, "type");
+      if (!(await holdType(q, type, false))) {
+        throw new Invalid(`type ${type} is removed; restore it first`);
       }
       const props = (before.props ?? {}) as Row;
-      check(kind, props, await propertiesOf(q, kind, undefined, true));
+      check(type, props, await propertiesOf(q, type, undefined, true));
       const result = await q
         .query(
           `update records
-           set kind = $2, title = $3, body = $4, props = $5::jsonb,
+           set type = $2, title = $3, body = $4, props = $5::jsonb,
                occurred_at = $6, confidence = $7, deleted_at = $8,
-               merged_into = $9, author = $10
+               merged_into = $9
            where id = $1 and person_id = current_member()`,
           [
             id,
-            kind,
+            type,
             text(before, "title"),
             text(before, "body"),
             JSON.stringify(props),
@@ -80,12 +75,11 @@ export async function revert(
             before.confidence ?? null,
             before.deleted_at ?? null,
             before.merged_into ?? null,
-            author,
           ],
         )
         .catch((err) => {
           if ((err as { code?: string }).code === "23503") {
-            throw new Invalid(`no kind "${kind}" now; restore it first`);
+            throw new Invalid(`no type "${type}" now; restore it first`);
           }
           throw err;
         });
@@ -94,68 +88,64 @@ export async function revert(
     }
     case "edge": {
       if (e.action === "created") {
-        await unlink(q, author, id);
+        await unlink(q, id);
         return `unlinked ${id}`;
       }
       if (e.action === "deleted") {
-        await restoreEdge(q, author, id);
+        await restoreEdge(q, id);
         return `restored edge ${id}`;
       }
       const result = await q.query(
         `update edges
-         set props = $2::jsonb, confidence = $3, occurred_at = $4, author = $5
+         set verb = $2, props = $3::jsonb, confidence = $4, occurred_at = $5
          where id = $1 and person_id = current_member()`,
         [
           id,
+          text(before, "verb"),
           JSON.stringify(before.props ?? {}),
           before.confidence ?? null,
           before.occurred_at ?? null,
-          author,
         ],
       );
       if (!result.rowCount) throw new NotFound(`edge ${id} is not yours`);
       return `edge ${id} as before #${n}`;
     }
-    case "kind":
-    case "verb": {
-      const what = e.subject;
+    case "type": {
       if (e.action === "created" || (before.deleted_at && !after.deleted_at)) {
-        await undefine(q, author, what, text(after, "name"));
-        return `removed ${what} ${text(after, "name")}`;
+        await removeType(q, text(after, "name"));
+        return `removed type ${text(after, "name")}`;
       }
       if (e.action === "deleted") {
-        await restoreDefinition(q, author, what, text(after, "name"));
-        return `restored ${what} ${text(after, "name")}`;
+        await restoreType(q, text(after, "name"));
+        return `restored type ${text(after, "name")}`;
       }
-      const was = await redefine(q, author, what, text(after, "name"), {
-        newName: text(before, "name"),
-        description: text(before, "description"),
-      });
-      return `${what} ${was.name} as before #${n}`;
+      await renameType(q, text(after, "name"), text(before, "name"));
+      return `type ${text(before, "name")} as before #${n}`;
     }
     case "property": {
-      const kind = text(after.kind === undefined ? before : after, "kind");
+      const type = text(after.type === undefined ? before : after, "type");
       if (e.action === "created") {
-        const gone = await removeProperty(q, author, kind, text(after, "name"));
-        return `removed field ${kind}.${text(after, "name")} from ${gone} records`;
+        const gone = await removeProperty(q, type, text(after, "name"));
+        return `removed field ${type}.${text(after, "name")} from ${gone} records`;
       }
       const definition = {
         name: text(before, "name"),
-        type: text(before, "type") as PropertyType,
-        description: text(before, "description"),
+        datatype: text(before, "datatype") as Datatype,
         required: Boolean(before.required),
         options: (before.options as string[] | null) ?? undefined,
       };
       if (e.action === "deleted") {
-        await defineProperty(q, author, text(before, "kind"), definition);
-        return `restored field ${text(before, "kind")}.${definition.name}`;
+        await defineProperty(q, text(before, "type"), definition);
+        return `restored field ${text(before, "type")}.${definition.name}`;
       }
-      const was = await redefineProperty(q, author, kind, text(after, "name"), {
+      const was = await redefineProperty(q, type, text(after, "name"), {
         ...definition,
         newName: definition.name,
       });
-      return `field ${kind}.${was.name} as before #${n}`;
+      return `field ${type}.${was.name} as before #${n}`;
     }
+    case "verb":
+      throw new Invalid("a verb is the word on its edges; change those");
     default:
       throw new Invalid(
         `a ${e.subject} is changed in settings, not walked back`,

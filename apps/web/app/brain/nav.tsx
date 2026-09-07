@@ -6,59 +6,56 @@ import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
-import { kindHref } from "./format";
-import { KindIcon } from "./kind-icon";
+import { typeHref } from "./format";
+import { TypeIcon } from "./type-icon";
 
-// Kinds shared into this brain by one person in one way, as the rail lists
-// them.
+// Types shared into this brain by one person, as the rail lists them.
 type SharedNav = {
   owner: string;
-  how: string;
-  kinds: { name: string; href: string }[];
+  types: { name: string; href: string }[];
 };
 
 function View({
   href,
   current,
-  kind,
+  type,
   children,
 }: {
   href: string;
   current: string;
-  kind?: string;
+  type?: string;
   children: ReactNode;
 }) {
   return (
     <Button
       variant={href === current ? "secondary" : "ghost"}
       size="sm"
-      className={`shrink-0 justify-start ${kind ? "md:ml-3" : ""}`}
+      className={`shrink-0 justify-start ${type ? "md:ml-3" : ""}`}
       nativeButton={false}
       render={<a href={href} />}
     >
-      {kind && <KindIcon kind={kind} />}
+      {type && <TypeIcon type={type} />}
       {children}
     </Button>
   );
 }
 
-// The brain's views: every record, one view per kind of the person's own,
-// the kinds shared into this brain grouped by owner and how they were
-// opened, then the vocabulary, the log and the file door. The current one
-// is marked.
+// The brain's views: every record, one view per type of the person's own,
+// the types shared into this brain grouped by owner, then the vocabulary
+// and the log. The current one is marked.
 export function BrainNav({
-  kinds,
+  types,
   shared,
 }: {
-  kinds: string[];
+  types: string[];
   shared: SharedNav[];
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
   const current =
     pathname === "/brain"
-      ? kindHref(
-          params.get("kind") ?? undefined,
+      ? typeHref(
+          params.get("type") ?? undefined,
           params.get("from") ?? undefined,
         )
       : pathname;
@@ -67,20 +64,20 @@ export function BrainNav({
       <View href="/brain" current={current}>
         Records
       </View>
-      {kinds.map((k) => (
-        <View key={k} href={kindHref(k)} current={current} kind={k}>
-          {k}
+      {types.map((t) => (
+        <View key={t} href={typeHref(t)} current={current} type={t}>
+          {t}
         </View>
       ))}
       {shared.length > 0 && <Separator className="my-2 hidden md:block" />}
       {shared.map((g) => (
-        <span key={`${g.owner}:${g.how}`} className="contents">
+        <span key={g.owner} className="contents">
           <p className="text-muted-foreground w-full px-2 pt-1 text-xs md:w-auto">
-            {g.owner}, {g.how}
+            {g.owner}&apos;s
           </p>
-          {g.kinds.map((k) => (
-            <View key={k.href} href={k.href} current={current} kind={k.name}>
-              {k.name}
+          {g.types.map((t) => (
+            <View key={t.href} href={t.href} current={current} type={t.name}>
+              {t.name}
             </View>
           ))}
         </span>

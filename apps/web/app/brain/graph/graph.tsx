@@ -31,8 +31,8 @@ import {
   useState,
 } from "react";
 
-import { kindColor, recordHref, verbText } from "../format";
-import { KindIcon } from "../kind-icon";
+import { recordHref, typeColor, verbText } from "../format";
+import { TypeIcon } from "../type-icon";
 import {
   arrange,
   CHIP_HEIGHT,
@@ -42,7 +42,7 @@ import {
 } from "./arrange";
 
 type RecordNode = Node<
-  { title: string; kind: string; lit: boolean; focus: boolean },
+  { title: string; type: string; lit: boolean; focus: boolean },
   "record"
 >;
 type AnyNode = RecordNode;
@@ -75,12 +75,12 @@ const Attention = createContext<{ centre: string | null; near: Set<string> }>({
 const HANDLE =
   "top-1/2! left-1/2! size-0! min-h-0! min-w-0! -translate-x-1/2! -translate-y-1/2! border-0! opacity-0!";
 
-// A record as a chip: its kind's icon and its title, small enough to sit
+// A record as a chip: its type's icon and its title, small enough to sit
 // with many and big enough to take hold of.
 function RecordChip({ id, data }: NodeProps<RecordNode>) {
   const { centre, near } = useContext(Attention);
   const attended = centre === id || near.has(id);
-  const color = kindColor(data.kind);
+  const color = typeColor(data.type);
   return (
     <div
       className={`bg-background flex cursor-grab items-center gap-1.5 rounded border px-1.5 text-xs leading-none transition-[background-color,opacity,border-color] active:cursor-grabbing ${
@@ -96,7 +96,7 @@ function RecordChip({ id, data }: NodeProps<RecordNode>) {
     >
       <Handle type="target" position={Position.Top} className={HANDLE} />
       <Handle type="source" position={Position.Top} className={HANDLE} />
-      <KindIcon kind={data.kind} className="size-3.5" />
+      <TypeIcon type={data.type} className="size-3.5" />
       <span className="truncate">{data.title || "(untitled)"}</span>
     </div>
   );
@@ -180,7 +180,7 @@ function MapIfRoom() {
     <MiniMap
       pannable
       zoomable
-      nodeColor={(n) => kindColor((n as RecordNode).data.kind)}
+      nodeColor={(n) => typeColor((n as RecordNode).data.type)}
       nodeStrokeWidth={0}
       bgColor="var(--muted)"
       maskColor="color-mix(in oklch, var(--background) 60%, transparent)"
@@ -220,7 +220,7 @@ function toNodes(map: BrainMap, lit: Set<string>, focus?: string): AnyNode[] {
       position: corner(n),
       data: {
         title: n.title,
-        kind: n.kind,
+        type: n.type,
         lit: lit.size === 0 || lit.has(n.id),
         focus: n.id === focus,
       },
@@ -379,7 +379,7 @@ function Canvas({
 
 // The brain drawn as a map. Around one record: that record in the middle,
 // everything it links to on a ring, the verb on each spoke. The whole
-// brain: each kind a cluster on a ring, links crossing the middle. Two
+// brain: each type a cluster on a ring, links crossing the middle. Two
 // fingers pan, a pinch zooms, a drag moves a chip, a click opens a record.
 export function BrainGraph({
   graph,

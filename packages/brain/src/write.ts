@@ -1,11 +1,6 @@
-import {
-  defineKind,
-  defineVerb,
-  type Definition,
-  type KindDefinition,
-} from "./catalog.ts";
-import { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
-import { check, holdKind, plain, propertiesOf } from "./properties.ts";
+import { defineType, type TypeDefinition } from "./catalog.ts";
+import { Invalid, Forbidden, NotFound } from "./errors.ts";
+import { check, holdType, plain, propertiesOf } from "./properties.ts";
 import {
   recordColumns,
   recordSelect,
@@ -15,7 +10,6 @@ import {
 import { need } from "./share.ts";
 import { refuse } from "./vocabulary.ts";
 import type {
-  Author,
   BrainRecord,
   EdgeInput,
   Property,
@@ -25,26 +19,25 @@ import type {
 } from "./types.ts";
 
 // Inserts a record, or updates the one with the same source and ref when its
-// content differs. Returns nothing when the record is already as written.
+// content differs. Returns nothing when the record is already as written. A
+// record from nowhere in particular is from the brain, under a fresh id.
 const UPSERT = `
 insert into records
-  (kind, layer, source, source_ref, title, body, props, occurred_at,
-   confidence, author)
-values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::timestamptz, $9::real, $10)
+  (type, source, source_ref, title, body, props, occurred_at, confidence)
+values ($1, coalesce($2, 'brain'), coalesce($3, short_id()), $4, $5,
+        $6::jsonb, $7::timestamptz, $8::real)
 on conflict (org_id, person_id, source, source_ref) do update set
-  kind = excluded.kind, layer = excluded.layer, title = excluded.title,
+  type = excluded.type, title = excluded.title,
   body = excluded.body, props = excluded.props,
   occurred_at = excluded.occurred_at, confidence = excluded.confidence,
-  author = excluded.author,
   deleted_at = case when records.merged_into is null then null
     else records.deleted_at end
-where (records.kind, records.layer, records.title, records.body,
-       records.props, records.occurred_at, records.confidence,
+where (records.type, records.title, records.body, records.props,
+       records.occurred_at, records.confidence,
        case when records.merged_into is null then records.deleted_at end)
   is distinct from
-      (excluded.kind, excluded.layer, excluded.title, excluded.body,
-       excluded.props, excluded.occurred_at, excluded.confidence,
-       null::timestamptz)
+      (excluded.type, excluded.title, excluded.body, excluded.props,
+       excluded.occurred_at, excluded.confidence, null::timestamptz)
 returning id`;
 
 const OWN_BY_REF =
@@ -59,8 +52,16 @@ async function resolve(
   q: Query,
   ref: Ref,
   written: Map<string, string>,
+  ids: string[],
 ): Promise<string> {
   if ("id" in ref) return ref.id;
+  if ("index" in ref) {
+    const id = ids[ref.index];
+    if (id === undefined) {
+      throw new Invalid(`no record ${ref.index} in this call`);
+    }
+    return id;
+  }
   const known = written.get(refKey(ref.source, ref.sourceRef));
   if (known) return known;
   const { rows } = await q.query<{ id: string; own: boolean }>(ANY_BY_REF, [
@@ -82,45 +83,32 @@ async function resolve(
   return rows[0].id;
 }
 
-// The kinds and verbs the call writes, each held until it commits, in one
-// order so two writes never wait on each other in a circle. A name the
-// person has not defined, or one gone by the time it is held, is refused
-// before anything is written.
-async function vocabulary(q: Query, kinds: string[], verbs: string[]) {
-  const missing = async (what: "kind" | "verb", name: string) => {
-    await refuse(q, what, name).catch((err) => {
-      if (err instanceof NotFound) {
-        throw new Invalid(
-          `no ${what} "${name}" in your vocabulary; define it, with a description, first`,
-        );
-      }
-      throw err;
-    });
-  };
-  const forms = new Map<string, Map<string, Property>>();
-  for (const name of [...new Set(kinds)].sort()) {
-    if (!(await holdKind(q, name, false))) await missing("kind", name);
-    forms.set(name, await propertiesOf(q, name));
+// The types the call writes, each held until it commits, in one order so
+// two writes never wait on each other in a circle. A name the person has
+// not defined, or one gone by the time it is held, is refused before
+// anything is written.
+async function forms(q: Query, types: string[]) {
+  const held = new Map<string, Map<string, Property>>();
+  for (const name of [...new Set(types)].sort()) {
+    if (!(await holdType(q, name, false))) {
+      await refuse(q, name).catch((err) => {
+        if (err instanceof NotFound) {
+          throw new Invalid(
+            `no type "${name}" in your vocabulary; define it first`,
+          );
+        }
+        throw err;
+      });
+    }
+    held.set(name, await propertiesOf(q, name));
   }
-  for (const name of [...new Set(verbs)].sort()) {
-    const { rowCount } = await q.query(
-      `select 1 from edge_verbs
-       where name = $1 and person_id = current_member() and deleted_at is null
-       for share`,
-      [name],
-    );
-    if (!rowCount) await missing("verb", name);
-  }
-  return { kind: (name: string) => forms.get(name)! };
+  return (name: string) => held.get(name)!;
 }
 
-// Where a record or an edge came from must print, since it is read back
-// unquoted.
-function origin(source: string, sourceRef: string) {
-  if (!plain(source) || !plain(sourceRef)) {
-    throw new Invalid(
-      `a source and its ref must print: ${JSON.stringify(source)}:${JSON.stringify(sourceRef)}`,
-    );
+// A name written to be read back unquoted must print.
+function printable(what: string, s: string) {
+  if (!s.trim() || !plain(s)) {
+    throw new Invalid(`${what} must print: ${JSON.stringify(s)}`);
   }
 }
 
@@ -130,58 +118,57 @@ export type Written = {
   // How many of them were new or changed, and how many edges were.
   changed: number;
   edges: number;
-  // What the call added to the vocabulary: "kind x", "field x.y", "verb v".
+  // What the call added to the vocabulary: "type x", "field x.y".
   defined: string[];
 };
 
-// Writes records and edges as one author, defining any kinds and verbs the
-// brain does not have yet in the same call. Idempotent: the same input twice
-// leaves the brain as it was. Each record must fit its kind's form. Edges may
-// name records written in the same call.
+// Writes records and edges, defining any types the brain does not have yet
+// in the same call. Idempotent: the same input twice leaves the brain as it
+// was. Each record must fit its type's form. Edges may name records written
+// in the same call.
 export async function write(
   q: Query,
-  author: Author,
   input: {
-    kinds?: KindDefinition[];
-    verbs?: Definition[];
+    types?: TypeDefinition[];
     records?: RecordInput[];
     edges?: EdgeInput[];
   },
 ): Promise<Written> {
-  const byName = (a: Definition, b: Definition) => a.name.localeCompare(b.name);
   const defined: string[] = [];
-  for (const k of [...(input.kinds ?? [])].sort(byName)) {
-    const kind = await defineKind(q, author, k);
-    if (kind.created) defined.push(`kind ${kind.name}`);
-    defined.push(...kind.added.map((f) => `field ${kind.name}.${f}`));
+  const byName = [...(input.types ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  for (const t of byName) {
+    const type = await defineType(q, t);
+    if (type.created) defined.push(`type ${type.name}`);
+    defined.push(...type.added.map((f) => `field ${type.name}.${f}`));
   }
-  for (const v of input.verbs ?? []) {
-    const verb = await defineVerb(q, author, v);
-    if (verb.created) defined.push(`verb ${verb.name}`);
-  }
-  const known = await vocabulary(
+  const form = await forms(
     q,
-    (input.records ?? []).map((r) => r.kind),
-    (input.edges ?? []).map((e) => e.verb),
+    (input.records ?? []).map((r) => r.type),
   );
   const ids: string[] = [];
   let changed = 0;
   const written = new Map<string, string>();
   for (const r of input.records ?? []) {
     const props = r.props ?? {};
-    check(r.kind, props, known.kind(r.kind));
-    origin(r.source, r.sourceRef);
+    check(r.type, props, form(r.type));
+    if ((r.source === undefined) !== (r.sourceRef === undefined)) {
+      throw new Invalid("a source and its ref come together");
+    }
+    if (r.source !== undefined) {
+      printable("a source", r.source);
+      printable("a source ref", r.sourceRef!);
+    }
     const upsert = await q.query<{ id: string }>(UPSERT, [
-      r.kind,
-      r.layer,
-      r.source,
-      r.sourceRef,
+      r.type,
+      r.source ?? null,
+      r.sourceRef ?? null,
       r.title ?? "",
       r.body ?? "",
       JSON.stringify(props),
       r.occurredAt ?? null,
       r.confidence ?? null,
-      author,
     ]);
     let id = upsert.rows[0]?.id;
     if (id) changed += 1;
@@ -194,14 +181,16 @@ export async function write(
       if (!id) throw new Error(`${r.source}:${r.sourceRef} was not written`);
     }
     ids.push(id);
-    written.set(refKey(r.source, r.sourceRef), id);
+    if (r.source !== undefined) {
+      written.set(refKey(r.source, r.sourceRef!), id);
+    }
   }
 
   let edges = 0;
   for (const e of input.edges ?? []) {
-    origin(e.source, e.sourceRef ?? "");
-    const fromId = await resolve(q, e.from, written);
-    const toId = await resolve(q, e.to, written);
+    printable("a verb", e.verb);
+    const fromId = await resolve(q, e.from, written, ids);
+    const toId = await resolve(q, e.to, written, ids);
     if (fromId === toId) {
       throw new Invalid(
         `an edge joins two records; ${fromId} cannot ${e.verb} itself`,
@@ -211,14 +200,11 @@ export async function write(
     await need(q, toId, "view");
     const result = await q.query(
       `insert into edges
-           (from_id, verb, to_id, props, confidence, occurred_at, source,
-            source_ref, author)
-         values ($1, $2, $3, $4::jsonb, $5::real, $6::timestamptz, $7, $8, $9)
+           (from_id, verb, to_id, props, confidence, occurred_at)
+         values ($1, $2, $3, $4::jsonb, $5::real, $6::timestamptz)
          on conflict (org_id, from_id, verb, to_id) do update set
            props = excluded.props, confidence = excluded.confidence,
-           occurred_at = excluded.occurred_at, source = excluded.source,
-           source_ref = excluded.source_ref, author = excluded.author,
-           deleted_at = null
+           occurred_at = excluded.occurred_at, deleted_at = null
          where (edges.props, edges.confidence, edges.occurred_at, edges.deleted_at)
            is distinct from
                (excluded.props, excluded.confidence, excluded.occurred_at, null)`,
@@ -229,9 +215,6 @@ export async function write(
         JSON.stringify(e.props ?? {}),
         e.confidence ?? null,
         e.occurredAt ?? null,
-        e.source,
-        e.sourceRef ?? null,
-        author,
       ],
     );
     edges += result.rowCount ?? 0;
@@ -239,12 +222,11 @@ export async function write(
   return { records: ids, changed, edges, defined };
 }
 
-// Removes an edge, in the author's name. The log keeps what it said.
 // Hides a link. Its row and its history stay; restore brings it back.
-export async function unlink(q: Query, author: Author, id: string) {
+export async function unlink(q: Query, id: string) {
   const result = await q.query(
-    "update edges set deleted_at = now(), author = $2 where id = $1 and deleted_at is null",
-    [id, author],
+    "update edges set deleted_at = now() where id = $1 and deleted_at is null",
+    [id],
   );
   if (result.rowCount) return;
   const seen = await q.query(
@@ -256,132 +238,102 @@ export async function unlink(q: Query, author: Author, id: string) {
   throw new NotFound(`edge ${id} is not in this brain`);
 }
 
-// Brings a hidden link back, under a verb that is there.
-export async function restoreEdge(q: Query, author: Author, id: string) {
-  const { rows: of } = await q.query<{ verb: string }>(
-    "select verb from edges where id = $1",
-    [id],
-  );
-  const verb = of[0]?.verb;
-  const { rowCount: live } = await q.query(
-    `select 1 from edge_verbs
-     where name = $1 and person_id = current_member() and deleted_at is null
-     for share`,
-    [verb ?? null],
-  );
-  if (verb && !live) {
-    throw new Invalid(
-      `edge ${id} carries ${verb}, which is removed; restore the verb first`,
-    );
-  }
+// Brings a hidden link back.
+export async function restoreEdge(q: Query, id: string) {
   const result = await q.query(
-    "update edges set deleted_at = null, author = $2 where id = $1 and deleted_at is not null",
-    [id, author],
+    "update edges set deleted_at = null where id = $1 and deleted_at is not null",
+    [id],
   );
   if (!result.rowCount) throw new NotFound(`edge ${id} is not hidden`);
 }
 
 export type Patch = {
-  kind?: string;
+  type?: string;
   title?: string;
   body?: string;
   props?: Record<string, unknown>;
   // Null takes the time away; absent leaves it.
   occurredAt?: Date | string | null;
-  confidence?: number;
+  confidence?: number | null;
 };
 
-// Changes a record from the version the caller read. A stale version is a
-// Conflict; the caller reads again and decides. New props replace the old and
-// must fit the kind's form.
+// Changes a record. New props replace the old and must fit the type's form.
 export async function edit(
   q: Query,
-  author: Author,
   id: string,
-  version: number,
   patch: Patch,
 ): Promise<BrainRecord> {
   await need(q, id, "edit");
-  if (patch.props || patch.kind) {
-    const current = await q.query<{
-      kind: string;
-      props: Record<string, unknown>;
-      person_id: string;
-    }>(
-      "select kind, props, person_id from records where id = $1 and deleted_at is null",
-      [id],
-    );
-    if (!current.rows[0])
-      throw new NotFound(`record ${id} is not in this brain`);
-    const kind = patch.kind ?? current.rows[0].kind;
+  const current = await q.query<{
+    type: string;
+    props: Record<string, unknown>;
+    person_id: string;
+  }>(
+    "select type, props, person_id from records where id = $1 and deleted_at is null",
+    [id],
+  );
+  if (!current.rows[0]) throw new NotFound(`record ${id} is not in this brain`);
+  if (patch.props || patch.type) {
+    const type = patch.type ?? current.rows[0].type;
     check(
-      kind,
+      type,
       patch.props ?? current.rows[0].props,
-      await propertiesOf(q, kind, current.rows[0].person_id, true),
+      await propertiesOf(q, type, current.rows[0].person_id, true),
     );
   }
   const { rows } = await q.query<RecordRow>(
     `update records set
-       kind = coalesce($3, kind),
-       title = coalesce($4, title),
-       body = coalesce($5, body),
-       props = coalesce($6::jsonb, props),
-       occurred_at = case when $10::boolean then $7::timestamptz
+       type = coalesce($2, type),
+       title = coalesce($3, title),
+       body = coalesce($4, body),
+       props = coalesce($5::jsonb, props),
+       occurred_at = case when $7::boolean then $6::timestamptz
          else occurred_at end,
-       confidence = coalesce($8::real, confidence),
-       author = $9
-     where id = $1 and version = $2 and deleted_at is null
+       confidence = case when $9::boolean then $8::real else confidence end
+     where id = $1 and deleted_at is null
      returning ${recordSelect}`,
     [
       id,
-      version,
-      patch.kind ?? null,
+      patch.type ?? null,
       patch.title ?? null,
       patch.body ?? null,
       patch.props ? JSON.stringify(patch.props) : null,
       patch.occurredAt ?? null,
-      patch.confidence ?? null,
-      author,
       patch.occurredAt !== undefined,
+      patch.confidence ?? null,
+      patch.confidence !== undefined,
     ],
   );
-  if (rows[0]) return toRecord(rows[0]);
-  const current = await q.query<{ version: number }>(
-    "select version from records where id = $1 and deleted_at is null",
-    [id],
-  );
-  if (!current.rows[0]) throw new NotFound(`record ${id} is not in this brain`);
-  throw new Conflict(
-    `record ${id} is at version ${current.rows[0].version}, not ${version}`,
-  );
+  if (!rows[0]) throw new NotFound(`record ${id} is not in this brain`);
+  return toRecord(rows[0]);
 }
 
 // Hides a record. Its row and its history stay; restore brings it back.
-export async function remove(q: Query, author: Author, id: string) {
+export async function remove(q: Query, id: string) {
   await need(q, id, "owner");
   const result = await q.query(
-    "update records set deleted_at = now(), author = $2 where id = $1 and deleted_at is null",
-    [id, author],
+    "update records set deleted_at = now() where id = $1 and deleted_at is null",
+    [id],
   );
   if (!result.rowCount) throw new NotFound(`record ${id} is not in this brain`);
 }
 
-// Brings a removed record back, under a kind that is there. The kind is
+// Brings a removed record back, under a type that is there. The type is
 // held until the transaction commits, so it cannot be removed underneath.
-export async function restore(q: Query, author: Author, id: string) {
+export async function restore(q: Query, id: string) {
   await need(q, id, "owner");
-  const { rows: of } = await q.query<{ kind: string }>(
-    "select kind from records where id = $1",
+  const { rows: of } = await q.query<{ type: string }>(
+    "select type from records where id = $1",
     [id],
   );
-  if (of[0] && !(await holdKind(q, of[0].kind, false))) {
+  if (of[0] && !(await holdType(q, of[0].type, false))) {
     throw new Invalid(
-      `record ${id} is of kind ${of[0].kind}, which is removed; restore the kind first`,
+      `record ${id} is a ${of[0].type}, which is removed; restore the type first`,
     );
   }
   const result = await q.query(
-    "update records set deleted_at = null, author = $2 where id = $1 and deleted_at is not null and merged_into is null",
-    [id, author],
+    "update records set deleted_at = null where id = $1 and deleted_at is not null and merged_into is null",
+    [id],
   );
   if (result.rowCount) return;
   const merged = await q.query(
@@ -406,16 +358,14 @@ with recursive chain as (
 select chain.*, access_level(chain.id) as access
 from chain order by depth desc limit 1`;
 
-// Makes one record stand for another of the same kind and the same owner.
+// Makes one record stand for another of the same type and the same owner.
 // The loser is hidden behind a pointer to the winner and nothing else is
-// rewritten: what was
-// merged into the loser stays merged into it, and reads walk the chain.
-// Merging into an alias merges into what it stands for. Merging the same
-// pair twice changes nothing. Both rows are locked, in one order, so two
-// merges racing in opposite directions cannot close a cycle.
+// rewritten: what was merged into the loser stays merged into it, and reads
+// walk the chain. Merging into an alias merges into what it stands for.
+// Merging the same pair twice changes nothing. Both rows are locked, in one
+// order, so two merges racing in opposite directions cannot close a cycle.
 export async function merge(
   q: Query,
-  author: Author,
   into: string,
   id: string,
 ): Promise<BrainRecord> {
@@ -442,15 +392,15 @@ export async function merge(
     if (!loser) throw new NotFound(`record ${id} is not in this brain`);
     if (loser.merged_into === winner.id) return toRecord(held);
     if (loser.deleted_at) throw new Invalid(`record ${id} is deleted`);
-    if (loser.kind !== winner.kind) {
-      throw new Invalid(`a ${loser.kind} cannot merge into a ${winner.kind}`);
+    if (loser.type !== winner.type) {
+      throw new Invalid(`a ${loser.type} cannot merge into a ${winner.type}`);
     }
     if (loser.person_id !== held.person_id) {
       throw new Invalid("two people's records do not merge; share one instead");
     }
     await q.query(
-      "update records set deleted_at = now(), merged_into = $1, author = $3 where id = $2",
-      [winner.id, id, author],
+      "update records set deleted_at = now(), merged_into = $1 where id = $2",
+      [winner.id, id],
     );
     return toRecord(held);
   }
@@ -458,11 +408,11 @@ export async function merge(
 
 // Undoes a merge: the record comes back as itself, and whatever was merged
 // into it comes back with it, since nothing was rewritten.
-export async function unmerge(q: Query, author: Author, id: string) {
+export async function unmerge(q: Query, id: string) {
   await need(q, id, "owner");
   const result = await q.query(
-    "update records set deleted_at = null, merged_into = null, author = $2 where id = $1 and merged_into is not null",
-    [id, author],
+    "update records set deleted_at = null, merged_into = null where id = $1 and merged_into is not null",
+    [id],
   );
   if (!result.rowCount) throw new NotFound(`record ${id} is not merged`);
 }

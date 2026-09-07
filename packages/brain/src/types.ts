@@ -3,83 +3,63 @@ import type pg from "pg";
 // A client inside an org-scoped transaction. The doors never open their own.
 export type Query = pg.ClientBase;
 
-// Who made a write: "seed", "person:<id>", "job:<kind>:<id>", "model:<call>".
-export type Author = string;
-
-export type Layer = "source" | "derived";
-
 // What a member may do with a record: see it, change it, or everything.
 export type Access = "view" | "edit" | "owner";
 
-// Who a grant is for: one member, one group, or everyone in the org.
+// Who a share is for: one member, one group, or everyone in the org.
 export type Subject =
-  | { kind: "everyone" }
-  | { kind: "group"; id: string }
-  | { kind: "member"; id: string };
+  | { who: "everyone" }
+  | { who: "group"; id: string }
+  | { who: "member"; id: string };
 
-// What a grant is on: one record, or one kind and so every record of it.
-export type Target = { record: string } | { kind: string };
+// What a share is on: one record, or one type and so every record of it.
+export type Target = { record: string } | { type: string };
 
-// One share: a subject may do this much with one record or one kind.
-export type Grant = {
+// One share: a subject may do this much with one record or one type.
+export type Share = {
   id: string;
   on: Target;
   subject: Subject;
   level: Access;
-  author: Author;
-  createdAt: Date;
 };
 
-// How a kind that is not the reader's own reaches them: through a grant on
-// the whole kind or on some of its records, to everyone in the org or to
-// them in particular.
-export type Via = { whole: boolean; everyone: boolean };
-
-// One verb an edge can carry, in the vocabulary of the member who owns it.
-export type Verb = {
-  id: string;
-  name: string;
-  description: string;
-  author: Author;
-  createdAt: Date;
-  ownerId: string;
-};
-
-export type PropertyType =
+export type Datatype =
   "text" | "number" | "boolean" | "date" | "datetime" | "enum" | "list";
 
-// One field on a kind's form. Values live in a record's props under name.
+// One field on a type's form. Values live in a record's props under name.
 export type Property = {
   id: string;
-  kind: string;
+  type: string;
   name: string;
-  type: PropertyType;
-  description: string;
+  datatype: Datatype;
   required: boolean;
   options: string[] | null;
-  author: Author;
-  createdAt: Date;
   ownerId: string;
 };
 
-// One kind a record can be, with the fields it declares. Via is set when
-// the kind is someone else's, shared into this brain.
-export type Kind = Verb & { properties: Property[]; via: Via | null };
+// One type a record can be, with the fields it declares: the reader's own,
+// or a colleague's shared into this brain.
+export type BrainType = {
+  id: string;
+  name: string;
+  properties: Property[];
+  own: boolean;
+  ownerId: string;
+};
 
-// One thing the brain knows, with where it came from.
+// One thing the brain knows, with where it came from: the app and its own
+// id there, or the brain itself and a fresh id when it was written here.
 export type BrainRecord = {
   id: string;
-  kind: string;
-  layer: Layer;
+  type: string;
   source: string;
   sourceRef: string;
   title: string;
   body: string;
   props: Record<string, unknown>;
   occurredAt: Date | null;
+  // How sure the writer was; set when the record is a conclusion.
   confidence: number | null;
-  author: Author;
-  version: number;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -99,13 +79,9 @@ export type Edge = {
   props: Record<string, unknown>;
   confidence: number | null;
   occurredAt: Date | null;
-  source: string;
-  sourceRef: string | null;
-  author: Author;
   createdAt: Date;
 };
 
-// One change the database logged.
 // One line of the log: its place in the whole log, its number among its
 // person's changes, and what changed.
 export type Event = {
@@ -113,22 +89,26 @@ export type Event = {
   n: number;
   at: Date;
   subject:
-    "record" | "edge" | "kind" | "verb" | "property" | "share" | "member";
+    "record" | "edge" | "type" | "verb" | "property" | "share" | "member";
   subjectId: string;
   action: "created" | "updated" | "deleted";
-  author: Author;
+  // Who made the change: "seed", "person:<id>" or "model:<app>".
+  author: string;
   before: unknown;
   after: unknown;
 };
 
-// Names a record either by id or by where it came from.
-export type Ref = { id: string } | { source: string; sourceRef: string };
+// Names a record by id, by where it came from, or by its position among
+// the records written in the same call.
+export type Ref =
+  { id: string } | { source: string; sourceRef: string } | { index: number };
 
 export type RecordInput = {
-  kind: string;
-  layer: Layer;
-  source: string;
-  sourceRef: string;
+  type: string;
+  // Where it came from, when it came from somewhere: the same pair written
+  // twice is one record.
+  source?: string;
+  sourceRef?: string;
   title?: string;
   body?: string;
   props?: Record<string, unknown>;
@@ -143,8 +123,6 @@ export type EdgeInput = {
   props?: Record<string, unknown>;
   confidence?: number | null;
   occurredAt?: Date | string | null;
-  source: string;
-  sourceRef?: string | null;
 };
 
 // A condition on a declared field. `in` takes a list; `contains` is for lists.

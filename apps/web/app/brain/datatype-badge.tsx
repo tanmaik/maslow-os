@@ -11,7 +11,7 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 
-const ICONS: Record<Property["type"], typeof TypeIcon> = {
+const ICONS: Record<Property["datatype"], typeof TypeIcon> = {
   text: TypeIcon,
   number: HashIcon,
   boolean: ToggleLeftIcon,
@@ -21,14 +21,18 @@ const ICONS: Record<Property["type"], typeof TypeIcon> = {
   list: TagsIcon,
 };
 
-// A field's type as a small badge with its icon, the same wherever a field
-// is named.
-export function TypeBadge({ type }: { type: Property["type"] }) {
-  const Icon = ICONS[type];
+// A field's datatype as a small badge with its icon, the same wherever a
+// field is named.
+export function DatatypeBadge({
+  datatype,
+}: {
+  datatype: Property["datatype"];
+}) {
+  const Icon = ICONS[datatype];
   return (
     <Badge variant="outline" className="text-muted-foreground font-normal">
       <Icon />
-      {type}
+      {datatype}
     </Badge>
   );
 }

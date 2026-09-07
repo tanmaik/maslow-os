@@ -1,51 +1,42 @@
 import {
   catalog,
-  defineKind,
+  defineType,
   Invalid,
   NotFound,
   write,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
 
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-import { kindHref, recordHref } from "../format";
+import { recordHref, typeHref } from "../format";
 import { instantFrom, propsFrom } from "../props";
 
-// The one kind the product itself knows, defined the first time it is used.
-const NOTE = {
-  name: "note",
-  description: "Something you wrote down yourself.",
-};
+// The one type the product itself knows, defined the first time it is used.
+const NOTE = "note";
 
-// Writes a record the signed-in person typed in: a source record from them,
-// fitted to its kind's form.
+// Writes a record the signed-in person typed in, fitted to its type's form.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const form = await request.formData();
-  const kind = String(form.get("kind") ?? "");
+  const type = String(form.get("type") ?? "");
   const title = String(form.get("title") ?? "").trim();
   if (!title) return new Response("A record needs a title.", { status: 400 });
 
-  const author = `person:${p.userId}`;
   try {
     const id = await asPerson(p, async (db) => {
-      if (kind === NOTE.name) await defineKind(db, author, NOTE);
-      const declared = (await catalog(db)).kinds.find(
-        (k) => k.name === kind && !k.via,
+      if (type === NOTE) await defineType(db, { name: NOTE });
+      const declared = (await catalog(db)).types.find(
+        (t) => t.name === type && t.own,
       );
-      if (!declared) throw new NotFound(`no kind "${kind}" in your vocabulary`);
-      const written = await write(db, author, {
+      if (!declared) throw new NotFound(`no type "${type}" in your vocabulary`);
+      const written = await write(db, {
         records: [
           {
-            kind,
-            layer: "source",
-            source: "person",
-            sourceRef: randomUUID(),
+            type,
             title,
             body: String(form.get("body") ?? "").trim(),
             props: propsFrom(form, declared.properties),
@@ -56,7 +47,7 @@ export async function POST(request: Request) {
       return written.records[0]!;
     });
     return NextResponse.redirect(
-      `${origin(request)}${kind === NOTE.name ? kindHref() : recordHref(id)}`,
+      `${origin(request)}${type === NOTE ? typeHref() : recordHref(id)}`,
       303,
     );
   } catch (err) {

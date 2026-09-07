@@ -17,31 +17,28 @@ import type {
   Edge,
   Event,
   Filter,
-  Layer,
   Property,
   Query,
   Sort,
 } from "./types.ts";
 
 export type ReadOptions = {
-  // Whose records, when no kind is named: the reader's own, what others
+  // Whose records, when no type is named: the reader's own, what others
   // shared with them, or both.
   scope?: "mine" | "shared" | "all";
-  // One person's kind: the reader's own, or with owner, one shared into
+  // One person's type: the reader's own, or with owner, one shared into
   // this brain by that member.
-  kind?: string;
+  type?: string;
   owner?: string;
-  layer?: Layer;
-  source?: string;
   // A person record's id: only records linked to it by an edge.
   person?: string;
   since?: Date;
   until?: Date;
   // Plain words, quoted phrases and -exclusions, as a search box takes them.
   query?: string;
-  // Conditions on the kind's declared fields; need a kind.
+  // Conditions on the type's declared fields; need a type.
   where?: Filter[];
-  // Order by a declared field instead of by time; needs a kind. Records
+  // Order by a declared field instead of by time; needs a type. Records
   // without the field are left out.
   orderBy?: Sort;
   includeDeleted?: boolean;
@@ -52,7 +49,7 @@ export type ReadOptions = {
 export type Page = { records: BrainRecord[]; cursor: string | null };
 
 export type HistoryOptions = {
-  // Only the changes to one record, edge, kind, verb or field.
+  // Only the changes to one record, edge, type or field.
   of?: string;
   // Only changes before this point in the log; the next page.
   before?: number;
@@ -116,13 +113,11 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   if (!["mine", "shared", "all"].includes(scope)) {
     throw new Invalid(`"${String(scope)}" is not a scope`);
   }
-  if (opts.owner && !opts.kind) throw new Invalid("an owner needs a kind");
+  if (opts.owner && !opts.type) throw new Invalid("an owner needs a type");
   const params: unknown[] = [
     opts.includeDeleted ?? false,
-    opts.kind ?? null,
+    opts.type ?? null,
     opts.owner ?? null,
-    opts.layer ?? null,
-    opts.source ?? null,
     opts.person ?? null,
     opts.since ?? null,
     opts.until ?? null,
@@ -130,23 +125,21 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   ];
   const where = [
     "($1::boolean or deleted_at is null)",
-    "($2::text is null or kind = $2)",
+    "($2::text is null or type = $2)",
     "($3::uuid is null or person_id = $3)",
-    "($4::text is null or layer = $4)",
-    "($5::text is null or source = $5)",
-    `($6::text is null or (
-       r.id not in (select same_record($6))
+    `($4::text is null or (
+       r.id not in (select same_record($4))
        and exists (
          select 1 from edges e
          join records p
            on p.id = case when e.from_id = r.id then e.to_id else e.from_id end
          where (e.from_id = r.id or e.to_id = r.id)
            and e.deleted_at is null
-           and p.id in (select same_record($6)))))`,
-    "($7::timestamptz is null or coalesce(occurred_at, created_at) >= $7)",
-    "($8::timestamptz is null or coalesce(occurred_at, created_at) < $8)",
-    "($9::text is null or search @@ websearch_to_tsquery('english', $9))",
-    opts.kind
+           and p.id in (select same_record($4)))))`,
+    "($5::timestamptz is null or coalesce(occurred_at, created_at) >= $5)",
+    "($6::timestamptz is null or coalesce(occurred_at, created_at) < $6)",
+    "($7::text is null or search @@ websearch_to_tsquery('english', $7))",
+    opts.type
       ? "person_id = coalesce($3, current_member())"
       : scope === "mine"
         ? "person_id = current_member()"
@@ -160,35 +153,35 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   // field's name is one parameter, whichever way it is read.
   let form: Map<string, Property> | null = null;
   const field = async (name: string) => {
-    if (!opts.kind) throw new Invalid(`filtering by "${name}" needs a kind`);
-    form ??= await propertiesOf(q, opts.kind, opts.owner);
+    if (!opts.type) throw new Invalid(`filtering by "${name}" needs a type`);
+    form ??= await propertiesOf(q, opts.type, opts.owner);
     const p = form.get(name);
-    if (!p) throw new Invalid(`${opts.kind} has no field "${name}"`);
+    if (!p) throw new Invalid(`${opts.type} has no field "${name}"`);
     const key = param(p.name);
-    return { p, key, expr: `(props ->> ${key})::${sqlType[p.type]}` };
+    return { p, key, expr: `(props ->> ${key})::${sqlType[p.datatype]}` };
   };
   // A filter's value must be what the field says, so the database never
   // sees a cast it cannot make.
   const fits = (p: Property, v: unknown) => {
     if (!accepts(p, v)) {
-      throw new Invalid(`${opts.kind}.${p.name} filter must be ${expected(p)}`);
+      throw new Invalid(`${opts.type}.${p.name} filter must be ${expected(p)}`);
     }
   };
   for (const f of opts.where ?? []) {
     const { p, key, expr } = await field(f.property);
     if (f.op === "contains") {
-      if (p.type !== "list" || typeof f.value !== "string") {
+      if (p.datatype !== "list" || typeof f.value !== "string") {
         throw new Invalid(`contains needs a list field and a string`);
       }
       where.push(`(props -> ${key}) ? ${param(f.value)}::text`);
     } else if (f.op === "in") {
       if (!Array.isArray(f.value)) throw new Invalid(`in needs a list`);
       for (const v of f.value) fits(p, v);
-      where.push(`${expr} = any(${param(f.value)}::${sqlType[p.type]}[])`);
+      where.push(`${expr} = any(${param(f.value)}::${sqlType[p.datatype]}[])`);
     } else if (Object.hasOwn(OPERATORS, f.op)) {
       fits(p, f.value);
       where.push(
-        `${expr} ${OPERATORS[f.op]} ${param(f.value)}::${sqlType[p.type]}`,
+        `${expr} ${OPERATORS[f.op]} ${param(f.value)}::${sqlType[p.datatype]}`,
       );
     } else {
       throw new Invalid(`"${String(f.op)}" is not a filter`);
@@ -202,19 +195,19 @@ export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
     (r.occurred_at ?? r.created_at).toISOString();
   if (opts.orderBy) {
     const { p, expr } = await field(opts.orderBy.property);
-    if (p.type === "list") {
-      throw new Invalid(`${opts.kind}.${p.name} is a list and has no order`);
+    if (p.datatype === "list") {
+      throw new Invalid(`${opts.type}.${p.name} is a list and has no order`);
     }
     const wanted = opts.orderBy.direction ?? "asc";
     if (!(wanted in DIRECTIONS)) {
       throw new Invalid(`"${String(wanted)}" is not a direction`);
     }
     order = expr;
-    orderType = sqlType[p.type];
+    orderType = sqlType[p.datatype];
     direction = DIRECTIONS[wanted];
     keyOf = (r) => (r.props[p.name] == null ? null : String(r.props[p.name]));
   }
-  const orderName = `${scope}/${opts.kind ?? ""}/${opts.owner ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
+  const orderName = `${scope}/${opts.type ?? ""}/${opts.owner ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
   if (opts.cursor) {
     const c = decode(opts.cursor, orderName);
     if (!keyFits(orderType, c.key)) throw new Invalid("that is not a cursor");
@@ -283,7 +276,7 @@ export async function aliasesOf(q: Query, id: string): Promise<string[]> {
 
 export type Graph = {
   // Distance from the records looked around, when any were.
-  nodes: { id: string; kind: string; title: string; depth: number | null }[];
+  nodes: { id: string; type: string; title: string; depth: number | null }[];
   edges: Edge[];
 };
 
@@ -315,8 +308,7 @@ const STANDING = `
   ), resolved as (
     select distinct on (wf.winner, e.verb, wt.winner)
       e.id, wf.winner as from_id, e.verb, wt.winner as to_id, e.props,
-      e.confidence, e.occurred_at, e.source, e.source_ref, e.author,
-      e.created_at
+      e.confidence, e.occurred_at, e.created_at
     from edges e
     join winner wf on wf.id = e.from_id
     join winner wt on wt.id = e.to_id
@@ -381,9 +373,9 @@ export async function graph(
   const ids = [...found.keys()];
   const { rows: named } = await q.query<{
     id: string;
-    kind: string;
+    type: string;
     title: string;
-  }>(`select id, kind, title from records where id = any($1::text[])`, [ids]);
+  }>(`select id, type, title from records where id = any($1::text[])`, [ids]);
   const nodes = named
     .map((n) => ({ ...n, depth: found.get(n.id) ?? null }))
     .sort(
@@ -398,19 +390,6 @@ export async function graph(
     [ids, verbs],
   );
   return { nodes, edges: edges.map(toEdge) };
-}
-
-// What changed after a point in the log. Start from 0 for everything.
-export async function changes(
-  q: Query,
-  after: number,
-  limit = DEFAULT_LIMIT,
-): Promise<Event[]> {
-  const { rows } = await q.query<EventRow>(
-    `select ${eventColumns} from events where seq > $1 order by seq limit $2`,
-    [after, Math.min(Math.max(limit, 1), MAX_LIMIT)],
-  );
-  return rows.map(toEvent);
 }
 
 // The log read backwards, newest first, as a person looks at it.

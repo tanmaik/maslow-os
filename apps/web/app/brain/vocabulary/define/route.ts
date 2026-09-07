@@ -1,10 +1,9 @@
 import {
-  defineKind,
   defineProperty,
-  defineVerb,
+  defineType,
   Invalid,
   NotFound,
-  type PropertyType,
+  type Datatype,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { NextResponse } from "next/server";
@@ -12,32 +11,25 @@ import { NextResponse } from "next/server";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-// Adds a kind, a field on a kind, or a verb to the signed-in person's
-// vocabulary.
+// Adds a type, or a field on a type, to the signed-in person's vocabulary.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const form = await request.formData();
   const text = (k: string) => String(form.get(k) ?? "").trim();
   const what = text("what");
-  const author = `person:${p.userId}`;
 
   try {
     await asPerson(p, async (db) => {
-      const definition = {
-        name: text("name"),
-        description: text("description"),
-      };
-      if (what === "kind") return defineKind(db, author, definition);
-      if (what === "verb") return defineVerb(db, author, definition);
+      if (what === "type") return defineType(db, { name: text("name") });
       if (what === "field") {
         const options = text("options")
           .split(",")
           .map((o) => o.trim())
           .filter(Boolean);
-        return defineProperty(db, author, text("kind"), {
-          ...definition,
-          type: text("type") as PropertyType,
+        return defineProperty(db, text("type"), {
+          name: text("name"),
+          datatype: text("datatype") as Datatype,
           required: form.get("required") === "1",
           options: options.length ? options : undefined,
         });

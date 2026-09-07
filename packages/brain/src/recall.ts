@@ -10,12 +10,12 @@ import type { BrainRecord, Query } from "./types.ts";
 // holds. Cut so no record costs more than a page.
 const MOST = 8000;
 const textOf = (r: {
-  kind: string;
+  type: string;
   title: string;
   body: string;
   props: Record<string, unknown>;
 }) =>
-  `${r.kind}: ${r.title}\n${r.body}${
+  `${r.type}: ${r.title}\n${r.body}${
     Object.keys(r.props).length ? `\n${JSON.stringify(r.props)}` : ""
   }`.slice(0, MOST);
 
@@ -72,7 +72,7 @@ export async function remember(
 }
 
 export type RecallOptions = {
-  kind?: string;
+  type?: string;
   since?: Date;
   until?: Date;
   limit?: number;
@@ -103,7 +103,7 @@ export async function recall(
      select ${OF_R}, s.score::float8 as score
      from scored s join records r on r.id = s.record_id
      where r.deleted_at is null and r.merged_into is null
-       and ($3::text is null or r.kind = $3)
+       and ($3::text is null or r.type = $3)
        and ($4::timestamptz is null or coalesce(r.occurred_at, r.created_at) >= $4)
        and ($5::timestamptz is null or coalesce(r.occurred_at, r.created_at) < $5)
      order by s.score desc, r.id
@@ -111,7 +111,7 @@ export async function recall(
     [
       model,
       vector,
-      opts.kind ?? null,
+      opts.type ?? null,
       opts.since ?? null,
       opts.until ?? null,
       limit,

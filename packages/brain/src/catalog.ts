@@ -7,121 +7,93 @@ import {
 import {
   propertyColumns,
   toProperty,
-  toVerb,
-  verbColumns,
+  typeColumns,
   type PropertyRow,
-  type VerbRow,
+  type TypeRow,
 } from "./rows.ts";
-import type { Author, Kind, Property, Query, Verb, Via } from "./types.ts";
+import type { BrainType, Property, Query } from "./types.ts";
 
-// How a kind reaches this brain, as the database says it: kind:everyone,
-// kind:you, record:everyone or record:you; null for the person's own.
-const via = (reach: string | null): Via | null =>
-  reach
-    ? {
-        whole: reach.startsWith("kind:"),
-        everyone: reach.endsWith(":everyone"),
-      }
-    : null;
-
-// This person's vocabulary: every kind they defined, with the fields each
-// declares, and every verb an edge can carry; with the kinds colleagues have
-// shared into this brain, each saying whose it is and how it reached here.
-// The agent reads this before it writes, and reuses before it defines.
+// This person's vocabulary: every type they defined, with the fields each
+// declares, and the types colleagues have shared into this brain, each
+// saying whose it is; then every verb an edge they can see carries.
 export async function catalog(
   q: Query,
-): Promise<{ kinds: Kind[]; verbs: Verb[] }> {
-  const kinds = await q.query<VerbRow & { reach: string | null }>(
-    `select ${verbColumns},
-       case when person_id = current_member() then null
-         else kind_reach(id) end as reach
-     from record_kinds where deleted_at is null
+): Promise<{ types: BrainType[]; verbs: string[] }> {
+  const types = await q.query<TypeRow & { own: boolean }>(
+    `select ${typeColumns}, person_id = current_member() as own
+     from types where deleted_at is null
      order by person_id <> current_member(), name`,
   );
   const properties = await q.query<PropertyRow>(
-    `select ${propertyColumns} from kind_properties order by kind, name`,
+    `select ${propertyColumns} from type_properties order by type, name`,
   );
-  const verbs = await q.query<VerbRow>(
-    `select ${verbColumns} from edge_verbs where deleted_at is null order by name`,
+  const verbs = await q.query<{ verb: string }>(
+    "select distinct verb from edges where deleted_at is null order by verb",
   );
   const fields = new Map<string, Property[]>();
   for (const row of properties.rows) {
-    const key = `${row.person_id}:${row.kind}`;
-    const kind = fields.get(key) ?? [];
-    kind.push(toProperty(row));
-    fields.set(key, kind);
+    const key = `${row.person_id}:${row.type}`;
+    const declared = fields.get(key) ?? [];
+    declared.push(toProperty(row));
+    fields.set(key, declared);
   }
   return {
-    kinds: kinds.rows.map((k) => ({
-      ...toVerb(k),
-      properties: fields.get(`${k.person_id}:${k.name}`) ?? [],
-      via: via(k.reach),
+    types: types.rows.map((t) => ({
+      id: t.id,
+      name: t.name,
+      ownerId: t.person_id,
+      properties: fields.get(`${t.person_id}:${t.name}`) ?? [],
+      own: t.own,
     })),
-    verbs: verbs.rows.map(toVerb),
+    verbs: verbs.rows.map((v) => v.verb),
   };
 }
 
-export type Definition = { name: string; description: string };
-export type KindDefinition = Definition & { properties?: PropertyDefinition[] };
+export type TypeDefinition = {
+  name: string;
+  properties?: PropertyDefinition[];
+};
 
-async function define(
+// Adds a type to this person's vocabulary, with any fields it declares.
+// Defining one they have returns it unchanged; new fields on an existing
+// type are added, and named as added.
+export async function defineType(
   q: Query,
-  table: "record_kinds" | "edge_verbs",
-  author: Author,
-  { name, description }: Definition,
-): Promise<Verb & { created: boolean }> {
-  if (!name.trim() || !plain(name) || !plain(description)) {
-    throw new Invalid(
-      "a kind or verb needs a name and a description that print",
-    );
-  }
-  if (!description.trim()) {
-    throw new Invalid(
-      `"${name}" needs a description: one sentence saying what it is`,
-    );
+  definition: TypeDefinition,
+): Promise<BrainType & { created: boolean; added: string[] }> {
+  const { name } = definition;
+  if (!name.trim() || !plain(name)) {
+    throw new Invalid("a type needs a name that prints");
   }
   const { rowCount } = await q.query(
-    `insert into ${table} (name, description, author) values ($1, $2, $3)
+    `insert into types (name) values ($1)
      on conflict (org_id, person_id, name) do nothing`,
-    [name, description, author],
+    [name],
   );
-  const { rows } = await q.query<VerbRow & { removed: boolean }>(
-    `select ${verbColumns}, deleted_at is not null as removed from ${table}
+  const { rows } = await q.query<TypeRow & { removed: boolean }>(
+    `select ${typeColumns}, deleted_at is not null as removed from types
      where name = $1 and person_id = current_member()`,
     [name],
   );
   if (rows[0]!.removed) {
     throw new Invalid(
-      `${table === "record_kinds" ? "kind" : "verb"} ${name} is removed; restore it, or choose another name`,
+      `type ${name} is removed; restore it, or choose another name`,
     );
   }
-  return { ...toVerb(rows[0]!), created: (rowCount ?? 0) > 0 };
-}
-
-// Adds a kind to this person's vocabulary, with any fields it declares.
-// Defining one they have returns it unchanged; new fields on an existing
-// kind are added, and named as added.
-export async function defineKind(
-  q: Query,
-  author: Author,
-  definition: KindDefinition,
-): Promise<Kind & { created: boolean; added: string[] }> {
-  const kind = await define(q, "record_kinds", author, definition);
   const properties = [];
   const added = [];
   for (const p of definition.properties ?? []) {
-    const property = await defineProperty(q, author, kind.name, p);
+    const property = await defineProperty(q, name, p);
     properties.push(property);
     if (property.created) added.push(property.name);
   }
-  return { ...kind, properties, via: null, added };
+  return {
+    id: rows[0]!.id,
+    name,
+    ownerId: rows[0]!.person_id,
+    properties,
+    own: true,
+    created: (rowCount ?? 0) > 0,
+    added,
+  };
 }
-
-// Adds a verb to this person's vocabulary. Defining one they have returns
-// it unchanged.
-export const defineVerb = (
-  q: Query,
-  author: Author,
-  definition: Definition,
-): Promise<Verb & { created: boolean }> =>
-  define(q, "edge_verbs", author, definition);

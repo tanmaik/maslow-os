@@ -15,7 +15,7 @@ import { Refused, tools, type Action } from "./tools";
 export type About = {
   person: string;
   org: string;
-  kinds: { name: string; records: number }[];
+  types: { name: string; records: number }[];
   shared: number;
   verbs: string[];
 };
@@ -25,25 +25,25 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
     firstName: string;
     lastName: string | null;
     org: string;
-    kinds: About["kinds"];
+    types: About["types"];
     shared: number;
     verbs: string[];
   }>(
     `select u.first_name as "firstName", u.last_name as "lastName",
          (select name from orgs) as org,
-         (select coalesce(json_agg(json_build_object('name', k.name, 'records', k.records)
-             order by k.records desc, k.name), '[]')
-          from (select k.name, count(r.id)::int as records
-                from record_kinds k
-                left join records r on r.kind = k.name
-                  and r.person_id = k.person_id
+         (select coalesce(json_agg(json_build_object('name', t.name, 'records', t.records)
+             order by t.records desc, t.name), '[]')
+          from (select t.name, count(r.id)::int as records
+                from types t
+                left join records r on r.type = t.name
+                  and r.person_id = t.person_id
                   and r.deleted_at is null and r.merged_into is null
-                where k.person_id = current_member() and k.deleted_at is null
-                group by k.name) k) as kinds,
-         (select count(*)::int from record_kinds
+                where t.person_id = current_member() and t.deleted_at is null
+                group by t.name) t) as types,
+         (select count(*)::int from types
           where person_id <> current_member() and deleted_at is null) as shared,
-         (select coalesce(array_agg(name order by name), '{}') from edge_verbs
-          where deleted_at is null) as verbs
+         (select coalesce(array_agg(distinct verb order by verb), '{}')
+          from edges where deleted_at is null) as verbs
        from users u where u.id = $1`,
     [s.userId],
   );
@@ -51,7 +51,7 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
   return {
     person: fullName(me),
     org: me.org,
-    kinds: me.kinds,
+    types: me.types,
     shared: me.shared,
     verbs: me.verbs,
   };
@@ -62,12 +62,12 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
 function instructions(a: About | null, client: string | null): string {
   const today = new Date().toISOString().slice(0, 10);
   const held = a
-    ? a.kinds.length === 0 && a.verbs.length === 0
-      ? "Their vocabulary is empty: no kinds, no verbs, no records yet."
-      : `It holds ${a.kinds.reduce((n, k) => n + k.records, 0)} records: ${a.kinds
-          .map((k) => `${k.records} ${k.name}`)
-          .join(", ")}. Verbs: ${a.verbs.join(", ") || "none"}.${
-          a.shared ? ` ${a.shared} kinds are shared in by colleagues.` : ""
+    ? a.types.length === 0
+      ? "Their vocabulary is empty: no types, no records yet."
+      : `It holds ${a.types.reduce((n, t) => n + t.records, 0)} records: ${a.types
+          .map((t) => `${t.records} ${t.name}`)
+          .join(", ")}. Verbs in use: ${a.verbs.join(", ") || "none"}.${
+          a.shared ? ` ${a.shared} types are shared in by colleagues.` : ""
         }`
     : "";
   const whose = a
@@ -77,18 +77,21 @@ function instructions(a: About | null, client: string | null): string {
 
 A brain is a graph of what a person knows: records, the links between them, and a log of every change. It is a mind, not a mirror: write what you concluded, with a confidence and an edge back to a stub of what it rests on (the app, its own id, and enough to cite it), never a copy of a mailbox or a calendar.
 
-Kinds and verbs are this person's own vocabulary, and it starts empty. Reuse a name before defining one; a record of an undefined kind is refused. Define a kind or verb in the same write call, with a one-sentence description. A kind may declare fields; values then live in props and must fit. Reshape it later with redefine and undefine. The catalog also lists kinds colleagues shared into this brain, each with its owner: read those with owner named, never write to them.
+Types are this person's own vocabulary, and it starts empty. Reuse a name before defining one; a record of an undefined type is refused. Define a type in the same write call. A type may declare fields; values then live in props and must fit. Reshape it later with redefine and undefine. A verb is any word an edge carries; nothing defines it. The catalog also lists types colleagues shared into this brain, each with its owner: read those with owner named, never write to them.
 
-Writes are idempotent on a record's source and sourceRef. Edit from the version you read. Ids are ten characters; carry them exactly.
+A record from an app carries the app as source and the app's own id as sourceRef, and the same pair written twice is one record; a record written without them is filed as source brain with a fresh ref. Ids are ten characters; carry them exactly.
 
-Answers are lines, not JSON. A record: id kind when "title" src=source:ref vN by=who, then edited=when once changed, derived c=confidence, shared:level, removed or merged→id when so, then its props as JSON; its body sits beneath, indented. by=you is the person's own words; by=colleague is theirs; any other name is an app's, so weigh it as a conclusion. A link from a record: → verb id "title" or ← for one made to it. A change in the log: #seq when subject id action by=who: field before→after.`;
+Answers are lines, not JSON. A record: id type when "title" src=source:ref, then c=confidence when it is a conclusion, shared:level, removed or merged→id when so, then its props as JSON; its body sits beneath, indented. A link from a record: → verb id "title" or ← for one made to it. A change in the log: #seq when subject id action by=who: field before→after; by=you is the person, by=colleague is theirs, any other name is an app's.`;
 }
 
 const ref = z.union([
   z.object({ id: z.string() }),
   z.object({ source: z.string(), sourceRef: z.string() }),
+  z
+    .object({ index: z.number().int().min(0) })
+    .describe("a record in this call's records, by position from 0"),
 ]);
-const propertyType = z.enum([
+const datatype = z.enum([
   "text",
   "number",
   "boolean",
@@ -102,16 +105,14 @@ const fieldName = z
   .describe("lowercase letters, digits and underscores");
 const property = z.object({
   name: fieldName,
-  type: propertyType,
-  description: z.string(),
+  datatype,
   required: z.boolean().optional(),
   options: z.array(z.string()).optional().describe("the values, for enum"),
 });
-const definition = z.object({
+const type = z.object({
   name: z.string(),
-  description: z.string().describe("one sentence saying what it is"),
+  properties: z.array(property).optional(),
 });
-const kind = definition.extend({ properties: z.array(property).optional() });
 const props = z.record(z.string(), z.unknown());
 // A moment, checked here so a malformed one is a refusal and never a
 // database error.
@@ -121,17 +122,16 @@ const moment = z.iso
 const instant = moment.nullable();
 const confidence = z.number().min(0).max(1).nullable();
 const record = z.object({
-  kind: z.string(),
-  layer: z
-    .enum(["source", "derived"])
-    .describe("source: a stub of something outside; derived: a conclusion"),
-  source: z.string().describe("the app or origin, like gmail or person"),
-  sourceRef: z.string().describe("its id there; unique with source"),
+  type: z.string(),
+  source: z.string().optional().describe("the app it came from, like gmail"),
+  sourceRef: z.string().optional().describe("its id there; unique with source"),
   title: z.string().max(500).optional(),
   body: z.string().max(100_000).optional().describe("markdown"),
   props: props.optional(),
   occurredAt: instant.optional(),
-  confidence: confidence.optional(),
+  confidence: confidence
+    .optional()
+    .describe("how sure, when the record is a conclusion"),
 });
 const edge = z.object({
   from: ref,
@@ -140,8 +140,6 @@ const edge = z.object({
   props: props.optional(),
   confidence: confidence.optional(),
   occurredAt: instant.optional(),
-  source: z.string(),
-  sourceRef: z.string().nullable().optional(),
 });
 const filter = z.object({
   property: z.string(),
@@ -151,24 +149,18 @@ const filter = z.object({
 const id = z.string().regex(brain.ID).describe("ten characters");
 const ids = z.array(id).min(1).max(50);
 // A change to a record: what a record has, minus where it came from, all
-// optional; the version it was read at; a confidence that stays.
+// optional. A null confidence takes it away.
 const change = record
-  .omit({ layer: true, source: true, sourceRef: true })
+  .omit({ source: true, sourceRef: true })
   .partial()
-  .extend({
-    id,
-    version: z.number().int(),
-    confidence: z.number().min(0).max(1).optional(),
-  });
-const rename = definition
-  .partial()
-  .extend({ name: z.string(), newName: z.string().optional() });
+  .extend({ id });
+const rename = z.object({ name: z.string(), newName: z.string() });
 const fieldChange = property.partial().extend({
-  kind: z.string(),
+  type: z.string(),
   name: z.string(),
   newName: fieldName.optional(),
 });
-const field = z.object({ kind: z.string(), name: z.string() });
+const field = z.object({ type: z.string(), name: z.string() });
 
 type Result = { content: { type: "text"; text: string }[]; isError?: true };
 
@@ -217,7 +209,6 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     { name: "brain", version: "2" },
     { instructions: instructions(a, s.client) },
   );
-  const author = s.client ? `model:${s.client}` : `person:${s.userId}`;
   const refusing = async (
     fn: () => Promise<string | Result>,
   ): Promise<Result> => {
@@ -235,19 +226,18 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     (args: A) =>
       refusing(() => asPerson(s, (q) => fn(q, args)));
   const date = (s: string | undefined) => (s ? new Date(s) : undefined);
-  const line = (r: brain.BrainRecord, detail?: "brief" | "full") =>
-    lines.record(r, s.userId, detail);
+  const line = lines.record;
 
   server.registerTool(
     "catalog",
     {
       description:
-        "The person's vocabulary: every kind they defined with its fields, every verb an edge can carry, and the kinds colleagues shared into this brain, each with its owner and how it reached here. Reuse before defining; write only to your own kinds.",
+        "The person's vocabulary: every type they defined with its fields, the types colleagues shared into this brain, each with its owner, and the verbs edges carry. Reuse before defining; write only to your own types.",
       annotations: { readOnlyHint: true },
     },
     door(async (q) => {
-      const { kinds, verbs } = await brain.catalog(q);
-      return lines.catalog(kinds, verbs);
+      const { types, verbs } = await brain.catalog(q);
+      return lines.catalog(types, verbs);
     }),
   );
 
@@ -255,22 +245,20 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "read",
     {
       description:
-        "Records, newest first by when they happened, one per line with the first line of the body beneath. Filter by kind, layer, source, time, a person record they link to, and full-text query (words, quoted phrases, -exclusions). A kind is one person's: the caller's own, or with owner, one shared into this brain. where and orderBy work on a kind's declared fields and need a kind. Pages by cursor. detail full gives whole bodies.",
+        "Records, newest first by when they happened, one per line with the first line of the body beneath. Filter by type, time, a person record they link to, and full-text query (words, quoted phrases, -exclusions). A type is one person's: the caller's own, or with owner, one shared into this brain. where and orderBy work on a type's declared fields and need a type. Pages by cursor. detail full gives whole bodies.",
       inputSchema: {
         scope: z
           .enum(["mine", "shared", "all"])
           .optional()
           .describe(
-            "with no kind: the person's own records, what others shared, or both",
+            "with no type: the person's own records, what others shared, or both",
           ),
-        kind: z.string().optional(),
+        type: z.string().optional(),
         owner: z
           .string()
           .uuid()
           .optional()
-          .describe("with kind: the member whose kind it is, from the catalog"),
-        layer: z.enum(["source", "derived"]).optional(),
-        source: z.string().optional(),
+          .describe("with type: the member whose type it is, from the catalog"),
         person: id.optional().describe("a person record's id"),
         since: moment.optional(),
         until: moment.optional(),
@@ -357,7 +345,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       const head = `${plural(g.nodes.length, "record")}, ${plural(g.edges.length, "edge")}`;
       const nodes = g.nodes.map(
         (n) =>
-          `${n.id} ${lines.token(n.kind)} ${JSON.stringify(n.title)}${n.depth === null ? "" : ` d${n.depth}`}`,
+          `${n.id} ${lines.token(n.type)} ${JSON.stringify(n.title)}${n.depth === null ? "" : ` d${n.depth}`}`,
       );
       const edges = g.edges.map(lines.edge);
       return [
@@ -372,20 +360,20 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "write",
     {
       description:
-        "Writes records and edges, defining any kinds and verbs the brain lacks in the same call. Idempotent: the same input twice changes nothing. A record must fit its kind's declared fields. Edges may name records by id or by source and sourceRef, including ones written in this call. Answers with each record's id, in order.",
+        "Writes records and edges, defining any types the brain lacks in the same call. Idempotent: the same input twice changes nothing. A record must fit its type's declared fields. Edges may name records by id, by source and sourceRef, or by index among this call's records. Answers with each record's id, in order.",
       inputSchema: {
-        kinds: z.array(kind).max(20).optional(),
-        verbs: z.array(definition).max(20).optional(),
+        types: z.array(type).max(20).optional(),
         records: z.array(record).max(100).optional(),
         edges: z.array(edge).max(200).optional(),
       },
       annotations: { idempotentHint: true },
     },
     door(async (q, a) => {
-      const w = await brain.write(q, author, a);
+      const w = await brain.write(q, a);
       const head = `${plural(w.records.length, "record")} (${w.changed} changed), ${plural(w.edges, "edge")} changed`;
       const written = (a.records ?? []).map(
-        (r, i) => `${w.records[i]} ${r.kind} src=${r.source}:${r.sourceRef}`,
+        (r, i) =>
+          `${w.records[i]} ${r.type}${r.source ? ` src=${r.source}:${r.sourceRef}` : ""}`,
       );
       return [head, ...w.defined.map((d) => `defined ${d}`), ...written].join(
         "\n",
@@ -397,13 +385,13 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "edit",
     {
       description:
-        "Changes records, each from the version you read; a stale version refuses the whole call, so read again and decide. New props replace the old and must fit the kind's fields. occurredAt null takes the time away. Answers with each record as it is now.",
+        "Changes records. New props replace the old and must fit the type's fields. occurredAt null takes the time away; confidence null takes it away. Answers with each record as it is now.",
       inputSchema: { changes: z.array(change).min(1).max(50) },
     },
     door(async (q, a) => {
       const out: string[] = [];
-      for (const { id, version, ...patch } of a.changes) {
-        out.push(line(await brain.edit(q, author, id, version, patch)));
+      for (const { id, ...patch } of a.changes) {
+        out.push(line(await brain.edit(q, id, patch)));
       }
       return out.join("\n");
     }),
@@ -418,7 +406,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       annotations: { destructiveHint: true },
     },
     door(async (q, a) => {
-      for (const id of a.ids) await brain.remove(q, author, id);
+      for (const id of a.ids) await brain.remove(q, id);
       return `removed ${a.ids.join(" ")}`;
     }),
   );
@@ -427,27 +415,22 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "restore",
     {
       description:
-        "Brings removed records, edges, kinds and verbs back. A record comes back only once its kind is there, an edge once its verb is.",
+        "Brings removed records, edges and types back. A record comes back only once its type is there.",
       inputSchema: {
         ids: ids.optional(),
         edges: ids.optional(),
-        kinds: z.array(z.string()).optional(),
-        verbs: z.array(z.string()).optional(),
+        types: z.array(z.string()).optional(),
       },
     },
     door(async (q, a) => {
       const out: string[] = [];
-      for (const name of a.kinds ?? []) {
-        await brain.restoreDefinition(q, author, "kind", name);
-        out.push(`restored kind ${name}`);
+      for (const name of a.types ?? []) {
+        await brain.restoreType(q, name);
+        out.push(`restored type ${name}`);
       }
-      for (const name of a.verbs ?? []) {
-        await brain.restoreDefinition(q, author, "verb", name);
-        out.push(`restored verb ${name}`);
-      }
-      for (const id of a.ids ?? []) await brain.restore(q, author, id);
+      for (const id of a.ids ?? []) await brain.restore(q, id);
       if (a.ids?.length) out.push(`restored ${a.ids.join(" ")}`);
-      for (const id of a.edges ?? []) await brain.restoreEdge(q, author, id);
+      for (const id of a.edges ?? []) await brain.restoreEdge(q, id);
       if (a.edges?.length) out.push(`restored edges ${a.edges.join(" ")}`);
       return out.join("\n") || "nothing to restore";
     }),
@@ -462,7 +445,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       annotations: { destructiveHint: true },
     },
     door(async (q, a) => {
-      for (const id of a.ids) await brain.unlink(q, author, id);
+      for (const id of a.ids) await brain.unlink(q, id);
       return `unlinked ${a.ids.join(" ")}`;
     }),
   );
@@ -471,13 +454,13 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "merge",
     {
       description:
-        "Makes one record stand for another of the same kind: the loser is hidden behind a pointer to the winner and its edges show on the winner. Reversible with unmerge.",
+        "Makes one record stand for another of the same type: the loser is hidden behind a pointer to the winner and its edges show on the winner. Reversible with unmerge.",
       inputSchema: {
         into: id.describe("the winner"),
         id: id.describe("the record that will stand aside"),
       },
     },
-    door(async (q, a) => line(await brain.merge(q, author, a.into, a.id))),
+    door(async (q, a) => line(await brain.merge(q, a.into, a.id))),
   );
 
   server.registerTool(
@@ -487,7 +470,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       inputSchema: { ids },
     },
     door(async (q, a) => {
-      for (const id of a.ids) await brain.unmerge(q, author, id);
+      for (const id of a.ids) await brain.unmerge(q, id);
       return `unmerged ${a.ids.join(" ")}`;
     }),
   );
@@ -496,12 +479,9 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "history",
     {
       description:
-        "The log of changes, newest first: what changed, by whom, and only the fields that moved. Your own changes are numbered #1 up; colleagues' changes to what is shared with you show between under their own numbers. Optionally only one record, edge, kind, verb or field's; page with before, the cursor the last page gives.",
+        "The log of changes, newest first: what changed, by whom, and only the fields that moved. Your own changes are numbered #1 up; colleagues' changes to what is shared with you show between under their own numbers. Optionally only one record, edge, type or field's; page with before, the cursor the last page gives.",
       inputSchema: {
-        of: z
-          .string()
-          .optional()
-          .describe("a record, edge, kind, verb or field id"),
+        of: z.string().optional().describe("a record, edge, type or field id"),
         before: z.number().int().optional(),
         limit: z.number().int().min(1).max(200).optional(),
       },
@@ -528,7 +508,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     },
     door(async (q, a) => {
       const out: string[] = [];
-      for (const n of a.changes) out.push(await brain.revert(q, author, n));
+      for (const n of a.changes) out.push(await brain.revert(q, n));
       return out.join("\n");
     }),
   );
@@ -537,33 +517,33 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "redefine",
     {
       description:
-        "Reshapes the vocabulary: renames or redescribes kinds and verbs, and renames, retypes, redescribes or requires fields. Fields change first, then verbs, then kinds, so name a field by the kind it has now. Records and edges follow a rename. A field change must fit what records already hold, or it is refused with the count to fix first.",
+        "Reshapes the vocabulary: renames types and verbs, and renames, retypes or requires fields. Fields change first, then verbs, then types, so name a field by the type it has now. Records and edges follow a rename. A field change must fit what records already hold, or it is refused with the count to fix first.",
       inputSchema: {
-        kinds: z.array(rename).optional(),
+        types: z.array(rename).optional(),
         verbs: z.array(rename).optional(),
         fields: z.array(fieldChange).optional(),
       },
     },
     door(async (q, a) => {
       const out: string[] = [];
-      // Kinds are held in name order here as a write holds them, so the
+      // Types are held in name order here as a write holds them, so the
       // two never wait on each other in a circle.
       const byName = <T extends { name: string }>(a: T, b: T) =>
         a.name.localeCompare(b.name);
       const fields = [...(a.fields ?? [])].sort(
-        (x, y) => x.kind.localeCompare(y.kind) || byName(x, y),
+        (x, y) => x.type.localeCompare(y.type) || byName(x, y),
       );
-      for (const { kind, name, ...c } of fields) {
-        const p = await brain.redefineProperty(q, author, kind, name, c);
-        out.push(`${p.kind}.${lines.field(p)}`);
+      for (const { type, name, ...c } of fields) {
+        const p = await brain.redefineProperty(q, type, name, c);
+        out.push(`${p.type}.${lines.field(p)}`);
       }
-      for (const { name, ...c } of [...(a.verbs ?? [])].sort(byName)) {
-        const v = await brain.redefine(q, author, "verb", name, c);
-        out.push(`verb ${v.name} — ${v.description}`);
+      for (const { name, newName } of [...(a.verbs ?? [])].sort(byName)) {
+        const n = await brain.renameVerb(q, name, newName);
+        out.push(`verb ${name} → ${newName} on ${plural(n, "edge")}`);
       }
-      for (const { name, ...c } of [...(a.kinds ?? [])].sort(byName)) {
-        const k = await brain.redefine(q, author, "kind", name, c);
-        out.push(`kind ${k.name} — ${k.description}`);
+      for (const { name, newName } of [...(a.types ?? [])].sort(byName)) {
+        await brain.renameType(q, name, newName);
+        out.push(`type ${name} → ${newName}`);
       }
       return out.join("\n") || "nothing to change";
     }),
@@ -573,27 +553,22 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "undefine",
     {
       description:
-        "Hides kinds and verbs, and takes fields off kinds. A kind with live records or a verb with edges is refused; change or remove those first. A hidden kind or verb keeps its history and comes back with restore; its removed records come back after it. Removing a field takes its values out of every record of the kind.",
+        "Hides types, and takes fields off types. A type with live records is refused; change or remove those first. A hidden type keeps its history and comes back with restore; its removed records come back after it. Removing a field takes its values out of every record of the type.",
       inputSchema: {
-        kinds: z.array(z.string()).optional(),
-        verbs: z.array(z.string()).optional(),
+        types: z.array(z.string()).optional(),
         fields: z.array(field).optional(),
       },
       annotations: { destructiveHint: true },
     },
     door(async (q, a) => {
       const out: string[] = [];
-      for (const { kind, name } of a.fields ?? []) {
-        const n = await brain.removeProperty(q, author, kind, name);
-        out.push(`removed field ${kind}.${name} from ${plural(n, "record")}`);
+      for (const { type, name } of a.fields ?? []) {
+        const n = await brain.removeProperty(q, type, name);
+        out.push(`removed field ${type}.${name} from ${plural(n, "record")}`);
       }
-      for (const name of a.kinds ?? []) {
-        await brain.undefine(q, author, "kind", name);
-        out.push(`removed kind ${name}`);
-      }
-      for (const name of a.verbs ?? []) {
-        await brain.undefine(q, author, "verb", name);
-        out.push(`removed verb ${name}`);
+      for (const name of a.types ?? []) {
+        await brain.removeType(q, name);
+        out.push(`removed type ${name}`);
       }
       return out.join("\n") || "nothing to remove";
     }),
@@ -650,10 +625,10 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
       "recall",
       {
         description:
-          "Records nearest a question by meaning, best first with a score, across kinds. Use when you do not know the words a record uses; read with query when you do.",
+          "Records nearest a question by meaning, best first with a score, across types. Use when you do not know the words a record uses; read with query when you do.",
         inputSchema: {
           question: z.string(),
-          kind: z.string().optional(),
+          type: z.string().optional(),
           since: moment.optional(),
           until: moment.optional(),
           limit: z.number().int().min(1).max(50).optional(),
@@ -668,7 +643,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
           return asPerson(s, async (q) => {
             const [asked] = await metered(q, [a.question], "query");
             const found = await brain.recall(q, vectors, asked!, {
-              kind: a.kind,
+              type: a.type,
               since: date(a.since),
               until: date(a.until),
               limit: a.limit,

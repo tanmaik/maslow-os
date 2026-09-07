@@ -18,9 +18,9 @@ import {
 
 import { cn } from "@/lib/utils";
 
-import { kindColor, kindHref } from "./format";
+import { typeColor, typeHref } from "./format";
 
-// One icon per kind of thing, by the name a kind is usually given. A kind
+// One icon per type of thing, by the name a type is usually given. A type
 // with a name of its own gets a box.
 const ICONS: Record<string, typeof BoxIcon> = {
   person: UserIcon,
@@ -47,47 +47,47 @@ const ICONS: Record<string, typeof BoxIcon> = {
   topic: TagIcon,
 };
 
-// A kind's icon in the kind's one colour.
-export function KindIcon({
-  kind,
+// A type's icon in the type's one colour.
+export function TypeIcon({
+  type,
   className,
 }: {
-  kind: string;
+  type: string;
   className?: string;
 }) {
-  const Icon = ICONS[kind] ?? BoxIcon;
+  const Icon = ICONS[type] ?? BoxIcon;
   return (
     <Icon
       className={cn("size-3.5 shrink-0", className)}
-      style={{ color: kindColor(kind) }}
+      style={{ color: typeColor(type) }}
       strokeWidth={2}
       aria-hidden
     />
   );
 }
 
-// A kind named beside its icon, linking to its table unless told not to.
-// Owner names whose the kind is when it is someone else's.
-export function KindMark({
-  kind,
+// A type named beside its icon, linking to its table unless told not to.
+// Owner names whose the type is when it is someone else's.
+export function TypeMark({
+  type,
   owner,
   link = true,
   className,
 }: {
-  kind: string;
+  type: string;
   owner?: string;
   link?: boolean;
   className?: string;
 }) {
   const inner = (
     <>
-      <KindIcon kind={kind} />
-      {kind}
+      <TypeIcon type={type} />
+      {type}
     </>
   );
   const classes = cn("inline-flex items-center gap-1.5", className);
   return link ? (
-    <a href={kindHref(kind, owner)} className={cn(classes, "hover:underline")}>
+    <a href={typeHref(type, owner)} className={cn(classes, "hover:underline")}>
       {inner}
     </a>
   ) : (

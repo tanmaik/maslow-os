@@ -1,51 +1,50 @@
 import { Invalid, NotFound } from "./errors.ts";
 import { propertyColumns, toProperty, type PropertyRow } from "./rows.ts";
-import type { Author, Property, PropertyType, Query } from "./types.ts";
+import type { Datatype, Property, Query } from "./types.ts";
 
 export type PropertyDefinition = {
   name: string;
-  type: PropertyType;
-  description: string;
+  datatype: Datatype;
   required?: boolean;
   options?: string[];
 };
 
-// Holds a kind's row until commit: shared by a writer checking a value
-// against the kind's fields, alone by whoever changes those fields, so
-// neither sees the other half-done. False when the kind is not the
-// person's own, which is the only kind whose fields they change.
-export async function holdKind(
+// Holds a type's row until commit: shared by a writer checking a value
+// against the type's fields, alone by whoever changes those fields, so
+// neither sees the other half-done. False when the type is not the
+// person's own, which is the only type whose fields they change.
+export async function holdType(
   q: Query,
-  kind: string,
+  type: string,
   alone: boolean,
   owner?: string,
 ): Promise<boolean> {
   const { rowCount } = await q.query(
-    `select 1 from record_kinds
+    `select 1 from types
      where name = $1 and person_id = coalesce($2, current_member())
        and deleted_at is null
      for ${alone ? "update" : "share"}`,
-    [kind, owner ?? null],
+    [type, owner ?? null],
   );
   return (rowCount ?? 0) > 0;
 }
 
-// The fields a kind declares, by name. Empty when the kind accepts anything.
-// The kind is the reader's own unless owner names whose it is. A writer
-// holds the kind until it commits, so a field cannot be declared or
+// The fields a type declares, by name. Empty when the type accepts anything.
+// The type is the reader's own unless owner names whose it is. A writer
+// holds the type until it commits, so a field cannot be declared or
 // redefined under a value that fits only what was declared before.
 export async function propertiesOf(
   q: Query,
-  kind: string,
+  type: string,
   owner?: string,
   hold = false,
 ): Promise<Map<string, Property>> {
-  if (hold) await holdKind(q, kind, false, owner);
+  if (hold) await holdType(q, type, false, owner);
   const { rows } = await q.query<PropertyRow>(
-    `select ${propertyColumns} from kind_properties
-     where kind = $1 and person_id = coalesce($2, current_member())
+    `select ${propertyColumns} from type_properties
+     where type = $1 and person_id = coalesce($2, current_member())
      order by name`,
-    [kind, owner ?? null],
+    [type, owner ?? null],
   );
   return new Map(rows.map((r) => [r.name, toProperty(r)]));
 }
@@ -54,67 +53,59 @@ export async function propertiesOf(
 // nothing written can forge a line in what an agent reads.
 export const plain = (s: string) => !/[\p{Cc}\p{Zl}\p{Zp}]/u.test(s);
 
-// Refuses a field that could not be one: a bad name, no description, a type
-// the brain does not have, an enum without options or options without an
-// enum.
-export function checkDefinition(kind: string, def: PropertyDefinition) {
+// Refuses a field that could not be one: a bad name, a datatype the brain
+// does not have, an enum without options or options without an enum.
+export function checkDefinition(type: string, def: PropertyDefinition) {
   if (!/^[a-z][a-z0-9_]*$/.test(def.name)) {
     throw new Invalid(
       `"${def.name}" is not a field name: lowercase letters, digits and underscores`,
     );
   }
-  if (!def.description.trim() || !plain(def.description)) {
-    throw new Invalid(`${kind}.${def.name} needs a description that prints`);
-  }
-  if (!Object.hasOwn(sqlType, def.type)) {
+  if (!Object.hasOwn(sqlType, def.datatype)) {
     throw new Invalid(
-      `"${String(def.type)}" is not a type; one of ${Object.keys(sqlType).join(", ")}`,
+      `"${String(def.datatype)}" is not a datatype; one of ${Object.keys(sqlType).join(", ")}`,
     );
   }
-  if (def.type === "enum" && !def.options?.length) {
-    throw new Invalid(`${kind}.${def.name} is an enum and needs options`);
+  if (def.datatype === "enum" && !def.options?.length) {
+    throw new Invalid(`${type}.${def.name} is an enum and needs options`);
   }
   if (def.options?.some((o) => !plain(o))) {
-    throw new Invalid(`${kind}.${def.name} has an option that does not print`);
+    throw new Invalid(`${type}.${def.name} has an option that does not print`);
   }
-  if (def.type !== "enum" && def.options) {
+  if (def.datatype !== "enum" && def.options) {
     throw new Invalid(
-      `${kind}.${def.name} is not an enum and takes no options`,
+      `${type}.${def.name} is not an enum and takes no options`,
     );
   }
 }
 
-// Adds a field to one of this person's kinds. Defining one that exists
+// Adds a field to one of this person's types. Defining one that exists
 // returns it unchanged.
 export async function defineProperty(
   q: Query,
-  author: Author,
-  kind: string,
+  type: string,
   def: PropertyDefinition,
 ): Promise<Property & { created: boolean }> {
-  checkDefinition(kind, def);
-  if (!(await holdKind(q, kind, true))) {
-    throw new NotFound(`"${kind}" is not a kind in your vocabulary`);
+  checkDefinition(type, def);
+  if (!(await holdType(q, type, true))) {
+    throw new NotFound(`"${type}" is not a type in your vocabulary`);
   }
   const { rowCount } = await q.query(
-    `insert into kind_properties
-       (kind, name, type, description, required, options, author)
-     values ($1, $2, $3, $4, $5, $6, $7)
-     on conflict (org_id, person_id, kind, name) do nothing`,
+    `insert into type_properties (type, name, datatype, required, options)
+     values ($1, $2, $3, $4, $5)
+     on conflict (org_id, person_id, type, name) do nothing`,
     [
-      kind,
+      type,
       def.name,
-      def.type,
-      def.description,
+      def.datatype,
       def.required ?? false,
-      def.type === "enum" ? def.options : null,
-      author,
+      def.datatype === "enum" ? def.options : null,
     ],
   );
   const { rows } = await q.query<PropertyRow>(
-    `select ${propertyColumns} from kind_properties
-     where kind = $1 and name = $2 and person_id = current_member()`,
-    [kind, def.name],
+    `select ${propertyColumns} from type_properties
+     where type = $1 and name = $2 and person_id = current_member()`,
+    [type, def.name],
   );
   return { ...toProperty(rows[0]!), created: (rowCount ?? 0) > 0 };
 }
@@ -135,7 +126,7 @@ const isDatetime = (v: unknown) =>
 
 // Whether a value is what a field says it is.
 export function accepts(p: Property, v: unknown): boolean {
-  switch (p.type) {
+  switch (p.datatype) {
     case "text":
       return typeof v === "string";
     case "number":
@@ -154,47 +145,47 @@ export function accepts(p: Property, v: unknown): boolean {
 }
 
 export const expected = (p: Property) =>
-  p.type === "enum"
+  p.datatype === "enum"
     ? `one of ${(p.options ?? []).join(", ")}`
-    : p.type === "date"
+    : p.datatype === "date"
       ? "a date like 2026-09-05"
-      : p.type === "datetime"
+      : p.datatype === "datetime"
         ? "an ISO date and time with a zone, like 2026-09-05T14:30:00Z"
-        : p.type === "list"
+        : p.datatype === "list"
           ? "a list of strings"
-          : `a ${p.type}`;
+          : `a ${p.datatype}`;
 
-// Checks props against a kind's form. A kind that declares nothing accepts
+// Checks props against a type's form. A type that declares nothing accepts
 // anything; one that declares fields accepts only those, typed as declared.
 export function check(
-  kind: string,
+  type: string,
   props: unknown,
   declared: Map<string, Property>,
 ): asserts props is Record<string, unknown> {
   if (typeof props !== "object" || props === null || Array.isArray(props)) {
-    throw new Invalid(`${kind} props must be an object`);
+    throw new Invalid(`${type} props must be an object`);
   }
   if (declared.size === 0) return;
   const values = props as Record<string, unknown>;
   for (const key of Object.keys(values)) {
     if (!declared.has(key)) {
-      throw new Invalid(`${kind} has no field "${key}"; declare it first`);
+      throw new Invalid(`${type} has no field "${key}"; declare it first`);
     }
   }
   for (const p of declared.values()) {
     const v = values[p.name];
     if (v === undefined || v === null) {
-      if (p.required) throw new Invalid(`${kind} needs "${p.name}"`);
+      if (p.required) throw new Invalid(`${type} needs "${p.name}"`);
       continue;
     }
     if (!accepts(p, v)) {
-      throw new Invalid(`${kind}.${p.name} must be ${expected(p)}`);
+      throw new Invalid(`${type}.${p.name} must be ${expected(p)}`);
     }
   }
 }
 
 // The SQL type a field's JSON text is compared as.
-export const sqlType: Record<PropertyType, string> = {
+export const sqlType: Record<Datatype, string> = {
   text: "text",
   enum: "text",
   list: "text",

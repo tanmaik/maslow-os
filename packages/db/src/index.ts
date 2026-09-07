@@ -69,9 +69,15 @@ export class Gone extends Error {}
 // Runs fn as one person through one membership: the org's shared rows, the
 // person's own row, and what that membership wrote in the brain. The
 // membership is held for the transaction, so a removal that lands first is
-// honoured and one that lands later waits.
+// honoured and one that lands later waits. The log names the person, or
+// the app connected as them when the session has one.
 export function asPerson<T>(
-  p: { orgId: string; personId: string; userId: string },
+  p: {
+    orgId: string;
+    personId: string;
+    userId: string;
+    client?: string | null;
+  },
   fn: (q: Query) => Promise<T>,
 ): Promise<T> {
   return scoped(
@@ -79,6 +85,7 @@ export function asPerson<T>(
       "app.org_id": p.orgId,
       "app.person_id": p.personId,
       "app.member_id": p.userId,
+      ...(p.client ? { "app.author": `model:${p.client}` } : {}),
     },
     async (q) => {
       const live = await q.query(

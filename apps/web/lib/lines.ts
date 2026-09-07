@@ -1,4 +1,4 @@
-import type { BrainRecord, Edge, Event, Kind, Verb } from "@placeholder/brain";
+import type { BrainRecord, BrainType, Edge, Event } from "@placeholder/brain";
 
 // How the brain reads to an agent: one line per thing, the id first, then
 // only what is there.
@@ -48,25 +48,19 @@ function by(author: string, me: string): string {
   return /\s/.test(who) ? quoted(who) : who;
 }
 
-// One record on a line: id, kind, when, title, then its origin, version,
-// author, confidence, standing and fields. Below it the body, whole or its
-// first line.
+// One record on a line: id, type, when, title, then its origin, confidence,
+// standing and fields. Below it the body, whole or its first line.
 export function record(
   r: BrainRecord,
-  me: string,
   detail: "brief" | "full" = "brief",
 ): string {
   const parts = [
     r.id,
-    token(r.kind),
+    token(r.type),
     when(r.occurredAt ?? r.createdAt),
     quoted(r.title),
     `src=${token(r.source)}:${token(r.sourceRef)}`,
-    `v${r.version}`,
-    `by=${by(r.author, me)}`,
   ];
-  if (r.version > 1) parts.push(`edited=${when(r.updatedAt)}`);
-  if (r.layer === "derived") parts.push("derived");
   if (r.confidence !== null) parts.push(`c=${r.confidence}`);
   if (r.access !== "owner") parts.push(`shared:${r.access}`);
   if (r.mergedInto) parts.push(`merged→${r.mergedInto}`);
@@ -87,9 +81,6 @@ export function edge(e: Edge): string {
   const parts = [e.id, e.fromId, token(e.verb), e.toId];
   if (e.confidence !== null) parts.push(`c=${e.confidence}`);
   if (e.occurredAt) parts.push(when(e.occurredAt));
-  parts.push(
-    `src=${token(e.source)}${e.sourceRef ? `:${token(e.sourceRef)}` : ""}`,
-  );
   if (some(e.props)) parts.push(quoted(e.props));
   return parts.join(" ");
 }
@@ -116,39 +107,33 @@ export function edgeFrom(
   return `  ${parts.join(" ")}`;
 }
 
-// A field on one line: name, type, whether it is required, what it is for.
+// A field on one line: name, what it holds, whether it is required.
 export const field = (f: {
   name: string;
-  type: string;
+  datatype: string;
   required: boolean;
-  description: string;
   options?: string[] | null;
 }) =>
-  `${f.name}: ${f.options ? `enum(${f.options.map(token).join("|")})` : f.type}${f.required ? ", required" : ""}${f.description ? ` — ${flat(f.description)}` : ""}`;
+  `${f.name}: ${f.options ? `enum(${f.options.map(token).join("|")})` : f.datatype}${f.required ? ", required" : ""}`;
 
-// The vocabulary: the person's own kinds with their fields, then the kinds
-// colleagues shared in, each naming whose it is and how it reached here,
-// then the verbs.
-export function catalog(kinds: Kind[], verbs: Verb[]): string {
-  const own = kinds.filter((k) => !k.via);
-  const shared = kinds.filter((k) => k.via);
-  const lines = [`kinds (${own.length} yours):`];
-  for (const k of own) {
-    lines.push(`${token(k.name)} — ${flat(k.description)}`);
-    for (const p of k.properties) lines.push(`  ${field(p)}`);
+// The vocabulary: the person's own types with their fields, then the types
+// colleagues shared in, each naming whose it is, then the verbs in use.
+export function catalog(types: BrainType[], verbs: string[]): string {
+  const own = types.filter((t) => t.own);
+  const shared = types.filter((t) => !t.own);
+  const lines = [`types (${own.length} yours):`];
+  for (const t of own) {
+    lines.push(token(t.name));
+    for (const p of t.properties) lines.push(`  ${field(p)}`);
   }
   if (shared.length) {
     lines.push(`shared in (${shared.length}), read with owner=…:`);
-    for (const k of shared) {
-      lines.push(
-        `${token(k.name)} owner=${k.ownerId} ${k.via!.whole ? "whole kind" : "some records"}, ${k.via!.everyone ? "to everyone" : "to you"} — ${flat(k.description)}`,
-      );
-      for (const p of k.properties) lines.push(`  ${field(p)}`);
+    for (const t of shared) {
+      lines.push(`${token(t.name)} owner=${t.ownerId}`);
+      for (const p of t.properties) lines.push(`  ${field(p)}`);
     }
   }
-  lines.push(`verbs (${verbs.length}):`);
-  for (const v of verbs)
-    lines.push(`${token(v.name)} — ${flat(v.description)}`);
+  lines.push(`verbs in use (${verbs.length}): ${verbs.map(token).join(" ")}`);
   return lines.join("\n");
 }
 
@@ -189,18 +174,18 @@ export function event(e: Event, me: string): string {
         : row.subject === "member"
           ? "a colleague"
           : "everyone";
-    const what = row.kind
-      ? `kind ${token(String(row.kind))}`
+    const what = row.type
+      ? `type ${token(String(row.type))}`
       : `record ${row.record_id} ${quoted(String(row.record ?? ""))}`;
     return `${head}: ${what} to ${to} at ${row.level}`;
   }
   if (e.action === "created" || e.action === "deleted") {
     const row = e.action === "created" ? after : before;
     const name = row.title ?? row.name ?? row.verb;
-    const kind = row.kind ? `${row.kind} ` : "";
+    const type = row.type ? `${row.type} ` : "";
     return name === undefined
       ? head
-      : `${head}: ${kind}${quoted(String(name))}`;
+      : `${head}: ${type}${quoted(String(name))}`;
   }
   const moved = [...new Set([...Object.keys(before), ...Object.keys(after)])]
     .filter((k) => !NOISE.has(k) && quoted(before[k]) !== quoted(after[k]))

@@ -1,4 +1,4 @@
-import type { Kind, Property, Via } from "@placeholder/brain";
+import type { BrainType, Property } from "@placeholder/brain";
 import { format } from "date-fns";
 
 // How the brain's values read on screen.
@@ -21,63 +21,53 @@ export function cell(v: unknown, p?: Property): string {
   if (Array.isArray(v)) return v.map(String).join(", ");
   if (typeof v === "boolean") return v ? "yes" : "no";
   if (typeof v === "object") return JSON.stringify(v);
-  if (p?.type === "date") return day(String(v));
-  if (p?.type === "datetime") return when(new Date(String(v)));
+  if (p?.datatype === "date") return day(String(v));
+  if (p?.datatype === "datetime") return when(new Date(String(v)));
   return String(v);
 }
 
 export const recordHref = (id: string) => `/brain/records/${id}`;
 
-// The table view of one kind, or of everything. A kind shared into this
+// The table view of one type, or of everything. A type shared into this
 // brain is named with its owner.
-export const kindHref = (kind?: string, owner?: string) => {
-  if (!kind) return "/brain";
-  const q = new URLSearchParams({ kind });
+export const typeHref = (type?: string, owner?: string) => {
+  if (!type) return "/brain";
+  const q = new URLSearchParams({ type });
   if (owner) q.set("from", owner);
   return `/brain?${q}`;
 };
 
-// How a shared kind reached this brain, as a person reads it.
-export const sharedHow = (via: Via) =>
-  `${via.whole ? "every record" : "some records"}, ${
-    via.everyone ? "everyone in the org" : "shared with you"
-  }`;
-
 type SharedGroup = {
   owner: string;
   ownerId: string;
-  how: string;
-  kinds: Kind[];
+  types: BrainType[];
 };
 
-// The kinds shared into this brain, grouped by who owns them and how they
-// were opened, in the catalog's order.
+// The types shared into this brain, grouped by who owns them, in the
+// catalog's order.
 export function sharedGroups(
-  kinds: Kind[],
+  types: BrainType[],
   people: Map<string, string>,
 ): SharedGroup[] {
   const groups = new Map<string, SharedGroup>();
-  for (const k of kinds) {
-    if (!k.via) continue;
-    const how = sharedHow(k.via);
-    const key = `${k.ownerId}:${how}`;
-    const group = groups.get(key) ?? {
-      owner: people.get(k.ownerId) ?? "someone no longer here",
-      ownerId: k.ownerId,
-      how,
-      kinds: [],
+  for (const t of types) {
+    if (t.own) continue;
+    const group = groups.get(t.ownerId) ?? {
+      owner: people.get(t.ownerId) ?? "someone no longer here",
+      ownerId: t.ownerId,
+      types: [],
     };
-    group.kinds.push(k);
-    groups.set(key, group);
+    group.types.push(t);
+    groups.set(t.ownerId, group);
   }
   return [...groups.values()];
 }
 
-// A kind's colour, the same everywhere it is drawn, from a hash of its name
-// so adding a kind never recolours the others.
-export function kindColor(kind: string): string {
+// A type's colour, the same everywhere it is drawn, from a hash of its name
+// so adding a type never recolours the others.
+export function typeColor(type: string): string {
   let h = 0;
-  for (const c of kind) h = (h * 31 + c.charCodeAt(0)) % 360;
+  for (const c of type) h = (h * 31 + c.charCodeAt(0)) % 360;
   return `oklch(0.62 0.15 ${h})`;
 }
 
@@ -87,20 +77,11 @@ export const verbText = (verb: string) => verb.replace(/_/g, " ");
 // Who an author string names, with people by their names. "seed" stays
 // itself; a model or job says which.
 export function authorText(author: string, people: Map<string, string>) {
-  const [kind, ...rest] = author.split(":");
+  const [who, ...rest] = author.split(":");
   const id = rest.join(":");
-  if (kind === "person") return people.get(id) ?? "someone no longer here";
-  if (kind === "model") return `the model, ${id}`;
-  if (kind === "job") return `a job, ${id}`;
-  if (kind === "seed") return "the example data";
+  if (who === "person") return people.get(id) ?? "someone no longer here";
+  if (who === "model") return `the model, ${id}`;
+  if (who === "job") return `a job, ${id}`;
+  if (who === "seed") return "the example data";
   return author;
-}
-
-// Where a record came from, in words: the app it was read from and the
-// app's own id for it, so the original can be found. A record typed in
-// here has no original; example data says so.
-export function sourceText(source: string, ref: string | null) {
-  if (source === "person") return "typed in here";
-  if (source === "seed") return `example data${ref ? ` (${ref})` : ""}`;
-  return ref ? `read from ${source}, their id ${ref}` : `read from ${source}`;
 }

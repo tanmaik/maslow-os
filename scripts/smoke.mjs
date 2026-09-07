@@ -342,7 +342,7 @@ try {
     method: "POST",
     headers: { cookie: pim },
     body: new URLSearchParams({
-      kind: "note",
+      type: "note",
       title: "Ovens",
       body: "Preheat by five.",
     }),
@@ -998,9 +998,8 @@ try {
       ).rows;
       await share(
         q,
-        "smoke",
         { record: record.id },
-        { kind: "member", id: "20000000-0000-4000-8000-000000000002" },
+        { who: "member", id: "20000000-0000-4000-8000-000000000002" },
         "view",
       ).catch(() => {});
     },
@@ -1143,7 +1142,7 @@ try {
     method: "POST",
     headers: { cookie: lateCookie },
     body: new URLSearchParams({
-      kind: "note",
+      type: "note",
       title: "Rent",
       body: "Due on the first.",
     }),
