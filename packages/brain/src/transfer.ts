@@ -296,7 +296,7 @@ const isEdgeEntry = (v: unknown) =>
 
 // Whether a parsed file is a brain snapshot this version can import, down to
 // each entry, so nothing malformed reaches a transaction.
-export function isSnapshot(file: unknown): file is Snapshot {
+function isSnapshot(file: unknown): file is Snapshot {
   if (!isObject(file) || file.format !== "maslow-brain/1") return false;
   const every = (v: unknown, ok: (x: unknown) => boolean) =>
     Array.isArray(v) && v.every(ok);

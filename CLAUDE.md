@@ -208,8 +208,9 @@ hour has passed since the last, in every environment, and from a cron in
 production as the backstop.
 
 **"Download my data"** gives a person what is theirs, and today that is
-their brain: an export that imports into any brain, as the importer. Nobody's
-export holds anyone else's slice, the org owner included. Importing is
+their brain: an export that imports into any brain, as the importer. It is
+a function in `packages/brain`, checked by the smoke, with no page on it
+yet. Nobody's export holds anyone else's slice, the org owner included. Importing is
 additive, so an org is rebuilt one person at a time. No production credential
 ever leaves production; only files travel.
 

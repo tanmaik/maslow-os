@@ -92,9 +92,6 @@ export function BrainNav({
       <View href="/brain/activity" current={current}>
         Activity
       </View>
-      <View href="/brain/transfer" current={current}>
-        Export & import
-      </View>
     </nav>
   );
 }
