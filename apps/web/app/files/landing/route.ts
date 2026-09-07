@@ -4,9 +4,9 @@ import { filesOf, whole } from "@/lib/files";
 import { principal } from "@/lib/session";
 
 // The person's uploads whole in the store and not yet on the disk: each
-// landing, staged again with why the machine could not land it, or lost
-// to the store. One not listed has landed. For a page waiting to show
-// them.
+// landing, or staged again with why the machine could not land it. One
+// not listed has landed, or was lost by the store and forgotten. For a
+// page waiting to show them.
 export async function GET() {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
@@ -14,7 +14,7 @@ export async function GET() {
   return NextResponse.json(
     {
       files: files
-        .filter((f) => whole(f) || f.state === "lost")
+        .filter(whole)
         .map((f) => ({ id: f.id, state: f.state, said: f.said })),
     },
     { headers: { "cache-control": "no-store" } },

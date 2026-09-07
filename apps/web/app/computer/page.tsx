@@ -384,13 +384,11 @@ export default async function Computer({
                       <span className="text-muted-foreground flex items-center gap-2">
                         <FileIcon className="size-4" />
                         {f.name} (
-                        {f.state === "lost"
-                          ? `lost: ${f.said}; remove it`
-                          : !whole(f)
-                            ? "arriving"
-                            : f.said
-                              ? `could not land: ${f.said}; tried again within the hour`
-                              : "landing"}
+                        {!whole(f)
+                          ? "arriving"
+                          : f.said
+                            ? `could not land: ${f.said}; tried again within the hour`
+                            : "landing"}
                         )
                       </span>
                     </TableCell>

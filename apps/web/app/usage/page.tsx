@@ -320,15 +320,12 @@ export default async function Usage() {
       much: bytes(b.size ?? 0),
       attr: { "data-bucket-backup": b.id },
     })),
-    // A file the store lost holds no bytes and is not on its way.
-    ...staged.files
-      .filter((f) => f.state !== "lost")
-      .map((f) => ({
-        key: `upload:${f.id}`,
-        what: `${f.name}, ${whole(f) ? "landing on your disk" : "still arriving"}`,
-        much: bytes(f.size),
-        attr: { "data-bucket-upload": f.id },
-      })),
+    ...staged.files.map((f) => ({
+      key: `upload:${f.id}`,
+      what: `${f.name}, ${whole(f) ? "landing on your disk" : "still arriving"}`,
+      much: bytes(f.size),
+      attr: { "data-bucket-upload": f.id },
+    })),
     ...pictures.map((x) => ({
       key: `picture:${x.kind}`,
       what: x.kind === "photo" ? "your profile photo" : "the org's logo",

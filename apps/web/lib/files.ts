@@ -17,7 +17,6 @@ import {
   forgetFileIn,
   landingFile,
   landingIn,
-  lostFile,
   readyFile,
   rejectFile,
   stagedAgain,
@@ -308,8 +307,9 @@ export async function landedOn(
   if (!outcome.ok) {
     console.error(`landing ${id}: ${outcome.error}`);
     // A source that answered 404 is asked about once more, here: bytes the
-    // store no longer has are lost, and nothing is tried again. A store
-    // that cannot say leaves the file staged, for the sweep.
+    // store no longer has will never land, so the file is forgotten and
+    // said so in the log. A store that cannot say leaves the file staged,
+    // for the sweep.
     let gone = false;
     if (/answered 404$/.test(outcome.error ?? ""))
       gone = await stored(f.key).then(
@@ -319,9 +319,11 @@ export async function landedOn(
           return false;
         },
       );
-    if (gone)
-      await lostFile(m.orgId, m.userId, id, "the store no longer has it");
-    else await stagedAgain(m.orgId, m.userId, id, outcome.error ?? "no reason");
+    if (gone) {
+      console.error(`landing ${id}: the store no longer has it; forgotten`);
+      await forgetFileIn(m.orgId, m.userId, id);
+    } else
+      await stagedAgain(m.orgId, m.userId, id, outcome.error ?? "no reason");
     return false;
   }
   try {
@@ -493,9 +495,9 @@ async function stored(key: string): Promise<boolean> {
   return false;
 }
 
-// Abandons an upload not yet whole, or one the store lost: the bytes go,
-// the row stays marked for the meter. One whole and on its way to the
-// disk is left to land.
+// Abandons an upload not yet whole: the bytes go, the row stays marked
+// for the meter. One already whole is on its way to the disk and is left
+// to land.
 export async function abandon(p: Principal, id: string): Promise<boolean> {
   const f = await fileOf(p, id);
   if (!f || whole(f)) return false;
