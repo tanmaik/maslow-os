@@ -5,6 +5,9 @@ const config: NextConfig = {
   agentRules: false,
   devIndicators: false,
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  // A page fetched before its click is shown as fetched for this long, then
+  // fetched again: fresh enough for a brain, far enough ahead to be ready.
+  experimental: { staleTimes: { static: 30 } },
   // The browser reports to PostHog through this origin, so a browser that
   // blocks PostHog's hosts still reports. PostHog's paths end in a slash,
   // which Next would otherwise redirect away.

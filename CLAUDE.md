@@ -259,7 +259,11 @@ A click shows the next page at once. Every link is `next/link`, so a click
 swaps only what changed and the page it points at is fetched before the
 click; a `loading.tsx` gives a page its shape while its rows are read. What
 a page does not need to show its first row — the graph beside the records —
-is fetched after the page is on screen, never carried inside it.
+is fetched after the page is on screen, never carried inside it. A link the
+pointer reaches starts loading its whole page, and a page fetched ahead is
+trusted for thirty seconds. The code runs in the database's own AWS region,
+Ohio, so a round trip to it is under a millisecond and a person's own trip
+is paid once a click; the database stays on and never sleeps.
 
 ## Metering and billing
 

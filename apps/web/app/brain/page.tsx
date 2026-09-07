@@ -13,6 +13,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { DateField } from "@/components/date-field";
+import { EagerLink } from "@/components/eager-link";
 import { FormDialog } from "@/components/form-dialog";
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
@@ -177,12 +178,12 @@ export default async function Page({
             {page.records.map((r) => (
               <TableRow key={r.id} className="relative">
                 <TableCell className="max-w-xs whitespace-normal">
-                  <Link
+                  <EagerLink
                     href={recordHref(r.id)}
                     className="font-medium after:absolute after:inset-0 hover:underline"
                   >
                     {r.title || "(untitled)"}
-                  </Link>
+                  </EagerLink>
                   {whose(r) && (
                     <span className="text-muted-foreground ml-2 text-xs">
                       {whose(r)}&apos;s

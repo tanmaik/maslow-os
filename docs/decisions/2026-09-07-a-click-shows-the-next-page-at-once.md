@@ -55,3 +55,31 @@ since the org policy showed one org at a time. A sign-in that names an email
 now also sees the name of every org that email has a live membership in,
 which is what the switch buttons show, and the session carries the email so
 nothing has to look it up first.
+
+## The code runs beside the database
+
+The database is at Neon in AWS Ohio. The app's functions ran in Vercel's
+Washington region, so every round trip to the database crossed two regions,
+ten to fifteen milliseconds each, eight or ten times a page. `regions` in
+`apps/web/vercel.json` puts the functions in Cleveland, the same AWS region
+as the database, where a round trip is under a millisecond. The person's own
+trip, from wherever they are to Ohio, is paid once a click and hidden by the
+fetch ahead. Where the customers turn out to be decides where both move
+next; the code does not change when they do.
+
+## The database does not sleep
+
+Neon's compute scaled to zero after five minutes idle, so the first click
+after a quiet spell waited for it to wake. It stays on now, sized from a
+quarter of a compute unit up to one as load asks. Set in the Neon console on
+2026-09-07; the repo holds no Neon settings.
+
+## A link starts loading when the pointer reaches it
+
+`next/link` fetches a page's shape when the link scrolls into view, and its
+rows only on the click. `EagerLink` in `apps/web/components` asks the router
+for the whole page, rows and all, the moment the pointer, a finger or focus
+reaches the link, so the click that follows finds it ready. The header's
+Brain and Settings, every view on the brain's rail and every record in a
+list are eager. A page fetched ahead is shown for thirty seconds before it
+is fetched again.

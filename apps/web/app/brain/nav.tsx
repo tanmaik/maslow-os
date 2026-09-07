@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { EagerLink } from "@/components/eager-link";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
@@ -33,7 +33,7 @@ function View({
       size="sm"
       className={`shrink-0 justify-start ${type ? "md:ml-3" : ""}`}
       nativeButton={false}
-      render={<Link href={href} />}
+      render={<EagerLink href={href} />}
     >
       {type && <TypeIcon type={type} />}
       {children}

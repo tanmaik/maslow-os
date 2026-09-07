@@ -2,6 +2,8 @@ import { asOrg } from "@placeholder/db";
 import { membershipsByEmail } from "@placeholder/db/auth";
 import Link from "next/link";
 
+import { EagerLink } from "@/components/eager-link";
+
 import { NewOrg } from "@/components/new-org";
 import { Button } from "@/components/ui/button";
 import { principal } from "@/lib/session";
@@ -56,7 +58,7 @@ export async function AppHeader() {
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<Link href="/brain" />}
+          render={<EagerLink href="/brain" />}
         >
           Brain
         </Button>
@@ -64,7 +66,7 @@ export async function AppHeader() {
           variant="ghost"
           size="sm"
           nativeButton={false}
-          render={<Link href="/settings" />}
+          render={<EagerLink href="/settings" />}
         >
           Settings
         </Button>
