@@ -314,8 +314,10 @@ A pull request merges when nothing lingers behind it. The gate is mechanical
 where it can be, and Macroscope where it cannot. What a reviewer walks by
 hand is `REVIEW.md`.
 
-- `check` is green: typecheck, format, unused code, and the smoke, which
-  migrates an empty database and signs in as every seeded org.
+- `check` is green: typecheck, format, unused code, the secrets check —
+  the database URLs are named only where they are opened, and shipped code
+  never handles the environment whole — and the smoke, which migrates an
+  empty database and signs in as every seeded org.
 - The preview built and its database migrated. Both are required checks, so a
   change that fails `next build` or a migration never reaches main.
 - Macroscope read it. A finding is fixed or answered in its thread, and every

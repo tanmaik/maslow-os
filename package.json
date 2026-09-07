@@ -8,9 +8,10 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "check": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm smoke",
-    "check:fast": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:db",
+    "check": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm smoke",
+    "check:fast": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm check:db",
     "check:db": "node scripts/check-db.mjs",
+    "check:secrets": "node scripts/check-secrets.mjs",
     "smoke": "node scripts/smoke.mjs",
     "typecheck": "turbo run typecheck",
     "unused": "knip",

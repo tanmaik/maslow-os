@@ -20,6 +20,17 @@ to production can make it print them. It narrows who can read the keys
 from anyone with Vercel access to anyone who can deploy, no further.
 Previews keep readable URLs to branches that hold seed data only.
 
+## The gate refuses code that could carry a key out
+
+`pnpm check:secrets`, part of `pnpm check`, reads every file that ships and
+every script a deploy runs. `DATABASE_URL` and `DATABASE_OWNER_URL` may be
+named only in the files that open a database, listed in the script; shipped
+code reads the environment one name at a time and never spreads, prints or
+serialises it whole. A pull request that would print a key fails the gate,
+and one that widens the list changes the script itself, in plain view of
+review. What the gate cannot refuse is a person who can merge choosing to
+change the gate.
+
 ## What this does not do
 
 Anyone in the Neon organisation can still reset a role's password, open the
