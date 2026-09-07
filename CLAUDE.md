@@ -73,9 +73,13 @@ secret with `pnpm env:set NAME value` and commit `.env.development`. Never
 print a decrypted value, and never commit `.env.keys`.
 
 Vercel's environment store holds preview and production, and the dev key alone
-on the development target — pulled, never injected. Nothing in it is ever
-marked Sensitive: values stay readable so they can be pulled, diffed and
-audited. A Vercel token is a full-account key: it lives only on the GitHub
+on the development target — pulled, never injected. Nothing in it is marked
+Sensitive — values stay readable so they can be pulled, diffed and audited —
+except production's two database URLs. Those are Sensitive: the build and
+the running app use them, and nobody reads the value back from Vercel.
+That stops a look-up, not a deploy — whoever can ship code can still make
+it print them — and either one opens every brain. A person who needs the
+database goes through Neon, where the access is a deliberate act. A Vercel token is a full-account key: it lives only on the GitHub
 `preview-db` environment, never with a person or an agent.
 
 Local boots with no credentials at all. The agent working on the repo can read
