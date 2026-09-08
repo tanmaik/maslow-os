@@ -61,14 +61,10 @@ chown root:root "$OS"
 chmod 755 "$OS"
 
 # VS Code starts plain: no welcome page, no AI panel, dot files hidden, a
-# port that opens shows inside VS Code. Written once; the person owns it
-# from then on.
-SETTINGS=$HOME_DIR/.local/share/code-server/User/settings.json
-if [ ! -e "$SETTINGS" ]; then
-  mkdir -p "$(dirname "$SETTINGS")"
-  cp /opt/maslow/etc/settings.json "$SETTINGS"
-  chown -R 1000:1000 "$HOME_DIR/.local"
-fi
+# port that opens shows inside VS Code. Ours are seeded into the person's
+# settings and kept current there, except where the person changed one.
+# Ten seconds at most, so nothing in the home can hold the boot.
+timeout 10 node /opt/maslow/settings.mjs "$HOME_DIR" || echo "settings: could not be seeded; left alone"
 
 # The image carries no package lists; the person's Linux fetches its own
 # behind the boot, so the first install finds its package.

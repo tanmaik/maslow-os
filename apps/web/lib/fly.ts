@@ -14,6 +14,17 @@ export type Machine = {
   };
 };
 
+// What a machine says of itself: CPU percent over the last moment, memory
+// used and total, the bytes the person holds, the disk's size, and the
+// ports listening inside with what listens.
+export type Stats = {
+  cpu: number;
+  memory: { used: number; total: number };
+  used: number | null;
+  disk: number | null;
+  ports: { port: number; name: string }[];
+};
+
 // What a machine is made of: its image, its door's secret and domain,
 // its size, its disk, its one port behind Fly's edge, and its tags.
 export type Shape = {
@@ -157,6 +168,19 @@ export const fly = {
       }
     }
     throw last;
+  },
+
+  // The machine's numbers, asked of its door with a ticket it takes.
+  async stats(machineId: string, ticket: string): Promise<Stats> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/stats`, {
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+    return (await res.json()) as Stats;
   },
 
   // Whether the machine's door answers at Fly's edge.

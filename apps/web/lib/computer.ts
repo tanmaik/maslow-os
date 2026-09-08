@@ -17,13 +17,13 @@ import {
 import { createHmac } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import { fly, type Machine } from "./fly.ts";
+import { fly, type Machine, type Stats } from "./fly.ts";
 
 // Every computer starts here; sizes above it come later.
 const FLOOR = { cpus: 2, memoryMb: 2048, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v10";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v21";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -259,17 +259,43 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
   }
 }
 
-// Where a ready computer opens: its machine's own address, with a ticket
-// signed with the computer's secret that its door takes for a month.
-// Null until it is ready.
-export async function openLink(p: Principal): Promise<string | null> {
-  const d = deployment.computers;
-  if (d.kind === "none") return null;
+// A ticket the computer's door takes: its expiry, signed with the
+// computer's secret, which only our server and that machine hold.
+function ticket(c: Computer, seconds: number): string {
+  const exp = String(Math.floor(Date.now() / 1000) + seconds);
+  return `${exp}.${createHmac("sha256", c.secret).update(exp).digest("hex")}`;
+}
+
+// The member's ready computer, or null.
+async function ready(p: Principal): Promise<Computer | null> {
+  if (deployment.computers.kind === "none") return null;
   const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
-  if (!c?.readyAt || !c.machineId) return null;
-  const exp = String(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
-  const sig = createHmac("sha256", c.secret).update(exp).digest("hex");
-  return `https://${c.machineId}.${d.domain}/?ticket=${exp}.${sig}`;
+  return c?.readyAt && c.machineId ? c : null;
+}
+
+// Where a ready computer opens: its machine's own address, with a ticket
+// its door takes for a month, and the path on it to go on to, when that
+// is a path. Null until it is ready.
+export async function openLink(
+  p: Principal,
+  to: string | null = null,
+): Promise<string | null> {
+  const d = deployment.computers;
+  const c = await ready(p);
+  if (!c || d.kind === "none") return null;
+  // A path on the machine: one leading slash, and no backslash anywhere,
+  // which a browser would read as a second slash.
+  const onward =
+    to && /^\/(?!\/)[^\\\s]*$/.test(to) ? `&to=${encodeURIComponent(to)}` : "";
+  return `https://${c.machineId}.${d.domain}/?ticket=${ticket(c, 30 * 24 * 3600)}${onward}`;
+}
+
+// The computer's numbers this moment, asked of its door with a ticket
+// good for a minute. Null until it is ready.
+export async function statsOf(p: Principal): Promise<Stats | null> {
+  const c = await ready(p);
+  if (!c) return null;
+  return fly.stats(c.machineId!, ticket(c, 60));
 }
 
 // Pays a purged member's or a deleted org's computer back to Fly: the

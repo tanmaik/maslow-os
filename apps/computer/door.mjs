@@ -8,6 +8,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import http from "node:http";
 import net from "node:net";
 
+import { stats } from "./stats.mjs";
+
 const SECRET = process.env.DOOR_SECRET;
 const DOMAIN = process.env.DOMAIN;
 const ME = process.env.FLY_MACHINE_ID ?? "local";
@@ -78,12 +80,23 @@ const server = http.createServer(async (req, res) => {
     return (await insideAnswers())
       ? say(res, 200, "ok")
       : say(res, 503, "VS Code is not answering yet.");
+  // The numbers, for our server alone: it signs its ask with the secret.
+  if (to.mine && url.pathname === "/maslow/stats") {
+    if (!valid(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(await stats()));
+  }
   if (to.mine) {
     const ticket = url.searchParams.get("ticket");
     if (ticket) {
       if (!valid(ticket)) return say(res, 403, "That ticket is not good here.");
+      // Then to where it was going, if that is a path on this machine: one
+      // leading slash, and no backslash anywhere, which a browser would
+      // read as a second slash.
+      const to = url.searchParams.get("to") ?? "/";
       res.writeHead(303, {
-        location: "/",
+        location: /^\/(?!\/)[^\\\s]*$/.test(to) ? to : "/",
         "set-cookie": `${COOKIE}=${ticket}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`,
       });
       return res.end();

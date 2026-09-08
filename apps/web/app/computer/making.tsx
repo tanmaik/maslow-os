@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { Numbers } from "@/app/computer/numbers";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -66,6 +67,7 @@ export function Making({
         <form action="/computer/open" method="post">
           <Button type="submit">Open your computer</Button>
         </form>
+        <Numbers />
       </div>
     );
   return (

@@ -25,6 +25,6 @@ WORKDIR /opt/maslow
 COPY --from=build /opt/maslow/node_modules node_modules
 COPY package.json ./
 COPY --chmod=0755 boot.sh ./
-COPY door.mjs ./
+COPY door.mjs stats.mjs settings.mjs ./
 COPY etc/sshd_config etc/settings.json etc/
 CMD ["/opt/maslow/boot.sh"]
