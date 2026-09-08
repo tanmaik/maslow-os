@@ -1,0 +1,7 @@
+{
+  "name": "@placeholder/computer",
+  "private": true,
+  "dependencies": {
+    "code-server": "4.135.0"
+  }
+}

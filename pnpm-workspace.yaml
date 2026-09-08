@@ -1,5 +1,8 @@
 packages:
   - apps/*
+  # The computer's image installs its own dependencies inside the image;
+  # nothing of it runs on a laptop.
+  - "!apps/computer"
   - packages/*
 
 # Install scripts are off unless listed. The Postgres packages recreate the

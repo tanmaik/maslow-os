@@ -1,0 +1,2 @@
+# The person is root whenever they ask to be, with no password.
+me ALL=(ALL) NOPASSWD: ALL

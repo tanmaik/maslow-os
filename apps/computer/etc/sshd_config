@@ -1,0 +1,12 @@
+# The SSH server runs outside the person's Linux and drops `me` inside it.
+# Keys only, one user, host keys kept on the disk so they outlive a restart.
+Port 22
+HostKey /data/ssh/ssh_host_ed25519_key
+AuthorizedKeysFile /data/keys/%u
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+AllowUsers me
+Subsystem sftp internal-sftp
+Match User me
+  ChrootDirectory /data/os

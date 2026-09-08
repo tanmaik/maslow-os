@@ -1,0 +1,16 @@
+{
+  "chat.disableAIFeatures": true,
+  "workbench.startupEditor": "none",
+  "workbench.tips.enabled": false,
+  "workbench.welcomePage.walkthroughs.openOnInstall": false,
+  "workbench.layoutControl.enabled": false,
+  "workbench.activityBar.location": "hidden",
+  "telemetry.telemetryLevel": "off",
+  "update.mode": "none",
+  "files.exclude": { "**/.*": true },
+  "remote.portsAttributes": {
+    "22": { "onAutoForward": "ignore" },
+    "8080": { "onAutoForward": "ignore" }
+  },
+  "remote.otherPortsAttributes": { "onAutoForward": "openPreview" }
+}

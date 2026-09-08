@@ -33,8 +33,8 @@ dropping is a restart too.
 They are `me`. Home is `/home/me`: VS Code, SFTP and every new terminal
 open there. `sudo` works with no password, so they are root when they ask
 to be, and `apt install` sticks. Everything under `/` is a normal Debian
-and is theirs. `/opt/maslow` is ours: mounted from the image, read-only
-even to root, fresh on every restart. CPU and memory are fixed from outside
+and is theirs. `/opt/maslow` is ours: mounted from the image, read-only,
+and fresh from the image on every restart, so nothing done to it lasts. CPU and memory are fixed from outside
 by Fly; nothing inside can change them. The internet is open outward and
 closed inward, except through our doors.
 
