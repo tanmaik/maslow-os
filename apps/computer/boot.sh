@@ -88,10 +88,12 @@ keep() {
   done
 }
 keep /usr/sbin/sshd -D -e -f /opt/maslow/etc/sshd_config &
+# The door, outside the person's Linux, is what the internet reaches; VS
+# Code inside answers only to it.
+keep node /opt/maslow/door.mjs &
 keep chroot --userspec=1000:1000 --groups=1000 "$OS" \
   /usr/bin/env -i HOME=/home/me USER=me LOGNAME=me SHELL=/bin/bash LANG=C.UTF-8 TERM=xterm-256color \
-  AUTH="${AUTH:-none}" PASSWORD="${PASSWORD:-}" \
-  /bin/bash -lc 'cd && exec code-server --host :: --port 8080 --auth "$AUTH" --app-name Maslow --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override /home/me' &
+  /bin/bash -lc 'cd && exec code-server --host 127.0.0.1 --port 8081 --auth none --app-name Maslow --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override /home/me' &
 
 trap 'kill 0' TERM INT
 wait

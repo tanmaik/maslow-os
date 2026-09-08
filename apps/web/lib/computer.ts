@@ -14,6 +14,8 @@ import {
   type Computer,
 } from "@placeholder/db/computers";
 
+import { createHmac } from "node:crypto";
+
 import { deployment } from "./deployment.ts";
 import { fly, type Machine } from "./fly.ts";
 
@@ -21,7 +23,7 @@ import { fly, type Machine } from "./fly.ts";
 const FLOOR = { cpus: 2, memoryMb: 2048, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v8";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v10";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -206,6 +208,30 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
         return;
       }
       if (!m) return;
+      // Every machine runs the image of the day: one on an older image is
+      // remade to it, on the same disk, and probed again before it opens.
+      // Fly may name an image with its digest; the tag is what is compared.
+      if (c.current && m.config?.image?.split("@")[0] !== IMAGE) {
+        await fly.reshape(m.id, {
+          image: IMAGE,
+          volumeId: c.volumeId!,
+          cpus: c.cpus,
+          memoryMb: c.memoryMb,
+          secret: c.secret,
+          metadata: m.config?.metadata ?? tags(c),
+        });
+        await setReady(q, c.id, false);
+        await note(q, {
+          orgId,
+          userId: c.userId,
+          resource: "machine",
+          event: "made",
+          ref: m.id,
+          detail: { image: IMAGE },
+          why: "the image moved on",
+        });
+        return;
+      }
       if (c.current && m.state === "stopped") {
         await fly.start(m.id);
         await note(q, {
@@ -231,6 +257,19 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
         await fly.tag(m.id, "lease", new Date().toISOString());
     });
   }
+}
+
+// Where a ready computer opens: its machine's own address, with a ticket
+// signed with the computer's secret that its door takes for a month.
+// Null until it is ready.
+export async function openLink(p: Principal): Promise<string | null> {
+  const d = deployment.computers;
+  if (d.kind === "none") return null;
+  const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  if (!c?.readyAt || !c.machineId) return null;
+  const exp = String(Math.floor(Date.now() / 1000) + 30 * 24 * 3600);
+  const sig = createHmac("sha256", c.secret).update(exp).digest("hex");
+  return `https://${c.machineId}.${d.domain}/?ticket=${exp}.${sig}`;
 }
 
 // Pays a purged member's or a deleted org's computer back to Fly: the

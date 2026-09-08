@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
 type Progress = "off" | "disk" | "machine" | "starting" | "ready";
@@ -55,13 +56,17 @@ export function Making({
   const [value, label] = STEPS[at];
   if (at === "ready")
     return (
-      <Alert>
-        <AlertTitle>Your computer is ready</AlertTitle>
-        <AlertDescription>
-          Always on, in {where ?? "its region"}. Opening it from here is the
-          next step.
-        </AlertDescription>
-      </Alert>
+      <div className="space-y-3">
+        <Alert>
+          <AlertTitle>Your computer is ready</AlertTitle>
+          <AlertDescription>
+            Always on, in {where ?? "its region"}.
+          </AlertDescription>
+        </Alert>
+        <form action="/computer/open" method="post">
+          <Button type="submit">Open your computer</Button>
+        </form>
+      </div>
     );
   return (
     <div className="space-y-3">

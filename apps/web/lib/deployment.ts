@@ -46,7 +46,14 @@ export type Connections =
 // Outside production every machine carries the checkout that made it, so
 // the reap can tell a laptop's from a preview's.
 export type Computers =
-  | { kind: "fly"; token: string; app: string; checkout: string | null }
+  | {
+      kind: "fly";
+      token: string;
+      app: string;
+      // Every machine has its own name under this: `<machine>.<domain>`.
+      domain: string;
+      checkout: string | null;
+    }
   | { kind: "none" };
 
 // Production is the live Vercel environment or any box that is not a
@@ -145,17 +152,22 @@ function connections(): Connections {
 }
 
 function computers(): Computers {
-  const { FLY_API_TOKEN: token, FLY_COMPUTERS_APP: app } = process.env;
-  if (token && app)
+  const {
+    FLY_API_TOKEN: token,
+    FLY_COMPUTERS_APP: app,
+    FLY_MACHINES_DOMAIN: domain,
+  } = process.env;
+  if (token && app && domain)
     return {
       kind: "fly",
       token,
       app,
+      domain,
       checkout: production ? null : (process.env.CHECKOUT ?? "laptop"),
     };
   if (production)
     throw new Error(
-      "No computers: set FLY_API_TOKEN and FLY_COMPUTERS_APP. Production has no fallback.",
+      "No computers: set FLY_API_TOKEN, FLY_COMPUTERS_APP and FLY_MACHINES_DOMAIN. Production has no fallback.",
     );
   return { kind: "none" };
 }

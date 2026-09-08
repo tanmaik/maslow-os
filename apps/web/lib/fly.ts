@@ -8,10 +8,41 @@ export type Machine = {
   region: string;
   created_at: string;
   config?: {
+    image?: string;
     metadata?: Record<string, string>;
     mounts?: { volume: string; path: string }[];
   };
 };
+
+// What a machine is made of: its image, its door's secret and domain,
+// its size, its disk, its one port behind Fly's edge, and its tags.
+export type Shape = {
+  image: string;
+  volumeId: string;
+  cpus: number;
+  memoryMb: number;
+  secret: string;
+  metadata: Record<string, string>;
+};
+
+const shape = (m: Shape) => ({
+  image: m.image,
+  env: { DOOR_SECRET: m.secret, DOMAIN: config().domain },
+  guest: { cpu_kind: "shared", cpus: m.cpus, memory_mb: m.memoryMb },
+  mounts: [{ volume: m.volumeId, path: "/data" }],
+  services: [
+    {
+      protocol: "tcp",
+      internal_port: 8080,
+      autostart: false,
+      autostop: "off",
+      ports: [{ port: 443, handlers: ["tls", "http"] }],
+    },
+  ],
+  metadata: m.metadata,
+  restart: { policy: "always" },
+  auto_destroy: false,
+});
 
 function config() {
   const c = deployment.computers;
@@ -54,40 +85,21 @@ export const fly = {
     return call("POST", "/volumes", { name, region, size_gb: sizeGb });
   },
 
-  // A machine on its disk, started, running until it is stopped: VS Code
-  // on its port behind Fly's edge, opened by the computer's secret.
-  createMachine(m: {
-    name: string;
-    region: string;
-    image: string;
-    volumeId: string;
-    cpus: number;
-    memoryMb: number;
-    secret: string;
-    metadata: Record<string, string>;
-  }): Promise<Machine> {
+  // A machine on its disk, started, running until it is stopped: its door
+  // on its port behind Fly's edge, opened by a ticket signed with the
+  // computer's secret, at its own name under the deployment's domain.
+  createMachine(m: Shape & { name: string; region: string }): Promise<Machine> {
     return call("POST", "/machines", {
       name: m.name,
       region: m.region,
-      config: {
-        image: m.image,
-        env: { AUTH: "password", PASSWORD: m.secret },
-        guest: { cpu_kind: "shared", cpus: m.cpus, memory_mb: m.memoryMb },
-        mounts: [{ volume: m.volumeId, path: "/data" }],
-        services: [
-          {
-            protocol: "tcp",
-            internal_port: 8080,
-            autostart: false,
-            autostop: "off",
-            ports: [{ port: 443, handlers: ["tls", "http"] }],
-          },
-        ],
-        metadata: m.metadata,
-        restart: { policy: "always" },
-        auto_destroy: false,
-      },
+      config: shape(m),
     });
+  },
+
+  // The same machine remade to a shape, a newer image most often: Fly
+  // restarts it into it in seconds, on the same disk.
+  async reshape(id: string, m: Shape): Promise<void> {
+    await call("POST", `/machines/${id}`, { config: shape(m) });
   },
 
   machines(): Promise<Machine[]> {
@@ -147,10 +159,10 @@ export const fly = {
     throw last;
   },
 
-  // Whether VS Code on the machine answers at Fly's edge.
+  // Whether the machine's door answers at Fly's edge.
   async answers(machineId: string): Promise<boolean> {
     try {
-      const res = await fetch(`https://${config().app}.fly.dev/login`, {
+      const res = await fetch(`https://${config().app}.fly.dev/maslow/health`, {
         headers: { "fly-force-instance-id": machineId },
         signal: AbortSignal.timeout(8_000),
         redirect: "manual",

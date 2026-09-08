@@ -19,11 +19,13 @@ async function call(method, path, body, env = process.env) {
     signal: AbortSignal.timeout(30_000),
   });
   if (res.status === 404 && method === "DELETE") return null;
+  const text = await res.text();
   if (!res.ok)
     throw new Error(
-      `Fly ${method} ${path} answered ${res.status}: ${(await res.text()).slice(0, 300)}`,
+      `Fly ${method} ${path} answered ${res.status}: ${text.slice(0, 300)}`,
     );
-  return res.json();
+  // A tag or a stop answers with nothing.
+  return text ? JSON.parse(text) : null;
 }
 
 export const machines = (env) => call("GET", "/machines", undefined, env);
