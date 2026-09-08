@@ -17,7 +17,6 @@ export type About = {
   org: string;
   types: { name: string; records: number }[];
   shared: number;
-  verbs: string[];
 };
 
 export async function about(q: brain.Query, s: Session): Promise<About> {
@@ -50,7 +49,6 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
     org: me.org,
     types: me.types,
     shared: me.shared,
-    verbs: await brain.verbsInUse(q),
   };
 }
 
@@ -63,7 +61,7 @@ function instructions(a: About | null, client: string | null): string {
       ? "Their vocabulary is empty: no types, no records yet."
       : `It holds ${a.types.reduce((n, t) => n + t.records, 0)} records: ${a.types
           .map((t) => `${t.records} ${t.name}`)
-          .join(", ")}. Verbs in use: ${a.verbs.join(", ") || "none"}.${
+          .join(", ")}.${
           a.shared ? ` ${a.shared} types are shared in by colleagues.` : ""
         }`
     : "";
@@ -228,12 +226,12 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "catalog",
     {
       description:
-        "The person's vocabulary: every type they defined with its fields, the types colleagues shared into this brain, each with its owner, the verbs on links between records that are here, and who is in the org, by name and email. Reuse before defining; write only to your own types; name people by email when you ask to share.",
+        "The person's vocabulary: every type they defined with its fields, the types colleagues shared into this brain, each with its owner, and who is in the org, by name and email. Reuse before defining; write only to your own types; name people by email when you ask to share.",
       annotations: { readOnlyHint: true },
     },
     door(async (q) => {
-      const { types, verbs, people } = await brain.catalog(q);
-      return lines.catalog(types, verbs, people, s.userId);
+      const { types, people } = await brain.catalog(q);
+      return lines.catalog(types, people, s.userId);
     }),
   );
 

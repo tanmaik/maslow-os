@@ -321,9 +321,8 @@ export async function edgesOf(
   return rows.map(toEdge);
 }
 
-// A record's id and the ids of everything merged into it, however many
+// The ids of some records and of everything merged into them, however many
 // merges deep.
-// The same for many records at once.
 async function sameAs(q: Query, ids: string[]): Promise<string[]> {
   const { rows } = await q.query<{ id: string }>(
     `with recursive same as (
@@ -336,13 +335,7 @@ async function sameAs(q: Query, ids: string[]): Promise<string[]> {
   return rows.map((r) => r.id);
 }
 
-export async function aliasesOf(q: Query, id: string): Promise<string[]> {
-  const { rows } = await q.query<{ id: string }>(
-    "select same_record($1) as id",
-    [id],
-  );
-  return rows.map((r) => r.id);
-}
+export const aliasesOf = (q: Query, id: string) => sameAs(q, [id]);
 
 export type Graph = {
   // Distance from the records looked around, when any were.
@@ -365,14 +358,12 @@ export type GraphOptions = {
 const MAX_DEPTH = 4;
 const MAX_NODES = 500;
 
-// What every record stands for, and every edge read between what its ends
-// stand for: a merged record's links show on its winner.
 // The links around some records, read between what their ends stand for:
 // every link touching one of the ids given, and each end followed up to the
 // record that stands for it, so a merged record's links show on its winner.
-// The ids are a record and everything merged into it, found first with
-// same_record, so the links are reached through their index and what this
-// costs grows with the links around them, not with the brain.
+// The ids are a record and everything merged into it, resolved first, so
+// the links are reached through their index and what this costs grows with
+// the links around them, not with the brain.
 const standing = (ids: string) => `
   with recursive touched as (
     select * from edges e
@@ -396,29 +387,6 @@ const standing = (ids: string) => `
     where wf.winner <> wt.winner
     order by wf.winner, e.verb, wt.winner, e.created_at, e.id
   )`;
-
-// Every verb on a link between two records that are both here, read the
-// way the graph reads links: a merged record's links count for its winner,
-// a removed record's do not, and a record the reader may no longer see is
-// not here. Only the removed are walked, since they are few: a removed
-// record and everything merged into it.
-export async function verbsInUse(q: Query): Promise<string[]> {
-  const { rows } = await q.query<{ verb: string }>(
-    `with recursive gone as (
-       select id from records where deleted_at is not null and merged_into is null
-       union
-       select r.id from records r join gone on r.merged_into = gone.id
-     )
-     select distinct e.verb from edges e
-     where e.deleted_at is null
-       and exists (select 1 from records f where f.id = e.from_id)
-       and exists (select 1 from records t where t.id = e.to_id)
-       and e.from_id not in (select id from gone)
-       and e.to_id not in (select id from gone)
-     order by e.verb`,
-  );
-  return rows.map((r) => r.verb);
-}
 
 // The brain as a graph: live records and the edges between them. Given
 // records to look around, only those, what is within so many links of them

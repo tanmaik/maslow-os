@@ -21,7 +21,7 @@ clients hand the model both, so it doubles the cost of every answer.
 The instructions an MCP server hands over at connect time were the same for
 everyone. Now the request that opens a connection runs one query as the
 person and the first sentence says their name, their org, the date, how many
-records there are of each kind and what the verbs are. Only the handshake
+records there are of each kind. Only the handshake
 pays for it; every other request builds the server without.
 
 ## The vocabulary bends

@@ -156,8 +156,8 @@ and a record of an undefined type is refused, never stored. Two people in one or
 define a `note`, and they are two types. A type may declare its fields as
 rows, never as columns: values stay in one JSON column and the doors check
 and query them by the declaration. Nothing changes a table's shape after
-deploy. A verb is the word on an edge and nothing else: not defined, not
-described, not a row.
+deploy. A verb is the word on an edge and nothing else: not
+defined, not described, not a row, not listed anywhere.
 
 The brain is not a database for people to look at. A table holds only what
 the product reads at runtime; who wrote a row and when is the log's to say,

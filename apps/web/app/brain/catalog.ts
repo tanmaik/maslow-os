@@ -12,7 +12,6 @@ export const vocabulary = cache(
     p: Principal,
   ): Promise<{
     types: BrainType[];
-    verbs: string[];
     people: Map<string, string>;
   }> =>
     asPerson(p, async (db) => ({

@@ -106,7 +106,6 @@ export async function smokeBrain(stack) {
     check(
       "a new org starts empty and refuses undefined types",
       newcomer.empty.types.length === 0 &&
-        newcomer.empty.verbs.length === 0 &&
         newcomer.refused instanceof brain.Invalid &&
         newcomer.written.changed === 1 &&
         newcomer.loop instanceof brain.Invalid,
@@ -143,11 +142,10 @@ export async function smokeBrain(stack) {
       orgOnly.records.length === 0 &&
         colleague.page.records.length === 0 &&
         colleague.vocab.types.length === 0 &&
-        colleague.vocab.verbs.length === 0 &&
         acme.users.every((u) =>
           colleague.vocab.people.some((p) => p.id === u.id),
         ),
-      `${colleague.page.records.length} records, ${colleague.vocab.types.length} types, ${colleague.vocab.verbs.length} verbs, ${colleague.vocab.people.length} people`,
+      `${colleague.page.records.length} records, ${colleague.vocab.types.length} types, ${colleague.vocab.people.length} people`,
     );
 
     // A type is shared whole with the org, or opened one record at a time;
@@ -212,7 +210,6 @@ export async function smokeBrain(stack) {
         seen.theirs.records.length === opened.commitments &&
         opened.commitments > 0 &&
         seen.unnamed.records.length === opened.commitments &&
-        seen.vocab.verbs.length === 0 &&
         opened.shares.length === 1 &&
         opened.shares[0].on.type === opened.commitment.id,
       `${seen.theirs.records.length} of Wile's commitments, ${seen.unnamed.records.length} named without an owner, ${seen.commitment?.properties.length} fields`,
@@ -571,7 +568,7 @@ export async function smokeBrain(stack) {
       `self refused, ${links.before.length} then ${links.after.length}, logged ${links.gone.map((e) => e.action).join("+")} by ${links.gone[0].author}, graph ${links.whole.nodes.length}/${links.whole.edges.length}, near ${links.near.nodes.length}/${links.near.edges.length}`,
     );
 
-    // A verb is in use only while both ends of a link are here.
+    // A link shows only while both its ends are here.
     const ghosts = await me(acme)(async (q) => {
       const a = { source: "smoke", sourceRef: "ghost:a" };
       const b = { source: "smoke", sourceRef: "ghost:b" };
@@ -583,27 +580,18 @@ export async function smokeBrain(stack) {
         edges: [{ from: a, verb: "haunts", to: b }],
       });
       const [a1, b1] = made.records;
-      const linked = (await brain.catalog(q)).verbs.includes("haunts");
       await brain.remove(q, b1);
       const dangling = (await brain.edgesOf(q, a1)).length;
       await brain.remove(q, a1);
-      const removed = (await brain.catalog(q)).verbs.includes("haunts");
       await brain.restore(q, a1);
-      const half = (await brain.catalog(q)).verbs.includes("haunts");
       await brain.restore(q, b1);
-      const back = (await brain.catalog(q)).verbs.includes("haunts");
       const shown = (await brain.edgesOf(q, a1)).length;
-      return { linked, dangling, removed, half, back, shown };
+      return { dangling, shown };
     });
     check(
-      "a link and its verb show only while both ends are here",
-      ghosts.linked &&
-        ghosts.dangling === 0 &&
-        !ghosts.removed &&
-        !ghosts.half &&
-        ghosts.back &&
-        ghosts.shown === 1,
-      `linked ${ghosts.linked}, links to a removed record ${ghosts.dangling}, verb after removal ${ghosts.removed}, one back ${ghosts.half}, both back ${ghosts.back} with ${ghosts.shown} link`,
+      "a link shows only while both ends are here",
+      ghosts.dangling === 0 && ghosts.shown === 1,
+      `links to a removed record ${ghosts.dangling}, both back with ${ghosts.shown} link`,
     );
 
     // A verb renamed follows every edge that carries it, hidden ones too.

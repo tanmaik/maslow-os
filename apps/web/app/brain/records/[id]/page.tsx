@@ -52,7 +52,7 @@ export default async function Page({
   if (!p) redirect("/");
   const { id } = await params;
   if (!isId(id)) notFound();
-  const [{ types, verbs, people }, found] = await Promise.all([
+  const [{ types, people }, found] = await Promise.all([
     vocabulary(p),
     asPerson(p, async (db) => {
       const [record] = await get(db, [id]);
@@ -197,7 +197,6 @@ export default async function Page({
         others={others}
         action={action}
         canEdit={canEdit}
-        verbs={verbs}
       />
     </Split>
   );
@@ -212,7 +211,6 @@ function Links({
   others,
   action,
   canEdit,
-  verbs,
 }: {
   record: BrainRecord;
   aliases: Set<string>;
@@ -220,7 +218,6 @@ function Links({
   others: Map<string, Stub>;
   action: string;
   canEdit: boolean;
-  verbs: string[];
 }) {
   const name = (id: string) =>
     aliases.has(id) ? (
@@ -234,7 +231,7 @@ function Links({
     <section className="space-y-2 pt-4">
       <div className="flex items-center justify-between">
         <h2 className="text-muted-foreground text-sm">Links</h2>
-        {canEdit && <LinkForm record={record} verbs={verbs} />}
+        {canEdit && <LinkForm record={record} />}
       </div>
       {edges.length === 0 && (
         <p className="text-muted-foreground text-sm">Linked to nothing yet.</p>
@@ -267,9 +264,8 @@ function Links({
   );
 }
 
-// A new link from or to this record, under any verb; the ones in use are
-// offered.
-function LinkForm({ record, verbs }: { record: BrainRecord; verbs: string[] }) {
+// A new link from or to this record, under any verb.
+function LinkForm({ record }: { record: BrainRecord }) {
   return (
     <FormDialog
       trigger="Link"
@@ -298,18 +294,7 @@ function LinkForm({ record, verbs }: { record: BrainRecord; verbs: string[] }) {
         </div>
         <div className="space-y-1">
           <Label htmlFor="verb">Verb</Label>
-          <Input
-            id="verb"
-            name="verb"
-            list="verbs"
-            placeholder="attended"
-            required
-          />
-          <datalist id="verbs">
-            {verbs.map((v) => (
-              <option key={v} value={v} />
-            ))}
-          </datalist>
+          <Input id="verb" name="verb" required />
         </div>
         <div className="space-y-1">
           <Label htmlFor="other">The other record</Label>

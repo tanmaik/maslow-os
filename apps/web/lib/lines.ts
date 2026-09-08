@@ -121,11 +121,10 @@ export const field = (f: {
   `${f.name}: ${f.options ? `enum(${f.options.map(token).join("|")})` : f.datatype}${f.required ? ", required" : ""}`;
 
 // The vocabulary: the person's own types with their fields, then the types
-// colleagues shared in, each naming whose it is, then the verbs in use, then
-// who is in the org, each by the email an ask names them by.
+// colleagues shared in, each naming whose it is, then who is in the org,
+// each by the email an ask names them by.
 export function catalog(
   types: BrainType[],
-  verbs: string[],
   people: Person[],
   me: string,
 ): string {
@@ -147,7 +146,6 @@ export function catalog(
       for (const p of t.properties) lines.push(`  ${field(p)}`);
     }
   }
-  lines.push(`verbs in use (${verbs.length}): ${verbs.map(token).join(" ")}`);
   lines.push(`people (${people.length}):`);
   for (const p of people) {
     lines.push(

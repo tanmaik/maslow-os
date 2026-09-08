@@ -11,7 +11,7 @@ Replaced by views over the same doors, laid out like a database tool:
 - **A record** is one page: body, fields, provenance, every edge in and out
   with its verb, confidence and time, and its history from the log. Edit,
   delete, restore and unmerge live there.
-- **Vocabulary** is the person's kinds, fields and verbs as tables, with
+- **Vocabulary** is the person's kinds and fields as tables, with
   forms to define more and a share on each kind; below them, the kinds
   colleagues have shared into this brain, one table per owner and way they
   were opened.
@@ -43,7 +43,7 @@ together. The graph mounts in the browser only, after its pane has a size.
 
 Links are read as sentences on a record page: "this person owes Road
 Runner", with how sure and when beside. A person can link two records on
-one of their own verbs, or unlink them, from there. Two gaps closed on the
+any verb, or unlink them, from there. Two gaps closed on the
 way: an edge could join a record to itself, and no edge could ever be
 removed through the door. Both are now refused or possible, with checks in
 the smoke suite.

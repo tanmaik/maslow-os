@@ -9,9 +9,9 @@ called shares, and verbs are no longer rows.
 - **Verbs as rows.** A verb has no fields to check values against and is
   never shared, so the table's one job was refusing an edge whose word had
   not been typed before. That cost the agent a definition step and bought
-  nothing. A verb is the word on an edge; the catalog reads the words in
-  use off the edges; renaming one updates the edges that carry it, which
-  the log records like any edge change.
+  nothing. A verb is the word on an edge; nothing lists the words, each is
+  read on the link that carries it; renaming one updates the edges that
+  carry it, which the log records like any edge change.
 - **Descriptions.** A type's name is what a model needs; a sentence beside
   it hardcodes more than the mechanism does. Fields keep their name, what
   they hold and whether they are required.
