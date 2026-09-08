@@ -16,9 +16,7 @@ export {
   get,
   graph,
   history,
-  list,
   read,
-  stubs,
   type Graph,
   verbsInUse,
 } from "./read.ts";

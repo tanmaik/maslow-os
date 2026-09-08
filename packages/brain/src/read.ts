@@ -5,11 +5,9 @@ import {
   edgeColumns,
   eventColumns,
   recordSelect,
-  stubSelect,
   toEdge,
   toEvent,
   toRecord,
-  toStub,
   type EdgeRow,
   type EventRow,
   type RecordRow,
@@ -22,7 +20,6 @@ import type {
   Property,
   Query,
   Sort,
-  Stub,
 } from "./types.ts";
 
 export type ReadOptions = {
@@ -52,7 +49,6 @@ export type ReadOptions = {
 };
 
 export type Page = { records: BrainRecord[]; cursor: string | null };
-export type StubPage = { records: Stub[]; cursor: string | null };
 
 export type HistoryOptions = {
   // Only the changes to one record, edge, type or field.
@@ -113,11 +109,7 @@ const DIRECTIONS = { asc: "asc", desc: "desc" } as const;
 
 // Records, newest first by when they happened, filtered and searched. Every
 // record carries its source and ref, so a caller can cite it.
-export async function read(
-  q: Query,
-  opts: ReadOptions = {},
-  select: string = recordSelect,
-): Promise<Page> {
+export async function read(q: Query, opts: ReadOptions = {}): Promise<Page> {
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const scope = opts.scope ?? "all";
   if (!["mine", "shared", "all"].includes(scope)) {
@@ -243,7 +235,7 @@ export async function read(
   }
 
   const { rows } = await q.query<RecordRow>(
-    `select ${select} from records r
+    `select ${recordSelect} from records r
      where ${where.join("\n       and ")}
      order by ${order} ${direction} nulls last, id ${direction}
      limit ${param(limit + 1)}`,
@@ -267,31 +259,6 @@ export async function get(q: Query, ids: string[]): Promise<BrainRecord[]> {
     [ids],
   );
   return rows.map(toRecord);
-}
-
-// Records as a list shows them: the same query, with the bodies left in the
-// database. A page of fifty records is a page of fifty titles, not a download
-// of everything those records say.
-export async function list(
-  q: Query,
-  opts: ReadOptions = {},
-): Promise<StubPage> {
-  const page = await read(q, opts, stubSelect);
-  return {
-    records: page.records.map(({ body: _body, ...rest }) => rest),
-    cursor: page.cursor,
-  };
-}
-
-// The same records without their bodies, for a caller that renders titles:
-// the ends of a record's links, or the records an ask names.
-export async function stubs(q: Query, ids: string[]): Promise<Stub[]> {
-  if (ids.length === 0) return [];
-  const { rows } = await q.query<RecordRow>(
-    `select ${stubSelect} from records where id = any($1::text[])`,
-    [ids],
-  );
-  return rows.map(toStub);
 }
 
 // Every edge touching a record or anything merged into it, however many

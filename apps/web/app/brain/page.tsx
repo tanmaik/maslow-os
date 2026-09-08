@@ -1,9 +1,9 @@
 import {
+  get,
   Invalid,
-  list,
+  read,
   requestsOf,
-  stubs,
-  type Stub,
+  type BrainRecord,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { groupsIn } from "@placeholder/db/groups";
@@ -81,14 +81,14 @@ export default async function Page({
     ({ page, asks, asked, groups } = await asPerson(p, async (db) => {
       const asks = await requestsOf(db);
       return {
-        page: await list(db, {
+        page: await read(db, {
           type: type?.name,
           owner: type?.ownerId,
           query: params.q || undefined,
           cursor: params.cursor,
         }),
         asks,
-        asked: await stubs(
+        asked: await get(
           db,
           asks.flatMap((a) =>
             a.items.flatMap((it) => ("record" in it ? [it.record] : [])),
@@ -102,7 +102,7 @@ export default async function Page({
     if (err instanceof Invalid && params.cursor) redirect(href({}));
     throw err;
   }
-  const whose = (r: Stub) =>
+  const whose = (r: BrainRecord) =>
     r.ownerId === p.userId ? null : (people.get(r.ownerId) ?? "someone");
 
   return (

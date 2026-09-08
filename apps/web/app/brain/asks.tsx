@@ -1,4 +1,4 @@
-import type { BrainType, ShareRequest, Stub } from "@placeholder/brain";
+import type { BrainRecord, BrainType, ShareRequest } from "@placeholder/brain";
 import type { Group } from "@placeholder/db/groups";
 import Link from "next/link";
 
@@ -17,7 +17,7 @@ export function Asks({
   groups,
 }: {
   asks: ShareRequest[];
-  records: Map<string, Stub>;
+  records: Map<string, BrainRecord>;
   types: BrainType[];
   people: Map<string, string>;
   groups: Group[];

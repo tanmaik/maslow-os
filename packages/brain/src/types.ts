@@ -73,11 +73,6 @@ export type BrainRecord = {
   access: Access;
 };
 
-// A record as a list, a link or a picker shows it: everything but the body.
-// It is a separate type so nothing can hand a stub to a writer and blank a
-// body that was never read.
-export type Stub = Omit<BrainRecord, "body">;
-
 // One directed link between two records: what, how strongly, since when.
 export type Edge = {
   id: string;
