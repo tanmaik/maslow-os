@@ -272,7 +272,10 @@ us: each person holds an OpenRouter key we minted with a cap, OpenRouter
 holds the record, and the sweep copies it. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
-ever calls home.
+ever calls home. The computer's tools, a browser and three hands on the
+machine, are offered by the brain's MCP at `/mcp` and passed to the
+machine through its door, so every agent that reaches the brain reaches
+the computer; there is no separate server and no separate agent for it.
 
 ## Interface
 

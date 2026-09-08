@@ -159,24 +159,60 @@ A machine never needs to reach our server. Our server asks the machine for
 its numbers, OpenRouter for its spend, and Fly for its list. That is what
 lets a laptop's machines be real.
 
-## Chrome, backups, shared drives
+## The computer is in the brain's MCP
 
-Chrome is in the image; its profile, logins included, is in home. Backups
-go to the bucket we already have. Shared drives, links into other people's
-computers with permissions and live sync, come later; what they need now is
-that files are plain files in a plain home on a plain disk.
+Settled with Tanmai on 2026-09-08. There is no separate agent for the
+computer and no separate server for it. The brain's MCP at `/mcp` also
+offers the computer's tools, so every agent that can reach the brain,
+Claude Code on the machine or on a Mac, claude.ai, the Mac app later, can
+use the person's computer through the same address and the same sign-in.
+
+The computer's tools are the browser and three hands. The browser is the
+Chrome extension's tools by the same names, read the page as a numbered
+list, find by words, click, type, screenshot and the rest, built on
+Playwright in `packages/browser` and written for the weakest model: the
+page comes back as text with numbered parts, a find answers with the
+number, every action waits for the page to settle and fails in one line.
+It is checked by four tasks that must pass with GLM 5.3 Flash. The hands
+are run a command, read a file, write a file, as `me` in home. Chrome and
+the browser tool run on the person's machine, inside their Linux, so the
+profile and its logins are theirs and in home; our server runs no browser.
+A call at `/mcp` is passed to the machine through its door, signed with
+the computer's secret, and the answer passed back, images included: the
+same road the page opens VS Code by, and the same direction as everything
+else, our server asking the machine. From inside a dev machine the brain
+is the preview's or production's, since a laptop cannot be reached; from
+the laptop itself everything works.
+
+Chromium for the tool's own checks comes from Playwright, fetched from
+Microsoft rather than npm: an exception to the field guide's line, written
+down here.
+
+## Backups and shared drives
+
+Backups go to the bucket we already have. Shared drives, links into other
+people's computers with permissions and live sync, come later; what they
+need now is that files are plain files in a plain home on a plain disk.
 
 ## Order of work
 
-0. This decision and the field guide.
-1. The image.
+Each is one pull request, read before the next starts. As of 2026-09-08:
+
+0. This decision and the field guide. Done.
+1. The image. Done.
 2. A computer at sign-in, with the lease, the tags, the ledger, the
-   progress bar and the backfill.
-3. The page: VS Code, charts, storage number, ports.
-4. Reset keeps home.
-5. Sizes.
-6. The disk grows itself.
-7. Claude Code on our key, and the switch.
-8. Chrome.
-9. Backups.
-10. The key and the SSH front door.
+   progress bar and the backfill. Done, live.
+3. Opening it: every machine at its own address behind a door that takes
+   a ticket from our sign-in, and the Open button. Built, in review.
+4. The browser tool as a package, with its four-task check. Built, in
+   review.
+5. The numbers on the page: live charts, the storage number, open ports.
+6. The computer in the brain's MCP: the browser and the three hands on
+   the machine, reached through `/mcp`.
+7. Reset keeps home.
+8. Sizes.
+9. The disk grows itself.
+10. Claude Code on our key, and the switch; it reaches `/mcp` like any
+    other agent.
+11. Backups.
+12. The key and the SSH front door.
