@@ -65,17 +65,26 @@ packages, so no monitor resets; it alerts us and shows the button.
 
 ## Sizes
 
-A ladder of sizes, each with its price per hour. Picking one restarts the
-machine into it in a few seconds; nothing inside can. The reporter gives
-CPU, memory and disk every few seconds; the page draws them live; near the
-top of the current size, the page says so. Shrinking is the same control.
+A ladder of four sizes, each named with its CPUs and memory and no price,
+at Tanmai's word on 2026-09-08: Small, two shared CPUs and 2 GB; Medium,
+four and 4 GB; Large, eight and 8 GB; Dedicated, two dedicated CPUs and
+8 GB. Picking one restarts the machine into it in a few seconds; nothing
+inside can. The row is the truth: the sweep remakes a machine whose size
+is not its row's, as it does for the image. The reporter gives CPU,
+memory and disk every few seconds; the page draws them live; near the top
+of the current size, the page says so. Shrinking is the same control. The
+ledger records every change with the size, and prices come later from
+reading it.
 
 ## The disk grows itself
 
 The disk is grown before it fills, with no restart: Fly grows the volume
-and its file system while the machine runs. It cannot shrink; a smaller
-disk is a copy while stopped. There is a ceiling, it is ours, it is high, and it
-never shows: hitting it alerts us and never walls the person.
+and its file system while the machine runs, checked on 2026-09-08 with a
+machine that saw the room the moment the call returned. The hourly sweep
+reads each running computer's numbers, and a disk more than four fifths
+full is grown by half again. It cannot shrink; a smaller disk is a copy
+while stopped. There is a ceiling, it is ours, it is 200 GB, and it never
+shows: hitting it alerts us and never walls the person.
 
 ## VS Code in the browser first, the key later
 
@@ -196,9 +205,17 @@ down here.
 
 ## Backups and shared drives
 
-Backups go to the bucket we already have. Shared drives, links into other
-people's computers with permissions and live sync, come later; what they
-need now is that files are plain files in a plain home on a plain disk.
+Backups go to the bucket we already have. Once a day the sweep signs an
+upload address for a computer and asks its door; the machine archives
+the home outside the person's Linux, uploads it there, and keeps what came
+of it on the disk for the sweep to read at its next ask, so nothing on the
+machine calls home and no key of ours is ever on it. The newest fourteen
+are kept, each recorded in the ledger, and the Computer page says when the
+last one was made. A failed one is said to us and tried again the next
+hour. Restoring from one is by hand for now. Shared drives, links into
+other people's computers with permissions and live sync, come later; what
+they need now is that files are plain files in a plain home on a plain
+disk.
 
 ## Order of work
 
@@ -217,8 +234,8 @@ Each is one pull request, read before the next starts. As of 2026-09-08:
    the machine, and the brain reached with the computer's session. Done,
    live.
 7. Reset keeps home. Done.
-8. Sizes.
-9. The disk grows itself.
+8. Sizes. Done.
+9. The disk grows itself. Done.
 10. Claude Code on our key, and the switch.
-11. Backups.
+11. Backups. Done.
 12. The key and the SSH front door.

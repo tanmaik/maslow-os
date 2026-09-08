@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { Numbers } from "@/app/computer/numbers";
+import { Sizes } from "@/app/computer/sizes";
+import type { SizeKey } from "@/lib/sizes";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -29,16 +31,23 @@ const STEPS: Record<Progress, [number, string]> = {
   ready: [100, "Ready"],
 };
 
-// The bar a person watches until their computer is ready: every few
-// seconds it asks, and each ask moves the making one step on.
+// The bar a person watches until their computer is ready, starting where
+// the computer stands: every few seconds it asks, and each ask moves the
+// making one step on.
 export function Making({
-  ready,
+  at: from,
   region,
+  size,
+  backedUp,
 }: {
-  ready: boolean;
+  at: Progress;
   region: string | null;
+  size: SizeKey | null;
+  // When the home was last backed up, null before any, or "off" where
+  // this deployment has no bucket to back up to.
+  backedUp: string | null | "off";
 }) {
-  const [at, setAt] = useState<Progress>(ready ? "ready" : "disk");
+  const [at, setAt] = useState<Progress>(from);
   const [where, setWhere] = useState(region);
   const [failed, setFailed] = useState<string | null>(null);
   useEffect(() => {
@@ -103,6 +112,14 @@ export function Making({
           </AlertDialog>
         </div>
         <Numbers />
+        <Sizes current={size} />
+        <p className="text-muted-foreground text-sm">
+          {backedUp === "off"
+            ? "No backups here: this deployment has no bucket."
+            : backedUp
+              ? `Home backed up ${new Date(backedUp).toLocaleString()}; a new one every day, the last fourteen kept.`
+              : "Home not backed up yet; the first one comes within the hour."}
+        </p>
       </div>
     );
   return (

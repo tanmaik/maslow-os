@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 
 import { Making } from "@/app/computer/making";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { progressOf } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
+import { sizeOf } from "@/lib/sizes";
 import { principal } from "@/lib/session";
 
 // The person's computer: made for them at sign-in, shown here as it comes
@@ -27,8 +29,14 @@ export default async function ComputerPage() {
           </Alert>
         ) : (
           <Making
-            ready={c?.readyAt !== null && c?.readyAt !== undefined}
+            at={c ? progressOf(c) : "disk"}
             region={c?.region ?? null}
+            size={c ? sizeOf(c) : null}
+            backedUp={
+              deployment.storage.kind === "s3"
+                ? (c?.backedUpAt?.toISOString() ?? null)
+                : "off"
+            }
           />
         )}
       </main>

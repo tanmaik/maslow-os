@@ -9,6 +9,7 @@ import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 
+import { backup } from "./backup.mjs";
 import { stats } from "./stats.mjs";
 
 const SECRET = process.env.DOOR_SECRET;
@@ -87,6 +88,34 @@ const server = http.createServer(async (req, res) => {
       return say(res, 401, "That ticket is not good here.");
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(await stats()));
+  }
+  // Backups, for our server alone: it asks with an address to upload to,
+  // and reads what came of the last one.
+  if (to.mine && url.pathname === "/maslow/backup") {
+    if (!valid(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    if (req.method === "GET") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify(backup.last()));
+    }
+    if (req.method === "POST") {
+      const body = await new Promise((resolve) => {
+        let s = "";
+        req.on("data", (d) => (s += d));
+        req.on("end", () => resolve(s));
+      });
+      let ask;
+      try {
+        ask = JSON.parse(body);
+      } catch {
+        return say(res, 400, "That is not an ask.");
+      }
+      if (typeof ask?.url !== "string" || typeof ask?.key !== "string")
+        return say(res, 400, "An ask names the address and the key.");
+      return backup.start(ask)
+        ? say(res, 202, "backing up")
+        : say(res, 409, "a backup is already running");
+    }
   }
   // Reset, for our server alone: the next boot starts the person's Linux
   // over and keeps their home. The mark is on the disk, outside their

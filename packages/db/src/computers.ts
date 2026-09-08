@@ -9,6 +9,7 @@ export type Computer = {
   orgId: string;
   userId: string;
   region: string;
+  cpuKind: CpuKind;
   cpus: number;
   memoryMb: number;
   diskGb: number;
@@ -16,18 +17,23 @@ export type Computer = {
   volumeId: string | null;
   machineId: string | null;
   readyAt: Date | null;
+  // When the home was last archived into the bucket, if ever.
+  backedUpAt: Date | null;
   // The owner's session the machine holds to reach the brain, if any.
   sessionId: string | null;
   // Whether its member is current; a past member's machine is stopped.
   current: boolean;
 };
 
-export type Size = { cpus: number; memoryMb: number; diskGb: number };
+// Shared CPUs, or dedicated ones: "performance" in Fly's words.
+type CpuKind = "shared" | "performance";
+export type Size = { cpuKind: CpuKind; cpus: number; memoryMb: number };
 
-const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region, c.cpus,
-  c.memory_mb as "memoryMb", c.disk_gb as "diskGb", c.secret,
+const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
+  c.cpu_kind as "cpuKind", c.cpus, c.memory_mb as "memoryMb", c.disk_gb as "diskGb", c.secret,
   c.volume_id as "volumeId", c.machine_id as "machineId", c.ready_at as "readyAt",
-  c.session_id as "sessionId", (u.removed_at is null) as current`;
+  c.backed_up_at as "backedUpAt", c.session_id as "sessionId",
+  (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
 // membership, however many sign-ins race for it.
@@ -36,21 +42,46 @@ export async function claimComputer(
   orgId: string,
   userId: string,
   region: string,
-  size: Size,
+  size: Size & { diskGb: number },
 ): Promise<void> {
   await q.query(
-    `insert into computers (org_id, user_id, region, cpus, memory_mb, disk_gb, secret)
-     values ($1, $2, $3, $4, $5, $6, $7)
+    `insert into computers (org_id, user_id, region, cpu_kind, cpus, memory_mb, disk_gb, secret)
+     values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (org_id, user_id) do nothing`,
     [
       orgId,
       userId,
       region,
+      size.cpuKind,
       size.cpus,
       size.memoryMb,
       size.diskGb,
       randomBytes(24).toString("base64url"),
     ],
+  );
+}
+
+// When the home was last archived.
+export async function setBackedUp(q: Query, id: string, at: Date) {
+  await q.query("update computers set backed_up_at = $2 where id = $1", [
+    id,
+    at,
+  ]);
+}
+
+// The disk's size, once Fly has grown it.
+export async function setDisk(q: Query, id: string, diskGb: number) {
+  await q.query("update computers set disk_gb = $2 where id = $1", [
+    id,
+    diskGb,
+  ]);
+}
+
+// The size the computer is to be; the machine follows at its next remake.
+export async function setSize(q: Query, id: string, size: Size) {
+  await q.query(
+    "update computers set cpu_kind = $2, cpus = $3, memory_mb = $4 where id = $1",
+    [id, size.cpuKind, size.cpus, size.memoryMb],
   );
 }
 
@@ -158,8 +189,15 @@ export async function note(
   entry: {
     orgId: string;
     userId: string | null;
-    resource: "machine" | "disk";
-    event: "made" | "started" | "stopped" | "reset" | "destroyed";
+    resource: "machine" | "disk" | "backup";
+    event:
+      | "made"
+      | "started"
+      | "stopped"
+      | "reset"
+      | "resized"
+      | "grown"
+      | "destroyed";
     ref: string | null;
     detail?: Record<string, unknown>;
     why: string;

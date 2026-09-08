@@ -123,6 +123,8 @@ export async function stats() {
     memory: memory(),
     used,
     disk: disk ? disk.blocks * disk.bsize : null,
+    // What the whole disk still has room for, the person's and ours alike.
+    free: disk ? disk.bavail * disk.bsize : null,
     ports: await ports(),
   };
 }

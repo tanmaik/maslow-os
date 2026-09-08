@@ -9,8 +9,11 @@ import {
   membersWithoutComputers,
   note,
   openComputerSession,
+  setBackedUp,
+  setDisk,
   setMachine,
   setReady,
+  setSize,
   setVolume,
   type Computer,
 } from "@placeholder/db/computers";
@@ -18,13 +21,15 @@ import {
 import { createHmac } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import { fly, type Machine, type Stats } from "./fly.ts";
+import { fly, type Backup, type Machine, type Stats } from "./fly.ts";
+import { list, presign, remove } from "./s3.ts";
+import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 
-// Every computer starts here; sizes above it come later.
-const FLOOR = { cpus: 2, memoryMb: 2048, diskGb: 10 };
+// Every computer starts at the ladder's first rung, with this much disk.
+const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v25";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v28";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -50,7 +55,7 @@ function tags(c: Computer): Record<string, string> {
   };
 }
 
-const progressOf = (c: Computer): Progress =>
+export const progressOf = (c: Computer): Progress =>
   c.readyAt
     ? "ready"
     : !c.volumeId
@@ -124,6 +129,7 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
         region: c.region,
         image: IMAGE,
         volumeId: c.volumeId,
+        cpuKind: c.cpuKind,
         cpus: c.cpus,
         memoryMb: c.memoryMb,
         secret: c.secret,
@@ -140,6 +146,7 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
         ref: m.id,
         detail: {
           region: c.region,
+          cpuKind: c.cpuKind,
           cpus: c.cpus,
           memoryMb: c.memoryMb,
           image: IMAGE,
@@ -224,15 +231,22 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
         if (c.current) await step(q, c, "sweep");
         return;
       }
-      // Every machine runs the image of the day: one on an older image is
-      // remade to it, on the same disk, and probed again before it opens.
-      // Asked before anything else, so a machine moves at the first sweep
-      // after the image does, however it was left. Fly may name an image
-      // with its digest; the tag is what is compared.
-      if (c.current && m.config?.image?.split("@")[0] !== IMAGE) {
+      // Every machine runs the image of the day at its row's size: one on
+      // an older image, or at another size, is remade on the same disk and
+      // probed again before it opens. Asked before anything else, so a
+      // machine moves at the first sweep after the image does, however it
+      // was left. Fly may name an image with its digest; the tag is what
+      // is compared.
+      const g = m.config?.guest ?? {};
+      const sized =
+        g.cpu_kind === c.cpuKind &&
+        g.cpus === c.cpus &&
+        g.memory_mb === c.memoryMb;
+      if (c.current && (m.config?.image?.split("@")[0] !== IMAGE || !sized)) {
         await fly.reshape(m.id, {
           image: IMAGE,
           volumeId: c.volumeId!,
+          cpuKind: c.cpuKind,
           cpus: c.cpus,
           memoryMb: c.memoryMb,
           secret: c.secret,
@@ -246,8 +260,13 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
           resource: "machine",
           event: "made",
           ref: m.id,
-          detail: { image: IMAGE },
-          why: "the image moved on",
+          detail: {
+            image: IMAGE,
+            cpuKind: c.cpuKind,
+            cpus: c.cpus,
+            memoryMb: c.memoryMb,
+          },
+          why: sized ? "the image moved on" : "the size was changed",
         });
         return;
       }
@@ -280,7 +299,133 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
       }
       if (m.config?.metadata?.lease)
         await fly.tag(m.id, "lease", new Date().toISOString());
+      if (c.readyAt && c.current && m.state === "started") {
+        await grow(q, c);
+        await backUp(q, c);
+      }
     });
+  }
+}
+
+// How many backups of a home are kept: the newest fourteen.
+const BACKUPS_KEPT = 14;
+const DAY = 24 * 3600 * 1000;
+
+// A home archived into the bucket once a day, by the machine, to an
+// address signed for it, and recorded here once it is done; the newest
+// fourteen are kept. One that failed is tried again the next hour and
+// said to us. Nowhere without a bucket.
+async function backUp(q: Query, c: Computer): Promise<void> {
+  const store = deployment.storage;
+  if (store.kind !== "s3") return;
+  let last: Backup | null;
+  try {
+    last = await fly.lastBackup(c.machineId!, ticket(c, 60));
+  } catch {
+    return;
+  }
+  // One still running is left to finish; one that has run for three hours
+  // was cut off somewhere and is asked again.
+  if (
+    last &&
+    !last.finishedAt &&
+    Date.now() - Date.parse(last.startedAt) < 3 * 3600 * 1000
+  )
+    return;
+  const prefix = `${store.prefix}backups/${c.id}/`;
+  let backedUpAt = c.backedUpAt;
+  if (
+    last?.finishedAt &&
+    (!backedUpAt || new Date(last.finishedAt) > backedUpAt)
+  ) {
+    if (last.error) {
+      console.error(`computer ${c.id}: backup failed: ${last.error}`);
+      // No room for the archive beside the home: the disk grows now, and
+      // the backup is asked for again next hour.
+      if (last.error.startsWith("no room"))
+        await extend(q, c, "no room to archive the home for a backup");
+      if (Date.now() - Date.parse(last.finishedAt) < 3600 * 1000) return;
+    } else {
+      backedUpAt = new Date(last.finishedAt);
+      await setBackedUp(q, c.id, backedUpAt);
+      await note(q, {
+        orgId: c.orgId,
+        userId: c.userId,
+        resource: "backup",
+        event: "made",
+        ref: last.key,
+        detail: { bytes: last.bytes },
+        why: "a day had passed",
+      });
+      const keys = await list(store, prefix);
+      for (const key of keys.slice(
+        0,
+        Math.max(0, keys.length - BACKUPS_KEPT),
+      )) {
+        await remove(store, key);
+        await note(q, {
+          orgId: c.orgId,
+          userId: c.userId,
+          resource: "backup",
+          event: "destroyed",
+          ref: key,
+          why: `older than the ${BACKUPS_KEPT} kept`,
+        });
+      }
+    }
+  }
+  if (backedUpAt && Date.now() - backedUpAt.getTime() < DAY) return;
+  const key = `${prefix}${new Date().toISOString().replace(/[:.]/g, "-")}.tgz`;
+  await fly.askBackup(c.machineId!, ticket(c, 60), {
+    url: presign(store, "PUT", key, 3 * 3600),
+    key,
+  });
+}
+
+// The disk's ceiling: ours, high, never shown. Reaching it is said to us.
+const DISK_CEILING_GB = 200;
+
+// Grows a disk before it fills: past four fifths full, by half again, up
+// to the ceiling, while the machine runs. Fly says when a machine must be
+// restarted to see the room, and then it is, as for a new image. A disk
+// that cannot be read this hour is left for the next.
+async function grow(q: Query, c: Computer): Promise<void> {
+  let s: Stats;
+  try {
+    s = await fly.stats(c.machineId!, ticket(c, 60));
+  } catch {
+    return;
+  }
+  // The whole disk's room, ours on it included, not the person's bytes
+  // alone; a machine that does not yet say is left alone.
+  if (s.free == null || s.disk === null || s.free > s.disk * 0.2) return;
+  await extend(q, c, "the disk was nearly full");
+}
+
+// Grows the disk by half again, up to the ceiling; at the ceiling, says
+// so to us and leaves it.
+async function extend(q: Query, c: Computer, why: string): Promise<void> {
+  if (c.diskGb >= DISK_CEILING_GB) {
+    console.error(
+      `computer ${c.id}: disk at the ceiling of ${DISK_CEILING_GB} GB, ${why}`,
+    );
+    return;
+  }
+  const gb = Math.min(DISK_CEILING_GB, Math.ceil(c.diskGb * 1.5));
+  const { needsRestart } = await fly.extendVolume(c.volumeId!, gb);
+  await setDisk(q, c.id, gb);
+  await note(q, {
+    orgId: c.orgId,
+    userId: c.userId,
+    resource: "disk",
+    event: "grown",
+    ref: c.volumeId,
+    detail: { from: c.diskGb, gb, restarted: needsRestart },
+    why,
+  });
+  if (needsRestart) {
+    await fly.restart(c.machineId!);
+    await setReady(q, c.id, false);
   }
 }
 
@@ -338,6 +483,50 @@ export async function reset(p: Principal): Promise<boolean> {
     });
   });
   return true;
+}
+
+// Moves a ready computer to a rung of the ladder: the row first, so the
+// row is always the truth the sweep restores, then the machine remade
+// into it on its own disk, a restart of a few seconds. False when there
+// is no ready computer.
+export async function resize(p: Principal, key: SizeKey): Promise<boolean> {
+  const size = SIZES[key];
+  // One transaction, holding the computer throughout: no other request
+  // talks to Fly about it meanwhile, and a remake that fails leaves the
+  // row as it was.
+  return asOrg(p.orgId, async (q) => {
+    const c = await computerOf(q, p.userId);
+    if (!c?.readyAt || !c.machineId || !(await holdComputer(q, c.id)))
+      return false;
+    if (sameSize(size, c)) return true;
+    await setSize(q, c.id, size);
+    await setReady(q, c.id, false);
+    await note(q, {
+      orgId: c.orgId,
+      userId: c.userId,
+      resource: "machine",
+      event: "resized",
+      ref: c.machineId,
+      detail: {
+        cpuKind: size.cpuKind,
+        cpus: size.cpus,
+        memoryMb: size.memoryMb,
+      },
+      why: "the person asked",
+    });
+    const m = await fly.machine(c.machineId);
+    await fly.reshape(c.machineId, {
+      image: IMAGE,
+      volumeId: c.volumeId!,
+      cpuKind: size.cpuKind,
+      cpus: size.cpus,
+      memoryMb: size.memoryMb,
+      secret: c.secret,
+      brain: await brainOf(q, c),
+      metadata: m?.config?.metadata ?? tags(c),
+    });
+    return true;
+  });
 }
 
 // The computer's numbers this moment, asked of its door with a ticket

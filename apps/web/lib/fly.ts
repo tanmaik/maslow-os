@@ -9,6 +9,7 @@ export type Machine = {
   created_at: string;
   config?: {
     image?: string;
+    guest?: { cpu_kind?: string; cpus?: number; memory_mb?: number };
     metadata?: Record<string, string>;
     mounts?: { volume: string; path: string }[];
   };
@@ -22,7 +23,19 @@ export type Stats = {
   memory: { used: number; total: number };
   used: number | null;
   disk: number | null;
+  // Room left on the whole disk; absent from a machine on an older image.
+  free?: number | null;
   ports: { port: number; name: string }[];
+};
+
+// What came of a backup: the key it went to, when it started and ended,
+// its size, and what went wrong if anything.
+export type Backup = {
+  key: string;
+  startedAt: string;
+  finishedAt: string | null;
+  bytes: number | null;
+  error: string | null;
 };
 
 // What a machine is made of: its image, its door's secret and domain, the
@@ -31,6 +44,7 @@ export type Stats = {
 export type Shape = {
   image: string;
   volumeId: string;
+  cpuKind: "shared" | "performance";
   cpus: number;
   memoryMb: number;
   secret: string;
@@ -45,7 +59,7 @@ const shape = (m: Shape) => ({
     DOMAIN: config().domain,
     ...(m.brain ? { BRAIN_URL: m.brain.url, BRAIN_TOKEN: m.brain.token } : {}),
   },
-  guest: { cpu_kind: "shared", cpus: m.cpus, memory_mb: m.memoryMb },
+  guest: { cpu_kind: m.cpuKind, cpus: m.cpus, memory_mb: m.memoryMb },
   mounts: [{ volume: m.volumeId, path: "/data" }],
   services: [
     {
@@ -127,6 +141,20 @@ export const fly = {
     return call("GET", "/volumes");
   },
 
+  // Grows a disk to a size while its machine runs. Fly says whether the
+  // machine must be restarted before it sees the room.
+  async extendVolume(
+    id: string,
+    sizeGb: number,
+  ): Promise<{ needsRestart: boolean }> {
+    const r = await call<{ needs_restart?: boolean }>(
+      "PUT",
+      `/volumes/${id}/extend`,
+      { size_gb: sizeGb },
+    );
+    return { needsRestart: Boolean(r.needs_restart) };
+  },
+
   // Null once Fly no longer has it.
   machine(id: string): Promise<Machine | null> {
     return call("GET", `/machines/${id}`, undefined, "null");
@@ -192,6 +220,42 @@ export const fly = {
     });
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
     return (await res.json()) as Stats;
+  },
+
+  // What came of the machine's last backup, asked of its door with a
+  // ticket it takes: null before any.
+  async lastBackup(machineId: string, ticket: string): Promise<Backup | null> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/backup`, {
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+    return (await res.json()) as Backup | null;
+  },
+
+  // Asks the machine's door to archive the home and upload it to an
+  // address signed for it. False when one is already running.
+  async askBackup(
+    machineId: string,
+    ticket: string,
+    ask: { url: string; key: string },
+  ): Promise<boolean> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/backup`, {
+      method: "POST",
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(ask),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (res.status === 409) return false;
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+    return true;
   },
 
   // Asks the machine's door to start the person's Linux over at the next

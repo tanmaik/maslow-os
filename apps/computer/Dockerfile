@@ -38,6 +38,6 @@ COPY packages/browser/src browser/src
 ENV PLAYWRIGHT_BROWSERS_PATH=/opt/maslow/browsers
 RUN cd browser && npx playwright install --with-deps chromium-headless-shell && rm -rf /var/lib/apt/lists/*
 COPY --chmod=0755 apps/computer/boot.sh ./
-COPY apps/computer/door.mjs apps/computer/stats.mjs apps/computer/seed.mjs ./
+COPY apps/computer/door.mjs apps/computer/stats.mjs apps/computer/seed.mjs apps/computer/backup.mjs ./
 COPY apps/computer/etc/sshd_config apps/computer/etc/settings.json apps/computer/etc/mcp.json etc/
 CMD ["/opt/maslow/boot.sh"]
