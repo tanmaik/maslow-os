@@ -28,9 +28,7 @@ import { principal } from "@/lib/session";
 import { Asks } from "./asks";
 import { vocabulary } from "./catalog";
 import { cell, recordHref } from "./format";
-import { Split } from "./graph/split";
 import { NewRecord } from "./new-record";
-import { WholeGraph } from "./graph/whole";
 import { TypeIcon, TypeMark } from "./type-icon";
 
 // What the list shows: everything, or one type, whose when the type is a
@@ -42,8 +40,7 @@ type Params = {
   cursor?: string;
 };
 
-// Everything this brain knows, beside the graph of it; or one type, with
-// its fields as columns.
+// Everything this brain knows; or one type, with its fields as columns.
 export default async function Page({
   searchParams,
 }: {
@@ -108,8 +105,8 @@ export default async function Page({
   const whose = (r: BrainRecord) =>
     r.ownerId === p.userId ? null : (people.get(r.ownerId) ?? "someone");
 
-  const view = (
-    <>
+  return (
+    <div className="space-y-4">
       <Asks
         asks={asks}
         records={new Map(asked.map((r) => [r.id, r]))}
@@ -226,8 +223,6 @@ export default async function Page({
           More
         </Button>
       )}
-    </>
+    </div>
   );
-  if (type) return <div className="space-y-4">{view}</div>;
-  return <Split graph={<WholeGraph />}>{view}</Split>;
 }

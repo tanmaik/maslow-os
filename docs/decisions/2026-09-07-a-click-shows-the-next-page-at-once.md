@@ -27,13 +27,6 @@ in a transaction of their own. `vocabulary(p)` in `apps/web/app/brain` is
 one read, cached for the request with React's `cache`, however many parts
 of the page ask.
 
-## The graph arrives after the table
-
-The records page carried the whole graph inside the page — three hundred
-kilobytes of nodes and edges before the first row could be shown. The table
-is the page now; the graph is fetched from `/brain/graph` once the table is
-on screen, and drawn when it lands.
-
 ## The vocabulary page carries one sharing form's worth of markup
 
 Each type's row rendered a full sharing dialog into the page: thirty rows,

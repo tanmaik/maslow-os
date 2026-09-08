@@ -15,19 +15,17 @@ const subscribe = (cb: () => void) => {
   return () => q.removeEventListener("change", cb);
 };
 
-// A view beside its graph: side by side with a draggable divider on a wide
-// screen, the graph above the view on a narrow one. An aside, when given,
-// sits under the graph.
+// A record beside its map: side by side with a draggable divider on a wide
+// screen, the map above the record on a narrow one. The aside, the record's
+// fields and who may see it, sits under the map.
 export function Split({
   children,
   graph,
   aside,
-  graphSize = 40,
 }: {
   children: ReactNode;
   graph: ReactNode;
-  aside?: ReactNode;
-  graphSize?: number;
+  aside: ReactNode;
 }) {
   const wide = useSyncExternalStore(
     subscribe,
@@ -48,24 +46,18 @@ export function Split({
   return (
     <div className="h-[calc(100dvh_-_9.5rem)]">
       <ResizablePanelGroup orientation="horizontal">
-        <ResizablePanel defaultSize={100 - graphSize} minSize={30}>
+        <ResizablePanel defaultSize={58} minSize={30}>
           <div className="h-full space-y-4 overflow-auto pr-4">{children}</div>
         </ResizablePanel>
         <ResizableHandle />
-        <ResizablePanel defaultSize={graphSize} minSize={20}>
+        <ResizablePanel defaultSize={42} minSize={20}>
           <div className="flex h-full flex-col gap-4 pl-4">
-            <div
-              className={`shrink-0 overflow-hidden rounded-md border ${
-                aside ? "h-[42%]" : "h-full"
-              }`}
-            >
+            <div className="h-[42%] shrink-0 overflow-hidden rounded-md border">
               {graph}
             </div>
-            {aside && (
-              <div className="min-h-0 flex-1 space-y-4 overflow-auto">
-                {aside}
-              </div>
-            )}
+            <div className="min-h-0 flex-1 space-y-4 overflow-auto">
+              {aside}
+            </div>
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>

@@ -31,8 +31,8 @@ import {
   useState,
 } from "react";
 
-import { recordHref, typeColor, verbText } from "../format";
-import { TypeIcon } from "../type-icon";
+import { recordHref, typeColor, verbText } from "../../format";
+import { TypeIcon } from "../../type-icon";
 import {
   arrange,
   CHIP_HEIGHT,
@@ -42,7 +42,7 @@ import {
 } from "./arrange";
 
 type RecordNode = Node<
-  { title: string; type: string; lit: boolean; focus: boolean },
+  { title: string; type: string; focus: boolean },
   "record"
 >;
 type AnyNode = RecordNode;
@@ -52,7 +52,6 @@ type AnyNode = RecordNode;
 type VerbEdge = Edge<
   {
     verb: string;
-    lit: boolean;
     lane: number;
     from: { w: number; h: number };
     to: { w: number; h: number };
@@ -66,8 +65,8 @@ const LANE = 12;
 // The record in focus or under the pointer, and everything one link away.
 // Held beside the nodes rather than in them, so hovering redraws the chips
 // it touches and not the whole graph.
-const Attention = createContext<{ centre: string | null; near: Set<string> }>({
-  centre: null,
+const Attention = createContext<{ centre: string; near: Set<string> }>({
+  centre: "",
   near: new Set(),
 });
 
@@ -83,13 +82,12 @@ function RecordChip({ id, data }: NodeProps<RecordNode>) {
   const color = typeColor(data.type);
   return (
     <div
-      className={`bg-background flex cursor-grab items-center gap-1.5 rounded border px-1.5 text-xs leading-none transition-[background-color,opacity,border-color] active:cursor-grabbing ${
+      className={`bg-background flex cursor-grab items-center gap-1.5 rounded border px-1.5 text-xs leading-none transition-[background-color,border-color] active:cursor-grabbing ${
         attended ? "border-foreground/50 bg-accent" : "hover:bg-accent/60"
       } ${data.focus || attended ? "font-medium" : ""}`}
       style={{
         width: chipWidth(data.title),
         height: CHIP_HEIGHT,
-        opacity: data.lit ? 1 : 0.3,
         boxShadow: data.focus ? `0 0 0 2px ${color}` : undefined,
       }}
       title={data.title}
@@ -148,7 +146,7 @@ function VerbLine({
   const half = ARROW / 2;
   const arrow = `M ${x2} ${y2} L ${bx - uy * half} ${by + ux * half} L ${bx + uy * half} ${by - ux * half} Z`;
   const color = named ? "var(--foreground)" : "var(--muted-foreground)";
-  const opacity = data?.lit ? (named ? 0.9 : 0.4) : 0.12;
+  const opacity = named ? 0.9 : 0.4;
   return (
     <>
       <BaseEdge
@@ -212,7 +210,7 @@ const corner = (b: { x: number; y: number; title: string }) => ({
   y: b.y - CHIP_HEIGHT / 2,
 });
 
-function toNodes(map: BrainMap, lit: Set<string>, focus?: string): AnyNode[] {
+function toNodes(map: BrainMap, focus: string): AnyNode[] {
   return [
     ...map.placed.map<RecordNode>((n) => ({
       id: n.id,
@@ -221,7 +219,6 @@ function toNodes(map: BrainMap, lit: Set<string>, focus?: string): AnyNode[] {
       data: {
         title: n.title,
         type: n.type,
-        lit: lit.size === 0 || lit.has(n.id),
         focus: n.id === focus,
       },
       connectable: false,
@@ -231,7 +228,7 @@ function toNodes(map: BrainMap, lit: Set<string>, focus?: string): AnyNode[] {
 
 // Edges joining the same two chips fan out, one lane each, counted from the
 // same side whichever way they point.
-function toEdges(graph: Graph, lit: Set<string>): VerbEdge[] {
+function toEdges(graph: Graph): VerbEdge[] {
   const size = new Map(
     graph.nodes.map((n) => [n.id, { w: chipWidth(n.title), h: CHIP_HEIGHT }]),
   );
@@ -255,7 +252,6 @@ function toEdges(graph: Graph, lit: Set<string>): VerbEdge[] {
       target: e.toId,
       data: {
         verb: e.verb,
-        lit: lit.size === 0 || (lit.has(e.fromId) && lit.has(e.toId)),
         lane,
         from: size.get(e.fromId) ?? { w: 0, h: 0 },
         to: size.get(e.toId) ?? { w: 0, h: 0 },
@@ -269,15 +265,11 @@ function toEdges(graph: Graph, lit: Set<string>): VerbEdge[] {
 // neighbours give way.
 function Canvas({
   graph,
-  lit,
   focus,
-  minimap,
   onHover,
 }: {
   graph: Graph;
-  lit: Set<string>;
-  focus?: string;
-  minimap: boolean;
+  focus: string;
   onHover: (id: string | null) => void;
 }) {
   const router = useRouter();
@@ -285,11 +277,11 @@ function Canvas({
   const size = useStore((s) => `${s.width}x${s.height}`);
   const [w, h] = size.split("x").map(Number);
   const [nodes, setNodes] = useState<AnyNode[]>([]);
-  const edges = useMemo(() => toEdges(graph, lit), [graph, lit]);
+  const edges = useMemo(() => toEdges(graph), [graph]);
   const physics = useRef<BrainMap | null>(null);
   const bodies = useRef(new Map<string, Body>());
 
-  // A new layout whenever the brain changes; a new fit whenever the pane
+  // A new layout whenever the record's map changes; a new fit whenever the pane
   // does.
   useEffect(() => {
     physics.current?.simulation.stop();
@@ -300,7 +292,7 @@ function Canvas({
     const map = arrange(graph, w, h, focus);
     physics.current = map;
     bodies.current = new Map(map.nodes.map((b) => [b.id, b]));
-    setNodes(toNodes(map, lit, focus));
+    setNodes(toNodes(map, focus));
     map.simulation.on("tick", () => {
       setNodes((current) =>
         current.map((n) => {
@@ -327,7 +319,7 @@ function Canvas({
     return () => {
       map.simulation.stop();
     };
-  }, [graph, w, h, lit, focus, setViewport]);
+  }, [graph, w, h, focus, setViewport]);
 
   const onNodesChange = useCallback((changes: NodeChange<AnyNode>[]) => {
     setNodes((current) => applyNodeChanges(changes, current));
@@ -372,31 +364,18 @@ function Canvas({
       onNodeDragStop={() => physics.current?.simulation.alphaTarget(0)}
       className="bg-background"
     >
-      {minimap && <MapIfRoom />}
+      <MapIfRoom />
     </ReactFlow>
   );
 }
 
-// The brain drawn as a map. Around one record: that record in the middle,
-// everything it links to on a ring, the verb on each spoke. The whole
-// brain: each type a cluster on a ring, links crossing the middle. Two
-// fingers pan, a pinch zooms, a drag moves a chip, a click opens a record.
-export function BrainGraph({
-  graph,
-  lit,
-  focus,
-  minimap = true,
-}: {
-  graph: Graph;
-  // Ids to draw in full; the rest dim. Empty lights everything.
-  lit?: string[];
-  focus?: string;
-  minimap?: boolean;
-}) {
+// A record drawn as a map: that record in the middle, everything it links
+// to on a ring, the verb on each spoke. Two fingers pan, a pinch zooms, a
+// drag moves a chip, a click opens a record.
+export function BrainGraph({ graph, focus }: { graph: Graph; focus: string }) {
   const [hovered, setHovered] = useState<string | null>(null);
-  const litSet = useMemo(() => new Set(lit ?? []), [lit]);
   const attention = useMemo(() => {
-    const centre = hovered ?? focus ?? null;
+    const centre = hovered ?? focus;
     const near = new Set<string>();
     for (const e of graph.edges) {
       if (e.fromId === centre) near.add(e.toId);
@@ -408,13 +387,7 @@ export function BrainGraph({
   return (
     <ReactFlowProvider>
       <Attention.Provider value={attention}>
-        <Canvas
-          graph={graph}
-          lit={litSet}
-          focus={focus}
-          minimap={minimap}
-          onHover={setHovered}
-        />
+        <Canvas graph={graph} focus={focus} onHover={setHovered} />
       </Attention.Provider>
     </ReactFlowProvider>
   );

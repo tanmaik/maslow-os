@@ -23,21 +23,15 @@ Replaced by views over the same doors, laid out like a database tool:
 Every body is markdown, rendered with `react-markdown` and GFM on the theme's
 tokens. A record with no body says so; nothing is forced.
 
-## The graph is a map, and what it shows depends on the page
+## The graph is a map of one record
 
 Three layouts were built and thrown away before this one: a force graph
 with dots and names, the same with cards, and a map of columns by kind.
 Each was readable, compact or organised, never all three, and none would
-stay so as a brain grew. What replaced them answers a different question on
-each page.
-
-On the Records page the question is what the brain holds and how its kinds
-connect, so each kind is a cluster of chips packed in a grid, the clusters
-sit on a ring in the order that puts linked kinds side by side, and links
-cross the empty middle where they can touch nothing. On a record page the
-question is what is around this one thing, so that record sits in the
+stay so as a brain grew. Only a record page has a graph. Its question is
+what is around this one thing, so that record sits in the
 centre with everything it links to on a ring around it and the verb on each
-spoke. Kind views have no graph.
+spoke.
 
 A chip is a kind's icon and a title, cut short with an ellipsis. Positions
 are exact, not simulated; a d3 simulation runs only under a drag, so a chip

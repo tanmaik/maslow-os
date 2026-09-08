@@ -31,12 +31,12 @@ import { principal } from "@/lib/session";
 
 import { vocabulary } from "../../catalog";
 import { recordHref, verbText } from "../../format";
-import { BrainGraph } from "../../graph/lazy";
-import { Split } from "../../graph/split";
 import { Sharing } from "../../sharing";
 import { TypeIcon, TypeMark } from "../../type-icon";
 import { Document } from "./document";
+import { BrainGraph } from "./lazy";
 import { Properties } from "./properties";
+import { Split } from "./split";
 
 // One record as a document to read and write in place, with what it holds
 // beside it under the graph around it: its fields, when, how sure, who may
@@ -174,7 +174,6 @@ export default async function Page({
     <Split
       graph={<BrainGraph graph={near} focus={winner?.id ?? r.id} />}
       aside={aside}
-      graphSize={42}
     >
       <TypeMark
         type={r.type}
