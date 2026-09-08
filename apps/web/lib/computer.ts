@@ -219,15 +219,16 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
         await clearMachine(q, c.id);
         c = { ...c, machineId: null, readyAt: null };
       }
-      // A stopped machine is not probed for VS Code; it is started below.
-      if (!c.readyAt && c.current && (!m || m.state !== "stopped")) {
-        await step(q, c, "sweep");
+      // A current member with no machine gets one at the next step.
+      if (!m) {
+        if (c.current) await step(q, c, "sweep");
         return;
       }
-      if (!m) return;
       // Every machine runs the image of the day: one on an older image is
       // remade to it, on the same disk, and probed again before it opens.
-      // Fly may name an image with its digest; the tag is what is compared.
+      // Asked before anything else, so a machine moves at the first sweep
+      // after the image does, however it was left. Fly may name an image
+      // with its digest; the tag is what is compared.
       if (c.current && m.config?.image?.split("@")[0] !== IMAGE) {
         await fly.reshape(m.id, {
           image: IMAGE,
@@ -248,6 +249,12 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
           detail: { image: IMAGE },
           why: "the image moved on",
         });
+        return;
+      }
+      // A running machine not yet known to answer is probed for VS Code;
+      // a stopped one is started below and probed next time.
+      if (!c.readyAt && c.current && m.state !== "stopped") {
+        await step(q, c, "sweep");
         return;
       }
       if (c.current && m.state === "stopped") {
