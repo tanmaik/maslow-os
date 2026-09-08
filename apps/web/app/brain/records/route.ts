@@ -12,23 +12,36 @@ import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
 import { recordHref, typeHref } from "../format";
-import { instantFrom, propsFrom } from "../props";
+import { definitionsFrom, instantFrom, propsFrom } from "../props";
 
 // The one type the product itself knows, defined the first time it is used.
 const NOTE = "note";
 
 // Writes a record the signed-in person typed in, fitted to its type's form.
+// A type made up in the same form is defined first, with the fields given.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const form = await request.formData();
-  const type = String(form.get("type") ?? "");
+  // A type being made up is named as typed, without stray spaces; one that
+  // exists is looked up by the name it has.
+  const fresh = form.get("new") === "1";
+  const given = String(form.get("type") ?? "");
+  const type = fresh ? given.trim() : given;
   const title = String(form.get("title") ?? "").trim();
   if (!title) return new Response("A record needs a title.", { status: 400 });
 
   try {
     const id = await asPerson(p, async (db) => {
-      if (type === NOTE) await defineType(db, { name: NOTE });
+      if (fresh) {
+        const made = await defineType(db, {
+          name: type,
+          properties: definitionsFrom(form),
+        });
+        if (!made.created) {
+          throw new Invalid(`you already have a type called "${type}"`);
+        }
+      } else if (type === NOTE) await defineType(db, { name: NOTE });
       const declared = (await catalog(db)).types.find(
         (t) => t.name === type && t.own,
       );

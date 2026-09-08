@@ -146,8 +146,9 @@ read.
 Types are the person's own vocabulary, open to them and their agent. A type
 is a name and the fields it declares, nothing more: no description, since
 the name is what a model needs. Every person's starts empty: whoever writes
-the first record of a type defines it in the same call, and a record of an
-undefined type is refused, never stored. Two people in one org may each
+the first record of a type defines it in the same call, a person included:
+writing a record by hand, they may name a new type and say what it holds,
+and a record of an undefined type is refused, never stored. Two people in one org may each
 define a `note`, and they are two types. A type may declare its fields as
 rows, never as columns: values stay in one JSON column and the doors check
 and query them by the declaration. Nothing changes a table's shape after

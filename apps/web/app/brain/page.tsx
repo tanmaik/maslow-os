@@ -4,7 +4,6 @@ import {
   read,
   requestsOf,
   type BrainRecord,
-  type BrainType,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { groupsIn } from "@placeholder/db/groups";
@@ -12,13 +11,10 @@ import { SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { DateField } from "@/components/date-field";
 import { EagerLink } from "@/components/eager-link";
-import { FormDialog } from "@/components/form-dialog";
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -27,14 +23,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Textarea } from "@/components/ui/textarea";
 import { principal } from "@/lib/session";
 
 import { Asks } from "./asks";
 import { vocabulary } from "./catalog";
-import { FieldInputs } from "./fields";
 import { cell, recordHref } from "./format";
 import { Split } from "./graph/split";
+import { NewRecord } from "./new-record";
 import { WholeGraph } from "./graph/whole";
 import { TypeIcon, TypeMark } from "./type-icon";
 
@@ -133,9 +128,7 @@ export default async function Page({
           </span>
         )}
         <span className="flex-1" />
-        {(!type || type.own) && (
-          <NewRecord type={type ?? mine.find((t) => t.name === "note")} />
-        )}
+        {(!type || type.own) && <NewRecord types={mine} type={type} />}
       </div>
       <form method="get" className="flex items-center gap-2">
         {type && <input type="hidden" name="type" value={type.name} />}
@@ -237,33 +230,4 @@ export default async function Page({
   );
   if (type) return <div className="space-y-4">{view}</div>;
   return <Split graph={<WholeGraph />}>{view}</Split>;
-}
-
-// A record written by hand: a note, or one of the type being looked at,
-// with its fields.
-function NewRecord({ type }: { type?: BrainType }) {
-  const name = type?.name ?? "note";
-  return (
-    <FormDialog trigger={`New ${name}`} variant="default" title={`New ${name}`}>
-      <form action="/brain/records" method="post" className="grid gap-3">
-        <input type="hidden" name="type" value={name} />
-        <div className="space-y-1">
-          <Label htmlFor="title">Title</Label>
-          <Input id="title" name="title" required autoFocus />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="body">Body</Label>
-          <Textarea id="body" name="body" rows={6} />
-        </div>
-        <FieldInputs properties={type?.properties ?? []} />
-        <div className="space-y-1">
-          <Label htmlFor="occurred_at">When</Label>
-          <DateField id="occurred_at" name="occurred_at" time />
-        </div>
-        <div>
-          <Button type="submit">Save</Button>
-        </div>
-      </form>
-    </FormDialog>
-  );
 }

@@ -9,7 +9,7 @@ export {
 export { catalog, defineType } from "./catalog.ts";
 export { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";
 export { ID, isId } from "./ids.ts";
-export { defineProperty } from "./properties.ts";
+export { defineProperty, type PropertyDefinition } from "./properties.ts";
 export {
   aliasesOf,
   edgesOf,

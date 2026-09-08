@@ -3,7 +3,6 @@ import { asPerson } from "@placeholder/db";
 import { groupsIn } from "@placeholder/db/groups";
 import { redirect } from "next/navigation";
 
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -14,7 +13,7 @@ import {
 import { principal } from "@/lib/session";
 
 import { vocabulary } from "../catalog";
-import { sharedGroups } from "../format";
+import { HOLDS, sharedGroups } from "../format";
 import { Sharing } from "../sharing";
 import { TypeMark } from "../type-icon";
 
@@ -41,28 +40,21 @@ export default async function Page() {
           colleague who has a type shares every record of it with you.
         </p>
       </div>
-      {mine.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          Nothing yet. The first note, or the agent&apos;s first record, starts
-          one.
-        </p>
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {mine.map((t) => (
-            <TypeCard key={t.id} type={t}>
-              <Sharing
-                on={{ type: t.id }}
-                owner
-                ownerName="you"
-                shares={shares.get(t.id) ?? []}
-                groups={groups}
-                members={members}
-                compact
-              />
-            </TypeCard>
-          ))}
-        </div>
-      )}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {mine.map((t) => (
+          <TypeCard key={t.id} type={t}>
+            <Sharing
+              on={{ type: t.id }}
+              owner
+              ownerName="you"
+              shares={shares.get(t.id) ?? []}
+              groups={groups}
+              members={members}
+              compact
+            />
+          </TypeCard>
+        ))}
+      </div>
       {sharedGroups(types, people).map((g) => (
         <section key={g.ownerId} className="space-y-3">
           <h2 className="text-muted-foreground text-sm">
@@ -79,8 +71,44 @@ export default async function Page() {
   );
 }
 
-// One type: its name, what a record of it holds, and, in a corner, who may
-// see it.
+// The fields every record has before its type declares any.
+const BUILT_IN: [string, string, boolean][] = [
+  ["title", "text", true],
+  ["body", "text", false],
+  ["when", HOLDS.datetime, false],
+];
+
+// One line of a type's form: the field's name, starred when a record must
+// fill it, and in a word what it holds; a choice names its options on hover.
+function Field({
+  name,
+  holds,
+  required,
+  options,
+}: {
+  name: string;
+  holds: string;
+  required: boolean;
+  options?: string[] | null;
+}) {
+  return (
+    <li className="flex justify-between gap-3">
+      <span>
+        {name}
+        {required && <span className="text-muted-foreground">*</span>}
+      </span>
+      <span
+        className="text-muted-foreground text-right"
+        title={options?.join(", ")}
+      >
+        {holds}
+      </span>
+    </li>
+  );
+}
+
+// One type: its name, its form line by line, and, in a corner, who may see
+// it.
 function TypeCard({
   type: t,
   owner,
@@ -97,21 +125,23 @@ function TypeCard({
           <TypeMark type={t.name} owner={owner} />
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex flex-wrap gap-1.5 px-4">
-        {t.properties.length === 0 ? (
-          <span className="text-muted-foreground text-sm">
-            a title and words
-          </span>
-        ) : (
-          t.properties.map((f) => (
-            <Badge key={f.id} variant="secondary" className="font-normal">
-              {f.name}
-              {f.required && <span className="text-muted-foreground">*</span>}
-            </Badge>
-          ))
-        )}
+      <CardContent className="px-4 text-sm">
+        <ul className="space-y-0.5">
+          {BUILT_IN.map(([name, holds, required]) => (
+            <Field key={name} name={name} holds={holds} required={required} />
+          ))}
+          {t.properties.map((f) => (
+            <Field
+              key={f.id}
+              name={f.name}
+              holds={HOLDS[f.datatype]}
+              required={f.required}
+              options={f.options}
+            />
+          ))}
+        </ul>
       </CardContent>
-      {children && <CardFooter className="px-4">{children}</CardFooter>}
+      {children && <CardFooter className="mt-auto px-4">{children}</CardFooter>}
     </Card>
   );
 }

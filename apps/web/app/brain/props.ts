@@ -1,4 +1,9 @@
-import { Invalid, type Property } from "@placeholder/brain";
+import {
+  Invalid,
+  type Datatype,
+  type Property,
+  type PropertyDefinition,
+} from "@placeholder/brain";
 import { isValid, parseISO } from "date-fns";
 
 // A form field's text as the value its declared field says, or undefined
@@ -61,4 +66,36 @@ export function confidenceFrom(raw: FormDataEntryValue | null): number | null {
     throw new Invalid("confidence is a percentage from 0 to 100");
   }
   return n / 100;
+}
+
+// What every record has before its type declares anything.
+const BUILT_IN = new Set(["title", "body", "when"]);
+
+// The fields a posted form declares for a type it makes up, numbered
+// f0.name, f0.datatype, f0.options and so on; one left without a name is
+// not a field, and two with one name, or one named for what every record
+// already has, are refused.
+export function definitionsFrom(form: FormData): PropertyDefinition[] {
+  const text = (k: string) => String(form.get(k) ?? "").trim();
+  const defs: PropertyDefinition[] = [];
+  for (let i = 0; form.has(`f${i}.name`); i++) {
+    const name = text(`f${i}.name`);
+    if (!name) continue;
+    if (defs.some((d) => d.name === name)) {
+      throw new Invalid(`two of the fields would both be called "${name}"`);
+    }
+    if (BUILT_IN.has(name)) {
+      throw new Invalid(`every record already has a ${name}`);
+    }
+    const options = text(`f${i}.options`)
+      .split(",")
+      .map((o) => o.trim())
+      .filter(Boolean);
+    defs.push({
+      name,
+      datatype: text(`f${i}.datatype`) as Datatype,
+      options: options.length ? options : undefined,
+    });
+  }
+  return defs;
 }

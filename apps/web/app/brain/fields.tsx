@@ -18,9 +18,11 @@ import { cell } from "./format";
 export function FieldInputs({
   properties,
   values = {},
+  labels = true,
 }: {
   properties: Property[];
   values?: Record<string, unknown>;
+  labels?: boolean;
 }) {
   return (
     <>
@@ -38,10 +40,12 @@ export function FieldInputs({
               : null;
         return (
           <div key={p.id} className="space-y-1">
-            <Label htmlFor={id} className="inline-flex items-center gap-1.5">
-              {p.name}
-              {p.required && <span className="text-muted-foreground">*</span>}
-            </Label>
+            {labels && (
+              <Label htmlFor={id} className="inline-flex items-center gap-1.5">
+                {p.name}
+                {p.required && <span className="text-muted-foreground">*</span>}
+              </Label>
+            )}
             {choices ? (
               <Select
                 name={id}

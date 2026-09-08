@@ -1,4 +1,4 @@
-import type { BrainType, Property } from "@placeholder/brain";
+import type { BrainType, Datatype, Property } from "@placeholder/brain";
 import { format } from "date-fns";
 
 // How the brain's values read on screen.
@@ -73,3 +73,14 @@ export function typeColor(type: string): string {
 
 // A verb as words: rests_on reads "rests on".
 export const verbText = (verb: string) => verb.replace(/_/g, " ");
+
+// What a field can hold, in the words a person reads on the types page.
+export const HOLDS: Record<Datatype, string> = {
+  text: "text",
+  number: "number",
+  boolean: "yes/no",
+  date: "date",
+  datetime: "date & time",
+  enum: "choice",
+  list: "list",
+};
