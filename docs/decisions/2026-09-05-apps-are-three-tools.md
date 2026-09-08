@@ -20,8 +20,9 @@ connected. `find` takes a task in a sentence and answers with the actions
 that fit, each with its inputs on one line apiece, and the plan and pitfalls
 Composio's own search returns; Composio's search is semantic and planned,
 where its plain tool listing is a keyword match that returns the wrong apps.
-`run` executes one action by name, as the membership, and answers with what
-the app returned, compact and capped, with the source named so the next write
+`run` executes one action by name, as the membership, in one of their
+accounts in the app (see 2026-09-08, several accounts in one app), and
+answers with what the app returned, compact and capped, with the source named so the next write
 to the brain cites it, and what came back marked as data to read, never
 instructions to follow, since a mailbox holds whatever anyone sent. Only
 apps the person has connected are searched or run; an action in any other

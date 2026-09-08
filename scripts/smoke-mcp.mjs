@@ -630,6 +630,7 @@ export async function smokeMcp(stack, signIn) {
     redirect: "manual",
   });
   const apps = await call(grant.access_token, "apps", {});
+  const account = apps.lines[0]?.match(/account=(pretend_[0-9a-f]{8})/)?.[1];
   const fits = await call(grant.access_token, "find", {
     task: "send a message to someone",
   });
@@ -651,11 +652,12 @@ export async function smokeMcp(stack, signIn) {
   check(
     "apps: find names what fits, run runs it as the person",
     none.text.startsWith("no apps connected") &&
-      apps.lines[0] === 'pigeon "Carrier Pigeon" ACTIVE' &&
+      apps.lines[0] === `pigeon "Carrier Pigeon" account=${account} ACTIVE` &&
       fits.lines[0] === "PIGEON_SEND (pigeon) — Sends a message by pigeon." &&
       fits.lines[1] === "  to: string, required — Who." &&
       sent.lines[0] === "source=pigeon action=PIGEON_SEND" &&
-      sent.lines[2] === '{"id":"pgn_1","sent":true,"to":"Road Runner"}' &&
+      sent.lines[2] ===
+        `{"id":"pgn_1","sent":true,"to":"Road Runner","from":"${account}"}` &&
       unconnected.refused &&
       unconnected.text === "connect sundial in settings first" &&
       named.refused &&
@@ -663,6 +665,60 @@ export async function smokeMcp(stack, signIn) {
       short.refused &&
       short.text === "missing body",
     `${apps.lines[0]} / ${fits.lines[0]} / ${unconnected.text} / ${named.text}`,
+  );
+  // A second account in the same app: apps names both, run refuses until
+  // told which, and runs in the one named.
+  const again = await fetch(`${base}/settings/connections`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ intent: "connect", app: "pigeon" }),
+    redirect: "manual",
+  });
+  const verified = await fetch(again.headers.get("location"), {
+    headers: { cookie: wile },
+    redirect: "manual",
+  });
+  const second = verified.headers
+    .get("location")
+    ?.match(/account=(pretend_[0-9a-f]{8})/)?.[1];
+  await fetch(`${base}/settings/connections`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({
+      intent: "rename",
+      account: second,
+      name: "home",
+    }),
+    redirect: "manual",
+  });
+  const two = await call(grant.access_token, "apps", {});
+  const which = await call(grant.access_token, "run", {
+    action: "PIGEON_SEND",
+    inputs: { to: "Road Runner", body: "Beep." },
+  });
+  const chosen = await call(grant.access_token, "run", {
+    action: "PIGEON_SEND",
+    inputs: { to: "Road Runner", body: "Beep." },
+    account: second,
+  });
+  const nobody = await call(grant.access_token, "run", {
+    action: "PIGEON_SEND",
+    inputs: { to: "Road Runner", body: "Beep." },
+    account: "pretend_00000000",
+  });
+  check(
+    "two accounts in one app: run is told which",
+    two.lines.length === 2 &&
+      two.lines[1] ===
+        `pigeon "Carrier Pigeon" account=${second} "home" ACTIVE` &&
+      which.refused &&
+      which.text ===
+        `pigeon has 2 accounts; say which: ${account}, ${second} "home"` &&
+      chosen.lines[0] === "source=pigeon action=PIGEON_SEND" &&
+      chosen.lines[2].endsWith(`,"from":"${second}"}`) &&
+      nobody.refused &&
+      nobody.text === "no account pretend_00000000 in pigeon",
+    `${two.lines[1]} / ${which.text} / ${nobody.text}`,
   );
   // What Wile spent, as the ledger holds it: nothing shows it yet.
   const spent = (resource) =>
@@ -678,8 +734,8 @@ export async function smokeMcp(stack, signIn) {
     );
   const charged = await spent("actions");
   check(
-    "every action is on the meter: the search and the run",
-    charged === 2,
+    "every action is on the meter: the search and the two runs that ran",
+    charged === 3,
     `${charged} actions`,
   );
 

@@ -62,10 +62,18 @@ type Notice = {
     | "gone";
   invite?: "sent" | "pending" | "member";
   group?: "saved" | "deleted" | "gone";
-  connection?: "connected" | "failed" | "disconnected" | "gone" | "unanswered";
+  connection?:
+    | "connected"
+    | "failed"
+    | "disconnected"
+    | "renamed"
+    | "taken"
+    | "name"
+    | "gone"
+    | "unanswered";
+  // The account a sign-in just made, to be named.
+  account?: string;
   agent?: "disconnected" | "gone";
-  // What is being searched for among the apps to connect.
-  apps?: string;
 };
 
 const NOTICES: Record<string, string> = {
@@ -109,6 +117,9 @@ const NOTICES: Record<string, string> = {
   "connection=connected": "Connected.",
   "connection=failed": "That sign-in didn't finish. Try again.",
   "connection=disconnected": "Disconnected.",
+  "connection=renamed": "Named.",
+  "connection=taken": "Another account in that app already has that name.",
+  "connection=name": "A name is up to 40 characters on one line.",
   "connection=gone": "No such app or connection.",
   "connection=unanswered":
     "Composio refused or didn't answer, so nothing changed. Try again in a moment.",
@@ -131,17 +142,16 @@ export default async function Settings({
     groupsOf(p),
     agentsOf(p),
   ]);
-  const appsQuery = (n.apps ?? "").trim();
   // Live from the vendor; when it does not answer, the card says so rather
-  // than showing nothing connected or nothing found.
+  // than showing nothing connected or nothing to connect.
   const unanswered = (err: Error) => {
     console.error(`connections: ${err.message}`);
     return null;
   };
-  const [connected, found] = connections.enabled
+  const [connected, mostUsed] = connections.enabled
     ? await Promise.all([
         connections.list(p).catch(unanswered),
-        appsQuery ? connections.search(appsQuery).catch(unanswered) : [],
+        connections.search("").catch(unanswered),
       ])
     : [[], []];
   const me = members.find((m) => m.id === p.userId)!;
@@ -150,66 +160,8 @@ export default async function Settings({
   const uploads = deployment.storage.kind !== "none";
 
   return (
-    <main className="space-y-6">
+    <main className="mx-auto w-full max-w-3xl space-y-6">
       <h1 className="text-2xl font-semibold">Settings</h1>
-
-      {owner && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle>Org</CardTitle>
-              <CardDescription>What everyone in it sees.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                action="/settings/org"
-                method="post"
-                encType="multipart/form-data"
-                className="space-y-4"
-              >
-                <div className="flex items-center gap-4">
-                  <Avatar className="size-16 rounded-md">
-                    {org.logoKey && (
-                      <AvatarImage src={storage.url(org.logoKey)} alt="" />
-                    )}
-                    <AvatarFallback className="rounded-md">
-                      {initials(org.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                  {uploads ? (
-                    <div className="space-y-2">
-                      <Label htmlFor="logo">Logo</Label>
-                      <ImageInput id="logo" name="logo" />
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-sm">
-                      Logos need object storage, which is not set up yet.
-                    </p>
-                  )}
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="org-name">Name</Label>
-                  <Input
-                    id="org-name"
-                    name="name"
-                    defaultValue={org.name}
-                    required
-                    maxLength={80}
-                  />
-                </div>
-                <div className="flex items-center gap-3">
-                  <Button type="submit">Save</Button>
-                  {said("org") && (
-                    <p className="text-muted-foreground text-sm">
-                      {said("org")}
-                    </p>
-                  )}
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </>
-      )}
 
       <Card>
         <CardHeader>
@@ -224,44 +176,48 @@ export default async function Settings({
             className="space-y-4"
           >
             <div className="flex items-center gap-4">
-              <Avatar className="size-16">
-                {me.avatarKey && (
-                  <AvatarImage src={storage.url(me.avatarKey)} alt="" />
-                )}
-                <AvatarFallback>{initials(me.name)}</AvatarFallback>
-              </Avatar>
               {uploads ? (
-                <div className="space-y-2">
-                  <Label htmlFor="avatar">Avatar</Label>
-                  <ImageInput id="avatar" name="avatar" />
-                </div>
+                <ImageInput
+                  id="avatar"
+                  name="avatar"
+                  src={me.avatarKey ? storage.url(me.avatarKey) : null}
+                  fallback={initials(me.name)}
+                />
               ) : (
-                <p className="text-muted-foreground text-sm">
-                  Avatars need object storage, which is not set up yet.
-                </p>
+                <Avatar className="size-16">
+                  {me.avatarKey && (
+                    <AvatarImage src={storage.url(me.avatarKey)} alt="" />
+                  )}
+                  <AvatarFallback>{initials(me.name)}</AvatarFallback>
+                </Avatar>
               )}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="first-name">First name</Label>
-                <Input
-                  id="first-name"
-                  name="first_name"
-                  defaultValue={me.firstName}
-                  required
-                  maxLength={80}
-                />
+              <div className="grid min-w-0 flex-1 grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="first-name">First name</Label>
+                  <Input
+                    id="first-name"
+                    name="first_name"
+                    defaultValue={me.firstName}
+                    required
+                    maxLength={80}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="last-name">Last name</Label>
+                  <Input
+                    id="last-name"
+                    name="last_name"
+                    defaultValue={me.lastName ?? ""}
+                    maxLength={80}
+                  />
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="last-name">Last name</Label>
-                <Input
-                  id="last-name"
-                  name="last_name"
-                  defaultValue={me.lastName ?? ""}
-                  maxLength={80}
-                />
-              </div>
             </div>
+            {!uploads && (
+              <p className="text-muted-foreground text-sm">
+                Avatars need object storage, which is not set up yet.
+              </p>
+            )}
             <div className="flex items-center gap-3">
               <Button type="submit">Save</Button>
               {said("profile") && (
@@ -304,6 +260,75 @@ export default async function Settings({
           )}
         </CardContent>
       </Card>
+
+      <Connections
+        enabled={connections.enabled}
+        connections={connected}
+        mostUsed={mostUsed}
+        focus={n.account ?? null}
+        said={said("connection")}
+      />
+
+      <Agents agents={agents} said={said("agent")} />
+
+      {owner && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Org</CardTitle>
+            <CardDescription>What everyone in it sees.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form
+              action="/settings/org"
+              method="post"
+              encType="multipart/form-data"
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-4">
+                {uploads ? (
+                  <ImageInput
+                    id="logo"
+                    name="logo"
+                    src={org.logoKey ? storage.url(org.logoKey) : null}
+                    fallback={initials(org.name)}
+                    className="rounded-md"
+                  />
+                ) : (
+                  <Avatar className="size-16 rounded-md">
+                    {org.logoKey && (
+                      <AvatarImage src={storage.url(org.logoKey)} alt="" />
+                    )}
+                    <AvatarFallback className="rounded-md">
+                      {initials(org.name)}
+                    </AvatarFallback>
+                  </Avatar>
+                )}
+                <div className="min-w-0 flex-1 space-y-2">
+                  <Label htmlFor="org-name">Name</Label>
+                  <Input
+                    id="org-name"
+                    name="name"
+                    defaultValue={org.name}
+                    required
+                    maxLength={80}
+                  />
+                </div>
+              </div>
+              {!uploads && (
+                <p className="text-muted-foreground text-sm">
+                  Logos need object storage, which is not set up yet.
+                </p>
+              )}
+              <div className="flex items-center gap-3">
+                <Button type="submit">Save</Button>
+                {said("org") && (
+                  <p className="text-muted-foreground text-sm">{said("org")}</p>
+                )}
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
@@ -532,6 +557,13 @@ export default async function Settings({
         </CardContent>
       </Card>
 
+      <Groups
+        groups={groups}
+        members={members.map((m) => ({ id: m.id, name: m.name }))}
+        owner={owner}
+        said={said("group")}
+      />
+
       {holder && (
         <Card>
           <CardHeader>
@@ -549,22 +581,6 @@ export default async function Settings({
           </CardContent>
         </Card>
       )}
-      <Connections
-        enabled={connections.enabled}
-        connections={connected}
-        query={appsQuery}
-        found={found}
-        said={said("connection")}
-      />
-
-      <Agents agents={agents} said={said("agent")} />
-
-      <Groups
-        groups={groups}
-        members={members.map((m) => ({ id: m.id, name: m.name }))}
-        owner={owner}
-        said={said("group")}
-      />
     </main>
   );
 }

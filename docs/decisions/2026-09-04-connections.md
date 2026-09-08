@@ -19,7 +19,7 @@ and by the sweep until they are, the way a machine is.
 
 ## Nothing is kept here
 
-Composio is the record. The settings page asks it what a membership has
+Composio is the record, the name a person gives an account included. The settings page asks it what a membership has
 connected every time it is shown, so a token that expired shows as expired,
 and when Composio does not answer the page says so rather than showing
 nothing connected. A table of our own, reconciled against Composio's list by

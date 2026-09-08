@@ -23,12 +23,16 @@ const SPREADS_ENV = new Set(["packages/db/src/postgres.ts"]);
 
 // Code that ships, plus the scripts a deploy runs.
 const SHIPS = ["apps/web", "packages", "scripts"];
-const SKIP = new Set(["node_modules", ".next", "migrations"]);
+const SKIP = new Set(["node_modules", "migrations"]);
 const CODE = /\.(ts|tsx|mjs|js)$/;
+
+// Next's build output, whichever run made it, is not source.
+const built = (name) => name.startsWith(".next");
 
 function* files(dir) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     if (SKIP.has(entry.name)) continue;
+    if (entry.isDirectory() && built(entry.name)) continue;
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) yield* files(full);
     else if (CODE.test(entry.name)) yield full;

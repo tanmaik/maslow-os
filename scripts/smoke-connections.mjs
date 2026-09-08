@@ -25,14 +25,22 @@ export async function smokeConnections(stack, signIn) {
       redirect: "manual",
     });
 
+  // An app is connected when its accounts row is on the page; the finder
+  // lists every app whether or not it is.
+  const holds = (page, app) => page.includes(`data-app="${app}"`);
+
   const bakery = orgs[1];
   const marge = await signIn(bakery.users[0].id);
   const otto = await signIn(bakery.users[1].id);
 
-  const searched = await settings(marge, "?apps=pige");
+  const searched = await (
+    await fetch(`${stack.url}/settings/connections/apps?q=pige`, {
+      headers: { cookie: marge },
+    })
+  ).json();
   check(
     "an app is found",
-    searched.includes("Carrier Pigeon") && !searched.includes("Sundial"),
+    searched.length === 1 && searched[0].name === "Carrier Pigeon",
     "Carrier Pigeon, not Sundial",
   );
 
@@ -47,15 +55,56 @@ export async function smokeConnections(stack, signIn) {
   });
   const landed = returned.headers.get("location") ?? "";
   const after = await settings(marge);
+  const mine = after.match(/name="account" value="(pretend_[0-9a-f]{8})"/)?.[1];
   check(
     "an app connects",
     begun.status === 303 &&
       signInUrl.includes("/settings/connections/verify?session_uri=") &&
-      landed.endsWith("/settings?connection=connected") &&
-      after.includes("Carrier Pigeon") &&
-      after.includes(">active<"),
+      landed.endsWith(`/settings?connection=connected&account=${mine}`) &&
+      holds(after, "pigeon"),
     `began ${begun.status}, landed ${landed.split("?")[1] ?? landed}`,
   );
+
+  // A second account in the same app, and a name for each; two accounts in
+  // one app cannot share a name.
+  const second = await post(marge, { intent: "connect", app: "pigeon" });
+  const secondLanded = await fetch(second.headers.get("location"), {
+    headers: { cookie: marge },
+    redirect: "manual",
+  });
+  const other = secondLanded.headers
+    .get("location")
+    ?.match(/account=(pretend_[0-9a-f]{8})/)?.[1];
+  const outcome = async (body) =>
+    (await post(marge, body)).headers.get("location")?.split("connection=")[1];
+  const named = await outcome({
+    intent: "rename",
+    account: mine,
+    name: "work",
+  });
+  const clashed = await outcome({
+    intent: "rename",
+    account: other,
+    name: "work",
+  });
+  const namedToo = await outcome({
+    intent: "rename",
+    account: other,
+    name: "home",
+  });
+  const both = await settings(marge);
+  check(
+    "two accounts in one app, each named",
+    other &&
+      other !== mine &&
+      named === "renamed" &&
+      clashed === "taken" &&
+      namedToo === "renamed" &&
+      both.includes('value="work"') &&
+      both.includes('value="home"'),
+    `named ${named}, clashed ${clashed}, then ${namedToo}`,
+  );
+  await post(marge, { intent: "disconnect", account: other });
 
   // Otto begins a sign-in and Marge finishes it: the vendor is told Marge
   // did it, which is not who it was for, so it fails and nobody gets it.
@@ -67,14 +116,13 @@ export async function smokeConnections(stack, signIn) {
   check(
     "a sign-in begun for someone else fails",
     (forged.headers.get("location") ?? "").endsWith("connection=failed") &&
-      !(await settings(marge)).includes("Sundial") &&
+      !holds(await settings(marge), "sundial") &&
       (await settings(otto)).includes(">failed<"),
     `answered ${forged.headers.get("location")?.split("?")[1]}`,
   );
 
   // On a project without a verifier the browser comes back naming the
   // account; it has to be the signed-in membership's at the vendor.
-  const mine = after.match(/name="account" value="(pretend_[0-9a-f]{8})"/)?.[1];
   const callback = (cookie) =>
     fetch(
       `${stack.url}/settings/connections/callback?status=success&connected_account_id=${mine}`,
@@ -86,24 +134,24 @@ export async function smokeConnections(stack, signIn) {
       "connection=gone",
     ) &&
       ((await callback(marge)).headers.get("location") ?? "").endsWith(
-        "connection=connected",
+        `connection=connected&account=${mine}`,
       ),
     "gone for Otto, connected for Marge",
   );
 
   check(
     "a connection is its owner's alone",
-    !(await settings(otto)).includes("Carrier Pigeon"),
+    !holds(await settings(otto), "pigeon"),
     "Otto sees none",
   );
 
-  const id = after.match(/name="account" value="(pretend_[0-9a-f]{8})"/)?.[1];
+  const id = mine;
   const stolen = await post(otto, { intent: "disconnect", account: id });
   check(
     "nobody else disconnects it",
     stolen.status === 303 &&
       (stolen.headers.get("location") ?? "").endsWith("connection=gone") &&
-      (await settings(marge)).includes("Carrier Pigeon"),
+      holds(await settings(marge), "pigeon"),
     `answered ${stolen.headers.get("location")?.split("?")[1]}`,
   );
 
@@ -115,7 +163,7 @@ export async function smokeConnections(stack, signIn) {
       (ended.headers.get("location") ?? "").endsWith(
         "connection=disconnected",
       ) &&
-      !(await settings(marge)).includes("Carrier Pigeon") &&
+      !holds(await settings(marge), "pigeon") &&
       (again.headers.get("location") ?? "").endsWith("connection=gone"),
     `answered ${ended.headers.get("location")?.split("?")[1]}, then ${again.headers.get("location")?.split("?")[1]}`,
   );
@@ -126,7 +174,7 @@ export async function smokeConnections(stack, signIn) {
     headers: { cookie: otto },
     redirect: "manual",
   });
-  const hadSundial = (await settings(otto)).includes(">active<");
+  const hadSundial = holds(await settings(otto), "sundial");
   const members = (body) =>
     fetch(`${stack.url}/settings/members`, {
       method: "POST",
@@ -139,7 +187,7 @@ export async function smokeConnections(stack, signIn) {
   const ottoBack = await signIn(bakery.users[1].id);
   check(
     "removal disconnects their apps",
-    hadSundial && !(await settings(ottoBack)).includes("Sundial"),
+    hadSundial && !holds(await settings(ottoBack), "sundial"),
     hadSundial ? "Sundial gone after removal" : "Sundial never connected",
   );
   return ok;

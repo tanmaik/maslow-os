@@ -10,11 +10,12 @@ export type App = {
   logo: string | null;
 };
 
-// An account at Composio: which app it is in, its standing there, and when
-// it was made.
+// An account at Composio: which app it is in, the name the person gave it,
+// its standing there, and when it was made.
 export type Account = {
   id: string;
   app: string;
+  name: string | null;
   status: string;
   createdAt: Date;
 };
@@ -56,6 +57,7 @@ type Toolkit = {
 };
 type ConnectedAccount = {
   id: string;
+  alias: string | null;
   status: string;
   toolkit: { slug: string };
   created_at: string;
@@ -94,13 +96,14 @@ const toApp = (t: Toolkit): App => ({
 const toAccount = (a: ConnectedAccount): Account => ({
   id: a.id,
   app: a.toolkit.slug,
+  name: a.alias || null,
   status: a.status,
   createdAt: new Date(a.created_at),
 });
 
 export const composio = {
-  // The apps whose sign-in Composio runs for us, that match a search,
-  // most used first.
+  // The apps whose sign-in Composio runs for us, that match a search, most
+  // used first; the most used of all when the search is empty.
   async search(query: string, limit = 12): Promise<App[]> {
     const page = await call<Page<Toolkit>>(
       "GET",
@@ -156,12 +159,9 @@ export const composio = {
     return out;
   },
 
-  // Completes a sign-in Composio is holding until we vouch for who did it.
-  // "failed" when the sign-in was not this user's; "connected" when it was.
-  async complete(
-    sessionUri: string,
-    userId: string,
-  ): Promise<"connected" | "failed"> {
+  // Completes a sign-in Composio is holding until we vouch for who did it:
+  // the account's id when the sign-in was this user's, null when it was not.
+  async complete(sessionUri: string, userId: string): Promise<string | null> {
     const c = config();
     const res = await fetch(
       `${c.api}/api/v3.1/connected_accounts/complete_auth`,
@@ -172,12 +172,34 @@ export const composio = {
         signal: AbortSignal.timeout(30_000),
       },
     );
-    if (res.status === 400) return "failed";
+    if (res.status === 400) return null;
     if (!res.ok)
       throw new Error(
         `Composio POST /connected_accounts/complete_auth answered ${res.status}: ${(await res.text()).slice(0, 300)}`,
       );
-    return "connected";
+    const done = (await res.json()) as { connected_account_id: string };
+    return done.connected_account_id;
+  },
+
+  // Names an account, or clears its name with an empty string. False when
+  // another of the user's accounts in the app already has that name.
+  async rename(id: string, name: string): Promise<boolean> {
+    const c = config();
+    const res = await fetch(
+      `${c.api}/api/v3.1/connected_accounts/${encodeURIComponent(id)}`,
+      {
+        method: "PATCH",
+        headers: { "x-api-key": c.apiKey, "content-type": "application/json" },
+        body: JSON.stringify({ alias: name }),
+        signal: AbortSignal.timeout(30_000),
+      },
+    );
+    if (res.status === 400 || res.status === 409) return false;
+    if (!res.ok)
+      throw new Error(
+        `Composio PATCH /connected_accounts/${id} answered ${res.status}: ${(await res.text()).slice(0, 300)}`,
+      );
+    return true;
   },
 
   // Deletes the account and revokes what the app granted it. An account
@@ -233,10 +255,12 @@ export const composio = {
     };
   },
 
-  // Runs one tool as a user. An app the user has not connected is a
-  // Refused; anything else the tool says is handed back as it said it.
+  // Runs one tool as a user, in one of their accounts. An app the user has
+  // not connected is a Refused; anything else the tool says is handed back
+  // as it said it.
   async execute(
     userId: string,
+    accountId: string,
     slug: string,
     args: Record<string, unknown>,
   ): Promise<Ran> {
@@ -246,7 +270,11 @@ export const composio = {
       {
         method: "POST",
         headers: { "x-api-key": c.apiKey, "content-type": "application/json" },
-        body: JSON.stringify({ user_id: userId, arguments: args }),
+        body: JSON.stringify({
+          user_id: userId,
+          connected_account_id: accountId,
+          arguments: args,
+        }),
         signal: AbortSignal.timeout(60_000),
       },
     );

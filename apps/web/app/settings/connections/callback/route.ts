@@ -7,7 +7,8 @@ import { principal } from "@/lib/session";
 const ACCOUNT = /^[A-Za-z0-9_-]{1,64}$/;
 
 // Where the browser lands after signing in to an app. The address names the
-// account; what came of it is asked of the vendor.
+// account; what came of it is asked of the vendor. A connection made lands
+// on the page naming the new account.
 export async function GET(request: Request) {
   const home = origin(request);
   const p = await principal();
@@ -20,5 +21,8 @@ export async function GET(request: Request) {
         return "unanswered";
       })
     : "gone";
-  return NextResponse.redirect(`${home}/settings?connection=${outcome}`, 303);
+  return NextResponse.redirect(
+    `${home}/settings?connection=${outcome}${outcome === "connected" ? `&account=${encodeURIComponent(id)}` : ""}`,
+    303,
+  );
 }

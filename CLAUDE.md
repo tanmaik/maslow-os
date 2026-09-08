@@ -198,7 +198,10 @@ other. Claude Code and claude.ai are the two clients it is checked against.
 
 A person's accounts in outside apps are held at Composio and nowhere else:
 the Composio user is the membership, and a connection is seen by nobody else
-in the org. Every app Composio reaches is one a person can connect; the
+in the org. A connection is one account, and a person may hold several in
+one app, each with a name they gave it that Composio keeps; the agent's
+`run` names which account it acts in, and an app with several refuses until
+it does. Every app Composio reaches is one a person can connect; the
 product names none. The page asks Composio what is connected each time it is
 shown, and says so when Composio does not answer. In production a finished
 sign-in activates only once we have vouched for who did it. Access to a person's apps

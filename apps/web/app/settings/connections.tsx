@@ -11,152 +11,132 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import {
+  Item,
+  ItemContent,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import { initials } from "@/lib/initials";
 
+import { AccountName } from "./account-name";
+import { Finder } from "./finder";
+
 // The apps the signed-in person has connected, as the vendor has them right
-// now, and a way to connect more. Null for either means the vendor did not
+// now, each account under its app with the name the person gave it, and a
+// way to connect more. Null for either list means the vendor did not
 // answer.
 export function Connections({
   enabled,
   connections,
-  query,
-  found,
+  mostUsed,
+  focus,
   said,
 }: {
   enabled: boolean;
   connections: Connection[] | null;
-  query: string;
-  found: App[] | null;
+  mostUsed: App[] | null;
+  focus: string | null;
   said: string | null;
 }) {
+  const apps = new Map<string, Connection[]>();
+  for (const c of connections ?? [])
+    apps.set(c.app, [...(apps.get(c.app) ?? []), c]);
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Connected apps</CardTitle>
         <CardDescription>
           Your accounts in outside apps, for the agent to read as you. Nobody
-          else in the org sees them. Shown as they stand right now.
+          else in the org sees them. Hold more than one account in an app and
+          name each so you and the agent can tell them apart.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-6">
         {!enabled ? (
           <p className="text-muted-foreground text-sm">
             Connections are not set up on this deployment.
           </p>
         ) : (
           <>
+            {said && <p className="text-sm">{said}</p>}
             {connections === null ? (
               <p className="text-muted-foreground text-sm">
                 Composio didn&apos;t answer, so your connections can&apos;t be
                 shown right now. Reload to try again.
               </p>
             ) : (
-              connections.length > 0 && (
-                <Table>
-                  <TableBody>
-                    {connections.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell className="w-10">
-                          <Avatar className="size-8">
-                            <AvatarFallback>
-                              {initials(c.appName)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </TableCell>
-                        <TableCell>
-                          <p>{c.appName}</p>
-                          <p className="text-muted-foreground text-sm">
-                            since {c.createdAt.toISOString().slice(0, 10)}
-                          </p>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge
-                            variant={
-                              c.status === "ACTIVE" ? "secondary" : "outline"
-                            }
-                          >
-                            {c.status.toLowerCase()}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <form action="/settings/connections" method="post">
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="disconnect"
-                            />
-                            <input type="hidden" name="account" value={c.id} />
-                            <Button variant="ghost" size="sm" type="submit">
-                              Disconnect
-                            </Button>
-                          </form>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )
-            )}
-            <form action="/settings" method="get" className="flex gap-2">
-              <Input
-                name="apps"
-                defaultValue={query}
-                placeholder="Find an app to connect"
-                aria-label="Find an app to connect"
-              />
-              <Button type="submit" variant="secondary">
-                Find
-              </Button>
-            </form>
-            {query && found === null && (
-              <p className="text-muted-foreground text-sm">
-                Composio didn&apos;t answer, so no apps can be found right now.
-                Try again in a moment.
-              </p>
-            )}
-            {query && found !== null && (
-              <Table>
-                <TableBody>
-                  {found.map((a) => (
-                    <TableRow key={a.slug}>
-                      <TableCell className="w-10">
-                        <Avatar className="size-8">
-                          {a.logo && <AvatarImage src={a.logo} alt="" />}
-                          <AvatarFallback>{initials(a.name)}</AvatarFallback>
+              apps.size > 0 && (
+                <ItemGroup className="gap-2">
+                  {[...apps.entries()].map(([slug, accounts]) => (
+                    <Item
+                      key={slug}
+                      variant="outline"
+                      className="items-start"
+                      data-app={slug}
+                    >
+                      <ItemMedia>
+                        <Avatar className="size-8 rounded-md">
+                          {accounts[0]!.logo && (
+                            <AvatarImage src={accounts[0]!.logo} alt="" />
+                          )}
+                          <AvatarFallback className="rounded-md">
+                            {initials(accounts[0]!.appName)}
+                          </AvatarFallback>
                         </Avatar>
-                      </TableCell>
-                      <TableCell>
-                        <p>{a.name}</p>
-                        {a.description && (
-                          <p className="text-muted-foreground truncate text-sm">
-                            {a.description}
-                          </p>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
+                      </ItemMedia>
+                      <ItemContent className="gap-2">
+                        <ItemTitle>{accounts[0]!.appName}</ItemTitle>
+                        {accounts.map((c) => (
+                          <div key={c.id} className="flex items-center gap-2">
+                            <AccountName
+                              account={c.id}
+                              name={c.name}
+                              focus={c.id === focus}
+                            />
+                            {c.status !== "ACTIVE" && (
+                              <Badge variant="outline">
+                                {c.status.toLowerCase()}
+                              </Badge>
+                            )}
+                            <form action="/settings/connections" method="post">
+                              <input
+                                type="hidden"
+                                name="intent"
+                                value="disconnect"
+                              />
+                              <input
+                                type="hidden"
+                                name="account"
+                                value={c.id}
+                              />
+                              <Button variant="ghost" size="sm" type="submit">
+                                Disconnect
+                              </Button>
+                            </form>
+                          </div>
+                        ))}
                         <form action="/settings/connections" method="post">
                           <input type="hidden" name="intent" value="connect" />
-                          <input type="hidden" name="app" value={a.slug} />
-                          <Button size="sm" type="submit">
-                            Connect
+                          <input type="hidden" name="app" value={slug} />
+                          <Button
+                            variant="link"
+                            size="sm"
+                            type="submit"
+                            className="text-muted-foreground h-auto px-0"
+                          >
+                            Add another {accounts[0]!.appName} account
                           </Button>
                         </form>
-                      </TableCell>
-                    </TableRow>
+                      </ItemContent>
+                    </Item>
                   ))}
-                  {found.length === 0 && (
-                    <TableRow>
-                      <TableCell className="text-muted-foreground">
-                        No app matches &ldquo;{query}&rdquo;.
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
+                </ItemGroup>
+              )
             )}
-            {said && <p className="text-muted-foreground text-sm">{said}</p>}
+            <Finder mostUsed={mostUsed} />
           </>
         )}
       </CardContent>

@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 
-import { connections } from "@/lib/connections";
+import { connections, NAME } from "@/lib/connections";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
 // Composio's ids are short and URL-safe.
 const ACCOUNT = /^[A-Za-z0-9_-]{1,64}$/;
 
-// Sends the person to sign in to an app, or deletes one of their accounts at
-// the vendor. A vendor that refuses or does not answer is said on the page.
+// Sends the person to sign in to an app, names one of their accounts, or
+// deletes one at the vendor. A vendor that refuses or does not answer is
+// said on the page.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
@@ -28,6 +29,13 @@ export async function POST(request: Request) {
           `${home}/settings/connections/callback`,
         );
         return url ? NextResponse.redirect(url, 303) : back("gone");
+      }
+      case "rename": {
+        const id = text("account");
+        const name = text("name");
+        if (!ACCOUNT.test(id)) return back("gone");
+        if (name && !NAME.test(name)) return back("name");
+        return back(await connections.rename(p, id, name));
       }
       case "disconnect": {
         const id = text("account");

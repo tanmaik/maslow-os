@@ -10,14 +10,15 @@ import {
   type Found,
   type Ran,
 } from "./composio.ts";
-import { connections } from "./connections.ts";
+import { connections, type Connection } from "./connections.ts";
 import { deployment } from "./deployment.ts";
 import { PRICES } from "./prices.ts";
 
 // A person's apps as things an agent can do: which actions fit a task, and
-// running one. Composio finds and runs them as the membership; the pretend
-// vendor has a few pretend actions. Nothing here is a tool per action: an
-// agent asks for what fits, gets a handful, and runs one by name.
+// running one in one of their accounts. Composio finds and runs them as the
+// membership; the pretend vendor has a few pretend actions. Nothing here is
+// a tool per action: an agent asks for what fits, gets a handful, and runs
+// one by name.
 
 export { Refused, type Action };
 
@@ -54,13 +55,33 @@ const PRETEND: Action[] = [
   },
 ];
 
+// The accounts the membership can act in.
+const active = async (p: Principal) =>
+  (await connections.list(p)).filter((c) => c.status === "ACTIVE");
+
 // The apps the membership has connected, by slug.
-async function connectedApps(p: Principal): Promise<Set<string>> {
-  return new Set(
-    (await connections.list(p))
-      .filter((c) => c.status === "ACTIVE")
-      .map((c) => c.app),
-  );
+const connectedApps = async (p: Principal) =>
+  new Set((await active(p)).map((c) => c.app));
+
+// An account as the agent is told it: its id, and its name when it has one.
+export const named = (c: Connection) =>
+  `${c.id}${c.name ? ` ${JSON.stringify(c.name)}` : ""}`;
+
+// The account to run in: the one named, or the only one in the app. An
+// app with several accounts and none named is refused with the choice.
+function pick(app: string, accounts: Connection[], id?: string): Connection {
+  const inApp = accounts.filter((c) => c.app === app);
+  if (inApp.length === 0) throw new Refused(`connect ${app} in settings first`);
+  if (id) {
+    const chosen = inApp.find((c) => c.id === id);
+    if (!chosen) throw new Refused(`no account ${id} in ${app}`);
+    return chosen;
+  }
+  if (inApp.length > 1)
+    throw new Refused(
+      `${app} has ${inApp.length} accounts; say which: ${inApp.map(named).join(", ")}`,
+    );
+  return inApp[0]!;
 }
 
 // The app an action belongs to, as its slug names it.
@@ -104,19 +125,19 @@ export const tools = {
     return { plan: [], pitfalls: [], actions };
   },
 
-  // Runs one action as the membership, in an app they have connected, at
-  // most so many an hour. The vendor's answer, refusal included, is handed
-  // back as it came, and every call to it is charged.
+  // Runs one action as the membership, in one of their accounts in an app
+  // they have connected, at most so many an hour. The vendor's answer,
+  // refusal included, is handed back as it came, and every call to it is
+  // charged.
   async run(
     q: Query,
     p: Principal,
     slug: string,
     args: Record<string, unknown>,
+    account?: string,
   ): Promise<Ran> {
     const app = appOf(slug);
-    if (!(await connectedApps(p)).has(app)) {
-      throw new Refused(`connect ${app} in settings first`);
-    }
+    const chosen = pick(app, await active(p), account);
     const action = PRETEND.find((a) => a.slug === slug);
     if (deployment.connections.kind !== "composio") {
       if (!action) {
@@ -141,11 +162,11 @@ export const tools = {
     }
     await charge(q, p, slug);
     if (deployment.connections.kind === "composio") {
-      return composio.execute(p.userId, slug, args);
+      return composio.execute(p.userId, chosen.id, slug, args);
     }
     const data =
       slug === "PIGEON_SEND"
-        ? { id: "pgn_1", sent: true, to: args.to }
+        ? { id: "pgn_1", sent: true, to: args.to, from: chosen.id }
         : slug === "PIGEON_LIST"
           ? [{ id: "pgn_0", from: "Road Runner", body: "Meep." }]
           : slug === "SUNDIAL_TODAY"

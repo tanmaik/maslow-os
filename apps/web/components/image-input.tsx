@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
 const SIDE = 512;
 
@@ -32,13 +33,28 @@ async function shrink(file: File): Promise<File | null> {
   }
 }
 
-// A file input that shrinks a chosen image before the form sends it, so a
-// photo straight off a phone is as welcome as a tidy PNG. A file the browser
-// cannot decode goes through as is, for the server to explain. Saving while
-// a shrink is under way waits for it.
-export function ImageInput(props: React.ComponentProps<"input">) {
+// A picture that is its own file input: click it to choose another, which
+// shows at once and is shrunk before the form sends it, so a photo straight
+// off a phone is as welcome as a tidy PNG. A file the browser cannot decode
+// goes through as is, for the server to explain. Saving while a shrink is
+// under way waits for it.
+export function ImageInput({
+  id,
+  name,
+  src,
+  fallback,
+  className,
+}: {
+  id: string;
+  name: string;
+  src: string | null;
+  fallback: string;
+  className?: string;
+}) {
   const input = useRef<HTMLInputElement>(null);
   const pending = useRef<Promise<void> | null>(null);
+  const queued = useRef(false);
+  const [preview, setPreview] = useState<string | null>(null);
 
   useEffect(() => {
     const form = input.current?.form;
@@ -46,32 +62,69 @@ export function ImageInput(props: React.ComponentProps<"input">) {
     const wait = (ev: SubmitEvent) => {
       if (!pending.current) return;
       ev.preventDefault();
-      pending.current.then(() => form.requestSubmit());
+      if (queued.current) return;
+      queued.current = true;
+      pending.current.then(() => {
+        queued.current = false;
+        form.requestSubmit();
+      });
     };
     form.addEventListener("submit", wait);
     return () => form.removeEventListener("submit", wait);
   }, []);
+  useEffect(
+    () => () => {
+      if (preview) URL.revokeObjectURL(preview);
+    },
+    [preview],
+  );
 
   return (
-    <Input
-      {...props}
-      ref={input}
-      type="file"
-      accept="image/*"
-      onChange={(e) => {
-        const el = e.currentTarget;
-        const file = el.files?.[0];
-        if (!file) return;
-        const job = shrink(file).then((small) => {
-          if (small) {
-            const dt = new DataTransfer();
-            dt.items.add(small);
-            el.files = dt.files;
-          }
-          if (pending.current === job) pending.current = null;
-        });
-        pending.current = job;
-      }}
-    />
+    <label htmlFor={id} className="group relative block cursor-pointer">
+      <input
+        ref={input}
+        id={id}
+        name={name}
+        type="file"
+        accept="image/*"
+        aria-label="Change the picture"
+        className="peer sr-only"
+        onChange={(e) => {
+          const el = e.currentTarget;
+          const file = el.files?.[0];
+          if (!file) return;
+          const job = shrink(file).then((small) => {
+            if (pending.current !== job) return;
+            if (small) {
+              const dt = new DataTransfer();
+              dt.items.add(small);
+              el.files = dt.files;
+            }
+            const url = URL.createObjectURL(small ?? file);
+            if (!input.current) URL.revokeObjectURL(url);
+            else setPreview(url);
+            pending.current = null;
+          });
+          pending.current = job;
+        }}
+      />
+      <Avatar
+        className={cn(
+          "size-16 peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50",
+          className,
+        )}
+      >
+        {(preview ?? src) && <AvatarImage src={preview ?? src!} alt="" />}
+        <AvatarFallback className={className}>{fallback}</AvatarFallback>
+      </Avatar>
+      <span
+        className={cn(
+          "bg-background/80 absolute inset-0 flex items-center justify-center rounded-full text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 peer-focus-visible:opacity-100",
+          className,
+        )}
+      >
+        Change
+      </span>
+    </label>
   );
 }
