@@ -23,6 +23,7 @@ type Props = {
     | "mail"
     | "analytics"
     | "storage"
+    | "computers"
     | "connections"
     | "embeddings",
     string | null

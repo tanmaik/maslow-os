@@ -35,6 +35,7 @@ export async function DevToolbar() {
           mail: deployment.mail.kind === "resend" ? "Resend" : null,
           analytics: deployment.analytics.kind === "posthog" ? "PostHog" : null,
           storage: deployment.storage.kind === "s3" ? "S3" : null,
+          computers: deployment.computers.kind === "fly" ? "Fly" : null,
           connections:
             deployment.connections.kind === "composio" ? "Composio" : null,
           embeddings: deployment.embeddings.kind === "voyage" ? "Voyage" : null,

@@ -1,17 +1,19 @@
 import { asOrg } from "@placeholder/db";
 import { pictureInUse } from "@placeholder/db/settings";
 
+import { destroy } from "./computer.ts";
 import { connections } from "./connections.ts";
 import { storage } from "./storage.ts";
 
 // Pays what removals and purges owe the vendors: deletes pictures from
-// the store, deletes an ended membership's accounts at Composio. Each debt
-// is forgotten only once it is paid; one that refuses is tried again by
-// the next call, and the sweep calls for every org every hour.
+// the store, deletes an ended membership's accounts at Composio, destroys
+// a purged member's computer at Fly. Each debt is forgotten only once it
+// is paid; one that refuses is tried again by the next call, and the
+// sweep calls for every org every hour.
 type Orphan = { id: string; kind: string; ref: string };
 
 // Every debt this pays; the database refuses any other kind.
-export const KINDS = ["accounts", "picture"] as const;
+export const KINDS = ["accounts", "picture", "computer"] as const;
 
 export async function settle(orgId: string): Promise<number> {
   const owed = await asOrg(
@@ -58,6 +60,9 @@ async function pay(orgId: string, o: Orphan): Promise<void> {
     case "picture":
       // A shared picture stays until the last to show it lets it go.
       if (!(await pictureInUse(orgId, o.ref))) await storage.delete(o.ref);
+      return;
+    case "computer":
+      await destroy(orgId, o.ref);
       return;
   }
 }

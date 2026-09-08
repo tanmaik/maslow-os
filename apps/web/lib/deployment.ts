@@ -41,6 +41,14 @@ export type Connections =
   | { kind: "fake" }
   | { kind: "none" };
 
+// Computers are Fly machines in one Fly app, or off. There is no fake: a
+// deployment without Fly's token makes nobody a computer and says so.
+// Outside production every machine carries the checkout that made it, so
+// the reap can tell a laptop's from a preview's.
+export type Computers =
+  | { kind: "fly"; token: string; app: string; checkout: string | null }
+  | { kind: "none" };
+
 // Production is the live Vercel environment or any box that is not a
 // development server and not a Vercel preview.
 const production = process.env.VERCEL
@@ -136,6 +144,22 @@ function connections(): Connections {
   return production ? { kind: "none" } : { kind: "fake" };
 }
 
+function computers(): Computers {
+  const { FLY_API_TOKEN: token, FLY_COMPUTERS_APP: app } = process.env;
+  if (token && app)
+    return {
+      kind: "fly",
+      token,
+      app,
+      checkout: production ? null : (process.env.CHECKOUT ?? "laptop"),
+    };
+  if (production)
+    throw new Error(
+      "No computers: set FLY_API_TOKEN and FLY_COMPUTERS_APP. Production has no fallback.",
+    );
+  return { kind: "none" };
+}
+
 // The sweep is what meters and cleans; production without its cron's
 // secret would run none of it and say nothing.
 if (production && !process.env.CRON_SECRET)
@@ -153,6 +177,7 @@ export const deployment = {
   // signed in as with one click.
   seededSignIn: !production,
   storage: storage(),
+  computers: computers(),
   connections: connections(),
   embeddings: embeddings(),
   https,

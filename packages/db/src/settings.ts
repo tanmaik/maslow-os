@@ -307,6 +307,14 @@ export async function deleteOrg(
     await q.query(
       "insert into orphans (org_id, kind, ref) select org_id, 'accounts', id from users",
     );
+    // Each computer is held first, so a make in flight finishes writing
+    // its ids before they are owed.
+    await q.query(
+      "select pg_advisory_xact_lock(hashtext('computer:' || id::text)) from computers",
+    );
+    await q.query(
+      "insert into orphans (org_id, kind, ref) select org_id, 'computer', coalesce(machine_id, '') || ':' || coalesce(volume_id, '') from computers",
+    );
     const gone = await q.query("delete from orgs where name = $1", [name]);
     return gone.rowCount ? "deleted" : "mismatch";
   });

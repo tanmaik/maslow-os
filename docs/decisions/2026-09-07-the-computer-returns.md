@@ -21,12 +21,18 @@ A person's computer is three things.
 
 ## Always on, from the first sign-in
 
-A computer is made the moment a person signs in, in the region they signed
-in from. The Computer page is blocked, with a progress bar, until it is
-ready. It never sleeps. Every person who exists before this ships gets one,
-backfilled. The floor size runs forever; a bigger size drops back to the
-floor only when nobody is connected and nothing is running, because
-dropping is a restart too.
+A computer is per membership: the org pays for it, its files stay inside
+the org, and it goes with the membership or the org. A person in two orgs
+has two. It is claimed the moment they sign in, in the region the sign-in
+came from, and made step by step as the Computer page asks after it: the
+disk, then the machine, then ready when VS Code answers. The page shows a
+progress bar until then. It never sleeps: the hourly sweep starts a
+current member's machine if it is stopped and stops a past member's if it
+runs, and gives a member with none one beside their org's others; an org
+with none yet waits for a sign-in, which knows where the person is. The
+floor is two CPUs, two gigabytes and ten of disk, about twelve dollars a
+month; a bigger size drops back to the floor only when nobody is connected
+and nothing is running, because dropping is a restart too.
 
 ## What the person sees
 
@@ -138,11 +144,14 @@ databases, runs hourly with Fly's token: lease lapsed an hour, stop the
 machine; lapsed a day, destroy it, its disk, its key and every object of
 its person's in the bucket. The two buckets themselves stay, one per
 environment. It reads Fly's
-list, not our database, so nothing forgotten escapes it, and it writes what
-it did to the ledger and ends with a count. A renewal can only keep a
-machine alive; silence can only stop one. The smoke on a pull request's
-own code holds a Fly token that reaches only the dev app, so it makes a
-real machine, checks it, and destroys it.
+list, not our database, so nothing forgotten escapes it, and it says what
+it did in its log and ends with a count; a laptop's database is not there
+to write a ledger row into, so the ledger holds what the app did and the
+reap's log holds what the reap did. A renewal can only keep a machine
+alive; silence can only stop one. A closed pull request destroys its
+preview's machines on the spot. The smoke on a pull request's own code
+holds a Fly token that reaches only the dev app, so it makes a real
+machine, checks it, and destroys it.
 
 ## Nothing calls home
 

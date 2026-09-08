@@ -4,10 +4,6 @@ import { NextResponse } from "next/server";
 import { origin } from "@/lib/origin";
 import { principal, signedIn } from "@/lib/session";
 
-// Vercel gives this request this long: founding ends in a computer made
-// behind the response.
-export const maxDuration = 120;
-
 // The longest name an org can have.
 const MAX_NAME = 80;
 
@@ -25,5 +21,5 @@ export async function POST(request: Request) {
     return NextResponse.redirect(`${home}/settings?org=name`, 303);
   const who = await personOf(p);
   if (!who) return new Response(null, { status: 401 });
-  return signedIn(await foundOrg(who.person, who.email, name), home);
+  return signedIn(await foundOrg(who.person, who.email, name), home, request);
 }

@@ -1,7 +1,7 @@
 # The Fly app computers outside production live in. Machines are made by
 # the app through the Machines API, never by `fly deploy`; this file only
 # names the image.
-app = "placeholder-computers-dev"
+app = "maslow-computers-dev"
 
 [build]
   dockerfile = "Dockerfile"

@@ -1,6 +1,7 @@
 import { asMeter, asOrg, type Query } from "@placeholder/db";
 import { picturesIn, type Resource, type Unit } from "@placeholder/db/usage";
 
+import { reconcile } from "./computer.ts";
 import { settle } from "./orphans.ts";
 import { PRICES } from "./prices.ts";
 
@@ -168,6 +169,10 @@ async function sweep(now = new Date()): Promise<number> {
       console.error(`sweep ${orgId}: ${(err as Error).message}`);
     }
   }
+  // Every current member has a computer and it runs.
+  await reconcile().catch((err: Error) =>
+    console.error(`sweep computers: ${err.message}`),
+  );
   return appended;
 }
 

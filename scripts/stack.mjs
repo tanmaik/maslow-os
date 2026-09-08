@@ -1,6 +1,7 @@
 // The whole local stack: this checkout's Postgres, migrated and seeded, and
 // Next on a free port with the app role's URL.
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -17,6 +18,9 @@ import { orgs, seed } from "../packages/db/src/seed.ts";
 import { seedBrain } from "../packages/brain/src/seed.ts";
 
 import { root } from "./root.mjs";
+
+// This checkout's name at Fly: its path, hashed short.
+export const checkout = `laptop-${createHash("sha1").update(root).digest("hex").slice(0, 8)}`;
 export { root };
 
 export function freePort() {
@@ -73,6 +77,7 @@ function vendorsOf(env) {
     )
       ? "S3"
       : null,
+    computers: has("FLY_API_TOKEN", "FLY_COMPUTERS_APP") ? "Fly" : null,
     connections: has("COMPOSIO_API_KEY") ? "Composio" : null,
     embeddings: has("VOYAGE_API_KEY") ? "Voyage" : null,
   };
@@ -116,6 +121,9 @@ export async function startStack({
         ...process.env,
         ...values,
         DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
+        // The machines this checkout makes carry its name, so its own
+        // dev server renews their lease and no other's.
+        CHECKOUT: checkout,
         NEXT_DIST_DIR: distDir,
         NEXT_TELEMETRY_DISABLED: "1",
         ...extraEnv,
@@ -134,6 +142,8 @@ export async function startStack({
     applied,
     secrets: values && Object.keys(values).length,
     vendors: vendorsOf({ ...process.env, ...values, ...extraEnv }),
+    // What the web process was given, for the dev script's own calls.
+    env: { ...process.env, ...values, ...extraEnv },
     web,
     // Resolves once Next answers; fails at once if Next has died.
     ready: async (ms = 60_000) => {

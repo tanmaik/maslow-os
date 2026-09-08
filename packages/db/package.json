@@ -11,6 +11,7 @@
     "./throttle": "./src/throttle.ts",
     "./settings": "./src/settings.ts",
     "./usage": "./src/usage.ts",
+    "./computers": "./src/computers.ts",
     "./groups": "./src/groups.ts",
     "./oauth": "./src/oauth.ts"
   },

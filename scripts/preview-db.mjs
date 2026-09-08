@@ -10,8 +10,23 @@
 import { createHmac } from "node:crypto";
 import { parseArgs } from "node:util";
 
+import { destroy, machines } from "./fly.mjs";
 import { ids } from "./ids.mjs";
 import { emptyPrefix as emptyIn } from "./purge.mjs";
+
+// Every machine a preview made goes with it. Without Fly's token the
+// hourly reap takes them a day later instead.
+async function destroyComputers(checkout) {
+  if (!process.env.FLY_API_TOKEN) {
+    console.log("fly: no token, the reap takes the preview's computers");
+    return;
+  }
+  for (const m of await machines()) {
+    if (m.config?.metadata?.checkout !== checkout) continue;
+    await destroy(m);
+    console.log(`fly: destroyed ${m.id} of ${checkout}`);
+  }
+}
 
 const {
   positionals: [command],
@@ -115,7 +130,12 @@ async function sql(uri, query) {
   return (await r.json()).rows ?? [];
 }
 
-const keys = ["DATABASE_URL", "DATABASE_OWNER_URL", "STORAGE_PREFIX"];
+const keys = [
+  "DATABASE_URL",
+  "DATABASE_OWNER_URL",
+  "STORAGE_PREFIX",
+  "CHECKOUT",
+];
 // Previews share the bucket under a prefix of their own, emptied with them.
 const prefixFor = (n) => `preview/pr-${n}/`;
 // Vercel's branch alias: the daemon reports there, whichever deployment is
@@ -192,6 +212,8 @@ async function up() {
     ["DATABASE_URL", app.toString()],
     ["DATABASE_OWNER_URL", owner],
     ["STORAGE_PREFIX", prefixFor(pr)],
+    // The machines this preview makes carry its name, and die with it.
+    ["CHECKOUT", `pr-${pr}`],
   ]) {
     await vercel("POST", `/v10/projects/${project()}/env?upsert=true`, {
       key,
@@ -275,6 +297,7 @@ async function down(prNumber = pr, branch = undefined) {
   const rows = (await envs()).filter(stampedFor(prNumber));
   await removeRows(rows);
   await emptyPrefix(prefixFor(prNumber));
+  await destroyComputers(`pr-${prNumber}`);
   const headRef =
     prNumber === pr && ref
       ? ref

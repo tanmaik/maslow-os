@@ -260,7 +260,8 @@ which the person cannot change because it is not on their disk. The
 settled design is `docs/decisions/2026-09-07-the-computer-returns.md`,
 built in its order, one pull request at a time.
 
-It is made at first sign-in, in the person's region, and never sleeps; the
+It is per membership, claimed at sign-in in the person's region and made
+as the page asks after it, and it never sleeps; the
 page is blocked until it is ready. They are `me`, home is `/home/me`,
 `sudo` needs no password, and `/opt/maslow` is ours and read-only. Reset
 throws their Linux away and keeps home; it is a button, never automatic.

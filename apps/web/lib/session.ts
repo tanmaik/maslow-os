@@ -9,7 +9,9 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { cache } from "react";
 
+import { claim } from "./computer.ts";
 import { cookie, FLOW, SESSION, SESSION_LIFETIME } from "./cookie.ts";
+import { regionFor } from "./region.ts";
 
 // What a sign-in remembers between its two legs: the email a code was sent
 // to, and where it was going.
@@ -38,10 +40,16 @@ export const principal = cache(
   },
 );
 
-// Opens a session for p and sends the browser to `to` holding it. If the
+// Opens a session for p and sends the browser to `to` holding it, having
+// claimed their computer in the region the request came from. If the
 // membership was removed in the meantime, the browser goes there as it was.
-export async function signedIn(p: Principal, to: string): Promise<Response> {
+export async function signedIn(
+  p: Principal,
+  to: string,
+  request: Request,
+): Promise<Response> {
   const token = await createSession(p);
+  if (token) await claim(p, await regionFor(request));
   const response = NextResponse.redirect(to, 303);
   if (token) response.cookies.set(SESSION, token, cookie(SESSION_LIFETIME));
   response.cookies.delete(FLOW);

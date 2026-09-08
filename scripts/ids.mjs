@@ -10,4 +10,6 @@ export const ids = {
   STORAGE_ENDPOINT: "https://fly.storage.tigris.dev",
   STORAGE_REGION: "auto",
   STORAGE_BUCKET: "placeholder-uploads-dev",
+  // The Fly app every computer outside production lives in.
+  FLY_COMPUTERS_DEV_APP: "maslow-computers-dev",
 };
