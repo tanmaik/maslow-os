@@ -3,11 +3,12 @@ import {
   edgesOf,
   get,
   graph,
+  stubs,
   isId,
-  read,
   sharesOf,
   type BrainRecord,
   type Edge,
+  type Stub,
 } from "@placeholder/brain";
 import { asPerson } from "@placeholder/db";
 import { groupsIn } from "@placeholder/db/groups";
@@ -32,8 +33,9 @@ import { principal } from "@/lib/session";
 import { vocabulary } from "../../catalog";
 import { recordHref, verbText } from "../../format";
 import { Sharing } from "../../sharing";
-import { TypeIcon, TypeMark } from "../../type-icon";
+import { TypeMark } from "../../type-icon";
 import { Document } from "./document";
+import { OtherRecord } from "./other-record";
 import { BrainGraph } from "./lazy";
 import { Properties } from "./properties";
 import { Split } from "./split";
@@ -57,7 +59,7 @@ export default async function Page({
       if (!record) return null;
       const aliases = new Set(await aliasesOf(db, id));
       const edges = await edgesOf(db, id);
-      const others = await get(
+      const others = await stubs(
         db,
         [...new Set(edges.flatMap((e) => [e.fromId, e.toId]))].filter(
           (x) => !aliases.has(x),
@@ -70,14 +72,6 @@ export default async function Page({
       while (winner?.mergedInto) {
         winner = (await get(db, [winner.mergedInto]))[0];
       }
-      // Every record the person can see, for the link picker.
-      const all: BrainRecord[] = [];
-      for (let cursor: string | null = null; ;) {
-        const page = await read(db, { limit: 200, cursor });
-        all.push(...page.records);
-        cursor = page.cursor;
-        if (!cursor) break;
-      }
       return {
         record,
         aliases,
@@ -86,7 +80,6 @@ export default async function Page({
         winner,
         near: await graph(db, [id]),
         shares: await sharesOf(db, { record: id }),
-        all,
         groups: await groupsIn(db),
       };
     }),
@@ -100,7 +93,6 @@ export default async function Page({
     winner,
     near,
     shares,
-    all,
     groups,
   } = found;
   const type = types.find((t) => t.name === r.type && t.ownerId === r.ownerId);
@@ -206,7 +198,6 @@ export default async function Page({
         action={action}
         canEdit={canEdit}
         verbs={verbs}
-        candidates={all}
       />
     </Split>
   );
@@ -222,16 +213,14 @@ function Links({
   action,
   canEdit,
   verbs,
-  candidates,
 }: {
   record: BrainRecord;
   aliases: Set<string>;
   edges: Edge[];
-  others: Map<string, BrainRecord>;
+  others: Map<string, Stub>;
   action: string;
   canEdit: boolean;
   verbs: string[];
-  candidates: BrainRecord[];
 }) {
   const name = (id: string) =>
     aliases.has(id) ? (
@@ -245,9 +234,7 @@ function Links({
     <section className="space-y-2 pt-4">
       <div className="flex items-center justify-between">
         <h2 className="text-muted-foreground text-sm">Links</h2>
-        {canEdit && (
-          <LinkForm record={record} verbs={verbs} candidates={candidates} />
-        )}
+        {canEdit && <LinkForm record={record} verbs={verbs} />}
       </div>
       {edges.length === 0 && (
         <p className="text-muted-foreground text-sm">Linked to nothing yet.</p>
@@ -282,16 +269,7 @@ function Links({
 
 // A new link from or to this record, under any verb; the ones in use are
 // offered.
-function LinkForm({
-  record,
-  verbs,
-  candidates,
-}: {
-  record: BrainRecord;
-  verbs: string[];
-  candidates: BrainRecord[];
-}) {
-  const others = candidates.filter((c) => c.id !== record.id);
+function LinkForm({ record, verbs }: { record: BrainRecord; verbs: string[] }) {
   return (
     <FormDialog
       trigger="Link"
@@ -299,69 +277,49 @@ function LinkForm({
       description="A link is a sentence: this record, a verb, another record."
       variant="ghost"
     >
-      {others.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          Nothing else to link to yet.
-        </p>
-      ) : (
-        <form
-          action={`${recordHref(record.id)}/link`}
-          method="post"
-          className="grid gap-3"
-        >
-          <div className="space-y-1">
-            <Label htmlFor="direction">Reads as</Label>
-            <Select name="direction" defaultValue="out">
-              <SelectTrigger id="direction" className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="out">
-                  this {record.type} … the other
-                </SelectItem>
-                <SelectItem value="in">
-                  the other … this {record.type}
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="verb">Verb</Label>
-            <Input
-              id="verb"
-              name="verb"
-              list="verbs"
-              placeholder="attended"
-              required
-            />
-            <datalist id="verbs">
-              {verbs.map((v) => (
-                <option key={v} value={v} />
-              ))}
-            </datalist>
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="other">The other record</Label>
-            <Select name="other" defaultValue={others[0]?.id ?? null}>
-              <SelectTrigger id="other" className="w-full">
-                <SelectValue placeholder="Choose" />
-              </SelectTrigger>
-              <SelectContent>
-                {others.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    <TypeIcon type={c.type} />
-                    {c.title || "(untitled)"}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <HowSure id="link-confidence" name="confidence" />
-          <div>
-            <Button type="submit">Link</Button>
-          </div>
-        </form>
-      )}
+      <form
+        action={`${recordHref(record.id)}/link`}
+        method="post"
+        className="grid gap-3"
+      >
+        <div className="space-y-1">
+          <Label htmlFor="direction">Reads as</Label>
+          <Select name="direction" defaultValue="out">
+            <SelectTrigger id="direction" className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="out">
+                this {record.type} … the other
+              </SelectItem>
+              <SelectItem value="in">the other … this {record.type}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="verb">Verb</Label>
+          <Input
+            id="verb"
+            name="verb"
+            list="verbs"
+            placeholder="attended"
+            required
+          />
+          <datalist id="verbs">
+            {verbs.map((v) => (
+              <option key={v} value={v} />
+            ))}
+          </datalist>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="other">The other record</Label>
+          <OtherRecord not={record.id} name="other" />
+        </div>
+        <HowSure id="link-confidence" name="confidence" />
+        <div>
+          <Button type="submit">Link</Button>
+        </div>
+      </form>
     </FormDialog>
   );
 }
