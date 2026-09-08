@@ -304,16 +304,14 @@ export async function edgesOf(
   verb?: string,
 ): Promise<Edge[]> {
   const { rows } = await q.query<EdgeRow>(
-    `${STANDING}
-     select ${edgeColumns.replaceAll(/(^|, )/g, "$1e.")} from edges e
+    `${standing("array[$1::text]")}
+     select ${edgeColumns.replaceAll(/(^|, )/g, "$1e.")} from touched e
      join winner wf on wf.id = e.from_id
      join winner wt on wt.id = e.to_id
-     where (e.from_id in (select same_record($1)) or e.to_id in (select same_record($1)))
-       and e.deleted_at is null
-       and ($2::text is null or e.verb = $2)
+     where ($2::text is null or e.verb = $2)
        and exists (
          select 1 from records o
-         where o.id = case when e.from_id in (select same_record($1))
+         where o.id = case when e.from_id in (select id from same)
            then wt.winner else wf.winner end
            and o.deleted_at is null)
      order by coalesce(e.occurred_at, e.created_at), e.id`,
@@ -355,9 +353,24 @@ const MAX_NODES = 500;
 
 // What every record stands for, and every edge read between what its ends
 // stand for: a merged record's links show on its winner.
-const STANDING = `
-  with recursive up as (
+// What some records stand for, and the links around them read between
+// what their ends stand for: the records, every record merged into them,
+// the links touching any of those, and each link's ends followed up to
+// the record that stands for them, so a merged record's links show on its
+// winner. Seeded, never the whole brain: what it costs grows with the
+// links around the seed, not with the records in the brain.
+const standing = (seed: string) => `
+  with recursive same as (
+    select id from records where id = any(${seed})
+    union
+    select r.id from records r join same on r.merged_into = same.id
+  ), touched as (
+    select * from edges e
+    where e.deleted_at is null
+      and (e.from_id in (select id from same) or e.to_id in (select id from same))
+  ), up as (
     select id, id as at, merged_into from records
+    where id in (select from_id from touched union select to_id from touched)
     union all
     select up.id, r.id, r.merged_into
     from up join records r on r.id = up.merged_into
@@ -367,22 +380,31 @@ const STANDING = `
     select distinct on (wf.winner, e.verb, wt.winner)
       e.id, wf.winner as from_id, e.verb, wt.winner as to_id,
       e.confidence, e.occurred_at, e.created_at
-    from edges e
+    from touched e
     join winner wf on wf.id = e.from_id
     join winner wt on wt.id = e.to_id
-    where wf.winner <> wt.winner and e.deleted_at is null
+    where wf.winner <> wt.winner
     order by wf.winner, e.verb, wt.winner, e.created_at, e.id
   )`;
 
 // Every verb on a link between two records that are both here, read the
 // way the graph reads links: a merged record's links count for its winner,
-// a removed record's do not.
+// a removed record's do not, and a record the reader may no longer see is
+// not here. Only the removed are walked, since they are few: a removed
+// record and everything merged into it.
 export async function verbsInUse(q: Query): Promise<string[]> {
   const { rows } = await q.query<{ verb: string }>(
-    `${STANDING}
-     select distinct e.verb from resolved e
-     join records f on f.id = e.from_id and f.deleted_at is null
-     join records t on t.id = e.to_id and t.deleted_at is null
+    `with recursive gone as (
+       select id from records where deleted_at is not null and merged_into is null
+       union
+       select r.id from records r join gone on r.merged_into = gone.id
+     )
+     select distinct e.verb from edges e
+     where e.deleted_at is null
+       and exists (select 1 from records f where f.id = e.from_id)
+       and exists (select 1 from records t where t.id = e.to_id)
+       and e.from_id not in (select id from gone)
+       and e.to_id not in (select id from gone)
      order by e.verb`,
   );
   return rows.map((r) => r.verb);
@@ -410,7 +432,12 @@ export async function graph(
   const found = new Map<string, number | null>();
   if (around) {
     const focus = await q.query<{ winner: string }>(
-      `${STANDING} select distinct winner from winner where id = any($1::text[])`,
+      `with recursive up as (
+         select id, id as at, merged_into from records where id = any($1::text[])
+         union all
+         select up.id, r.id, r.merged_into
+         from up join records r on r.id = up.merged_into
+       ) select distinct at as winner from up where merged_into is null`,
       [around],
     );
     for (const f of focus.rows) found.set(f.winner, 0);
@@ -419,7 +446,7 @@ export async function graph(
     let frontier = [...found.keys()];
     for (let d = 1; d <= depth && frontier.length && found.size < limit; d++) {
       const step = await q.query<{ id: string }>(
-        `${STANDING}
+        `${standing("$1::text[]")}
          select distinct n.id from resolved e
          join records cur on cur.deleted_at is null and cur.id = case
            when $2 <> 'in' and e.from_id = any($1::text[]) then e.from_id
@@ -454,7 +481,7 @@ export async function graph(
       (a, b) => (a.depth ?? -1) - (b.depth ?? -1) || a.id.localeCompare(b.id),
     );
   const { rows: edges } = await q.query<EdgeRow>(
-    `${STANDING}
+    `${standing("$1::text[]")}
      select ${edgeColumns} from resolved
      where from_id = any($1::text[]) and to_id = any($1::text[])
        and ($2::text[] is null or verb = any($2))
