@@ -30,7 +30,8 @@ sees only that message has the whole picture.
 
 Node 24 to develop on, 22.18 as the floor: where importing `.ts` arrived.
 pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for hosting. Neon
-for the managed database. Tigris, through Fly, for object storage.
+for the managed database. Fly for the computers, and Tigris, through Fly,
+for object storage: one invoice.
 
 ## Local
 
@@ -50,8 +51,8 @@ No Docker: nesting containers is unreliable inside cloud agents, and what
 starts without a daemon starts everywhere.
 
 Every checkout is self-contained — its own database, its own ports picked free
-at start, nothing shared with another checkout. Ten worktrees are ten
-independent stacks. A migration is created with `pnpm migration:new <name>`,
+at start, its own machines on Fly under a lease it renews, nothing shared
+with another checkout. Ten worktrees are ten independent stacks. A migration is created with `pnpm migration:new <name>`,
 which stamps the clock; the runner refuses two files with the same stamp, so
 parallel work cannot collide on a name.
 
@@ -91,9 +92,12 @@ environment. A register in `docs/dependencies.md` lists every vendor, written
 when the vendor is added. Every vendor sits behind an interface of ours, so a
 second supplier is a second implementation, never a second code path.
 
-CI holds exactly two credentials — a Neon key and a Vercel token — on a GitHub
-environment only `main` can use. The per-PR database workflow runs main's code
-with them; a pull request's code never sees them.
+The per-PR workflow and the hourly reap hold five credentials — Neon's key,
+Vercel's token, the second bucket's two keys and Fly's token — on a GitHub
+environment only `main` can use. They run main's code; a pull request's
+code never sees them. The check that runs a pull request's own code holds
+one credential: a Fly token that reaches only the dev app, so the worst a
+bad pull request can do is make dev machines, which the reap kills.
 
 ## Tenancy
 
@@ -209,12 +213,15 @@ never a tool per action.
 
 Development runs against the real thing — real vendors, your own keys —
 because a product nobody lives in does not get good. Tests run with no
-credentials: the smoke boots a fresh stack with every vendor key blanked, so
-CI needs none.
+credentials: the smoke boots a fresh stack with every vendor key blanked,
+and needs only the dev-app Fly token to make, check and destroy one real
+machine.
 
 The fake is a fallback, never a default. Credential present, real thing;
 absent, fake — so a fresh checkout still gives a working app. A fallback in
-development stays visible on screen for as long as it is active.
+development stays visible on screen for as long as it is active. The
+computer has no fake: no Fly token, and computers are off, and the page
+says so.
 
 **In production there is no fallback.** A missing credential stops the app
 from starting. Nothing degrades quietly, and no error is swallowed.
@@ -235,7 +242,7 @@ Resend to founders only, and the bucket — and the synthetic seed: three
 orgs with obviously distinguishable data. Whatever is not there is faked,
 and `pnpm dev` and the pill say which. A laptop's objects live under a
 `dev/` prefix in the dev bucket — a bucket of its own, with keys of its
-own, so nothing outside production holds production's — and the nightly
+own, so nothing outside production holds production's — and the hourly
 reap purges them: tomorrow makes new ones. A preview is the same: a Neon
 branch off an empty parent — never off production — migrated and seeded on
 deploy, on preview keys. The per-PR workflow is the only thing that builds
@@ -245,12 +252,26 @@ visibly flagged like every fake and impossible in production.
 
 ## The computer
 
-There is none today. What was here — a Fly machine with a volume per
-person, its daemon, uploads staged through the bucket, daily backups,
-Claude Code on it behind a model gateway — came out on 2026-09-07, with
-every table and page it had. It comes back deliberately, as SSH and SFTP
-to a machine that spins up and down and sizes itself, and not before. The
-keys it used stay in the environment stores, unread.
+A person's computer is three things in three places: the disk, a Fly
+volume holding their files, their packages and their whole Linux, which
+must never be lost; the machine, CPU and memory rented by the second, on
+which nothing matters; and our image, the base Linux with our tools in it,
+which the person cannot change because it is not on their disk. The
+settled design is `docs/decisions/2026-09-07-the-computer-returns.md`,
+built in its order, one pull request at a time.
+
+It is made at first sign-in, in the person's region, and never sleeps; the
+page is blocked until it is ready. They are `me`, home is `/home/me`,
+`sudo` needs no password, and `/opt/maslow` is ours and read-only. Reset
+throws their Linux away and keeps home; it is a button, never automatic.
+Sizes are a ladder with a price per hour and a restart; the disk grows
+before it fills and never shows a cap. VS Code in the browser is the first
+door; the SSH key and front door come last. Model calls never route through
+us: each person holds an OpenRouter key we minted with a cap, OpenRouter
+holds the record, and the sweep copies it. Laptops, previews and
+production all make real machines; there is no fake, and every machine
+outside production carries a lease the reap enforces. Nothing on a machine
+ever calls home.
 
 ## Interface
 
@@ -258,7 +279,8 @@ Every component is shadcn, and every shadcn component is installed under
 `apps/web/components/ui`. Nothing is hand-rolled beside them: no bespoke
 button, input, dialog or table, and no other component library. Styling is
 Tailwind on shadcn's theme tokens. The typeface is the system one; no font is
-fetched from anywhere.
+fetched from anywhere. VS Code in the browser is not a component: it is
+`code-server`, whole, running on the person's machine and shown in a frame.
 
 A click shows the next page at once. Every link is `next/link`, so a click
 swaps only what changed and the page it points at is fetched before the
@@ -270,20 +292,21 @@ is paid once a click; the database stays on and never sleeps.
 
 ## Metering and billing
 
-Every unit of consumption is recorded from the first day — bytes held in
-the bucket and the brain, vectors made, actions run — whether or not anyone
-is charged yet, and whether or not anyone reads it yet: nothing shows it.
-Measurement and price stay separate, so prices are set later from real usage.
-Every metered figure is reconciled against the vendor's own bill.
-
-Each event carries its cause: a share someone else read, an agent running
-unattended, an app a colleague opened. A bill is a list of reasons, not a
-number.
+There is no meter. Two rules stand in for it. Every resource we make
+anywhere — a machine, a disk, an object, a key — carries the person's id,
+the org's id and the environment in its name or tags, so any vendor's list
+traces back in one look. And one table, the ledger, records every resource
+event: when, whose, what, how much, at what cost, and why. It records what
+happened to resources, never what is in files or conversations. Nothing
+shows it to the person. Prices are set later from reading it, and vendor
+bills are checked against it.
 
 Billing is per org, and the org owner pays for everyone in it. Managed is pay
 as you go through Stripe. **No resource that costs money exists without a
 payment method behind it**: a sweep finds anything that does, and finding one
-is an incident. Everything metered has an abuse limit before it ships.
+is an incident. Every resource has a ceiling before it ships; the ceiling is
+ours, it never shows, and reaching it alerts us rather than walling the
+person.
 
 ## Public site
 
@@ -294,7 +317,10 @@ Built to be read by agents as much as by people, and measured with
 
 Nothing is cleaned up; things fail to outlive their owner. A test's database
 dies with the test, a checkout's data with the checkout, a preview's resources
-with the pull request. A nightly sweep catches what a failed close missed.
+with the pull request. A machine made outside production carries a lease:
+renewed while its owner runs, stopped an hour after it lapses, destroyed a
+day after. An hourly reap, reading the vendor's list rather than ours,
+catches what a failed close missed.
 
 ## Documentation
 
