@@ -214,8 +214,9 @@ Each is one pull request, read before the next starts. As of 2026-09-08:
 5. The numbers on the page: live charts, the storage number, open ports.
    Done, live.
 6. Claude Code on every computer, the browser as its own MCP server on
-   the machine, and the brain reached with the computer's session.
-7. Reset keeps home.
+   the machine, and the brain reached with the computer's session. Done,
+   live.
+7. Reset keeps home. Done.
 8. Sizes.
 9. The disk grows itself.
 10. Claude Code on our key, and the switch.

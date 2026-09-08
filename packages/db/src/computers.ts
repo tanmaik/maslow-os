@@ -159,7 +159,7 @@ export async function note(
     orgId: string;
     userId: string | null;
     resource: "machine" | "disk";
-    event: "made" | "started" | "stopped" | "destroyed";
+    event: "made" | "started" | "stopped" | "reset" | "destroyed";
     ref: string | null;
     detail?: Record<string, unknown>;
     why: string;

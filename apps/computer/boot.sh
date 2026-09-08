@@ -9,6 +9,15 @@ DISK=/data
 OS=$DISK/os
 HOME_DIR=$DISK/home
 
+# A reset asked for through the door: the person's Linux is thrown away
+# and copied fresh below; their home, its own folder, is not touched. The
+# ask stands until the copy is whole, so a boot cut off mid-way finishes.
+if [ -e "$DISK/.reset-asked" ]; then
+  echo "resetting the operating system; home is kept"
+  rm -f "$DISK/.os-ready"
+  rm -rf "$OS"
+fi
+
 # The image's own Debian becomes the person's Linux, copied once, one
 # entry at a time so nothing is ever half there.
 if [ ! -e "$DISK/.os-ready" ]; then
@@ -23,6 +32,7 @@ if [ ! -e "$DISK/.os-ready" ]; then
     mv "$OS/$name.copying" "$OS/$name"
   done
   date -u +%FT%TZ >"$DISK/.os-ready"
+  rm -f "$DISK/.reset-asked"
 fi
 mkdir -p "$OS"/{proc,sys,dev,run,tmp,opt/maslow,home/me}
 chmod 1777 "$OS/tmp"
@@ -112,5 +122,7 @@ keep chroot --userspec=1000:1000 --groups=1000 "$OS" \
   /usr/bin/env -i HOME=/home/me USER=me LOGNAME=me SHELL=/bin/bash LANG=C.UTF-8 TERM=xterm-256color \
   /bin/bash -lc 'cd && exec code-server --host 127.0.0.1 --port 8081 --auth none --app-name Maslow --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override /home/me' &
 
-trap 'kill 0' TERM INT
+# A stop is a hard stop: what is still in memory is written to the disk
+# first, so the last seconds of work survive a restart or a new image.
+trap 'sync; kill 0' TERM INT
 wait

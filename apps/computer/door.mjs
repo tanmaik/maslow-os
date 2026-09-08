@@ -5,6 +5,7 @@
 // the app's address, so a request for another machine's name is passed
 // to that machine's door over Fly's private network, whatever its size.
 import { createHmac, timingSafeEqual } from "node:crypto";
+import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 
@@ -86,6 +87,23 @@ const server = http.createServer(async (req, res) => {
       return say(res, 401, "That ticket is not good here.");
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(await stats()));
+  }
+  // Reset, for our server alone: the next boot starts the person's Linux
+  // over and keeps their home. The mark is on the disk, outside their
+  // Linux, so nothing inside can set or clear it.
+  if (to.mine && url.pathname === "/maslow/reset" && req.method === "POST") {
+    if (!valid(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    // Forced onto the disk before the answer: the restart that follows is
+    // a hard stop, and a mark still in memory would be lost with it.
+    const fd = fs.openSync("/data/.reset-asked", "w");
+    fs.writeSync(fd, new Date().toISOString());
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    const dir = fs.openSync("/data", "r");
+    fs.fsyncSync(dir);
+    fs.closeSync(dir);
+    return say(res, 200, "reset at the next boot");
   }
   if (to.mine) {
     const ticket = url.searchParams.get("ticket");

@@ -144,6 +144,11 @@ export const fly = {
     await call("POST", `/machines/${id}/stop`);
   },
 
+  // A reboot: every running process ends, and only the disk remains.
+  async restart(id: string): Promise<void> {
+    await call("POST", `/machines/${id}/restart`);
+  },
+
   // The lease and anything else a machine is tagged with, without a
   // restart.
   async tag(id: string, key: string, value: string): Promise<void> {
@@ -187,6 +192,20 @@ export const fly = {
     });
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
     return (await res.json()) as Stats;
+  },
+
+  // Asks the machine's door to start the person's Linux over at the next
+  // boot, with a ticket it takes.
+  async askReset(machineId: string, ticket: string): Promise<void> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/reset`, {
+      method: "POST",
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
   },
 
   // Whether the machine's door answers at Fly's edge.

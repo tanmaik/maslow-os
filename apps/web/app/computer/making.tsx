@@ -4,6 +4,17 @@ import { useEffect, useState } from "react";
 
 import { Numbers } from "@/app/computer/numbers";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 
@@ -64,9 +75,33 @@ export function Making({
             Always on, in {where ?? "its region"}.
           </AlertDescription>
         </Alert>
-        <form action="/computer/open" method="post">
-          <Button type="submit">Open your computer</Button>
-        </form>
+        <div className="flex gap-2">
+          <form action="/computer/open" method="post">
+            <Button type="submit">Open your computer</Button>
+          </form>
+          <AlertDialog>
+            <AlertDialogTrigger render={<Button variant="outline" />}>
+              Reset
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <form action="/computer/reset" method="post" className="contents">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Start your Linux over?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Everything you installed with apt or changed outside your
+                    home is thrown away and replaced with a fresh Linux. Your
+                    home, with your files, packages and settings, is kept.
+                    Anything running stops. This takes about a minute.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep it</AlertDialogCancel>
+                  <AlertDialogAction type="submit">Reset</AlertDialogAction>
+                </AlertDialogFooter>
+              </form>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
         <Numbers />
       </div>
     );

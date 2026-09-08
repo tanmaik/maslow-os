@@ -24,7 +24,7 @@ import { fly, type Machine, type Stats } from "./fly.ts";
 const FLOOR = { cpus: 2, memoryMb: 2048, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v22";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v24";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -313,6 +313,31 @@ export async function openLink(
   const onward =
     to && /^\/(?!\/)[^\\\s]*$/.test(to) ? `&to=${encodeURIComponent(to)}` : "";
   return `https://${c.machineId}.${d.domain}/?ticket=${ticket(c, 30 * 24 * 3600)}${onward}`;
+}
+
+// Starts the person's Linux over and keeps their home: the door is asked
+// to mark the disk, the machine is rebooted, and the page watches it come
+// back. The person's own choice, never a monitor's. False when there is
+// no ready computer to reset. The door first, so a refusal changes
+// nothing; the row last, so what a failure leaves behind is a machine
+// that comes back ready on its own within the minute.
+export async function reset(p: Principal): Promise<boolean> {
+  const c = await ready(p);
+  if (!c) return false;
+  await fly.askReset(c.machineId!, ticket(c, 60));
+  await fly.restart(c.machineId!);
+  await asOrg(p.orgId, async (q) => {
+    await setReady(q, c.id, false);
+    await note(q, {
+      orgId: c.orgId,
+      userId: c.userId,
+      resource: "machine",
+      event: "reset",
+      ref: c.machineId,
+      why: "the person asked",
+    });
+  });
+  return true;
 }
 
 // The computer's numbers this moment, asked of its door with a ticket
