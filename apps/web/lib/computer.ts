@@ -24,7 +24,7 @@ import { fly, type Machine, type Stats } from "./fly.ts";
 const FLOOR = { cpus: 2, memoryMb: 2048, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v24";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v25";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code

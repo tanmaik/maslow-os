@@ -12,7 +12,9 @@
   "files.exclude": { "**/.*": true },
   "remote.portsAttributes": {
     "22": { "onAutoForward": "ignore" },
-    "8080": { "onAutoForward": "ignore" }
+    "8080": { "onAutoForward": "ignore" },
+    "8081": { "onAutoForward": "ignore" },
+    "8082": { "onAutoForward": "ignore" }
   },
   "remote.otherPortsAttributes": { "onAutoForward": "openPreview" }
 }
