@@ -258,6 +258,25 @@ export const fly = {
     return true;
   },
 
+  // Gives the machine's door the keys that open SSH, with a ticket it takes.
+  async pushKeys(
+    machineId: string,
+    ticket: string,
+    keys: string,
+  ): Promise<void> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/keys`, {
+      method: "PUT",
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+        "content-type": "text/plain",
+      },
+      body: keys,
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+  },
+
   // Asks the machine's door to start the person's Linux over at the next
   // boot, with a ticket it takes.
   async askReset(machineId: string, ticket: string): Promise<void> {

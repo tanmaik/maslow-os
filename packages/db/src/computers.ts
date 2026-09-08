@@ -19,6 +19,8 @@ export type Computer = {
   readyAt: Date | null;
   // When the home was last archived into the bucket, if ever.
   backedUpAt: Date | null;
+  // The public keys that open SSH, one per line; empty until set.
+  authorizedKeys: string;
   // The owner's session the machine holds to reach the brain, if any.
   sessionId: string | null;
   // Whether its member is current; a past member's machine is stopped.
@@ -32,8 +34,8 @@ export type Size = { cpuKind: CpuKind; cpus: number; memoryMb: number };
 const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.cpu_kind as "cpuKind", c.cpus, c.memory_mb as "memoryMb", c.disk_gb as "diskGb", c.secret,
   c.volume_id as "volumeId", c.machine_id as "machineId", c.ready_at as "readyAt",
-  c.backed_up_at as "backedUpAt", c.session_id as "sessionId",
-  (u.removed_at is null) as current`;
+  c.backed_up_at as "backedUpAt", c.authorized_keys as "authorizedKeys",
+  c.session_id as "sessionId", (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
 // membership, however many sign-ins race for it.
@@ -59,6 +61,14 @@ export async function claimComputer(
       randomBytes(24).toString("base64url"),
     ],
   );
+}
+
+// The public keys that open SSH, as the person set them.
+export async function setKeys(q: Query, id: string, keys: string) {
+  await q.query("update computers set authorized_keys = $2 where id = $1", [
+    id,
+    keys,
+  ]);
 }
 
 // When the home was last archived.

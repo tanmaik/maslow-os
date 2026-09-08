@@ -29,7 +29,7 @@ import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v28";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v30";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -302,6 +302,11 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
       if (c.readyAt && c.current && m.state === "started") {
         await grow(q, c);
         await backUp(q, c);
+        // The keys again every hour, so a machine remade or reset has them.
+        if (c.authorizedKeys)
+          await fly
+            .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
+            .catch(() => {});
       }
     });
   }
@@ -527,6 +532,25 @@ export async function resize(p: Principal, key: SizeKey): Promise<boolean> {
     });
     return true;
   });
+}
+
+// Gives a ready computer's machine the keys that open it over SSH, as the
+// row has them. Nothing when it is not ready; the sweep gives them then.
+export async function pushKeys(p: Principal): Promise<void> {
+  const c = await ready(p);
+  if (!c) return;
+  await fly.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
+}
+
+// Where a ready computer answers SSH, and whether any key opens it. Null
+// until it is ready.
+export async function sshOf(
+  p: Principal,
+): Promise<{ host: string; keys: boolean } | null> {
+  const d = deployment.computers;
+  const c = await ready(p);
+  if (!c || d.kind === "none") return null;
+  return { host: `${c.machineId}.${d.domain}`, keys: c.authorizedKeys !== "" };
 }
 
 // The computer's numbers this moment, asked of its door with a ticket

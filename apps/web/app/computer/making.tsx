@@ -39,6 +39,7 @@ export function Making({
   region,
   size,
   backedUp,
+  ssh,
 }: {
   at: Progress;
   region: string | null;
@@ -46,6 +47,8 @@ export function Making({
   // When the home was last backed up, null before any, or "off" where
   // this deployment has no bucket to back up to.
   backedUp: string | null | "off";
+  // Where the computer answers SSH and whether a key opens it yet.
+  ssh: { host: string; keys: boolean } | null;
 }) {
   const [at, setAt] = useState<Progress>(from);
   const [where, setWhere] = useState(region);
@@ -113,6 +116,35 @@ export function Making({
         </div>
         <Numbers />
         <Sizes current={size} />
+        {ssh && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">From your own terminal</p>
+            {ssh.keys ? (
+              <>
+                <p className="text-muted-foreground text-sm">
+                  Put{" "}
+                  <a
+                    className="underline underline-offset-4"
+                    href="/maslow-ssh"
+                  >
+                    maslow-ssh
+                  </a>{" "}
+                  in your ~/.ssh folder, add this to ~/.ssh/config, and{" "}
+                  <code>ssh computer</code> opens a terminal; VS Code and file
+                  apps that read that file follow. Python 3 is all it needs.
+                </p>
+                <pre className="bg-muted overflow-x-auto rounded-md p-3 text-xs">
+                  {`Host computer\n  HostName ${ssh.host}\n  User me\n  ProxyCommand python3 ~/.ssh/maslow-ssh %h`}
+                </pre>
+              </>
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Add a public key under SSH in Settings and the way in appears
+                here.
+              </p>
+            )}
+          </div>
+        )}
         <p className="text-muted-foreground text-sm">
           {backedUp === "off"
             ? "No backups here: this deployment has no bucket."

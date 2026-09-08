@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { Making } from "@/app/computer/making";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { progressOf } from "@/lib/computer";
+import { progressOf, sshOf } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { sizeOf } from "@/lib/sizes";
 import { principal } from "@/lib/session";
@@ -37,6 +37,7 @@ export default async function ComputerPage() {
                 ? (c?.backedUpAt?.toISOString() ?? null)
                 : "off"
             }
+            ssh={await sshOf(p)}
           />
         )}
       </main>

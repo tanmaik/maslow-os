@@ -20,8 +20,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       ripgrep jq unzip zip procps iproute2 python3 python3-pip python3-venv \
     && rm -rf /var/lib/apt/lists/*
 # The person: `me`, uid 1000, at home in /home/me. The base image's node
-# user holds that id and becomes them.
-RUN usermod -l me -d /home/me -m node && groupmod -n me node
+# user holds that id and becomes them. The account has no password and is
+# not locked either: the SSH server refuses a locked one whatever the key.
+RUN usermod -l me -d /home/me -m node && groupmod -n me node && usermod -p '*' me
 COPY --chmod=0440 apps/computer/etc/sudoers.d/me /etc/sudoers.d/me
 COPY --chmod=0644 apps/computer/etc/profile.d/me.sh /etc/profile.d/me.sh
 COPY --chmod=0644 apps/computer/etc/pip.conf /etc/pip.conf

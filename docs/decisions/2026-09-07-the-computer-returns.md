@@ -98,10 +98,22 @@ bucket. Large files must work that way too, and the check drops one of
 gigabytes; SFTP, later, is the road for whole folders. The Computer page holds what VS Code does not: the live charts,
 the size, the storage number, reset, and open ports as previews.
 
-A person with the browser needs no key. The public SSH key, pasted or made
-in the browser and downloaded so the private half never touches our
-server, and the SSH front door that lets a Mac's own terminal, VS Code and
-file apps in, come last.
+A person with the browser needs no key. The SSH front door, built
+2026-09-08: the public keys are pasted under SSH in settings, kept on the
+computer's row, and given to the machine's door, which writes them beside
+the SSH server outside the person's Linux; the sweep gives them again
+every hour, so a remade or reset machine has them. The road in is SSH
+carried over a WebSocket through the same door VS Code uses, at
+`/maslow/ssh` on the machine's own name, with no ticket: the key is the
+lock, as on any machine on the internet, and the SSH server takes keys
+only, one user, no root. A Mac's own `ssh` reaches it through
+`maslow-ssh`, a small Python script served by the app that runs as ssh's
+ProxyCommand and needs nothing installed; the Computer page shows the
+`~/.ssh/config` lines. VS Code's remote SSH and every file app that reads
+that file follow. Raw port 22 at Fly's edge was not possible: the edge
+cannot route a plain TCP connection to a machine by name, and SSH names
+its target only after the handshake. Making a key in the browser comes
+later.
 
 ## Models: a key per person, no gateway
 
@@ -238,4 +250,4 @@ Each is one pull request, read before the next starts. As of 2026-09-08:
 9. The disk grows itself. Done.
 10. Claude Code on our key, and the switch.
 11. Backups. Done.
-12. The key and the SSH front door.
+12. The key and the SSH front door. Done.

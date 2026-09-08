@@ -4,7 +4,7 @@
 // and its live connection alike, to VS Code inside. Every machine shares
 // the app's address, so a request for another machine's name is passed
 // to that machine's door over Fly's private network, whatever its size.
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -117,6 +117,20 @@ const server = http.createServer(async (req, res) => {
         : say(res, 409, "a backup is already running");
     }
   }
+  // The keys that open SSH, for our server alone: written beside the
+  // server's own, outside the person's Linux.
+  if (to.mine && url.pathname === "/maslow/keys" && req.method === "PUT") {
+    if (!valid(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    const text = await new Promise((resolve) => {
+      let s = "";
+      req.on("data", (d) => (s += d));
+      req.on("end", () => resolve(s));
+    });
+    fs.mkdirSync("/data/keys", { recursive: true });
+    fs.writeFileSync("/data/keys/me", text, { mode: 0o644 });
+    return say(res, 200, "keys written");
+  }
   // Reset, for our server alone: the next boot starts the person's Linux
   // over and keeps their home. The mark is on the disk, outside their
   // Linux, so nothing inside can set or clear it.
@@ -180,6 +194,11 @@ const server = http.createServer(async (req, res) => {
 // joined; one for another machine is joined to that machine's door.
 server.on("upgrade", (req, socket, head) => {
   const to = target(req);
+  // SSH over a WebSocket: the internet's road to the SSH server outside
+  // the person's Linux. No ticket: the key the person set is the lock,
+  // as on any machine on the internet.
+  if (to.mine && req.url.split("?")[0] === "/maslow/ssh")
+    return sshOver(req, socket, head);
   if (to.mine && !valid(cookieOf(req))) {
     socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
     return;
@@ -195,5 +214,87 @@ server.on("upgrade", (req, socket, head) => {
   onward.on("error", () => socket.destroy());
   socket.on("error", () => onward.destroy());
 });
+
+// SSH carried over a WebSocket: the handshake answered here, then every
+// binary frame from the client unmasked into the SSH server and every
+// byte back framed for the client. Only what a tunnel needs of the
+// protocol: binary frames, pings answered, close honoured.
+function sshOver(req, socket, head) {
+  const key = req.headers["sec-websocket-key"];
+  if (!key) {
+    socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
+    return;
+  }
+  const accept = createHash("sha1")
+    .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+    .digest("base64");
+  const ssh = net.connect(22, "127.0.0.1", () => {
+    socket.write(
+      "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n" +
+        `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+    );
+    let buf = head.length ? Buffer.from(head) : Buffer.alloc(0);
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      for (;;) {
+        if (buf.length < 2) return;
+        const op = buf[0] & 0x0f;
+        const masked = buf[1] & 0x80;
+        let n = buf[1] & 0x7f;
+        let at = 2;
+        if (n === 126) {
+          if (buf.length < 4) return;
+          n = buf.readUInt16BE(2);
+          at = 4;
+        } else if (n === 127) {
+          if (buf.length < 10) return;
+          n = Number(buf.readBigUInt64BE(2));
+          at = 10;
+        }
+        const maskAt = at;
+        if (masked) at += 4;
+        if (buf.length < at + n) return;
+        const payload = Buffer.from(buf.subarray(at, at + n));
+        if (masked)
+          for (let i = 0; i < n; i++) payload[i] ^= buf[maskAt + (i % 4)];
+        buf = buf.subarray(at + n);
+        if (op === 0x8) {
+          ssh.end();
+          socket.end();
+          return;
+        }
+        if (op === 0x9) socket.write(frame(0x8a, payload));
+        else if (op === 0x1 || op === 0x2 || op === 0x0) ssh.write(payload);
+      }
+    });
+    ssh.on("data", (data) => socket.write(frame(0x82, data)));
+    ssh.on("end", () => socket.end(frame(0x88, Buffer.alloc(0))));
+    socket.on("end", () => ssh.end());
+  });
+  ssh.on("error", () => socket.destroy());
+  socket.on("error", () => ssh.destroy());
+}
+
+// A server-to-client frame: never masked.
+function frame(first, payload) {
+  const n = payload.length;
+  const header =
+    n < 126
+      ? Buffer.from([first, n])
+      : n < 65536
+        ? Buffer.concat([
+            Buffer.from([first, 126]),
+            Buffer.from([n >> 8, n & 0xff]),
+          ])
+        : Buffer.concat([
+            Buffer.from([first, 127]),
+            (() => {
+              const b = Buffer.alloc(8);
+              b.writeBigUInt64BE(BigInt(n));
+              return b;
+            })(),
+          ]);
+  return Buffer.concat([header, payload]);
+}
 
 server.listen(8080, "::", () => console.log("the door is open on 8080"));

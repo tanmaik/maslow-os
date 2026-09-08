@@ -273,7 +273,10 @@ throws their Linux away and keeps home; it is a button, never automatic.
 Sizes are a ladder of CPU and memory, shown without a price, and a
 restart of a few seconds; the disk grows
 before it fills and never shows a cap. VS Code in the browser is the first
-door; the SSH key and front door come last. Model calls never route through
+door; the second is SSH, carried over a WebSocket through the same door
+with no ticket, opened by the public keys a person sets in settings, and
+reached from a Mac's own `ssh` through a Python script the app serves as
+its ProxyCommand. Model calls never route through
 us: each person holds an OpenRouter key we minted with a cap, OpenRouter
 holds the record, and the sweep copies it. Laptops, previews and
 production all make real machines; there is no fake, and every machine

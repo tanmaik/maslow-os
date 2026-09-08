@@ -1,4 +1,6 @@
+import { asOrg } from "@placeholder/db";
 import { agentsOf } from "@placeholder/db/auth";
+import { computerOf } from "@placeholder/db/computers";
 import { groupsOf } from "@placeholder/db/groups";
 import { orgOf } from "@placeholder/db/settings";
 import { redirect } from "next/navigation";
@@ -33,6 +35,7 @@ import { ImageInput } from "@/components/image-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { Agents } from "@/app/settings/agents";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { Connections } from "@/app/settings/connections";
@@ -45,6 +48,7 @@ import { storage } from "@/lib/storage";
 
 // What the last save left to say, by the query it redirected with.
 type Notice = {
+  keys?: "saved" | "invalid";
   org?: "saved" | "name" | "image" | "storage";
   leave?: "principal";
   delete?: "mismatch";
@@ -123,6 +127,9 @@ const NOTICES: Record<string, string> = {
   "connection=gone": "No such app or connection.",
   "connection=unanswered":
     "Composio refused or didn't answer, so nothing changed. Try again in a moment.",
+  "keys=saved": "Saved, and given to your computer.",
+  "keys=invalid":
+    "Each line must be one public key as ssh-keygen writes it, and at most twenty of them.",
   "agent=disconnected": "Disconnected. Its token no longer works.",
   "agent=gone": "That agent was already disconnected.",
 };
@@ -137,11 +144,15 @@ export default async function Settings({
   if (!p) redirect("/");
   const n = await searchParams;
   const said = (k: keyof Notice) => (n[k] ? NOTICES[`${k}=${n[k]}`] : null);
-  const [{ org, members, invited, past }, groups, agents] = await Promise.all([
-    orgOf(p),
-    groupsOf(p),
-    agentsOf(p),
-  ]);
+  const [{ org, members, invited, past }, groups, agents, computer] =
+    await Promise.all([
+      orgOf(p),
+      groupsOf(p),
+      agentsOf(p),
+      deployment.computers.kind === "none"
+        ? null
+        : asOrg(p.orgId, (q) => computerOf(q, p.userId)),
+    ]);
   // Live from the vendor; when it does not answer, the card says so rather
   // than showing nothing connected or nothing to connect.
   const unanswered = (err: Error) => {
@@ -258,6 +269,34 @@ export default async function Settings({
               </AlertDialogContent>
             </AlertDialog>
           )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>SSH</CardTitle>
+          <CardDescription>
+            The public keys that open your computer from your own terminal, one
+            per line. The Computer page says how to connect.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form action="/settings/keys" method="post" className="space-y-2">
+            <Textarea
+              name="keys"
+              rows={3}
+              defaultValue={computer?.authorizedKeys ?? ""}
+              placeholder="ssh-ed25519 AAAA… you@yourmac"
+              spellCheck={false}
+              className="font-mono text-xs"
+            />
+            {said("keys") && (
+              <p className="text-muted-foreground text-sm">{said("keys")}</p>
+            )}
+            <Button type="submit" variant="outline">
+              Save keys
+            </Button>
+          </form>
         </CardContent>
       </Card>
 
