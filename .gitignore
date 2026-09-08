@@ -9,3 +9,6 @@ next-env.d.ts
 *.tsbuildinfo
 .vercel/
 .claude/worktrees/
+
+# Codex CLI keeps its local settings here
+.codex/
