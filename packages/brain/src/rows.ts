@@ -1,4 +1,4 @@
-import type { BrainRecord, Edge, Event, Property } from "./types.ts";
+import type { BrainRecord, Edge, Event, Property, Stub } from "./types.ts";
 
 // Database rows and how they become the brain's types.
 
@@ -8,6 +8,12 @@ export const recordColumns =
 
 // The columns and what the reader may do, for any select of records.
 export const recordSelect = `${recordColumns}, access_level(id) as access`;
+
+// The same, without the body. A body is by far the largest thing a record
+// holds and a list, a link or a picker renders only its title, so leaving it
+// in the database is the difference between a page and a download. What comes
+// back is a Stub, which the types will not let anyone save back as a record.
+export const stubSelect = recordSelect.replace("body,", "'' as body,");
 
 export type RecordRow = {
   id: string;
@@ -25,6 +31,11 @@ export type RecordRow = {
   merged_into: string | null;
   person_id: string;
   access: BrainRecord["access"];
+};
+
+export const toStub = (r: RecordRow): Stub => {
+  const { body: _body, ...rest } = toRecord(r);
+  return rest;
 };
 
 export const toRecord = (r: RecordRow): BrainRecord => ({

@@ -73,6 +73,12 @@ export type BrainRecord = {
   access: Access;
 };
 
+// A record as a list, a link or a picker shows it: everything but the body.
+// The body is declared as null rather than left out, so a stub cannot be
+// handed to the write door: RecordInput takes a string body, and passing one
+// of these would blank a body that was never read.
+export type Stub = Omit<BrainRecord, "body"> & { body?: null };
+
 // One directed link between two records: what, how strongly, since when.
 export type Edge = {
   id: string;
