@@ -1,0 +1,8 @@
+# The computer's image is built from the repo's root and takes only what
+# it copies: the computer's own files and the browser package.
+*
+!apps/computer
+!packages/browser
+apps/computer/fly.toml
+packages/browser/fixtures
+**/node_modules

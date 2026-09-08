@@ -1,5 +1,8 @@
+import { createServer } from "node:http";
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
 
 import {
@@ -40,7 +43,17 @@ const coordinate = z
   .optional()
   .describe("[x, y] pixels from the top left, when there is no ref");
 
-function browserServer(browser: Browser): McpServer {
+// A path as the caller names it, on the machine's disk: on a computer the
+// caller is inside the person's Linux, where home is /home/me, and the
+// browser is outside it, where the same home is /data/home.
+function place(p: string): string {
+  const [from, to] = (process.env.BROWSER_PATHS ?? "").split("=");
+  return from && to && (p === from || p.startsWith(`${from}/`))
+    ? to + p.slice(from.length)
+    : p;
+}
+
+function browserServer(browser: Browser, gif: Gif): McpServer {
   const server = new McpServer(
     { name: "browser", version: "1" },
     {
@@ -48,7 +61,6 @@ function browserServer(browser: Browser): McpServer {
         "A real browser. Start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
     },
   );
-  const gif = new Gif();
 
   // Where the tab is now, after an action.
   const where = async (id: number) => {
@@ -421,7 +433,7 @@ function browserServer(browser: Browser): McpServer {
     { ref: z.string(), paths: z.array(z.string()), tabId },
     async ({ ref: r, paths, tabId: id }) => {
       const t = await browser.tab(id);
-      await locate(t.page, r).setInputFiles(paths);
+      await locate(t.page, r).setInputFiles(paths.map(place));
       if (gif.recording) await gif.frame(t.page);
       return `${paths.length} file${paths.length === 1 ? "" : "s"} chosen\n${await where(t.id)}`;
     },
@@ -554,7 +566,7 @@ function browserServer(browser: Browser): McpServer {
       }
       if (!path) throw new Error("Say the path to save the GIF to.");
       await gif.frame(t.page);
-      const { frames, dropped } = await gif.save(path);
+      const { frames, dropped } = await gif.save(place(path));
       return `${path}: ${frames} frames${dropped ? `; the ${dropped} oldest were let go to keep the recording small` : ""}`;
     },
   );
@@ -600,14 +612,36 @@ function findRefs(query: string, lines: string[]): string[] {
     .map((x) => x.line);
 }
 
-// Serves the browser over stdio until the client hangs up.
-export async function serve(): Promise<void> {
+// Serves the browser: over stdio until the client hangs up, or on the
+// machine itself at http://127.0.0.1:<port>/mcp, every request answered
+// on its own, where the browser closes after ten idle minutes and opens
+// again at the next call, with its profile kept.
+export async function serve(http?: number): Promise<void> {
   const browser = new Browser();
-  const server = browserServer(browser);
-  const transport = new StdioServerTransport();
-  await server.connect(transport);
+  const gif = new Gif();
   const bye = () => browser.quit().finally(() => process.exit(0));
-  process.stdin.on("close", bye);
   process.on("SIGINT", bye);
   process.on("SIGTERM", bye);
+  if (http === undefined) {
+    await browserServer(browser, gif).connect(new StdioServerTransport());
+    process.stdin.on("close", bye);
+    return;
+  }
+  browser.idle(10 * 60_000);
+  createServer(async (req, res) => {
+    if (new URL(req.url ?? "/", "http://browser").pathname !== "/mcp") {
+      res.writeHead(404).end();
+      return;
+    }
+    const transport = new StreamableHTTPServerTransport({
+      sessionIdGenerator: undefined,
+      enableJsonResponse: true,
+    });
+    const server = browserServer(browser, gif);
+    await server.connect(transport);
+    res.on("close", () => void server.close());
+    await transport.handleRequest(req, res);
+  }).listen(http, "127.0.0.1", () =>
+    console.log(`the browser is open on ${http}`),
+  );
 }

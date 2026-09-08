@@ -8,7 +8,7 @@ import { readdir, readFile, readlink, statfs } from "node:fs/promises";
 
 const OS = "/data/os";
 const HOME = "/data/home";
-const OURS = new Set([22, 8080, 8081]);
+const OURS = new Set([22, 8080, 8081, 8082]);
 
 // CPU: the share of ticks not idle between two readings, two seconds apart.
 let cpu = 0;

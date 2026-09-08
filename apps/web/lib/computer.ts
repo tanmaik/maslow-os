@@ -8,6 +8,7 @@ import {
   holdComputer,
   membersWithoutComputers,
   note,
+  openComputerSession,
   setMachine,
   setReady,
   setVolume,
@@ -23,7 +24,7 @@ import { fly, type Machine, type Stats } from "./fly.ts";
 const FLOOR = { cpus: 2, memoryMb: 2048, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v21";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v22";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -126,6 +127,7 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
         cpus: c.cpus,
         memoryMb: c.memoryMb,
         secret: c.secret,
+        brain: await brainOf(q, c),
         metadata: tags(c),
       }));
     try {
@@ -151,6 +153,21 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
     return;
   }
   if (await fly.answers(c.machineId)) await setReady(q, c.id, true);
+}
+
+// What Claude Code on the machine reaches the brain with: this
+// deployment's address and a session of the owner's, opened once for the
+// computer and kept on its row; a session the person ended is replaced
+// when the machine is next made. Null where no machine can reach the app,
+// as on a laptop.
+async function brainOf(
+  q: Query,
+  c: Computer,
+): Promise<{ url: string; token: string } | null> {
+  const d = deployment.computers;
+  if (d.kind !== "fly" || !d.brain) return null;
+  const sessionId = c.sessionId ?? (await openComputerSession(q, c));
+  return { url: d.brain, token: `${c.orgId}.${sessionId}` };
 }
 
 // The sweep's pass, org by org: every current member has a computer and
@@ -218,6 +235,7 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
           cpus: c.cpus,
           memoryMb: c.memoryMb,
           secret: c.secret,
+          brain: await brainOf(q, c),
           metadata: m.config?.metadata ?? tags(c),
         });
         await setReady(q, c.id, false);

@@ -1,6 +1,9 @@
 # The Fly app computers outside production live in. Machines are made by
 # the app through the Machines API, never by `fly deploy`; this file only
-# names the image.
+# names the image. It is built from the repo's root, so the browser
+# package comes along:
+#   fly deploy --build-only --push --remote-only --image-label vN \
+#     --config apps/computer/fly.toml --dockerfile apps/computer/Dockerfile .
 app = "maslow-computers-dev"
 
 [build]

@@ -53,6 +53,9 @@ export type Computers =
       // Every machine has its own name under this: `<machine>.<domain>`.
       domain: string;
       checkout: string | null;
+      // Where a machine reaches this deployment's brain, or null where it
+      // cannot, as on a laptop.
+      brain: string | null;
     }
   | { kind: "none" };
 
@@ -157,6 +160,16 @@ function computers(): Computers {
     FLY_COMPUTERS_APP: app,
     FLY_MACHINES_DOMAIN: domain,
   } = process.env;
+  // The address a machine reaches the app at: production's own, or the
+  // preview branch's, which outlives any one push. Production without one
+  // would make computers that cannot reach the brain, and says so instead.
+  const site = production
+    ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+    : process.env.VERCEL_BRANCH_URL;
+  if (production && token && app && domain && !site)
+    throw new Error(
+      "No address for computers to reach the brain at: set VERCEL_PROJECT_PRODUCTION_URL. Production has no fallback.",
+    );
   if (token && app && domain)
     return {
       kind: "fly",
@@ -164,6 +177,7 @@ function computers(): Computers {
       app,
       domain,
       checkout: production ? null : (process.env.CHECKOUT ?? "laptop"),
+      brain: site ? `https://${site}/mcp` : null,
     };
   if (production)
     throw new Error(

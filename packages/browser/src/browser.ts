@@ -39,6 +39,7 @@ export class Browser {
   // a fresh one for its own life and says so. Tabs the profile reopened
   // on its own are numbered too.
   async open(): Promise<BrowserContext> {
+    this.touch();
     if (this.context) return this.context;
     // Two callers at once open one browser: the second waits on the first.
     this.opening ??= this.launch().finally(() => (this.opening = null));
@@ -46,6 +47,20 @@ export class Browser {
   }
 
   private opening: Promise<BrowserContext> | null = null;
+
+  // Closes the browser after so long without a call, giving its memory
+  // back; the next call opens it again. Off until asked for.
+  private idleMs = 0;
+  private timer: NodeJS.Timeout | null = null;
+  idle(ms: number) {
+    this.idleMs = ms;
+  }
+  private touch() {
+    if (!this.idleMs) return;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => void this.quit(), this.idleMs);
+    this.timer.unref();
+  }
 
   private async launch(): Promise<BrowserContext> {
     const dir =
@@ -166,8 +181,11 @@ export class Browser {
   }
 
   async quit(): Promise<void> {
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
     await this.context?.close();
     this.context = null;
+    this.tabs.clear();
     if (this.fresh) await rm(this.fresh, { recursive: true, force: true });
     this.fresh = null;
   }

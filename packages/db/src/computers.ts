@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 
 import type { Query } from "./index.ts";
 
@@ -16,6 +16,8 @@ export type Computer = {
   volumeId: string | null;
   machineId: string | null;
   readyAt: Date | null;
+  // The owner's session the machine holds to reach the brain, if any.
+  sessionId: string | null;
   // Whether its member is current; a past member's machine is stopped.
   current: boolean;
 };
@@ -25,7 +27,7 @@ export type Size = { cpus: number; memoryMb: number; diskGb: number };
 const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region, c.cpus,
   c.memory_mb as "memoryMb", c.disk_gb as "diskGb", c.secret,
   c.volume_id as "volumeId", c.machine_id as "machineId", c.ready_at as "readyAt",
-  (u.removed_at is null) as current`;
+  c.session_id as "sessionId", (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
 // membership, however many sign-ins race for it.
@@ -122,6 +124,25 @@ export async function clearMachine(q: Query, id: string) {
     "update computers set machine_id = null, ready_at = null where id = $1",
     [id],
   );
+}
+
+// Opens a session of the owner's for the computer to hold, named so the
+// person sees it beside their apps and can end it there, and keeps its id
+// on the row. The session id, which with the org's is the token.
+export async function openComputerSession(
+  q: Query,
+  c: { id: string; orgId: string; userId: string },
+): Promise<string> {
+  const sessionId = randomUUID();
+  await q.query(
+    "insert into sessions (id, org_id, user_id, client) values ($1, $2, $3, 'Your computer')",
+    [sessionId, c.orgId, c.userId],
+  );
+  await q.query("update computers set session_id = $2 where id = $1", [
+    c.id,
+    sessionId,
+  ]);
+  return sessionId;
 }
 
 export async function setReady(q: Query, id: string, ready: boolean) {

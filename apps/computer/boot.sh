@@ -60,11 +60,23 @@ grep -q profile.d/me.sh "$OS/etc/bash.bashrc" ||
 chown root:root "$OS"
 chmod 755 "$OS"
 
+# Claude Code inside reaches the brain with a session of the owner's,
+# given to the machine by our server; a machine our server cannot be
+# reached from, as a laptop's, has none.
+if [ -n "${BRAIN_URL:-}" ]; then
+  printf 'export MASLOW_BRAIN_URL=%q\nexport MASLOW_BRAIN_TOKEN=%q\n' "$BRAIN_URL" "${BRAIN_TOKEN:-}" >"$OS/etc/profile.d/maslow-brain.sh"
+else
+  rm -f "$OS/etc/profile.d/maslow-brain.sh"
+fi
+
 # VS Code starts plain: no welcome page, no AI panel, dot files hidden, a
-# port that opens shows inside VS Code. Ours are seeded into the person's
-# settings and kept current there, except where the person changed one.
-# Ten seconds at most, so nothing in the home can hold the boot.
-timeout 10 node /opt/maslow/settings.mjs "$HOME_DIR" || echo "settings: could not be seeded; left alone"
+# port that opens shows inside VS Code. Claude Code knows the browser and
+# the brain. Ours are seeded into the person's files and kept current
+# there, except where the person changed one. Ten seconds each at most,
+# so nothing in the home can hold the boot.
+for seed in settings mcp; do
+  timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" $seed || echo "$seed: could not be seeded; left alone"
+done
 
 # The image carries no package lists; the person's Linux fetches its own
 # behind the boot, so the first install finds its package.
@@ -87,6 +99,15 @@ keep /usr/sbin/sshd -D -e -f /opt/maslow/etc/sshd_config &
 # The door, outside the person's Linux, is what the internet reaches; VS
 # Code inside answers only to it.
 keep node /opt/maslow/door.mjs &
+# The browser, ours, outside the person's Linux but run as the person, so
+# it updates with the image and reaches only their home; Claude Code
+# inside finds it on 8082. Its profile, logins included, is on the disk.
+mkdir -p "$DISK/browser"
+chown 1000:1000 "$DISK/browser"
+keep chroot --userspec=1000:1000 --groups=1000 / \
+  /usr/bin/env -i HOME=/data/home BROWSER_PROFILE=/data/browser BROWSER_PATHS=/home/me=/data/home \
+  PLAYWRIGHT_BROWSERS_PATH=/opt/maslow/browsers \
+  /usr/local/bin/node /opt/maslow/browser/bin/browser-mcp.mjs --http 8082 &
 keep chroot --userspec=1000:1000 --groups=1000 "$OS" \
   /usr/bin/env -i HOME=/home/me USER=me LOGNAME=me SHELL=/bin/bash LANG=C.UTF-8 TERM=xterm-256color \
   /bin/bash -lc 'cd && exec code-server --host 127.0.0.1 --port 8081 --auth none --app-name Maslow --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override /home/me' &

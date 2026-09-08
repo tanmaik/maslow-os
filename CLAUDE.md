@@ -272,10 +272,16 @@ us: each person holds an OpenRouter key we minted with a cap, OpenRouter
 holds the record, and the sweep copies it. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
-ever calls home. The computer's tools, a browser and three hands on the
-machine, are offered by the brain's MCP at `/mcp` and passed to the
-machine through its door, so every agent that reaches the brain reaches
-the computer; there is no separate server and no separate agent for it.
+ever calls home. Claude Code is in the image and is `claude` on the
+person's path; for now they sign in to it with their own Anthropic
+account. It knows two MCP servers out of the box, seeded into its
+settings like VS Code's defaults: the browser tool, `packages/browser`,
+running on the machine as its own server outside the person's Linux but
+as the person, with its profile on the disk; and the brain at this
+deployment's `/mcp`, reached with a session of the owner's that our
+server opens for the computer and the person can end in settings. The
+brain's MCP is the brain and the connectors, and nothing of the machine:
+no hand that runs a command or reads or writes a file goes into it.
 
 ## Interface
 

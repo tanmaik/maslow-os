@@ -159,33 +159,39 @@ A machine never needs to reach our server. Our server asks the machine for
 its numbers, OpenRouter for its spend, and Fly for its list. That is what
 lets a laptop's machines be real.
 
-## The computer is in the brain's MCP
+## Claude Code on the computer, the browser beside it, the brain over the wire
 
-Settled with Tanmai on 2026-09-08. There is no separate agent for the
-computer and no separate server for it. The brain's MCP at `/mcp` also
-offers the computer's tools, so every agent that can reach the brain,
-Claude Code on the machine or on a Mac, claude.ai, the Mac app later, can
-use the person's computer through the same address and the same sign-in.
+Settled with Tanmai on 2026-09-08, reversing the earlier "the computer is
+in the brain's MCP". The brain's MCP at `/mcp` is the brain and the
+connectors, Composio's apps, find and run, and nothing else: no hand that
+runs a command or reads or writes a file goes into it. The computer is
+where Claude Code runs, not another set of remote tools.
 
-The computer's tools are the browser and three hands. The browser is the
-Chrome extension's tools by the same names, read the page as a numbered
-list, find by words, click, type, screenshot and the rest, built on
-Playwright in `packages/browser` and written for the weakest model: the
-page comes back as text with numbered parts, a find answers with the
-number, every action waits for the page to settle and fails in one line.
-It is checked by four tasks that must pass with GLM 5.3 Flash. The hands
-are run a command, read a file, write a file, as `me` in home. Chrome and
-the browser tool run on the person's machine, inside their Linux, so the
-profile and its logins are theirs and in home; our server runs no browser.
-A call at `/mcp` is passed to the machine through its door, signed with
-the computer's secret, and the answer passed back, images included: the
-same road the page opens VS Code by, and the same direction as everything
-else, our server asking the machine. From inside a dev machine the brain
-is the preview's or production's, since a laptop cannot be reached; from
-the laptop itself everything works.
+Claude Code is in the image, under `/opt/maslow` from npm like VS Code, so
+it updates with the image and is `claude` on the person's path. For now
+the person signs in to their own Anthropic account from it; our key and
+the switch come later in the order. It knows two MCP servers out of the
+box, seeded into its settings the way VS Code's are, so a person who
+changes or removes one is left alone:
 
-Chromium for the tool's own checks comes from Playwright, fetched from
-Microsoft rather than npm: an exception to the field guide's line, written
+- **The browser**, `packages/browser`: the Chrome extension's tools by
+  the same names, read the page as a numbered list, find by words, click,
+  type, screenshot and the rest, built on Playwright and written for the
+  weakest model. It runs on the machine as its own MCP server, on
+  `127.0.0.1:8082`, outside the person's Linux but as the person, so it
+  updates with the image, reaches only their home, and its Chromium and
+  what that needs from Debian are never on their disk. Its profile, logins
+  included, lives on the disk beside the home. It closes after ten idle
+  minutes and opens again at the next call.
+- **The brain**, at this deployment's `/mcp`, with a session of the
+  owner's that our server opens for the computer, named "Your computer"
+  beside their apps in settings, and gives the machine with its address.
+  Ending it there ends it; the next time the machine is made, on the next
+  image, it gets another. A laptop's app cannot be reached from a machine,
+  so a laptop's computer knows the browser alone.
+
+Chromium comes from Playwright, fetched from Microsoft rather than npm
+when the image is built: an exception to the field guide's line, written
 down here.
 
 ## Backups and shared drives
@@ -203,16 +209,15 @@ Each is one pull request, read before the next starts. As of 2026-09-08:
 2. A computer at sign-in, with the lease, the tags, the ledger, the
    progress bar and the backfill. Done, live.
 3. Opening it: every machine at its own address behind a door that takes
-   a ticket from our sign-in, and the Open button. Built, in review.
-4. The browser tool as a package, with its four-task check. Built, in
-   review.
+   a ticket from our sign-in, and the Open button. Done, live.
+4. The browser tool as a package, with its scripted check. Done.
 5. The numbers on the page: live charts, the storage number, open ports.
-6. The computer in the brain's MCP: the browser and the three hands on
-   the machine, reached through `/mcp`.
+   Done, live.
+6. Claude Code on every computer, the browser as its own MCP server on
+   the machine, and the brain reached with the computer's session.
 7. Reset keeps home.
 8. Sizes.
 9. The disk grows itself.
-10. Claude Code on our key, and the switch; it reaches `/mcp` like any
-    other agent.
+10. Claude Code on our key, and the switch.
 11. Backups.
 12. The key and the SSH front door.

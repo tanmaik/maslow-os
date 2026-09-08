@@ -25,20 +25,26 @@ export type Stats = {
   ports: { port: number; name: string }[];
 };
 
-// What a machine is made of: its image, its door's secret and domain,
-// its size, its disk, its one port behind Fly's edge, and its tags.
+// What a machine is made of: its image, its door's secret and domain, the
+// brain's address and the session it reaches it with, its size, its disk,
+// its one port behind Fly's edge, and its tags.
 export type Shape = {
   image: string;
   volumeId: string;
   cpus: number;
   memoryMb: number;
   secret: string;
+  brain: { url: string; token: string } | null;
   metadata: Record<string, string>;
 };
 
 const shape = (m: Shape) => ({
   image: m.image,
-  env: { DOOR_SECRET: m.secret, DOMAIN: config().domain },
+  env: {
+    DOOR_SECRET: m.secret,
+    DOMAIN: config().domain,
+    ...(m.brain ? { BRAIN_URL: m.brain.url, BRAIN_TOKEN: m.brain.token } : {}),
+  },
   guest: { cpu_kind: "shared", cpus: m.cpus, memory_mb: m.memoryMb },
   mounts: [{ volume: m.volumeId, path: "/data" }],
   services: [

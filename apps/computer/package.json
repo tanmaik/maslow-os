@@ -2,6 +2,7 @@
   "name": "@placeholder/computer",
   "private": true,
   "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.263",
     "code-server": "4.135.0"
   }
 }

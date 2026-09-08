@@ -1,0 +1,13 @@
+{
+  "browser": {
+    "type": "http",
+    "url": "http://127.0.0.1:8082/mcp"
+  },
+  "brain": {
+    "type": "http",
+    "url": "${MASLOW_BRAIN_URL}",
+    "headers": {
+      "Authorization": "Bearer ${MASLOW_BRAIN_TOKEN}"
+    }
+  }
+}
