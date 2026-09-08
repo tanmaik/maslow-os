@@ -303,25 +303,39 @@ export async function edgesOf(
   id: string,
   verb?: string,
 ): Promise<Edge[]> {
+  const same = await aliasesOf(q, id);
   const { rows } = await q.query<EdgeRow>(
-    `${standing("array[$1::text]")}
+    `${standing("$1::text[]")}
      select ${edgeColumns.replaceAll(/(^|, )/g, "$1e.")} from touched e
      join winner wf on wf.id = e.from_id
      join winner wt on wt.id = e.to_id
      where ($2::text is null or e.verb = $2)
        and exists (
          select 1 from records o
-         where o.id = case when e.from_id in (select id from same)
+         where o.id = case when e.from_id = any($1::text[])
            then wt.winner else wf.winner end
            and o.deleted_at is null)
      order by coalesce(e.occurred_at, e.created_at), e.id`,
-    [id, verb ?? null],
+    [same, verb ?? null],
   );
   return rows.map(toEdge);
 }
 
 // A record's id and the ids of everything merged into it, however many
 // merges deep.
+// The same for many records at once.
+async function sameAs(q: Query, ids: string[]): Promise<string[]> {
+  const { rows } = await q.query<{ id: string }>(
+    `with recursive same as (
+       select id from unnest($1::text[]) as id
+       union
+       select r.id from records r join same on r.merged_into = same.id
+     ) select id from same`,
+    [ids],
+  );
+  return rows.map((r) => r.id);
+}
+
 export async function aliasesOf(q: Query, id: string): Promise<string[]> {
   const { rows } = await q.query<{ id: string }>(
     "select same_record($1) as id",
@@ -353,21 +367,17 @@ const MAX_NODES = 500;
 
 // What every record stands for, and every edge read between what its ends
 // stand for: a merged record's links show on its winner.
-// What some records stand for, and the links around them read between
-// what their ends stand for: the records, every record merged into them,
-// the links touching any of those, and each link's ends followed up to
-// the record that stands for them, so a merged record's links show on its
-// winner. Seeded, never the whole brain: what it costs grows with the
-// links around the seed, not with the records in the brain.
-const standing = (seed: string) => `
-  with recursive same as (
-    select id from records where id = any(${seed})
-    union
-    select r.id from records r join same on r.merged_into = same.id
-  ), touched as (
+// The links around some records, read between what their ends stand for:
+// every link touching one of the ids given, and each end followed up to the
+// record that stands for it, so a merged record's links show on its winner.
+// The ids are a record and everything merged into it, found first with
+// same_record, so the links are reached through their index and what this
+// costs grows with the links around them, not with the brain.
+const standing = (ids: string) => `
+  with recursive touched as (
     select * from edges e
     where e.deleted_at is null
-      and (e.from_id in (select id from same) or e.to_id in (select id from same))
+      and (e.from_id = any(${ids}) or e.to_id = any(${ids}))
   ), up as (
     select id, id as at, merged_into from records
     where id in (select from_id from touched union select to_id from touched)
@@ -446,7 +456,7 @@ export async function graph(
     let frontier = [...found.keys()];
     for (let d = 1; d <= depth && frontier.length && found.size < limit; d++) {
       const step = await q.query<{ id: string }>(
-        `${standing("$1::text[]")}
+        `${standing("$6::text[]")}
          select distinct n.id from resolved e
          join records cur on cur.deleted_at is null and cur.id = case
            when $2 <> 'in' and e.from_id = any($1::text[]) then e.from_id
@@ -456,7 +466,14 @@ export async function graph(
          where ($3::text[] is null or e.verb = any($3))
            and not (n.id = any($4::text[]))
          order by n.id limit $5`,
-        [frontier, direction, verbs, [...found.keys()], limit - found.size],
+        [
+          frontier,
+          direction,
+          verbs,
+          [...found.keys()],
+          limit - found.size,
+          await sameAs(q, frontier),
+        ],
       );
       frontier = step.rows.map((r) => r.id);
       for (const id of frontier) found.set(id, d);
@@ -481,12 +498,12 @@ export async function graph(
       (a, b) => (a.depth ?? -1) - (b.depth ?? -1) || a.id.localeCompare(b.id),
     );
   const { rows: edges } = await q.query<EdgeRow>(
-    `${standing("$1::text[]")}
+    `${standing("$3::text[]")}
      select ${edgeColumns} from resolved
      where from_id = any($1::text[]) and to_id = any($1::text[])
        and ($2::text[] is null or verb = any($2))
      order by id`,
-    [ids, verbs],
+    [ids, verbs, await sameAs(q, ids)],
   );
   return { nodes, edges: edges.map(toEdge) };
 }
