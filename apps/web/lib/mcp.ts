@@ -27,7 +27,6 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
     org: string;
     types: About["types"];
     shared: number;
-    verbs: string[];
   }>(
     `select u.first_name as "firstName", u.last_name as "lastName",
          (select name from orgs) as org,
@@ -41,9 +40,7 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
                 where t.person_id = current_member() and t.deleted_at is null
                 group by t.name) t) as types,
          (select count(*)::int from types
-          where person_id <> current_member() and deleted_at is null) as shared,
-         (select coalesce(array_agg(distinct verb order by verb), '{}')
-          from edges where deleted_at is null) as verbs
+          where person_id <> current_member() and deleted_at is null) as shared
        from users u where u.id = $1`,
     [s.userId],
   );
@@ -53,7 +50,7 @@ export async function about(q: brain.Query, s: Session): Promise<About> {
     org: me.org,
     types: me.types,
     shared: me.shared,
-    verbs: me.verbs,
+    verbs: await brain.verbsInUse(q),
   };
 }
 
@@ -231,7 +228,7 @@ export function brainServer(s: Session, a: About | null = null): McpServer {
     "catalog",
     {
       description:
-        "The person's vocabulary: every type they defined with its fields, the types colleagues shared into this brain, each with its owner, the verbs edges carry, and who is in the org, by name and email. Reuse before defining; write only to your own types; name people by email when you ask to share.",
+        "The person's vocabulary: every type they defined with its fields, the types colleagues shared into this brain, each with its owner, the verbs on links between records that are here, and who is in the org, by name and email. Reuse before defining; write only to your own types; name people by email when you ask to share.",
       annotations: { readOnlyHint: true },
     },
     door(async (q) => {

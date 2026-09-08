@@ -571,6 +571,41 @@ export async function smokeBrain(stack) {
       `self refused, ${links.before.length} then ${links.after.length}, logged ${links.gone.map((e) => e.action).join("+")} by ${links.gone[0].author}, graph ${links.whole.nodes.length}/${links.whole.edges.length}, near ${links.near.nodes.length}/${links.near.edges.length}`,
     );
 
+    // A verb is in use only while both ends of a link are here.
+    const ghosts = await me(acme)(async (q) => {
+      const a = { source: "smoke", sourceRef: "ghost:a" };
+      const b = { source: "smoke", sourceRef: "ghost:b" };
+      const made = await brain.write(q, {
+        records: [
+          { type: "note", ...a, title: "A ghost" },
+          { type: "note", ...b, title: "Another ghost" },
+        ],
+        edges: [{ from: a, verb: "haunts", to: b }],
+      });
+      const [a1, b1] = made.records;
+      const linked = (await brain.catalog(q)).verbs.includes("haunts");
+      await brain.remove(q, b1);
+      const dangling = (await brain.edgesOf(q, a1)).length;
+      await brain.remove(q, a1);
+      const removed = (await brain.catalog(q)).verbs.includes("haunts");
+      await brain.restore(q, a1);
+      const half = (await brain.catalog(q)).verbs.includes("haunts");
+      await brain.restore(q, b1);
+      const back = (await brain.catalog(q)).verbs.includes("haunts");
+      const shown = (await brain.edgesOf(q, a1)).length;
+      return { linked, dangling, removed, half, back, shown };
+    });
+    check(
+      "a link and its verb show only while both ends are here",
+      ghosts.linked &&
+        ghosts.dangling === 0 &&
+        !ghosts.removed &&
+        !ghosts.half &&
+        ghosts.back &&
+        ghosts.shown === 1,
+      `linked ${ghosts.linked}, links to a removed record ${ghosts.dangling}, verb after removal ${ghosts.removed}, one back ${ghosts.half}, both back ${ghosts.back} with ${ghosts.shown} link`,
+    );
+
     // A verb renamed follows every edge that carries it, hidden ones too.
     const renamed = await me(acme)(async (q) => {
       const wile = (await brain.read(q, { type: "person" })).records.find(

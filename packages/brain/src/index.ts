@@ -18,6 +18,7 @@ export {
   history,
   read,
   type Graph,
+  verbsInUse,
 } from "./read.ts";
 export { recall, remember, stale } from "./recall.ts";
 export { revert } from "./revert.ts";

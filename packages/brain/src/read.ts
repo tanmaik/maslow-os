@@ -262,18 +262,28 @@ export async function get(q: Query, ids: string[]): Promise<BrainRecord[]> {
 }
 
 // Every edge touching a record or anything merged into it, however many
-// merges deep, in either direction; optionally only those carrying one verb.
+// merges deep, in either direction, whose other end is here: a merged record
+// counts as its winner, a removed one does not. Optionally only those
+// carrying one verb.
 export async function edgesOf(
   q: Query,
   id: string,
   verb?: string,
 ): Promise<Edge[]> {
   const { rows } = await q.query<EdgeRow>(
-    `select ${edgeColumns} from edges
-     where (from_id in (select same_record($1)) or to_id in (select same_record($1)))
-       and deleted_at is null
-       and ($2::text is null or verb = $2)
-     order by coalesce(occurred_at, created_at), id`,
+    `${STANDING}
+     select ${edgeColumns.replaceAll(/(^|, )/g, "$1e.")} from edges e
+     join winner wf on wf.id = e.from_id
+     join winner wt on wt.id = e.to_id
+     where (e.from_id in (select same_record($1)) or e.to_id in (select same_record($1)))
+       and e.deleted_at is null
+       and ($2::text is null or e.verb = $2)
+       and exists (
+         select 1 from records o
+         where o.id = case when e.from_id in (select same_record($1))
+           then wt.winner else wf.winner end
+           and o.deleted_at is null)
+     order by coalesce(e.occurred_at, e.created_at), e.id`,
     [id, verb ?? null],
   );
   return rows.map(toEdge);
@@ -330,6 +340,20 @@ const STANDING = `
     where wf.winner <> wt.winner and e.deleted_at is null
     order by wf.winner, e.verb, wt.winner, e.created_at, e.id
   )`;
+
+// Every verb on a link between two records that are both here, read the
+// way the graph reads links: a merged record's links count for its winner,
+// a removed record's do not.
+export async function verbsInUse(q: Query): Promise<string[]> {
+  const { rows } = await q.query<{ verb: string }>(
+    `${STANDING}
+     select distinct e.verb from resolved e
+     join records f on f.id = e.from_id and f.deleted_at is null
+     join records t on t.id = e.to_id and t.deleted_at is null
+     order by e.verb`,
+  );
+  return rows.map((r) => r.verb);
+}
 
 // The brain as a graph: live records and the edges between them. Given
 // records to look around, only those, what is within so many links of them

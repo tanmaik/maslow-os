@@ -12,11 +12,12 @@ import {
   type TypeRow,
 } from "./rows.ts";
 import type { BrainType, Person, Property, Query } from "./types.ts";
+import { verbsInUse } from "./read.ts";
 
 // This person's vocabulary: every type they defined, with the fields each
 // declares, and the types colleagues have shared into this brain, each
-// saying whose it is; every verb an edge they can see carries; and who is
-// in the org, as it stands now.
+// saying whose it is; every verb on a link between records that are here;
+// and who is in the org, as it stands now.
 export async function catalog(
   q: Query,
 ): Promise<{ types: BrainType[]; verbs: string[]; people: Person[] }> {
@@ -28,9 +29,7 @@ export async function catalog(
   const properties = await q.query<PropertyRow>(
     `select ${propertyColumns} from type_properties order by type, name`,
   );
-  const verbs = await q.query<{ verb: string }>(
-    "select distinct verb from edges where deleted_at is null order by verb",
-  );
+  const verbs = await verbsInUse(q);
   const people = await q.query<Person>(
     "select id, name, email from users order by name",
   );
@@ -49,7 +48,7 @@ export async function catalog(
       properties: fields.get(`${t.person_id}:${t.name}`) ?? [],
       own: t.own,
     })),
-    verbs: verbs.rows.map((v) => v.verb),
+    verbs,
     people: people.rows,
   };
 }
