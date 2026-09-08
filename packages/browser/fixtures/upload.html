@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Send a file</title>
+  </head>
+  <body>
+    <h1>Send a file</h1>
+    <form>
+      <label for="file">Your file</label>
+      <input id="file" type="file" />
+    </form>
+    <p id="chosen">No file chosen yet.</p>
+    <script>
+      document.getElementById("file").addEventListener("change", (e) => {
+        const f = e.target.files[0];
+        document.getElementById("chosen").textContent = f
+          ? `Chosen: ${f.name}, ${f.size} bytes`
+          : "No file chosen yet.";
+      });
+    </script>
+  </body>
+</html>

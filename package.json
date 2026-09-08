@@ -11,6 +11,7 @@
     "check": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm smoke",
     "check:fast": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm check:db",
     "check:db": "node scripts/check-db.mjs",
+    "check:browser": "node scripts/smoke-browser.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "smoke": "node scripts/smoke.mjs",
     "typecheck": "turbo run typecheck",

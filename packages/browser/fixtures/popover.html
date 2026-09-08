@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Claim your code</title>
+    <style>
+      #spacer {
+        height: 2600px;
+      }
+      #help {
+        display: none;
+        border: 1px solid #888;
+        padding: 8px;
+        width: 20em;
+      }
+      #help.open {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Claim your code</h1>
+    <button
+      id="toggle"
+      type="button"
+      aria-expanded="false"
+      aria-controls="help"
+    >
+      Help
+    </button>
+    <div id="help" role="region" aria-label="Help">
+      <p>
+        Your code is <strong id="code">7391</strong>. Scroll to the bottom and
+        press Claim.
+      </p>
+    </div>
+    <div id="spacer"></div>
+    <button id="claim" type="button">Claim</button>
+    <p id="claimed" hidden>Claimed. Thank you.</p>
+    <script>
+      const toggle = document.getElementById("toggle");
+      const help = document.getElementById("help");
+      toggle.addEventListener("click", () => {
+        const open = help.classList.toggle("open");
+        toggle.setAttribute("aria-expanded", String(open));
+      });
+      document.getElementById("claim").addEventListener("click", () => {
+        document.getElementById("claimed").hidden = false;
+      });
+    </script>
+  </body>
+</html>

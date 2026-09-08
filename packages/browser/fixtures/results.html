@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Results</title>
+  </head>
+  <body>
+    <h1 id="heading">Results</h1>
+    <ul id="list"></ul>
+    <a href="search.html">Search again</a>
+    <script>
+      const box = {
+        bread: ["Sourdough loaf", "Soda bread", "Focaccia"],
+        soup: ["Leek and potato", "Miso"],
+      };
+      const q = new URLSearchParams(location.search).get("q") ?? "";
+      const found = box[q.trim().toLowerCase()] ?? [];
+      document.getElementById("heading").textContent =
+        `Results for ${q}: ${found.length} recipe${found.length === 1 ? "" : "s"} found`;
+      for (const name of found) {
+        const li = document.createElement("li");
+        li.textContent = name;
+        document.getElementById("list").append(li);
+      }
+    </script>
+  </body>
+</html>
