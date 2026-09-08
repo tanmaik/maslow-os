@@ -92,8 +92,9 @@ environment. A register in `docs/dependencies.md` lists every vendor, written
 when the vendor is added. Every vendor sits behind an interface of ours, so a
 second supplier is a second implementation, never a second code path.
 
-The per-PR workflow and the hourly reap hold five credentials — Neon's key,
-Vercel's token, the second bucket's two keys and Fly's token — on a GitHub
+The per-PR workflow, the hourly reap and the sweep that follows every
+production deploy hold six credentials — Neon's key, Vercel's token, the
+second bucket's two keys, Fly's token and the sweep's secret — on a GitHub
 environment only `main` can use. They run main's code; a pull request's
 code never sees them. The check that runs a pull request's own code holds
 one credential: a Fly token that reaches only the dev app, so the worst a
@@ -229,9 +230,10 @@ says so.
 **In production there is no fallback.** A missing credential stops the app
 from starting. Nothing degrades quietly, and no error is swallowed.
 
-The hourly sweep — the meter and the orphans — runs from the app when an
-hour has passed since the last, in every environment, and from a cron in
-production as the backstop.
+The hourly sweep — the meter, the orphans and the computers — runs from
+the app when an hour has passed since the last, in every environment, from
+a cron in production as the backstop, and the moment a production deploy
+goes live, so a new image reaches every computer at once.
 
 **"Download my data"** gives a person what is theirs, and today that is
 their brain: an export that imports into any brain, as the importer. It is
