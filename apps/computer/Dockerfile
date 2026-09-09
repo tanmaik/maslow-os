@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN usermod -l me -d /home/me -m node && groupmod -n me node && usermod -p '*' me
 COPY --chmod=0440 apps/computer/etc/sudoers.d/me /etc/sudoers.d/me
 COPY --chmod=0644 apps/computer/etc/profile.d/me.sh /etc/profile.d/me.sh
+COPY --chmod=0755 apps/computer/bin/model apps/computer/bin/claude /opt/maslow/bin/
 COPY --chmod=0644 apps/computer/etc/pip.conf /etc/pip.conf
 RUN visudo -cf /etc/sudoers.d/me
 WORKDIR /opt/maslow

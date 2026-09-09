@@ -119,7 +119,27 @@ later.
 
 Nothing routes model calls through us. Each person gets their own
 OpenRouter key, minted by us with a spending cap, placed on their machine;
-Claude Code uses it directly. The key is ours, so OpenRouter already holds
+Claude Code uses it directly. Built 2026-09-08: the key is minted with
+OpenRouter's provisioning key (`OPENROUTER_PROVISIONING_KEY`) when the
+machine is first made, named for the environment, the checkout and the
+computer, capped at twenty dollars a month in production and two
+elsewhere, kept on the computer's row and given to the machine in its
+environment; `claude` on the machine is a wrapper of ours that reads the
+key and the person's choice at every start, from any shell, a bare `ssh
+computer claude` included, and reaches OpenRouter through the
+Anthropic-shaped address it offers with the models named by OpenRouter's
+own ids. `model mine` in the computer's terminal switches Claude Code to
+the person's own Anthropic account and `model ours` back, at its next
+start; the choice is a file in home, and the machine reports it with its
+numbers so the Computer page says which account is in use. A machine made
+before the deployment minted keys gets one at the next sweep. A
+deployment without the provisioning key mints none and says so on the
+Computer page: Claude Code runs on the person's own account there. The
+sweep copies each key's spend into the ledger and deletes keys carrying
+this deployment's name that no computer holds, reading OpenRouter's own
+list: only on a pass that read every org, and never a key made within
+the hour, whose computer may be mid-making. A key OpenRouter no longer
+has is forgotten and the machine remade with a fresh one. The key is ours, so OpenRouter already holds
 every call it made, with the model, the tokens, the cached tokens and the
 exact cost; nothing polls it. The hourly sweep copies each key's spend into
 the ledger, and anyone with our keys, a person or an agent, reads the
@@ -248,6 +268,6 @@ Each is one pull request, read before the next starts. As of 2026-09-08:
 7. Reset keeps home. Done.
 8. Sizes. Done.
 9. The disk grows itself. Done.
-10. Claude Code on our key, and the switch.
+10. Claude Code on our key, and the switch. Done.
 11. Backups. Done.
 12. The key and the SSH front door. Done.

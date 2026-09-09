@@ -10,6 +10,7 @@
   "telemetry.telemetryLevel": "off",
   "update.mode": "none",
   "files.exclude": { "**/.*": true },
+  "terminal.integrated.copyOnSelection": true,
   "remote.portsAttributes": {
     "22": { "onAutoForward": "ignore" },
     "8080": { "onAutoForward": "ignore" },

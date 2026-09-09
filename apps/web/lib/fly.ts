@@ -25,6 +25,8 @@ export type Stats = {
   disk: number | null;
   // Room left on the whole disk; absent from a machine on an older image.
   free?: number | null;
+  // Whose account Claude Code runs on there; absent from an older image.
+  model?: "ours" | "mine" | "none";
   ports: { port: number; name: string }[];
 };
 
@@ -49,6 +51,8 @@ export type Shape = {
   memoryMb: number;
   secret: string;
   brain: { url: string; token: string } | null;
+  // The OpenRouter key Claude Code inside runs on, or none.
+  modelKey: string | null;
   metadata: Record<string, string>;
 };
 
@@ -58,6 +62,7 @@ const shape = (m: Shape) => ({
     DOOR_SECRET: m.secret,
     DOMAIN: config().domain,
     ...(m.brain ? { BRAIN_URL: m.brain.url, BRAIN_TOKEN: m.brain.token } : {}),
+    ...(m.modelKey ? { MODEL_KEY: m.modelKey } : {}),
   },
   guest: { cpu_kind: m.cpuKind, cpus: m.cpus, memory_mb: m.memoryMb },
   mounts: [{ volume: m.volumeId, path: "/data" }],

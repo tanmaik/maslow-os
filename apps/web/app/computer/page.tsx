@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 
 import { Making } from "@/app/computer/making";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { progressOf, sshOf } from "@/lib/computer";
+import { modelOf, progressOf, sshOf } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { sizeOf } from "@/lib/sizes";
 import { principal } from "@/lib/session";
@@ -38,6 +38,7 @@ export default async function ComputerPage() {
                 : "off"
             }
             ssh={await sshOf(p)}
+            model={modelOf()}
           />
         )}
       </main>

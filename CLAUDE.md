@@ -278,7 +278,10 @@ with no ticket, opened by the public keys a person sets in settings, and
 reached from a Mac's own `ssh` through a Python script the app serves as
 its ProxyCommand. Model calls never route through
 us: each person holds an OpenRouter key we minted with a cap, OpenRouter
-holds the record, and the sweep copies it. Laptops, previews and
+holds the record, and the sweep copies it; `model mine` in the computer's
+terminal switches Claude Code to the person's own account, and a
+deployment without our provisioning key runs everyone on their own, and
+says so. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
 ever calls home. Claude Code is in the image and is `claude` on the

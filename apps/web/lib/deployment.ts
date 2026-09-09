@@ -59,6 +59,14 @@ export type Computers =
     }
   | { kind: "none" };
 
+// Model keys for the computers come from OpenRouter, minted per person
+// with a provisioning key of ours, or from nowhere, in which case Claude
+// Code on a computer runs on the person's own account and the page says
+// so. Not a fallback: a deployment without one has the feature off, in
+// the open.
+export type Models =
+  | { kind: "openrouter"; provisioningKey: string; capUsd: number }
+  | { kind: "none" };
 // Production is the live Vercel environment or any box that is not a
 // development server and not a Vercel preview.
 const production = process.env.VERCEL
@@ -186,6 +194,14 @@ function computers(): Computers {
   return { kind: "none" };
 }
 
+// The cap is the abuse limit: low outside production, where keys are
+// made and thrown away with every checkout and preview.
+function models(): Models {
+  const provisioningKey = process.env.OPENROUTER_PROVISIONING_KEY;
+  if (!provisioningKey) return { kind: "none" };
+  return { kind: "openrouter", provisioningKey, capUsd: production ? 20 : 2 };
+}
+
 // The sweep is what meters and cleans; production without its cron's
 // secret would run none of it and say nothing.
 if (production && !process.env.CRON_SECRET)
@@ -204,6 +220,7 @@ export const deployment = {
   seededSignIn: !production,
   storage: storage(),
   computers: computers(),
+  models: models(),
   connections: connections(),
   embeddings: embeddings(),
   https,

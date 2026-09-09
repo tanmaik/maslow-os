@@ -21,6 +21,11 @@ export type Computer = {
   backedUpAt: Date | null;
   // The public keys that open SSH, one per line; empty until set.
   authorizedKeys: string;
+  // The OpenRouter key Claude Code on the machine runs on, its hash, and
+  // what of its spend the ledger already holds.
+  modelKey: string | null;
+  modelKeyHash: string | null;
+  modelSpentUsd: number;
   // The owner's session the machine holds to reach the brain, if any.
   sessionId: string | null;
   // Whether its member is current; a past member's machine is stopped.
@@ -35,6 +40,8 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.cpu_kind as "cpuKind", c.cpus, c.memory_mb as "memoryMb", c.disk_gb as "diskGb", c.secret,
   c.volume_id as "volumeId", c.machine_id as "machineId", c.ready_at as "readyAt",
   c.backed_up_at as "backedUpAt", c.authorized_keys as "authorizedKeys",
+  c.model_key as "modelKey", c.model_key_hash as "modelKeyHash",
+  c.model_spent_usd::float as "modelSpentUsd",
   c.session_id as "sessionId", (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
@@ -61,6 +68,36 @@ export async function claimComputer(
       randomBytes(24).toString("base64url"),
     ],
   );
+}
+
+// The model key the computer runs on, once minted.
+export async function setModelKey(
+  q: Query,
+  id: string,
+  key: string,
+  hash: string,
+) {
+  await q.query(
+    "update computers set model_key = $2, model_key_hash = $3 where id = $1",
+    [id, key, hash],
+  );
+}
+
+// A key OpenRouter no longer has is forgotten, so the next remake mints
+// another.
+export async function clearModelKey(q: Query, id: string) {
+  await q.query(
+    "update computers set model_key = null, model_key_hash = null, model_spent_usd = 0 where id = $1",
+    [id],
+  );
+}
+
+// How much of the key's spend the ledger holds now.
+export async function setModelSpent(q: Query, id: string, usd: number) {
+  await q.query("update computers set model_spent_usd = $2 where id = $1", [
+    id,
+    usd,
+  ]);
 }
 
 // The public keys that open SSH, as the person set them.
@@ -199,7 +236,7 @@ export async function note(
   entry: {
     orgId: string;
     userId: string | null;
-    resource: "machine" | "disk" | "backup";
+    resource: "machine" | "disk" | "backup" | "key";
     event:
       | "made"
       | "started"
@@ -207,6 +244,7 @@ export async function note(
       | "reset"
       | "resized"
       | "grown"
+      | "spent"
       | "destroyed";
     ref: string | null;
     detail?: Record<string, unknown>;

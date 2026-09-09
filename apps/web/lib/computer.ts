@@ -4,6 +4,7 @@ import {
   allComputers,
   claimComputer,
   clearMachine,
+  clearModelKey,
   computerOf,
   holdComputer,
   membersWithoutComputers,
@@ -12,6 +13,8 @@ import {
   setBackedUp,
   setDisk,
   setMachine,
+  setModelKey,
+  setModelSpent,
   setReady,
   setSize,
   setVolume,
@@ -22,6 +25,7 @@ import { createHmac } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
 import { fly, type Backup, type Machine, type Stats } from "./fly.ts";
+import { openrouter } from "./openrouter.ts";
 import { list, presign, remove } from "./s3.ts";
 import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 
@@ -29,7 +33,7 @@ import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v30";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v34";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -134,6 +138,7 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
         memoryMb: c.memoryMb,
         secret: c.secret,
         brain: await brainOf(q, c),
+        modelKey: await modelKeyOf(q, c),
         metadata: tags(c),
       }));
     try {
@@ -160,6 +165,35 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
     return;
   }
   if (await fly.answers(c.machineId)) await setReady(q, c.id, true);
+}
+
+// The name a computer's key carries at OpenRouter: the environment, the
+// checkout, and the computer, so any list there traces back in one look
+// and each deployment knows its own.
+const keyPrefix = () => {
+  const d = deployment.computers;
+  return `maslow ${deployment.where} ${d.kind === "fly" ? (d.checkout ?? "production") : "off"} `;
+};
+
+// The OpenRouter key Claude Code on the machine runs on: minted once per
+// computer with the cap, kept on its row, and given to the machine. Null
+// where this deployment mints none; the person's own account then.
+async function modelKeyOf(q: Query, c: Computer): Promise<string | null> {
+  const m = deployment.models;
+  if (m.kind !== "openrouter") return null;
+  if (c.modelKey) return c.modelKey;
+  const minted = await openrouter.mint(`${keyPrefix()}${c.id}`, m.capUsd);
+  await setModelKey(q, c.id, minted.key, minted.hash);
+  await note(q, {
+    orgId: c.orgId,
+    userId: c.userId,
+    resource: "key",
+    event: "made",
+    ref: minted.hash,
+    detail: { capUsd: m.capUsd },
+    why: "the computer's Claude Code runs on it",
+  });
+  return minted.key;
 }
 
 // What Claude Code on the machine reaches the brain with: this
@@ -190,16 +224,114 @@ export async function reconcile(): Promise<void> {
     ),
   );
   const live = new Map((await fly.machines()).map((m) => [m.id, m]));
+  const keys = new Set<string>();
+  let whole = true;
   for (const orgId of orgs) {
     try {
-      await reconcileOrg(orgId, live);
+      for (const hash of await reconcileOrg(orgId, live)) keys.add(hash);
     } catch (err) {
+      whole = false;
       console.error(`computers ${orgId}: ${(err as Error).message}`);
     }
   }
+  // Only a pass that read every org may say which keys nobody holds.
+  if (whole)
+    await stray(keys).catch((err: Error) =>
+      console.error(`keys: ${err.message}`),
+    );
 }
 
-async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
+// The machine remade on its disk to the image of the day at its row's
+// size, with the brain's session and a model key, and probed again before
+// it opens.
+async function remake(
+  q: Query,
+  c: Computer,
+  m: Machine,
+  why: string,
+): Promise<void> {
+  await fly.reshape(m.id, {
+    image: IMAGE,
+    volumeId: c.volumeId!,
+    cpuKind: c.cpuKind,
+    cpus: c.cpus,
+    memoryMb: c.memoryMb,
+    secret: c.secret,
+    brain: await brainOf(q, c),
+    modelKey: await modelKeyOf(q, c),
+    metadata: m.config?.metadata ?? tags(c),
+  });
+  await setReady(q, c.id, false);
+  await note(q, {
+    orgId: c.orgId,
+    userId: c.userId,
+    resource: "machine",
+    event: "made",
+    ref: m.id,
+    detail: {
+      image: IMAGE,
+      cpuKind: c.cpuKind,
+      cpus: c.cpus,
+      memoryMb: c.memoryMb,
+    },
+    why,
+  });
+}
+
+// Keys at OpenRouter that carry this deployment's name and no computer
+// here holds: gone with the computer, whatever failed to let them go. One
+// made within the hour is left: its computer may be mid-making.
+async function stray(held: Set<string>): Promise<void> {
+  if (deployment.models.kind !== "openrouter") return;
+  const prefix = keyPrefix();
+  for (const k of await openrouter.list())
+    if (
+      k.name.startsWith(prefix) &&
+      !held.has(k.hash) &&
+      Date.now() - k.createdAt.getTime() > 3600 * 1000
+    ) {
+      await openrouter.remove(k.hash);
+      console.log(`key ${k.name}: deleted, its computer is gone`);
+    }
+}
+
+// The key's spend since the last sweep, into the ledger. A key OpenRouter
+// no longer has is forgotten and the machine remade with a fresh one.
+async function spend(q: Query, c: Computer, m: Machine): Promise<void> {
+  if (deployment.models.kind !== "openrouter" || !c.modelKeyHash) return;
+  let total: number;
+  try {
+    total = await openrouter.spent(c.modelKeyHash);
+  } catch (err) {
+    if (/ answered 404:/.test((err as Error).message)) {
+      await clearModelKey(q, c.id);
+      await remake(
+        q,
+        { ...c, modelKey: null, modelKeyHash: null },
+        m,
+        "its key was gone",
+      );
+    }
+    return;
+  }
+  if (total <= c.modelSpentUsd + 0.000001) return;
+  await note(q, {
+    orgId: c.orgId,
+    userId: c.userId,
+    resource: "key",
+    event: "spent",
+    ref: c.modelKeyHash,
+    detail: { usd: total - c.modelSpentUsd, total },
+    why: "models Claude Code called",
+  });
+  await setModelSpent(q, c.id, total);
+}
+
+// Answers the hashes of the model keys the org's computers hold.
+async function reconcileOrg(
+  orgId: string,
+  live: Map<string, Machine>,
+): Promise<string[]> {
   const computers = await asOrg(orgId, allComputers);
   const beside = computers[0];
   if (beside)
@@ -242,32 +374,23 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
         g.cpu_kind === c.cpuKind &&
         g.cpus === c.cpus &&
         g.memory_mb === c.memoryMb;
-      if (c.current && (m.config?.image?.split("@")[0] !== IMAGE || !sized)) {
-        await fly.reshape(m.id, {
-          image: IMAGE,
-          volumeId: c.volumeId!,
-          cpuKind: c.cpuKind,
-          cpus: c.cpus,
-          memoryMb: c.memoryMb,
-          secret: c.secret,
-          brain: await brainOf(q, c),
-          metadata: m.config?.metadata ?? tags(c),
-        });
-        await setReady(q, c.id, false);
-        await note(q, {
-          orgId,
-          userId: c.userId,
-          resource: "machine",
-          event: "made",
-          ref: m.id,
-          detail: {
-            image: IMAGE,
-            cpuKind: c.cpuKind,
-            cpus: c.cpus,
-            memoryMb: c.memoryMb,
-          },
-          why: sized ? "the image moved on" : "the size was changed",
-        });
+      // A machine made before this deployment minted keys gets one too.
+      const keyed =
+        deployment.models.kind !== "openrouter" || c.modelKeyHash !== null;
+      if (
+        c.current &&
+        (m.config?.image?.split("@")[0] !== IMAGE || !sized || !keyed)
+      ) {
+        await remake(
+          q,
+          c,
+          m,
+          !keyed
+            ? "a key was minted"
+            : sized
+              ? "the image moved on"
+              : "the size was changed",
+        );
         return;
       }
       // A running machine not yet known to answer is probed for VS Code;
@@ -307,9 +430,13 @@ async function reconcileOrg(orgId: string, live: Map<string, Machine>) {
           await fly
             .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
             .catch(() => {});
+        await spend(q, c, m);
       }
     });
   }
+  return (await asOrg(orgId, allComputers))
+    .map((c) => c.modelKeyHash)
+    .filter((h): h is string => h !== null);
 }
 
 // How many backups of a home are kept: the newest fourteen.
@@ -528,6 +655,7 @@ export async function resize(p: Principal, key: SizeKey): Promise<boolean> {
       memoryMb: size.memoryMb,
       secret: c.secret,
       brain: await brainOf(q, c),
+      modelKey: await modelKeyOf(q, c),
       metadata: m?.config?.metadata ?? tags(c),
     });
     return true;
@@ -540,6 +668,15 @@ export async function pushKeys(p: Principal): Promise<void> {
   const c = await ready(p);
   if (!c) return;
   await fly.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
+}
+
+// Whose account Claude Code on the computer runs on: ours, with the cap,
+// where this deployment mints keys; the person's own elsewhere.
+export function modelOf(): { kind: "ours"; capUsd: number } | { kind: "mine" } {
+  const m = deployment.models;
+  return m.kind === "openrouter"
+    ? { kind: "ours", capUsd: m.capUsd }
+    : { kind: "mine" };
 }
 
 // Where a ready computer answers SSH, and whether any key opens it. Null

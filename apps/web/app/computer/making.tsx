@@ -40,6 +40,7 @@ export function Making({
   size,
   backedUp,
   ssh,
+  model,
 }: {
   at: Progress;
   region: string | null;
@@ -49,6 +50,8 @@ export function Making({
   backedUp: string | null | "off";
   // Where the computer answers SSH and whether a key opens it yet.
   ssh: { host: string; keys: boolean } | null;
+  // Whose account Claude Code on the computer runs on.
+  model: { kind: "ours"; capUsd: number } | { kind: "mine" };
 }) {
   const [at, setAt] = useState<Progress>(from);
   const [where, setWhere] = useState(region);
@@ -114,7 +117,7 @@ export function Making({
             </AlertDialogContent>
           </AlertDialog>
         </div>
-        <Numbers />
+        <Numbers capUsd={model.kind === "ours" ? model.capUsd : null} />
         <Sizes current={size} />
         {ssh && (
           <div className="space-y-2">

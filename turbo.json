@@ -31,7 +31,8 @@
         "FLY_API_TOKEN",
         "FLY_COMPUTERS_APP",
         "FLY_MACHINES_DOMAIN",
-        "CHECKOUT"
+        "CHECKOUT",
+        "OPENROUTER_PROVISIONING_KEY"
       ]
     },
     "typecheck": {

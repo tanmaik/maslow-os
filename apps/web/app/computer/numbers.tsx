@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
 
 type Stats = {
+  model?: "ours" | "mine" | "none";
   cpu: number;
   memory: { used: number; total: number };
   used: number | null;
@@ -31,7 +32,9 @@ const memoryChart = {
 
 // The computer's live numbers: CPU and memory over the last minute, the
 // bytes used, and the ports listening inside, each a link that opens it.
-export function Numbers() {
+// The cap on our key where this deployment mints one; null where it does
+// not.
+export function Numbers({ capUsd }: { capUsd: number | null }) {
   const [now, setNow] = useState<Stats | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [failed, setFailed] = useState<string | null>(null);
@@ -115,6 +118,15 @@ export function Numbers() {
             <span className="text-muted-foreground"> used</span>
           </>
         )}
+      </p>
+      <p className="text-muted-foreground text-sm">
+        {now.model === "ours"
+          ? `Claude Code runs on a key of ours, capped at $${capUsd ?? "?"} a month. In its terminal, "model mine" switches it to your own Anthropic account.`
+          : now.model === "mine"
+            ? 'Claude Code runs on your own Anthropic account, by your choice. In its terminal, "model ours" switches it back to our key.'
+            : now.model === "none"
+              ? "Claude Code runs on your own Anthropic account: this computer holds no key of ours."
+              : "Claude Code's account will show once the computer is on the newest image."}
       </p>
       {now.ports.length > 0 && (
         <div className="space-y-1">

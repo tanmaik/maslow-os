@@ -1,0 +1,21 @@
+#!/bin/bash
+# Claude Code as the person starts it, from any shell: on Maslow's key,
+# through OpenRouter and the models Maslow names, unless the person chose
+# their own account with `model mine` or this computer has no key. Read
+# at every start, so a switch takes at once.
+set -euo pipefail
+[ -r /etc/profile.d/maslow-model-key.sh ] && . /etc/profile.d/maslow-model-key.sh
+choice=$(cat "$HOME/.config/maslow/model" 2>/dev/null || echo ours)
+if [ "$choice" = ours ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
+  export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+  export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_KEY"
+  export ANTHROPIC_API_KEY=""
+  export ANTHROPIC_MODEL="anthropic/claude-sonnet-5"
+  export ANTHROPIC_DEFAULT_FABLE_MODEL="anthropic/claude-fable-5.1"
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="anthropic/claude-opus-5"
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="anthropic/claude-sonnet-5"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="anthropic/claude-haiku-4.5"
+  export CLAUDE_CODE_SUBAGENT_MODEL="anthropic/claude-sonnet-5"
+  export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
+fi
+exec /opt/maslow/node_modules/.bin/claude "$@"

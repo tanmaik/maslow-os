@@ -70,6 +70,19 @@ grep -q profile.d/me.sh "$OS/etc/bash.bashrc" ||
 chown root:root "$OS"
 chmod 755 "$OS"
 
+# The key Claude Code inside runs on, given to the machine by our server;
+# a machine without one runs on the person's own account.
+if [ -n "${MODEL_KEY:-}" ]; then
+  printf 'export MASLOW_MODEL_KEY=%q\n' "$MODEL_KEY" >"$OS/etc/profile.d/maslow-model-key.sh"
+else
+  rm -f "$OS/etc/profile.d/maslow-model-key.sh"
+fi
+# Ours on the path of every shell, a bare `ssh computer claude` included,
+# which reads no profile: `claude` here is the wrapper that reads the key
+# and the person's choice at every start.
+ln -sf /opt/maslow/bin/claude "$OS/usr/local/bin/claude"
+ln -sf /opt/maslow/bin/model "$OS/usr/local/bin/model"
+
 # Claude Code inside reaches the brain with a session of the owner's,
 # given to the machine by our server; a machine our server cannot be
 # reached from, as a laptop's, has none.
