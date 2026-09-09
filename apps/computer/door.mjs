@@ -117,6 +117,37 @@ const server = http.createServer(async (req, res) => {
         : say(res, 409, "a backup is already running");
     }
   }
+  // A person's hand on the browser, for our server alone: passed to the
+  // browser server as it came.
+  if (
+    to.mine &&
+    url.pathname === "/maslow/browser/act" &&
+    req.method === "POST"
+  ) {
+    if (!valid(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    const onward = http.request(
+      {
+        host: "127.0.0.1",
+        port: 8082,
+        path: "/act",
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        timeout: 15000,
+      },
+      (answer) => {
+        res.writeHead(answer.statusCode ?? 502, {
+          "content-type": "text/plain",
+        });
+        answer.on("error", () => res.destroy());
+        answer.pipe(res);
+      },
+    );
+    onward.on("error", () => say(res, 502, "The browser is not answering."));
+    onward.on("timeout", () => onward.destroy());
+    req.pipe(onward);
+    return;
+  }
   // What the browser is looking at, for our server alone: the picture the
   // browser server draws of its newest tab, or nothing while it is closed.
   if (to.mine && url.pathname === "/maslow/browser") {

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { BrowserView } from "@/app/computer/browser";
 import { Numbers } from "@/app/computer/numbers";
 import { Sizes } from "@/app/computer/sizes";
 import type { SizeKey } from "@/lib/sizes";
@@ -19,6 +18,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
 
 type Progress = "off" | "disk" | "machine" | "starting" | "ready";
@@ -84,76 +89,27 @@ export function Making({
   const [value, label] = STEPS[at];
   if (at === "ready")
     return (
-      <div className="space-y-3">
+      <div className="space-y-4">
         <Alert>
           <AlertTitle>Your computer is ready</AlertTitle>
           <AlertDescription>
-            Always on, in {where ?? "its region"}.
+            Always on, in {where ?? "its region"}. Open it and run{" "}
+            <code>claude</code> in its terminal to talk to Claude; its browser
+            has a page of its own.
           </AlertDescription>
         </Alert>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <form action="/computer/open" method="post">
             <Button type="submit">Open your computer</Button>
           </form>
-          <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="outline" />}>
-              Reset
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <form action="/computer/reset" method="post" className="contents">
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Start your Linux over?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    Everything you installed with apt or changed outside your
-                    home is thrown away and replaced with a fresh Linux. Your
-                    home, with your files, packages and settings, is kept.
-                    Anything running stops. This takes about a minute.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Keep it</AlertDialogCancel>
-                  <AlertDialogAction type="submit">Reset</AlertDialogAction>
-                </AlertDialogFooter>
-              </form>
-            </AlertDialogContent>
-          </AlertDialog>
+          <Button
+            variant="outline"
+            nativeButton={false}
+            render={<Link href="/browser" />}
+          >
+            Its browser
+          </Button>
         </div>
-        <Numbers capUsd={model.kind === "ours" ? model.capUsd : null} />
-        <Sizes current={size} />
-        <p className="text-muted-foreground text-sm">
-          A computer found with its memory nearly full is moved up one size on
-          its own, a restart of a few seconds; never down.
-        </p>
-        <BrowserView />
-        {ssh && (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">From your own terminal</p>
-            {ssh.keys ? (
-              <>
-                <p className="text-muted-foreground text-sm">
-                  Put{" "}
-                  <a
-                    className="underline underline-offset-4"
-                    href="/maslow-ssh"
-                  >
-                    maslow-ssh
-                  </a>{" "}
-                  in your ~/.ssh folder, add this to ~/.ssh/config, and{" "}
-                  <code>ssh computer</code> opens a terminal; VS Code and file
-                  apps that read that file follow. Python 3 is all it needs.
-                </p>
-                <pre className="bg-muted overflow-x-auto rounded-md p-3 text-xs">
-                  {`Host computer\n  HostName ${ssh.host}\n  User me\n  ProxyCommand python3 ~/.ssh/maslow-ssh %h`}
-                </pre>
-              </>
-            ) : (
-              <p className="text-muted-foreground text-sm">
-                Add a public key under SSH in Settings and the way in appears
-                here.
-              </p>
-            )}
-          </div>
-        )}
         <p className="text-muted-foreground text-sm">
           {backedUp === "off"
             ? "No backups here: this deployment has no bucket."
@@ -161,6 +117,88 @@ export function Making({
               ? `Home backed up ${new Date(backedUp).toLocaleString()}; a new one every day, the last fourteen kept.`
               : "Home not backed up yet; the first one comes within the hour."}
         </p>
+        <Collapsible>
+          <CollapsibleTrigger
+            render={<Button variant="ghost" size="sm" className="group px-0" />}
+          >
+            <span className="group-data-panel-open:hidden">
+              For developers: numbers, size, SSH, reset
+            </span>
+            <span className="hidden group-data-panel-open:inline">
+              Fewer details
+            </span>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4 pt-3">
+            <Numbers capUsd={model.kind === "ours" ? model.capUsd : null} />
+            <Sizes current={size} />
+            <p className="text-muted-foreground text-sm">
+              A computer found with its memory nearly full is moved up one size
+              on its own, a restart of a few seconds; never down.
+            </p>
+            {ssh && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium">From your own terminal</p>
+                {ssh.keys ? (
+                  <>
+                    <p className="text-muted-foreground text-sm">
+                      Put{" "}
+                      <a
+                        className="underline underline-offset-4"
+                        href="/maslow-ssh"
+                      >
+                        maslow-ssh
+                      </a>{" "}
+                      in your ~/.ssh folder, add this to ~/.ssh/config, and{" "}
+                      <code>ssh computer</code> opens a terminal; VS Code and
+                      file apps that read that file follow. Python 3 is all it
+                      needs.
+                    </p>
+                    <pre className="bg-muted overflow-x-auto rounded-md p-3 text-xs">
+                      {`Host computer\n  HostName ${ssh.host}\n  User me\n  ProxyCommand python3 ~/.ssh/maslow-ssh %h`}
+                    </pre>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground text-sm">
+                    Add a public key under SSH in Settings and the way in
+                    appears here.
+                  </p>
+                )}
+              </div>
+            )}
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Reset</p>
+              <AlertDialog>
+                <AlertDialogTrigger render={<Button variant="outline" />}>
+                  Start your Linux over
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <form
+                    action="/computer/reset"
+                    method="post"
+                    className="contents"
+                  >
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Start your Linux over?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Everything you installed with apt or changed outside
+                        your home is thrown away and replaced with a fresh
+                        Linux. Your home, with your files, packages and
+                        settings, is kept. Anything running stops. This takes
+                        about a minute.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep it</AlertDialogCancel>
+                      <AlertDialogAction type="submit">Reset</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </form>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
       </div>
     );
   return (

@@ -66,6 +66,14 @@ export async function AppHeader() {
           variant="ghost"
           size="sm"
           nativeButton={false}
+          render={<EagerLink href="/browser" />}
+        >
+          Browser
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          nativeButton={false}
           render={<EagerLink href="/brain" />}
         >
           Brain

@@ -70,7 +70,7 @@ at Tanmai's word on 2026-09-08: Small, two shared CPUs and 2 GB; Medium,
 four and 4 GB; Large, eight and 8 GB; Dedicated, two dedicated CPUs and
 8 GB. Picking one restarts the machine into it in a few seconds; nothing
 inside can. The row is the truth: the sweep remakes a machine whose size
-is not its row's, as it does for the image. Since 2026-09-09 the sweep
+is not its row's, as it does for the image. Since 2026-09-08 the sweep
 also moves a computer up one rung on its own when it finds nine tenths of
 its memory in use, up to Large, and never down: Tanmai's own machine at
 Small was starved by a typecheck, Claude Code and VS Code together, and a
@@ -99,8 +99,13 @@ machine directly, carrying a ticket from our sign-in. Files from outside
 come in the way VS Code takes them: dropped onto the tree, straight into
 home, and downloaded from it the same way; nothing is staged through the
 bucket. Large files must work that way too, and the check drops one of
-gigabytes; SFTP, later, is the road for whole folders. The Computer page holds what VS Code does not: the live charts,
-the size, the storage number, reset, and open ports as previews.
+gigabytes; SFTP, later, is the road for whole folders. The Computer page
+holds what VS Code does not, in two layers since 2026-09-08, at Tanmai's
+word that it read as confusing to a normal person without wanting to lose
+developers: the top is plain, ready, Open, the browser's page, and the
+last backup; everything a developer wants, the live charts and ports,
+the size ladder, SSH, the model switch and reset, sits under one "For
+developers" fold, nothing removed.
 
 A person with the browser needs no key. The SSH front door, built
 2026-09-08: the public keys are pasted under SSH in settings, kept on the
@@ -132,7 +137,8 @@ environment; `claude` on the machine is a wrapper of ours that reads the
 key and the person's choice at every start, from any shell, a bare `ssh
 computer claude` included, and reaches OpenRouter through the
 Anthropic-shaped address it offers with the models named by OpenRouter's
-own ids. `model mine` in the computer's terminal switches Claude Code to
+own ids: GLM 5.3 Flash by default, at Tanmai's word on 2026-09-08, with
+the Claude 5 models one `/model` away. `model mine` in the computer's terminal switches Claude Code to
 the person's own Anthropic account and `model ours` back, at its next
 start; the choice is a file in home, and the machine reports it with its
 numbers so the Computer page says which account is in use. A machine made
@@ -227,10 +233,13 @@ changes or removes one is left alone:
   updates with the image, reaches only their home, and its Chromium and
   what that needs from Debian are never on their disk. Its profile, logins
   included, lives on the disk beside the home. It closes after ten idle
-  minutes and opens again at the next call. The Computer page shows what
-  it is looking at, a picture every few seconds while it is open, so the
-  person watches over the agent's shoulder; the page's port list leaves
-  out VS Code's and Claude Code's own listeners.
+  minutes and opens again at the next call. It has a page of its own,
+  `/browser`, live and in the person's hands: a picture every moment,
+  and their clicks, keys, scrolls and addresses passed back through the
+  door, so a person watches over the agent's shoulder, steps in to sign
+  in to a site for it, and hands it back. Tanmai, 2026-09-08: "it is
+  just another port at the end of the day." The Computer page's port
+  list leaves out VS Code's and Claude Code's own listeners.
 - **The brain**, at this deployment's `/mcp`, with a session of the
   owner's that our server opens for the computer, named "Your computer"
   beside their apps in settings, and gives the machine with its address.

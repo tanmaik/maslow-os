@@ -10,12 +10,14 @@ if [ "$choice" = ours ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
   export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
   export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_KEY"
   export ANTHROPIC_API_KEY=""
-  export ANTHROPIC_MODEL="anthropic/claude-sonnet-5"
+  # GLM 5.3 Flash by default, at Tanmai's word; the Claude models are one
+  # /model away.
+  export ANTHROPIC_MODEL="z-ai/glm-5.3-flash"
   export ANTHROPIC_DEFAULT_FABLE_MODEL="anthropic/claude-fable-5.1"
   export ANTHROPIC_DEFAULT_OPUS_MODEL="anthropic/claude-opus-5"
   export ANTHROPIC_DEFAULT_SONNET_MODEL="anthropic/claude-sonnet-5"
   export ANTHROPIC_DEFAULT_HAIKU_MODEL="anthropic/claude-haiku-4.5"
-  export CLAUDE_CODE_SUBAGENT_MODEL="anthropic/claude-sonnet-5"
+  export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash"
   export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
 fi
 exec /opt/maslow/node_modules/.bin/claude "$@"

@@ -43,6 +43,14 @@ const coordinate = z
   .optional()
   .describe("[x, y] pixels from the top left, when there is no ref");
 
+// What a person watching can do to the browser by hand.
+type Act =
+  | { kind: "navigate"; url: string }
+  | { kind: "click"; x: number; y: number }
+  | { kind: "type"; text: string }
+  | { kind: "key"; key: string }
+  | { kind: "scroll"; x: number; y: number; dy: number };
+
 // A path as the caller names it, on the machine's disk: on a computer the
 // caller is inside the person's Linux, where home is /home/me, and the
 // browser is outside it, where the same home is /data/home.
@@ -643,6 +651,38 @@ export async function serve(http?: number): Promise<void> {
         res.writeHead(200, { "content-type": "image/jpeg" }).end(jpeg);
       } catch {
         res.writeHead(204).end();
+      }
+      return;
+    }
+    // A person's own hand on the browser: a click, a key, typed text, a
+    // scroll, or an address to go to, on the newest tab, which opens the
+    // browser if it was closed. What the agent sees changes under it.
+    if (path === "/act" && req.method === "POST") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      try {
+        const act = JSON.parse(body) as Act;
+        const { page } = await browser.tab();
+        if (act.kind === "navigate")
+          await page.goto(
+            /^[a-z]+:/i.test(act.url) ? act.url : `https://${act.url}`,
+            {
+              waitUntil: "domcontentloaded",
+            },
+          );
+        else if (act.kind === "click") await page.mouse.click(act.x, act.y);
+        else if (act.kind === "type") await page.keyboard.type(act.text);
+        else if (act.kind === "key")
+          await page.keyboard.press(keyName(act.key));
+        else if (act.kind === "scroll") {
+          await page.mouse.move(act.x, act.y);
+          await page.mouse.wheel(0, act.dy);
+        }
+        res.writeHead(204).end();
+      } catch (err) {
+        res
+          .writeHead(400, { "content-type": "text/plain" })
+          .end((err as Error).message.split("\n")[0]);
       }
       return;
     }

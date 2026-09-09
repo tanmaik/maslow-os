@@ -273,24 +273,29 @@ throws their Linux away and keeps home; it is a button, never automatic.
 Sizes are a ladder of CPU and memory, shown without a price, and a
 restart of a few seconds; a computer found with its memory nearly full
 moves up a rung on its own, never down; the disk grows
-before it fills and never shows a cap. VS Code in the browser is the first
+before it fills and never shows a cap. The Computer page is plain first,
+ready, Open, the browser, the last backup, and everything a developer
+wants sits under one "For developers" fold. VS Code in the browser is the first
 door; the second is SSH, carried over a WebSocket through the same door
 with no ticket, opened by the public keys a person sets in settings, and
 reached from a Mac's own `ssh` through a Python script the app serves as
 its ProxyCommand. Model calls never route through
 us: each person holds an OpenRouter key we minted with a cap, OpenRouter
-holds the record, and the sweep copies it; `model mine` in the computer's
-terminal switches Claude Code to the person's own account, and a
+holds the record, and the sweep copies it; Claude Code runs on it by
+default, on GLM 5.3 Flash, with the Claude models one `/model` away;
+`model mine` in the computer's terminal switches it to the person's own
+Anthropic account, and a
 deployment without our provisioning key runs everyone on their own, and
 says so. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
 ever calls home. Claude Code is in the image and is `claude` on the
-person's path; for now they sign in to it with their own Anthropic
-account. It knows two MCP servers out of the box, seeded into its
+person's path. It knows two MCP servers out of the box, seeded into its
 settings like VS Code's defaults: the browser tool, `packages/browser`,
 running on the machine as its own server outside the person's Linux but
-as the person, with its profile on the disk; and the brain at this
+as the person, with its profile on the disk and a page of its own,
+`/browser`, where the person watches it live and takes it over with their
+own clicks and keys; and the brain at this
 deployment's `/mcp`, reached with a session of the owner's that our
 server opens for the computer and the person can end in settings. The
 brain's MCP is the brain and the connectors, and nothing of the machine:

@@ -33,7 +33,7 @@ import { sameSize, SIZES, sizeOf, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v36";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v37";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -716,6 +716,15 @@ export async function browserShotOf(p: Principal): Promise<Uint8Array | null> {
   const c = await ready(p);
   if (!c) return null;
   return fly.browserShot(c.machineId!, ticket(c, 60)).catch(() => null);
+}
+
+// A person's hand on their computer's browser. False when the computer is
+// not ready; the door's word when the browser refuses.
+export async function browserAct(p: Principal, act: unknown): Promise<boolean> {
+  const c = await ready(p);
+  if (!c) return false;
+  await fly.browserAct(c.machineId!, ticket(c, 60), act);
+  return true;
 }
 
 // Whose account Claude Code on the computer runs on: ours, with the cap,

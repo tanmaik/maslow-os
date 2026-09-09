@@ -281,6 +281,30 @@ export const fly = {
     return new Uint8Array(await res.arrayBuffer());
   },
 
+  // A person's hand on the machine's browser, through its door with a
+  // ticket it takes. The door's word when the browser refuses.
+  async browserAct(
+    machineId: string,
+    ticket: string,
+    act: unknown,
+  ): Promise<void> {
+    const res = await fetch(
+      `https://${config().app}.fly.dev/maslow/browser/act`,
+      {
+        method: "POST",
+        headers: {
+          "fly-force-instance-id": machineId,
+          "x-maslow-ticket": ticket,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify(act),
+        signal: AbortSignal.timeout(20_000),
+      },
+    );
+    if (!res.ok)
+      throw new Error((await res.text()) || `the door answered ${res.status}`);
+  },
+
   // Gives the machine's door the keys that open SSH, with a ticket it takes.
   async pushKeys(
     machineId: string,
