@@ -49,7 +49,9 @@ type Act =
   | { kind: "click"; x: number; y: number }
   | { kind: "type"; text: string }
   | { kind: "key"; key: string }
-  | { kind: "scroll"; x: number; y: number; dy: number };
+  | { kind: "scroll"; x: number; y: number; dy: number }
+  | { kind: "select"; x: number; y: number; x2: number; y2: number }
+  | { kind: "copy" };
 
 // A path as the caller names it, on the machine's disk: on a computer the
 // caller is inside the person's Linux, where home is /home/me, and the
@@ -655,8 +657,9 @@ export async function serve(http?: number): Promise<void> {
       return;
     }
     // A person's own hand on the browser: a click, a key, typed text, a
-    // scroll, or an address to go to, on the newest tab, which opens the
-    // browser if it was closed. What the agent sees changes under it.
+    // scroll, a drag that selects, the selected words back, or an address
+    // to go to, on the newest tab, which opens the browser if it was
+    // closed. What the agent sees changes under it.
     if (path === "/act" && req.method === "POST") {
       let body = "";
       for await (const chunk of req) body += chunk;
@@ -677,6 +680,19 @@ export async function serve(http?: number): Promise<void> {
         else if (act.kind === "scroll") {
           await page.mouse.move(act.x, act.y);
           await page.mouse.wheel(0, act.dy);
+        } else if (act.kind === "select") {
+          await page.mouse.move(act.x, act.y);
+          await page.mouse.down();
+          await page.mouse.move(act.x2, act.y2, { steps: 8 });
+          await page.mouse.up();
+        } else if (act.kind === "copy") {
+          const taken = await page.evaluate(
+            () => window.getSelection()?.toString() ?? "",
+          );
+          res
+            .writeHead(200, { "content-type": "text/plain; charset=utf-8" })
+            .end(taken);
+          return;
         }
         res.writeHead(204).end();
       } catch (err) {

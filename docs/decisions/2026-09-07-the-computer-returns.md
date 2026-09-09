@@ -193,7 +193,10 @@ time in its Fly tags, that the running dev server renews while it is up.
 The reap, which already runs on GitHub for the bucket and preview
 databases, runs hourly with Fly's token: lease lapsed an hour, stop the
 machine; lapsed a day, destroy it, its disk, its key and every object of
-its person's in the bucket. The two buckets themselves stay, one per
+its person's in the bucket. A disk an hour old that no machine holds goes
+too, since one made for a machine that was never made is on no list of
+leases; a computer whose disk went that way forgets it and makes another
+at its next step. The two buckets themselves stay, one per
 environment. It reads Fly's
 list, not our database, so nothing forgotten escapes it, and it says what
 it did in its log and ends with a count; a laptop's database is not there
@@ -238,8 +241,12 @@ changes or removes one is left alone:
   and their clicks, keys, scrolls and addresses passed back through the
   door, so a person watches over the agent's shoulder, steps in to sign
   in to a site for it, and hands it back. Tanmai, 2026-09-08: "it is
-  just another port at the end of the day." The Computer page's port
-  list leaves out VS Code's and Claude Code's own listeners.
+  just another port at the end of the day." Words cross both ways: a
+  drag selects in the picture and Copy carries the selection into the
+  person's own clipboard, paste sends theirs in as typed text, and every
+  other chord with Cmd or Ctrl stays with their own browser, whose
+  reload and tabs keep working. The Computer page's port list leaves out
+  VS Code's and Claude Code's own listeners.
 - **The brain**, at this deployment's `/mcp`, with a session of the
   owner's that our server opens for the computer, named "Your computer"
   beside their apps in settings, and gives the machine with its address.

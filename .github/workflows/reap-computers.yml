@@ -2,7 +2,8 @@ name: reap-computers
 
 # Every hour, main's copy of the reap, with Fly's token: stops what no
 # laptop or preview has wanted for an hour, destroys what none has wanted
-# for a day. Production's app is never touched; it is not this app.
+# for a day, and takes a disk an hour old that no machine holds.
+# Production's app is never touched; it is not this app.
 on:
   schedule:
     - cron: "17 * * * *"

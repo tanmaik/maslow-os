@@ -30,6 +30,8 @@ async function call(method, path, body, env = process.env) {
 
 export const machines = (env) => call("GET", "/machines", undefined, env);
 
+export const volumes = (env) => call("GET", "/volumes", undefined, env);
+
 // Marks every machine of a checkout as wanted now.
 export async function renewLeases(checkout, env = process.env) {
   let n = 0;
@@ -63,15 +65,18 @@ export async function destroy(m) {
     if (!live || live.state === "destroyed") break;
     await new Promise((r) => setTimeout(r, 1000));
   }
-  for (const mount of m.config?.mounts ?? []) {
-    for (let i = 0; i < 5; i++) {
-      try {
-        await call("DELETE", `/volumes/${mount.volume}`);
-        break;
-      } catch (err) {
-        if (i === 4) throw err;
-        await new Promise((r) => setTimeout(r, 2000));
-      }
+  for (const mount of m.config?.mounts ?? []) await destroyVolume(mount.volume);
+}
+
+// A disk, tried a few times: Fly holds one for a moment after its machine.
+export async function destroyVolume(id) {
+  for (let i = 0; i < 5; i++) {
+    try {
+      await call("DELETE", `/volumes/${id}`);
+      return;
+    } catch (err) {
+      if (i === 4) throw err;
+      await new Promise((r) => setTimeout(r, 2000));
     }
   }
 }

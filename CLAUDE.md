@@ -295,7 +295,8 @@ settings like VS Code's defaults: the browser tool, `packages/browser`,
 running on the machine as its own server outside the person's Linux but
 as the person, with its profile on the disk and a page of its own,
 `/browser`, where the person watches it live and takes it over with their
-own clicks and keys; and the brain at this
+own clicks and keys, dragging to select and carrying the words out; and
+the brain at this
 deployment's `/mcp`, reached with a session of the owner's that our
 server opens for the computer and the person can end in settings. The
 brain's MCP is the brain and the connectors, and nothing of the machine:
@@ -347,8 +348,10 @@ Nothing is cleaned up; things fail to outlive their owner. A test's database
 dies with the test, a checkout's data with the checkout, a preview's resources
 with the pull request. A machine made outside production carries a lease:
 renewed while its owner runs, stopped an hour after it lapses, destroyed a
-day after. An hourly reap, reading the vendor's list rather than ours,
-catches what a failed close missed.
+day after, along with any disk an hour old that no machine holds. An hourly
+reap, reading the vendor's list rather than ours, catches what a failed
+close missed; what it takes from under a live row, the row forgets and
+makes again.
 
 ## Documentation
 

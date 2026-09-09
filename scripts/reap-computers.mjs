@@ -1,10 +1,18 @@
 // The hourly reap of computers outside production: a machine nobody has
-// wanted for an hour is stopped, and one nobody has wanted for a day is
-// destroyed with its disk. It reads Fly's own list, never ours, so
-// nothing forgotten escapes it, and it ends with a count.
+// wanted for an hour is stopped, one nobody has wanted for a day is
+// destroyed with its disk, and a disk an hour old that no machine holds
+// goes too. It reads Fly's own lists, never ours, so nothing forgotten
+// escapes it, and it ends with a count.
 //
 //   node scripts/reap-computers.mjs [--checkout NAME]   also destroy NAME's now
-import { destroy, machines, stop, wantedAt } from "./fly.mjs";
+import {
+  destroy,
+  destroyVolume,
+  machines,
+  stop,
+  volumes,
+  wantedAt,
+} from "./fly.mjs";
 
 const HOUR = 60 * 60_000;
 const gone = process.argv.indexOf("--checkout");
@@ -39,6 +47,29 @@ for (const m of all) {
     console.error(`reap ${who}: ${err.message}`);
   }
 }
+
+// A disk made for a machine never made, or left when a destruction was cut
+// off, is on no machine; it goes once it is an hour old.
+let disks = 0;
+const held = new Set(
+  (await machines()).flatMap((m) =>
+    (m.config?.mounts ?? []).map((x) => x.volume),
+  ),
+);
+for (const v of await volumes()) {
+  if (held.has(v.id) || v.attached_machine_id) continue;
+  const age = now - new Date(v.created_at).getTime();
+  if (age < HOUR) continue;
+  try {
+    await destroyVolume(v.id);
+    disks++;
+    console.log(
+      `destroyed disk ${v.id} (${v.name}): ${Math.round(age / HOUR)} h old, on no machine`,
+    );
+  } catch (err) {
+    console.error(`reap disk ${v.id}: ${err.message}`);
+  }
+}
 console.log(
-  `reap: ${all.length} machine${all.length === 1 ? "" : "s"}, ${leased} leased, ${stopped} stopped, ${destroyed} destroyed`,
+  `reap: ${all.length} machine${all.length === 1 ? "" : "s"}, ${leased} leased, ${stopped} stopped, ${destroyed} destroyed, ${disks} disk${disks === 1 ? "" : "s"} taken`,
 );

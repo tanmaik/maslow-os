@@ -204,6 +204,15 @@ export async function clearMachine(q: Query, id: string) {
   );
 }
 
+// A disk Fly no longer has is forgotten with the machine that would have
+// mounted it, so the next step makes both.
+export async function clearVolume(q: Query, id: string) {
+  await q.query(
+    "update computers set volume_id = null, machine_id = null, ready_at = null where id = $1",
+    [id],
+  );
+}
+
 // Opens a session of the owner's for the computer to hold, named so the
 // person sees it beside their apps and can end it there, and keeps its id
 // on the row. The session id, which with the org's is the token.

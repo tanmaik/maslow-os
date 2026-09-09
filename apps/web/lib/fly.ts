@@ -282,12 +282,13 @@ export const fly = {
   },
 
   // A person's hand on the machine's browser, through its door with a
-  // ticket it takes. The door's word when the browser refuses.
+  // ticket it takes, and what the browser answered: the selected words
+  // for a copy, nothing for the rest. The door's word when it refuses.
   async browserAct(
     machineId: string,
     ticket: string,
     act: unknown,
-  ): Promise<void> {
+  ): Promise<string> {
     const res = await fetch(
       `https://${config().app}.fly.dev/maslow/browser/act`,
       {
@@ -303,6 +304,7 @@ export const fly = {
     );
     if (!res.ok)
       throw new Error((await res.text()) || `the door answered ${res.status}`);
+    return res.status === 204 ? "" : await res.text();
   },
 
   // Gives the machine's door the keys that open SSH, with a ticket it takes.

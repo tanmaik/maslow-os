@@ -4,6 +4,7 @@ import {
   allComputers,
   claimComputer,
   clearMachine,
+  clearVolume,
   clearModelKey,
   computerOf,
   holdComputer,
@@ -33,7 +34,7 @@ import { sameSize, SIZES, sizeOf, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v37";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v38";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -123,6 +124,20 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
     return;
   }
   if (!c.machineId) {
+    // A disk Fly no longer has — taken by the reap while no machine held
+    // it, or by hand — is forgotten, and the next step makes another.
+    if (!(await fly.volumes()).some((v) => v.id === c.volumeId)) {
+      await clearVolume(q, c.id);
+      await note(q, {
+        orgId: c.orgId,
+        userId: c.userId,
+        resource: "disk",
+        event: "destroyed",
+        ref: c.volumeId,
+        why: "Fly no longer has it; another is made",
+      });
+      return;
+    }
     const m =
       (await fly.machines()).find(
         (m) =>
@@ -718,13 +733,16 @@ export async function browserShotOf(p: Principal): Promise<Uint8Array | null> {
   return fly.browserShot(c.machineId!, ticket(c, 60)).catch(() => null);
 }
 
-// A person's hand on their computer's browser. False when the computer is
-// not ready; the door's word when the browser refuses.
-export async function browserAct(p: Principal, act: unknown): Promise<boolean> {
+// A person's hand on their computer's browser, and what it answered: the
+// selected words for a copy, nothing for the rest. Null when the computer
+// is not ready; the door's word when the browser refuses.
+export async function browserAct(
+  p: Principal,
+  act: unknown,
+): Promise<string | null> {
   const c = await ready(p);
-  if (!c) return false;
-  await fly.browserAct(c.machineId!, ticket(c, 60), act);
-  return true;
+  if (!c) return null;
+  return await fly.browserAct(c.machineId!, ticket(c, 60), act);
 }
 
 // Whose account Claude Code on the computer runs on: ours, with the cap,
