@@ -40,8 +40,12 @@ import { BrainGraph } from "./lazy";
 import { Properties } from "./properties";
 import { Split } from "./split";
 
+// A record with more links than this has no map: its links are read as
+// sentences alone.
+const MAP_LIMIT = 8;
+
 // One record as a document to read and write in place, with what it holds
-// beside it under the graph around it: its fields, when, how sure, who may
+// beside it under the map around it: its fields, when, how sure, who may
 // see it, and its links read as sentences.
 export default async function Page({
   params,
@@ -78,7 +82,7 @@ export default async function Page({
         edges,
         others: new Map(others.map((r) => [r.id, r])),
         winner,
-        near: await graph(db, [id]),
+        near: edges.length <= MAP_LIMIT ? await graph(db, [id]) : null,
         shares: await sharesOf(db, { record: id }),
         groups: await groupsIn(db),
       };
@@ -164,7 +168,7 @@ export default async function Page({
 
   return (
     <Split
-      graph={<BrainGraph graph={near} focus={winner?.id ?? r.id} />}
+      graph={near && <BrainGraph graph={near} focus={winner?.id ?? r.id} />}
       aside={aside}
     >
       <TypeMark

@@ -15,16 +15,16 @@ const subscribe = (cb: () => void) => {
   return () => q.removeEventListener("change", cb);
 };
 
-// A record beside its map: side by side with a draggable divider on a wide
-// screen, the map above the record on a narrow one. The aside, the record's
-// fields and who may see it, sits under the map.
+// A record beside its map, when it has one: side by side with a draggable
+// divider on a wide screen, the map above the record on a narrow one. The
+// aside, the record's fields and who may see it, sits under the map.
 export function Split({
   children,
   graph,
   aside,
 }: {
   children: ReactNode;
-  graph: ReactNode;
+  graph: ReactNode | null;
   aside: ReactNode;
 }) {
   const wide = useSyncExternalStore(
@@ -35,9 +35,11 @@ export function Split({
   if (!wide) {
     return (
       <div className="space-y-4">
-        <div className="h-[min(50dvh,420px)] overflow-hidden rounded-md border">
-          {graph}
-        </div>
+        {graph && (
+          <div className="h-[min(50dvh,420px)] overflow-hidden rounded-md border">
+            {graph}
+          </div>
+        )}
         {children}
         {aside}
       </div>
@@ -52,9 +54,11 @@ export function Split({
         <ResizableHandle />
         <ResizablePanel defaultSize={42} minSize={20}>
           <div className="flex h-full flex-col gap-4 pl-4">
-            <div className="h-[42%] shrink-0 overflow-hidden rounded-md border">
-              {graph}
-            </div>
+            {graph && (
+              <div className="h-[42%] shrink-0 overflow-hidden rounded-md border">
+                {graph}
+              </div>
+            )}
             <div className="min-h-0 flex-1 space-y-4 overflow-auto">
               {aside}
             </div>

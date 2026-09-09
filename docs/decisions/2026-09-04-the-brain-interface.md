@@ -31,7 +31,11 @@ Each was readable, compact or organised, never all three, and none would
 stay so as a brain grew. Only a record page has a graph. Its question is
 what is around this one thing, so that record sits in the
 centre with everything it links to on a ring around it and the verb on each
-spoke.
+spoke. A ring answers that question up to a handful of links and past that
+it is a thicket, so a record with more than eight links has no map, and its
+links are read as sentences alone; the page does not read the graph for it.
+A galaxy of groups within groups was designed for the crowded case and
+dropped on 2026-09-09: the sentences are enough there.
 
 A chip is a kind's icon and a title, cut short with an ellipsis. Positions
 are exact, not simulated; a d3 simulation runs only under a drag, so a chip
