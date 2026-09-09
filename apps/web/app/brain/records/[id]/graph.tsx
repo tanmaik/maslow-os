@@ -94,7 +94,7 @@ function RecordChip({ id, data }: NodeProps<RecordNode>) {
     >
       <Handle type="target" position={Position.Top} className={HANDLE} />
       <Handle type="source" position={Position.Top} className={HANDLE} />
-      <TypeIcon type={data.type} className="size-3.5" />
+      <TypeIcon type={data.type} />
       <span className="truncate">{data.title || "(untitled)"}</span>
     </div>
   );

@@ -258,6 +258,16 @@ export async function read(
   };
 }
 
+// How many live records of the person's own the brain holds.
+export async function count(q: Query): Promise<number> {
+  const { rows } = await q.query<{ n: number }>(
+    `select count(*)::int as n from records
+     where person_id = current_member()
+       and deleted_at is null and merged_into is null`,
+  );
+  return rows[0]!.n;
+}
+
 // Records by id, in no particular order. Missing ids are simply absent.
 export async function get(q: Query, ids: string[]): Promise<BrainRecord[]> {
   if (ids.length === 0) return [];

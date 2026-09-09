@@ -114,15 +114,17 @@ export async function smokeBrain(stack) {
 
     // Isolation between orgs and between colleagues.
     for (const org of orgs) {
-      const { page, vocab } = await me(org)(async (q) => ({
+      const { page, held, vocab } = await me(org)(async (q) => ({
         page: await brain.read(q, { limit: 200 }),
+        held: await brain.count(q),
         vocab: await brain.catalog(q),
       }));
       check(
         `${org.slug} sees its own records`,
         page.records.length === seeds[org.slug].records.length &&
+          held === page.records.length &&
           vocab.types.length === vocabulary.length,
-        `${page.records.length} records, ${vocab.types.length} types`,
+        `${page.records.length} records, ${held} counted, ${vocab.types.length} types`,
       );
     }
     const orgOnly = await asOrg(acme.id, (q) => brain.read(q));

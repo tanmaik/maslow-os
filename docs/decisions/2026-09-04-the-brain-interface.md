@@ -2,23 +2,27 @@
 
 The brain page was one column: a search, a flat list, the vocabulary as a
 definition list, a note form and the file door, with no way to see an edge.
-Replaced by views over the same doors, laid out like a database tool:
+Replaced by views over the same doors, each a card beside a rail of the
+brain's views:
 
-- **Records** is a table. Picking a kind adds its declared fields as columns,
-  sortable by any field that has an order and filterable by any enum, through
-  the read door's `where` and `orderBy`. Deleted rows are hidden unless asked
-  for. A row is added in place, on the kind's own form.
-- **A record** is one page: body, fields, provenance, every edge in and out
-  with its verb, confidence and time, and its history from the log. Edit,
-  delete, restore and unmerge live there.
-- **Vocabulary** is the person's kinds and fields as tables, with
-  forms to define more and a share on each kind; below them, the kinds
-  colleagues have shared into this brain, one table per owner and way they
-  were opened.
-- **Activity** is the log, newest first. The read door gained `history` for
-  this: `changes` reads forward for a consumer keeping up, `history` reads
-  backward for a person looking.
-- **Export & import** is the file door.
+- **The rail** is a floating card: everything, one view per type of the
+  person's own, the types shared into this brain with whose each is, and
+  the types page. It says how many records of the person's own it holds.
+- **Records** is one card: a search and a way to write a record on top, the
+  agent's asks to share beneath them, then a row per record with its type
+  and when. Picking a type puts its declared fields in the columns.
+  Deleted rows are hidden.
+- **A record** is one page, a card of its own beside the rail: its type
+  and whose it is, the title and body edited in place, its fields with how
+  sure and when among them, then "Relevant records", every record linked
+  to it as a chip named after it, with whose it is when it is a
+  colleague's, and the ring beside them when it has links and no more than
+  eight; the verbs are read on the ring. Then "Who can see it".
+  Link, unlink, share, delete, restore and unmerge live there. Nothing on
+  the page says who wrote it or when; that is the log's.
+- **Types and fields** is the person's types as cards, each with its form
+  and a share; below them, the types colleagues have shared into this
+  brain, grouped by owner.
 
 Every body is markdown, rendered with `react-markdown` and GFM on the theme's
 tokens. A record with no body says so; nothing is forced.
@@ -33,11 +37,13 @@ what is around this one thing, so that record sits in the
 centre with everything it links to on a ring around it and the verb on each
 spoke. A ring answers that question up to a handful of links and past that
 it is a thicket, so a record with more than eight links has no map, and its
-links are read as sentences alone; the page does not read the graph for it.
+links are read as a list alone; the page does not read the graph for it.
+A record with no links has nothing to map and no map either.
 A galaxy of groups within groups was designed for the crowded case and
-dropped on 2026-09-09: the sentences are enough there.
+dropped on 2026-09-09: the list is enough there.
 
-A chip is a kind's icon and a title, cut short with an ellipsis. Positions
+A chip is a type's mark, a small square in its colour, and a title, cut
+short with an ellipsis. Positions
 are exact, not simulated; a d3 simulation runs only under a drag, so a chip
 stays where it is put and its neighbours shoulder aside. React Flow draws
 it: pan with two fingers, pinch to zoom, click to open. It is the one
@@ -45,9 +51,8 @@ rendering library beside shadcn, taken because a hand-rolled SVG pan, zoom
 and minimap would be more bespoke code than the rest of the interface put
 together. The graph mounts in the browser only, after its pane has a size.
 
-Links are read as sentences on a record page: "this person owes Road
-Runner", with how sure and when beside. A person can link two records on
-any verb, or unlink them, from there. Two gaps closed on the
+A person can link two records on any verb, or unlink them, from the
+record page. Two gaps closed on the
 way: an edge could join a record to itself, and no edge could ever be
 removed through the door. Both are now refused or possible, with checks in
 the smoke suite.

@@ -32,9 +32,11 @@ export default async function Page() {
   const members = [...people].map(([id, name]) => ({ id, name }));
 
   return (
-    <>
+    <div className="space-y-4">
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold">Types</h1>
+        <h1 className="font-serif text-[26px] leading-[30px] tracking-[-0.01em]">
+          Types and fields
+        </h1>
         <p className="text-muted-foreground text-sm">
           The kinds of thing this brain holds. Yours until you share one; a
           colleague who has a type shares every record of it with you.
@@ -67,7 +69,7 @@ export default async function Page() {
           </div>
         </section>
       ))}
-    </>
+    </div>
   );
 }
 
@@ -119,7 +121,7 @@ function TypeCard({
   children?: React.ReactNode;
 }) {
   return (
-    <Card className="gap-3 py-4">
+    <Card className="gap-3 rounded-[14px] py-4">
       <CardHeader className="px-4">
         <CardTitle className="text-base">
           <TypeMark type={t.name} owner={owner} />

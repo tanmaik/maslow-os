@@ -14,6 +14,7 @@ export { defineProperty, type PropertyDefinition } from "./properties.ts";
 export {
   aliasesOf,
   edgesOf,
+  count,
   get,
   graph,
   history,

@@ -5,16 +5,14 @@ import type { ReactNode } from "react";
 
 import { EagerLink } from "@/components/eager-link";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 
 import { typeHref } from "./format";
 import { TypeIcon } from "./type-icon";
 
-// Types shared into this brain by one person, as the rail lists them.
-type SharedNav = {
-  owner: string;
-  types: { name: string; href: string }[];
-};
+// A type shared into this brain, with whose it is.
+type SharedType = { name: string; owner: string; href: string };
 
 function View({
   href,
@@ -30,10 +28,14 @@ function View({
   return (
     <Button
       variant={href === current ? "secondary" : "ghost"}
-      size="sm"
-      className={`shrink-0 justify-start ${type ? "md:ml-3" : ""}`}
+      className="h-8 shrink-0 justify-start gap-2.5 rounded-[10px] px-2.5 text-sm font-normal aria-[current]:font-medium"
       nativeButton={false}
-      render={<EagerLink href={href} />}
+      render={
+        <EagerLink
+          href={href}
+          aria-current={href === current ? "page" : undefined}
+        />
+      }
     >
       {type && <TypeIcon type={type} />}
       {children}
@@ -41,15 +43,19 @@ function View({
   );
 }
 
-// The brain's views: every record, one view per type of the person's own,
-// the types shared into this brain grouped by owner, then the types page.
+const Rule = () => <Separator className="mx-1 my-2 hidden w-auto md:block" />;
+
+// The brain's views: everything, one view per type of the person's own, the
+// types shared into this brain with whose they are, then the types page.
 // The current one is marked.
 export function BrainNav({
+  records,
   types,
   shared,
 }: {
+  records: number;
   types: string[];
-  shared: SharedNav[];
+  shared: SharedType[];
 }) {
   const pathname = usePathname();
   const params = useSearchParams();
@@ -61,32 +67,43 @@ export function BrainNav({
         )
       : pathname;
   return (
-    <nav className="flex flex-wrap gap-1 md:flex-col">
-      <View href="/brain" current={current}>
-        Records
-      </View>
-      {types.map((t) => (
-        <View key={t} href={typeHref(t)} current={current} type={t}>
-          {t}
+    <Card className="gap-0 rounded-2xl p-2">
+      <nav className="flex gap-0.5 overflow-x-auto md:flex-col md:overflow-visible">
+        <div className="hidden items-baseline justify-between px-2.5 pt-0.5 pb-1.5 text-xs md:flex">
+          <span className="text-muted-foreground font-medium">Your brain</span>
+          <span className="text-muted-foreground/70">
+            {records} {records === 1 ? "record" : "records"}
+          </span>
+        </div>
+        <View href="/brain" current={current}>
+          Everything
         </View>
-      ))}
-      {shared.length > 0 && <Separator className="my-2 hidden md:block" />}
-      {shared.map((g) => (
-        <span key={g.owner} className="contents">
-          <p className="text-muted-foreground w-full px-2 pt-1 text-xs md:w-auto">
-            {g.owner}&apos;s
-          </p>
-          {g.types.map((t) => (
-            <View key={t.href} href={t.href} current={current} type={t.name}>
-              {t.name}
-            </View>
-          ))}
-        </span>
-      ))}
-      <Separator className="my-2 hidden md:block" />
-      <View href="/brain/vocabulary" current={current}>
-        Types
-      </View>
-    </nav>
+        {types.map((t) => (
+          <View key={t} href={typeHref(t)} current={current} type={t}>
+            {t}
+          </View>
+        ))}
+        {shared.length > 0 && (
+          <>
+            <Rule />
+            <span className="text-muted-foreground hidden px-2.5 pb-1 text-[11.5px] md:block">
+              Shared into your brain
+            </span>
+            {shared.map((t) => (
+              <View key={t.href} href={t.href} current={current} type={t.name}>
+                <span className="flex-1 truncate">{t.name}</span>
+                <span className="text-muted-foreground text-[11.5px]">
+                  {t.owner}&apos;s
+                </span>
+              </View>
+            ))}
+          </>
+        )}
+        <Rule />
+        <View href="/brain/vocabulary" current={current}>
+          Types and fields
+        </View>
+      </nav>
+    </Card>
   );
 }

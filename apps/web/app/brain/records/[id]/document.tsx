@@ -4,7 +4,6 @@ import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
 import { Markdown } from "@/components/markdown";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
 import { save } from "./save";
@@ -56,22 +55,28 @@ export function Document({
   return (
     <div className="space-y-4">
       {canEdit ? (
-        <Input
+        <Textarea
           aria-label="Title"
+          rows={1}
           value={heading}
-          onChange={(e) => setHeading(e.target.value)}
+          onChange={(e) => setHeading(e.target.value.replace(/\n/g, " "))}
           onBlur={() => {
             setHeading(heading.trim());
             keep("title", heading.trim());
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") e.currentTarget.blur();
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
           }}
           placeholder="Untitled"
-          className="h-auto border-0 bg-transparent px-0 text-2xl font-semibold shadow-none focus-visible:ring-0 md:text-2xl dark:bg-transparent"
+          className="min-h-0 field-sizing-content resize-none rounded-none border-0 bg-transparent px-0 py-0 font-serif text-[26px] leading-[30px] font-normal tracking-[-0.01em] shadow-none focus-visible:ring-0 md:text-[26px] dark:bg-transparent"
         />
       ) : (
-        <h1 className="text-2xl font-semibold">{title || "(untitled)"}</h1>
+        <h1 className="font-serif text-[26px] leading-[30px] font-normal tracking-[-0.01em]">
+          {title || "(untitled)"}
+        </h1>
       )}
       {canEdit && (writing || !text.trim()) ? (
         <Textarea
@@ -86,7 +91,7 @@ export function Document({
             keep("body", text.trim());
           }}
           placeholder="Write here. Markdown works."
-          className="min-h-40 resize-none border-0 bg-transparent px-0 leading-relaxed shadow-none focus-visible:ring-0 md:text-sm dark:bg-transparent"
+          className="min-h-24 field-sizing-content resize-none border-0 bg-transparent px-0 leading-relaxed shadow-none focus-visible:ring-0 md:text-sm dark:bg-transparent"
         />
       ) : (
         <div

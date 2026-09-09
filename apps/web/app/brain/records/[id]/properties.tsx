@@ -19,8 +19,8 @@ import {
 import { cell, percent } from "../../format";
 import { save } from "./save";
 
-// What a record holds beside its words, read as plain lines: each field,
-// when it happened, how sure. A line is clicked into to change it and kept
+// What a record holds beside its words, as a grid of lines: each field,
+// how sure, when it happened. A line is clicked into to change it and kept
 // as it is left.
 export function Properties({
   id,
@@ -106,7 +106,7 @@ export function Properties({
   );
 
   return (
-    <dl className="space-y-2 text-sm">
+    <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
       {fields.map((f) => (
         <Line
           key={f.id}
@@ -128,6 +128,9 @@ export function Properties({
       {undeclared.map((k) => (
         <Line key={k} label={k} shown={cell(values[k])} editing={false} />
       ))}
+      {confidence !== null && (
+        <Line label="how sure" shown={percent(confidence)} editing={false} />
+      )}
       <Line
         label="when"
         shown={whenShown ? <LocalTime at={whenShown} /> : canEdit ? "add" : ""}
@@ -143,10 +146,7 @@ export function Properties({
           onChange={setPending}
         />
       </Line>
-      {confidence !== null && (
-        <p className="text-muted-foreground pt-1">{percent(confidence)} sure</p>
-      )}
-      {trouble && <p className="text-destructive">{trouble}</p>}
+      {trouble && <p className="text-destructive col-span-2">{trouble}</p>}
     </dl>
   );
 }
@@ -169,9 +169,9 @@ function Line({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-baseline gap-3">
-      <dt className="text-muted-foreground w-20 shrink-0 truncate">{label}</dt>
-      <dd className="min-w-0 flex-1">
+    <>
+      <dt className="text-muted-foreground truncate leading-7">{label}</dt>
+      <dd className="min-w-0 leading-7">
         {editing ? (
           <div className="flex flex-wrap items-center gap-2">
             {children}
@@ -199,7 +199,7 @@ function Line({
           <span>{shown || "—"}</span>
         )}
       </dd>
-    </div>
+    </>
   );
 }
 

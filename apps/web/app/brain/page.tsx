@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { EagerLink } from "@/components/eager-link";
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -23,7 +24,7 @@ import { Asks } from "./asks";
 import { vocabulary } from "./catalog";
 import { cell, recordHref } from "./format";
 import { NewRecord } from "./new-record";
-import { TypeIcon, TypeMark } from "./type-icon";
+import { TypeMark } from "./type-icon";
 
 // What the list shows: everything, or one type, whose when the type is a
 // colleague's, a search, and where the page starts.
@@ -98,9 +99,26 @@ export default async function Page({
   }
   const whose = (r: Stub) =>
     r.ownerId === p.userId ? null : (people.get(r.ownerId) ?? "someone");
-
   return (
-    <div className="space-y-4">
+    <Card className="gap-0 rounded-[14px] py-0">
+      <div className="flex items-center gap-3 p-3.5">
+        <form method="get" className="min-w-0 flex-1">
+          {type && <input type="hidden" name="type" value={type.name} />}
+          {type && !type.own && (
+            <input type="hidden" name="from" value={type.ownerId} />
+          )}
+          <div className="relative">
+            <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2" />
+            <Input
+              name="q"
+              defaultValue={params.q ?? ""}
+              placeholder={type ? `Search ${type.name}s` : "Search"}
+              className="bg-background rounded-full pl-8"
+            />
+          </div>
+        </form>
+        {(!type || type.own) && <NewRecord types={mine} type={type} />}
+      </div>
       <Asks
         asks={asks}
         records={new Map(asked.map((r) => [r.id, r]))}
@@ -108,68 +126,47 @@ export default async function Page({
         people={people}
         groups={groups}
       />
-      <div className="flex flex-wrap items-center gap-2">
-        <h1 className="flex items-center gap-2 text-2xl font-semibold">
-          {type && <TypeIcon type={type.name} className="size-5" />}
-          {type ? type.name : "Brain"}
-        </h1>
-        {type && !type.own && (
-          <span className="text-muted-foreground text-sm">
-            {people.get(type.ownerId) ?? "someone"}&apos;s, shared with you
-          </span>
-        )}
-        <span className="flex-1" />
-        {(!type || type.own) && <NewRecord types={mine} type={type} />}
-      </div>
-      <form method="get" className="flex items-center gap-2">
-        {type && <input type="hidden" name="type" value={type.name} />}
-        {type && !type.own && (
-          <input type="hidden" name="from" value={type.ownerId} />
-        )}
-        <div className="relative w-full sm:w-72">
-          <SearchIcon className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2" />
-          <Input
-            name="q"
-            defaultValue={params.q ?? ""}
-            placeholder={type ? `Search ${type.name}s` : "Search"}
-            className="pl-8"
-          />
-        </div>
-      </form>
-
+      {type && !type.own && (
+        <p className="text-muted-foreground px-3.5 pb-3 text-sm">
+          {people.get(type.ownerId) ?? "someone"}&apos;s {type.name}s, shared
+          with you.
+        </p>
+      )}
       {page.records.length === 0 && !params.q ? (
-        <p className="text-muted-foreground text-sm">
+        <p className="text-muted-foreground px-3.5 pb-4 text-sm">
           {type
             ? `No ${type.name}s yet.`
             : "This brain is empty. Write a note, or let your agent start."}
         </p>
       ) : (
-        <Table>
+        <Table className="text-sm">
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               <TableHead>Title</TableHead>
               {type ? (
                 properties.map((f) => (
                   <TableHead key={f.id}>{f.name}</TableHead>
                 ))
               ) : (
-                <TableHead>Type</TableHead>
+                <TableHead className="w-44">Type</TableHead>
               )}
-              <TableHead className="hidden sm:table-cell">When</TableHead>
+              <TableHead className="hidden w-40 text-right sm:table-cell">
+                When
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {page.records.map((r) => (
-              <TableRow key={r.id} className="relative">
+              <TableRow key={r.id} className="relative h-10">
                 <TableCell className="max-w-xs whitespace-normal">
                   <EagerLink
                     href={recordHref(r.id)}
-                    className="font-medium after:absolute after:inset-0 hover:underline"
+                    className="font-medium after:absolute after:inset-0"
                   >
                     {r.title || "(untitled)"}
                   </EagerLink>
                   {whose(r) && (
-                    <span className="text-muted-foreground ml-2 text-xs">
+                    <span className="text-muted-foreground ml-2 text-[11.5px]">
                       {whose(r)}&apos;s
                     </span>
                   )}
@@ -189,7 +186,7 @@ export default async function Page({
                     />
                   </TableCell>
                 )}
-                <TableCell className="text-muted-foreground hidden whitespace-nowrap sm:table-cell">
+                <TableCell className="text-muted-foreground hidden text-right text-xs whitespace-nowrap tabular-nums sm:table-cell">
                   <LocalTime at={r.occurredAt} fallback="—" />
                 </TableCell>
               </TableRow>
@@ -208,15 +205,18 @@ export default async function Page({
         </Table>
       )}
       {page.cursor && (
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link href={href({ cursor: page.cursor })} />}
-        >
-          More
-        </Button>
+        <div className="px-3.5 pt-1 pb-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground rounded-full"
+            nativeButton={false}
+            render={<Link href={href({ cursor: page.cursor })} />}
+          >
+            More
+          </Button>
+        </div>
       )}
-    </div>
+    </Card>
   );
 }
