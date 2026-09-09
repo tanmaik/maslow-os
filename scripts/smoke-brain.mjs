@@ -427,6 +427,13 @@ export async function smokeBrain(stack) {
         ordered.push(...page.records.map((r) => r.props.weight));
         cursor = page.cursor;
       } while (cursor);
+      const paged = [];
+      cursor = null;
+      do {
+        const page = await brain.read(q, { type: "lift", limit: 1, cursor });
+        paged.push(...page.records.map((r) => r.title));
+        cursor = page.cursor;
+      } while (cursor);
       let unknown = null;
       try {
         await brain.read(q, {
@@ -436,7 +443,7 @@ export async function smokeBrain(stack) {
       } catch (err) {
         unknown = err;
       }
-      return { outcomes, heavy, ordered, unknown };
+      return { outcomes, heavy, ordered, paged, unknown };
     });
 
     // A list field is searched for one of its values; the person type's
@@ -469,6 +476,11 @@ export async function smokeBrain(stack) {
         forms.ordered.join(",") === "130,102.5,80" &&
         forms.unknown instanceof brain.Invalid,
       `${forms.heavy.records.length} heavy, order ${forms.ordered.join(",")}`,
+    );
+    check(
+      "records written in one call page without a gap",
+      forms.paged.length === 3,
+      `${forms.paged.length} of 3`,
     );
 
     // An edge carries strength and time.

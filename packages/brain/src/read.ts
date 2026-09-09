@@ -214,8 +214,6 @@ export async function read(
   let order = "coalesce(occurred_at, created_at)";
   let orderType = "timestamptz";
   let direction: "asc" | "desc" = "desc";
-  let keyOf = (r: RecordRow): string | null =>
-    (r.occurred_at ?? r.created_at).toISOString();
   if (opts.orderBy) {
     const { p, expr } = await field(opts.orderBy.property);
     if (p.datatype === "list") {
@@ -228,7 +226,6 @@ export async function read(
     order = expr;
     orderType = sqlType[p.datatype];
     direction = DIRECTIONS[wanted];
-    keyOf = (r) => (r.props[p.name] == null ? null : String(r.props[p.name]));
   }
   const orderName = `${scope}/${opts.type ?? ""}/${opts.owner ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
   if (opts.cursor) {
@@ -242,8 +239,10 @@ export async function read(
     );
   }
 
-  const { rows } = await q.query<RecordRow>(
-    `select ${select} from records r
+  // The sort key travels as the database writes it, so the next page
+  // starts exactly where this one ended.
+  const { rows } = await q.query<RecordRow & { sort_key: string | null }>(
+    `select ${select}, to_json(${order}) #>> '{}' as sort_key from records r
      where ${where.join("\n       and ")}
      order by ${order} ${direction} nulls last, id ${direction}
      limit ${param(limit + 1)}`,
@@ -254,7 +253,7 @@ export async function read(
   return {
     records: page,
     cursor: last
-      ? encode({ key: keyOf(last), id: last.id, order: orderName })
+      ? encode({ key: last.sort_key, id: last.id, order: orderName })
       : null,
   };
 }
