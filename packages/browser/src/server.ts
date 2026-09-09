@@ -629,7 +629,24 @@ export async function serve(http?: number): Promise<void> {
   }
   browser.idle(10 * 60_000);
   createServer(async (req, res) => {
-    if (new URL(req.url ?? "/", "http://browser").pathname !== "/mcp") {
+    const path = new URL(req.url ?? "/", "http://browser").pathname;
+    // What the newest tab looks like now, for a person watching over the
+    // agent's shoulder; nothing while the browser is closed.
+    if (path === "/screenshot") {
+      const page = browser.current();
+      if (!page) {
+        res.writeHead(204).end();
+        return;
+      }
+      try {
+        const jpeg = await page.screenshot({ type: "jpeg", quality: 60 });
+        res.writeHead(200, { "content-type": "image/jpeg" }).end(jpeg);
+      } catch {
+        res.writeHead(204).end();
+      }
+      return;
+    }
+    if (path !== "/mcp") {
       res.writeHead(404).end();
       return;
     }

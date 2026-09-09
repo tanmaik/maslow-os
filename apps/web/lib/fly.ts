@@ -263,6 +263,24 @@ export const fly = {
     return true;
   },
 
+  // What the machine's browser is looking at this moment, as a JPEG, or
+  // null while it is closed. Asked of the door with a ticket it takes.
+  async browserShot(
+    machineId: string,
+    ticket: string,
+  ): Promise<Uint8Array | null> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/browser`, {
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (res.status === 204) return null;
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+    return new Uint8Array(await res.arrayBuffer());
+  },
+
   // Gives the machine's door the keys that open SSH, with a ticket it takes.
   async pushKeys(
     machineId: string,

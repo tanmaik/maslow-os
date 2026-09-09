@@ -117,6 +117,25 @@ const server = http.createServer(async (req, res) => {
         : say(res, 409, "a backup is already running");
     }
   }
+  // What the browser is looking at, for our server alone: the picture the
+  // browser server draws of its newest tab, or nothing while it is closed.
+  if (to.mine && url.pathname === "/maslow/browser") {
+    if (!valid(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    const shot = http.get(
+      { host: "127.0.0.1", port: 8082, path: "/screenshot", timeout: 8000 },
+      (answer) => {
+        res.writeHead(answer.statusCode ?? 502, {
+          "content-type": answer.headers["content-type"] ?? "image/jpeg",
+        });
+        answer.on("error", () => res.destroy());
+        answer.pipe(res);
+      },
+    );
+    shot.on("error", () => say(res, 204, ""));
+    shot.on("timeout", () => shot.destroy());
+    return;
+  }
   // The keys that open SSH, for our server alone: written beside the
   // server's own, outside the person's Linux.
   if (to.mine && url.pathname === "/maslow/keys" && req.method === "PUT") {
@@ -175,6 +194,7 @@ const server = http.createServer(async (req, res) => {
     },
     (answer) => {
       res.writeHead(answer.statusCode ?? 502, answer.headers);
+      answer.on("error", () => res.destroy());
       answer.pipe(res);
     },
   );

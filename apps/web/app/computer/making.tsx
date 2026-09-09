@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { BrowserView } from "@/app/computer/browser";
 import { Numbers } from "@/app/computer/numbers";
 import { Sizes } from "@/app/computer/sizes";
 import type { SizeKey } from "@/lib/sizes";
@@ -119,6 +120,11 @@ export function Making({
         </div>
         <Numbers capUsd={model.kind === "ours" ? model.capUsd : null} />
         <Sizes current={size} />
+        <p className="text-muted-foreground text-sm">
+          A computer found with its memory nearly full is moved up one size on
+          its own, a restart of a few seconds; never down.
+        </p>
+        <BrowserView />
         {ssh && (
           <div className="space-y-2">
             <p className="text-sm font-medium">From your own terminal</p>

@@ -27,13 +27,13 @@ import { deployment } from "./deployment.ts";
 import { fly, type Backup, type Machine, type Stats } from "./fly.ts";
 import { openrouter } from "./openrouter.ts";
 import { list, presign, remove } from "./s3.ts";
-import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
+import { sameSize, SIZES, sizeOf, type SizeKey } from "./sizes.ts";
 
 // Every computer starts at the ladder's first rung, with this much disk.
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v34";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v36";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -423,7 +423,15 @@ async function reconcileOrg(
       if (m.config?.metadata?.lease)
         await fly.tag(m.id, "lease", new Date().toISOString());
       if (c.readyAt && c.current && m.state === "started") {
-        await grow(q, c);
+        // The numbers once, for the disk and the size; a machine that
+        // cannot be read this hour is left for the next.
+        const s = await fly
+          .stats(c.machineId!, ticket(c, 60))
+          .catch(() => null);
+        if (s) {
+          if (await hot(q, c, m, s)) return;
+          await grow(q, c, s);
+        }
         await backUp(q, c);
         // The keys again every hour, so a machine remade or reset has them.
         if (c.authorizedKeys)
@@ -521,17 +529,49 @@ const DISK_CEILING_GB = 200;
 // to the ceiling, while the machine runs. Fly says when a machine must be
 // restarted to see the room, and then it is, as for a new image. A disk
 // that cannot be read this hour is left for the next.
-async function grow(q: Query, c: Computer): Promise<void> {
-  let s: Stats;
-  try {
-    s = await fly.stats(c.machineId!, ticket(c, 60));
-  } catch {
-    return;
-  }
+async function grow(q: Query, c: Computer, s: Stats): Promise<void> {
   // The whole disk's room, ours on it included, not the person's bytes
   // alone; a machine that does not yet say is left alone.
   if (s.free == null || s.disk === null || s.free > s.disk * 0.2) return;
   await extend(q, c, "the disk was nearly full");
+}
+
+// The rung above each: memory doubles up the ladder and stops at Large,
+// since Dedicated has no more of it.
+const UP: Partial<Record<SizeKey, SizeKey>> = {
+  small: "medium",
+  medium: "large",
+};
+
+// A computer found with nine tenths of its memory in use is moved up one
+// rung on its own, a restart of seconds, and never down: a starved
+// machine cannot even show the person the warning. At the top, we are
+// told. Whether it was moved.
+async function hot(
+  q: Query,
+  c: Computer,
+  m: Machine,
+  s: Stats,
+): Promise<boolean> {
+  if (s.memory.used < s.memory.total * 0.9) return false;
+  const next = UP[sizeOf(c) ?? "large"];
+  if (!next) {
+    console.error(`computer ${c.id}: memory nearly full at its largest size`);
+    return false;
+  }
+  const size = SIZES[next];
+  await setSize(q, c.id, size);
+  await note(q, {
+    orgId: c.orgId,
+    userId: c.userId,
+    resource: "machine",
+    event: "resized",
+    ref: c.machineId,
+    detail: { cpuKind: size.cpuKind, cpus: size.cpus, memoryMb: size.memoryMb },
+    why: "memory was nearly full",
+  });
+  await remake(q, { ...c, ...size }, m, "memory was nearly full");
+  return true;
 }
 
 // Grows the disk by half again, up to the ceiling; at the ceiling, says
@@ -668,6 +708,14 @@ export async function pushKeys(p: Principal): Promise<void> {
   const c = await ready(p);
   if (!c) return;
   await fly.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
+}
+
+// What the computer's browser is looking at, or null while it is closed
+// or the computer is not ready.
+export async function browserShotOf(p: Principal): Promise<Uint8Array | null> {
+  const c = await ready(p);
+  if (!c) return null;
+  return fly.browserShot(c.machineId!, ticket(c, 60)).catch(() => null);
 }
 
 // Whose account Claude Code on the computer runs on: ours, with the cap,

@@ -109,7 +109,14 @@ async function ports() {
       if (!m || !listening.has(m[1])) continue;
       const port = listening.get(m[1]);
       listening.delete(m[1]);
+      // VS Code's and Claude Code's own listeners are theirs, not a port
+      // the person opened; they are left off the list.
+      const cmd = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(
+        () => "",
+      );
+      if (/code-server|\/opt\/maslow\//.test(cmd)) continue;
       const name = await readFile(`/proc/${pid}/comm`, "utf8").catch(() => "");
+      if (name.trim() === "claude") continue;
       out.push({ port, name: name.trim() });
     }
   }

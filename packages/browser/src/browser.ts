@@ -146,6 +146,13 @@ export class Browser {
     return out;
   }
 
+  // The newest open tab without opening the browser, or null while it is
+  // closed: what a watcher sees.
+  current(): Page | null {
+    if (!this.context) return null;
+    return [...this.tabs.values()].filter((p) => !p.isClosed()).at(-1) ?? null;
+  }
+
   // The tab asked for, or the newest when none is named.
   async tab(id?: number): Promise<Tab> {
     await this.open();

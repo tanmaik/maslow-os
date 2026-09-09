@@ -70,7 +70,11 @@ at Tanmai's word on 2026-09-08: Small, two shared CPUs and 2 GB; Medium,
 four and 4 GB; Large, eight and 8 GB; Dedicated, two dedicated CPUs and
 8 GB. Picking one restarts the machine into it in a few seconds; nothing
 inside can. The row is the truth: the sweep remakes a machine whose size
-is not its row's, as it does for the image. The reporter gives CPU,
+is not its row's, as it does for the image. Since 2026-09-09 the sweep
+also moves a computer up one rung on its own when it finds nine tenths of
+its memory in use, up to Large, and never down: Tanmai's own machine at
+Small was starved by a typecheck, Claude Code and VS Code together, and a
+starved machine cannot even show the warning. The page says so. The reporter gives CPU,
 memory and disk every few seconds; the page draws them live; near the top
 of the current size, the page says so. Shrinking is the same control. The
 ledger records every change with the size, and prices come later from
@@ -223,7 +227,10 @@ changes or removes one is left alone:
   updates with the image, reaches only their home, and its Chromium and
   what that needs from Debian are never on their disk. Its profile, logins
   included, lives on the disk beside the home. It closes after ten idle
-  minutes and opens again at the next call.
+  minutes and opens again at the next call. The Computer page shows what
+  it is looking at, a picture every few seconds while it is open, so the
+  person watches over the agent's shoulder; the page's port list leaves
+  out VS Code's and Claude Code's own listeners.
 - **The brain**, at this deployment's `/mcp`, with a session of the
   owner's that our server opens for the computer, named "Your computer"
   beside their apps in settings, and gives the machine with its address.

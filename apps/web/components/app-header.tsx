@@ -29,7 +29,7 @@ export async function AppHeader() {
   const others = memberships.filter((m) => m.userId !== p.userId);
 
   return (
-    <header className="mb-6 flex h-8 items-center justify-between gap-2 overflow-x-auto whitespace-nowrap">
+    <header className="mb-6 flex min-h-8 flex-wrap items-center justify-between gap-x-2 gap-y-1">
       <div className="flex items-center gap-1">
         <Link href="/" className="px-2 text-base font-semibold">
           {orgName}

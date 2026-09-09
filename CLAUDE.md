@@ -271,7 +271,8 @@ page is blocked until it is ready. They are `me`, home is `/home/me`,
 `sudo` needs no password, and `/opt/maslow` is ours and read-only. Reset
 throws their Linux away and keeps home; it is a button, never automatic.
 Sizes are a ladder of CPU and memory, shown without a price, and a
-restart of a few seconds; the disk grows
+restart of a few seconds; a computer found with its memory nearly full
+moves up a rung on its own, never down; the disk grows
 before it fills and never shows a cap. VS Code in the browser is the first
 door; the second is SSH, carried over a WebSocket through the same door
 with no ticket, opened by the public keys a person sets in settings, and
