@@ -15,12 +15,15 @@ export function Asks({
   types,
   people,
   groups,
+  back = "/brain",
 }: {
   asks: ShareRequest[];
   records: Map<string, Stub>;
   types: BrainType[];
   people: Map<string, string>;
   groups: Group[];
+  // Where an answer lands: the page the ask was answered on.
+  back?: "/" | "/brain";
 }) {
   if (asks.length === 0) return null;
   const may = {
@@ -77,6 +80,7 @@ export function Asks({
           </p>
           <form action="/brain/requests" method="post" className="flex gap-1">
             <input type="hidden" name="request" value={a.id} />
+            <input type="hidden" name="back" value={back} />
             <Button
               type="submit"
               size="sm"

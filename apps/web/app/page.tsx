@@ -1,18 +1,19 @@
-import { asOrg } from "@maslow/db";
-import Link from "next/link";
-
+import { requestsOf, stubs } from "@maslow/brain";
+import { asOrg, asPerson } from "@maslow/db";
+import { groupsIn } from "@maslow/db/groups";
 import { after } from "next/server";
 
 import { SignIn, notice, type Notice } from "@/components/sign-in";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { sweepIfDue } from "@/lib/meter";
 import { principal } from "@/lib/session";
 
-type Member = { id: string; name: string; email: string };
+import { Asks } from "./brain/asks";
+import { vocabulary } from "./brain/catalog";
+import { Rail } from "./room/rail";
+import { Zoom } from "./room/zoom";
 
-// Home for the signed-in person: their org, and the way to its settings.
-// Signed out, a way in.
+// Home for the signed-in person is their room: what asks something of
+// them, and who is in the org. Signed out, a way in.
 export default async function Page({
   searchParams,
 }: {
@@ -24,38 +25,57 @@ export default async function Page({
   // A look at the site is what runs the hourly sweep outside production.
   after(() => sweepIfDue());
 
-  const { orgName, members, me } = await asOrg(p.orgId, async (q) => {
-    const rows = (
-      await q.query<Member>("select id, name, email from users order by name")
-    ).rows;
-    return {
-      orgName: (await q.query<{ name: string }>("select name from orgs"))
-        .rows[0]?.name,
-      members: rows.length,
-      me: rows.find((m) => m.id === p.userId),
-    };
-  });
+  const [{ types, people }, orgName, { asks, asked, groups }] =
+    await Promise.all([
+      vocabulary(p),
+      asOrg(
+        p.orgId,
+        async (q) =>
+          (await q.query<{ name: string }>("select name from orgs")).rows[0]
+            ?.name,
+      ),
+      asPerson(p, async (db) => {
+        const asks = await requestsOf(db);
+        return {
+          asks,
+          asked: await stubs(
+            db,
+            asks.flatMap((a) =>
+              a.items.flatMap((it) => ("record" in it ? [it.record] : [])),
+            ),
+          ),
+          groups: asks.length ? await groupsIn(db) : [],
+        };
+      }),
+    ]);
 
   return (
-    <main className="mx-auto max-w-xl">
-      <Card className="shadow-float ring-0">
-        <CardContent className="space-y-4 px-6 py-2">
-          <h1 className="font-serif text-3xl leading-tight italic">
-            {orgName}
-          </h1>
-          <p className="text-muted-foreground">
-            {members} {members === 1 ? "member" : "members"}
-            {me && ` · you are ${me.name}`}. Invite people and manage the org in{" "}
-            <Link href="/settings" className="text-foreground underline">
-              settings
-            </Link>
-            .
-          </p>
-          <Button nativeButton={false} render={<Link href="/brain" />}>
-            Open the brain
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
+    <div className="flex items-start gap-6">
+      <h1 className="sr-only">{orgName}</h1>
+      <Rail
+        people={[...people]
+          .map(([id, name]) => ({ id, name }))
+          .sort((a, b) => a.name.localeCompare(b.name))}
+      />
+      <main className="min-w-0 flex-1">
+        <Zoom>
+          {asks.length > 0 ? (
+            <Asks
+              asks={asks}
+              records={new Map(asked.map((r) => [r.id, r]))}
+              types={types}
+              people={people}
+              groups={groups}
+              back="/"
+            />
+          ) : (
+            <p className="text-muted-foreground px-1 py-2 text-sm">
+              Nothing is in front of you. What a teammate&apos;s agent puts in
+              front of you lands here.
+            </p>
+          )}
+        </Zoom>
+      </main>
+    </div>
   );
 }

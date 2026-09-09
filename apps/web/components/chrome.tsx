@@ -51,7 +51,7 @@ export async function Chrome() {
             variant="outline"
             className="shadow-float pointer-events-auto h-10 gap-2 border-0 bg-card px-3.5 text-[13px]"
             nativeButton={false}
-            render={<EagerLink href="/brain" />}
+            render={<EagerLink href="/" />}
           >
             <span className="bg-primary size-2 rounded-full" />
             {open} waiting on you

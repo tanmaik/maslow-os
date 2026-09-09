@@ -37,5 +37,7 @@ export async function POST(request: Request) {
     }
     throw err;
   }
-  return NextResponse.redirect(`${origin(request)}/brain`, 303);
+  // Back to the page the ask was answered on: the room, or the brain.
+  const back = form.get("back") === "/" ? "/" : "/brain";
+  return NextResponse.redirect(`${origin(request)}${back}`, 303);
 }
