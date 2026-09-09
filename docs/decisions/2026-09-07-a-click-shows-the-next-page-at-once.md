@@ -76,3 +76,31 @@ reaches the link, so the click that follows finds it ready. The header's
 Brain and Settings, every view on the brain's rail and every record in a
 list are eager. A page fetched ahead is shown for thirty seconds before it
 is fetched again.
+
+## The shares are read once a query, not once a row
+
+The rule on a record is "yours, or shared with you". The second half was a
+`security definer` function called with each row's id, which looked the
+record up again and joined shares by record and by type. Any query that
+legitimately scans the org — a brain list, a search, the ends of a record's
+links — therefore paid one such call per row it did not own, and the cost
+grew with every record another member wrote.
+
+The same rule is now two sets: the records a share reaches for the reader,
+and the types it reaches, by whose they are and what they are called, which
+is what a record already carries. The policy tests membership in them. The
+planner reads the shares once, hashes the result and probes it per row.
+Nothing about who sees what changed, and the sharing checks in the brain
+and MCP smokes pass unaltered.
+
+Measured on a laptop, one member holding 6,000 records of a type shared to
+everyone, read by a member who owns none of them:
+
+| what               | per row | as a set |
+| ------------------ | ------- | -------- |
+| a page of 50       | 48 ms   | 5 ms     |
+| search for a word  | 49 ms   | 4 ms     |
+| one record's links | 93 ms   | 5 ms     |
+
+`share_level` remains, for `access_level`, which answers for one record and
+calls it once.
