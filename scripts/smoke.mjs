@@ -84,6 +84,15 @@ async function page(cookie) {
   return (await res.text()).replaceAll("<!-- -->", "");
 }
 
+// Who the page says you are: the name under your picture in the corner.
+const youOn = (html) =>
+  html.match(/<span class="sr-only">([^<]*)<\/span>/)?.[1];
+
+// Whether the page offers a switch to another org of yours. The offer
+// sits under your picture, drawn in the browser from what the page
+// carries for it.
+const offers = (html, orgName) => html.includes(`\\"orgName\\":\\"${orgName}`);
+
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 let failed = false;
@@ -321,8 +330,8 @@ try {
   await settings("/settings/profile", profileForm, otto);
   check(
     "profile renamed",
-    (await page(otto)).includes("Sign out, Otto L."),
-    "Sign out, Otto L.",
+    youOn(await page(otto)) === "Otto L.",
+    "Otto L. in the corner",
   );
   const selfRemove = await settings(
     "/settings/members",
@@ -709,9 +718,7 @@ try {
   check(
     "a person in two orgs is offered the other",
     /<h1[^>]*>Blue Whale Bakery/.test(ottoHome) &&
-      /<button[^>]*value="30000000-0000-4000-8000-000000000002"[^>]*>Switch to Chartreuse Observatory</.test(
-        ottoHome,
-      ),
+      offers(ottoHome, "Chartreuse Observatory"),
     "bakery, with the observatory offered",
   );
   const switched = await fetch(`${stack.url}/auth/switch`, {
@@ -771,7 +778,7 @@ try {
       !orgs.some((o) => o.id === ownOrgId) &&
       ownMember?.role === "owner" &&
       /<h1[^>]*>Otto&#x27;s Own/.test(ownHome) &&
-      ownHome.includes("Switch to Blue Whale Bakery"),
+      offers(ownHome, "Blue Whale Bakery"),
     `answered ${madeOrg.status}; ${ownHome.match(/<h1[^>]*>([^<]*)/)?.[1] ?? "no org"} as ${ownMember?.role}`,
   );
 
@@ -1060,7 +1067,7 @@ try {
   );
   check(
     "a person's name is one across orgs",
-    (await page(ottoNow)).includes("Sign out, Otto L. Loaf"),
+    youOn(await page(ottoNow)) === "Otto L. Loaf",
     "renamed in the observatory, seen in the bakery",
   );
   // Renames racing from both orgs all land, none deadlocks, and every org
@@ -1075,9 +1082,7 @@ try {
       },
     ),
   );
-  const seen = [await page(ottoNow), await page(ottoObs)].map(
-    (h) => h.match(/Sign out, (Otto [A-F])</)?.[1],
-  );
+  const seen = [await page(ottoNow), await page(ottoObs)].map(youOn);
   const deadlocks = await asOrg(
     "00000000-0000-4000-8000-000000000002",
     async (q) =>

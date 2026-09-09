@@ -5,6 +5,7 @@ export {
   declineRequest,
   requestsOf,
   type ShareRequest,
+  waiting,
 } from "./ask.ts";
 export { catalog, defineType } from "./catalog.ts";
 export { Conflict, Forbidden, Invalid, NotFound } from "./errors.ts";

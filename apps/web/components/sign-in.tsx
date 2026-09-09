@@ -1,4 +1,7 @@
+import type { ReactNode } from "react";
+
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { deployment } from "@/lib/deployment";
 import { pendingFlow } from "@/lib/session";
@@ -41,8 +44,7 @@ export async function SignIn({
     const flow = await pendingFlow();
     const email = flow?.email ?? null;
     return (
-      <main className="space-y-4">
-        <h1 className="text-2xl font-semibold">Sign in</h1>
+      <Door>
         {email ? (
           <>
             {deployment.mail.kind === "none" ? (
@@ -97,18 +99,31 @@ export async function SignIn({
             </form>
           </>
         )}
-      </main>
+      </Door>
     );
   }
 
   return (
-    <main className="space-y-4">
-      <h1 className="text-2xl font-semibold">Sign in</h1>
+    <Door>
       <p className="text-muted-foreground">
         No identity provider is configured. Pick a person from the pill in the
         corner.
       </p>
       {said && <p className="text-destructive text-sm">{said}</p>}
+    </Door>
+  );
+}
+
+// The sign-in as one card on the canvas.
+function Door({ children }: { children: ReactNode }) {
+  return (
+    <main className="mx-auto max-w-md pt-[12dvh]">
+      <Card className="shadow-float ring-0">
+        <CardContent className="space-y-4 px-6 py-2">
+          <h1 className="font-serif text-3xl leading-tight italic">Sign in</h1>
+          {children}
+        </CardContent>
+      </Card>
     </main>
   );
 }

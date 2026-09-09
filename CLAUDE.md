@@ -304,12 +304,23 @@ no hand that runs a command or reads or writes a file goes into it.
 
 ## Interface
 
+The canvas is the screen and the chrome floats over it: dark, warm, quiet,
+one look with no light one. Top left, the org, the four places in the
+house, Team, Brain, Computer and Settings, and how much waits on you;
+bottom right, you. Team is home. "Waiting on you" is what asks something
+of you and is still there: the agent's asks, and later the pages
+teammates' agents put in front of you; a shared record is knowledge, not a
+demand, and nothing tracks whether you opened it. The settled design is
+`docs/decisions/2026-09-09-the-canvas-is-the-screen.md`.
+
 Every component is shadcn, and every shadcn component is installed under
 `apps/web/components/ui`. Nothing is hand-rolled beside them: no bespoke
 button, input, dialog or table, and no other component library. Styling is
-Tailwind on shadcn's theme tokens. The typeface is the system one; no font is
-fetched from anywhere. VS Code in the browser is not a component: it is
-`code-server`, whole, running on the person's machine and shown in a frame.
+Tailwind on shadcn's theme tokens. The typefaces are Instrument Sans and
+Instrument Serif, shipped from npm inside the bundle; nothing is fetched
+from anywhere at build or at run. VS Code in the browser is not a
+component: it is `code-server`, whole, running on the person's machine and
+shown in a frame.
 
 A click shows the next page at once. Every link is `next/link`, so a click
 swaps only what changed and the page it points at is fetched before the

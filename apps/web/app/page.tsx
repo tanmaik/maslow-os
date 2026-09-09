@@ -5,6 +5,7 @@ import { after } from "next/server";
 
 import { SignIn, notice, type Notice } from "@/components/sign-in";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { sweepIfDue } from "@/lib/meter";
 import { principal } from "@/lib/session";
 
@@ -36,19 +37,25 @@ export default async function Page({
   });
 
   return (
-    <main className="space-y-4">
-      <h1 className="text-2xl font-semibold">{orgName}</h1>
-      <p className="text-muted-foreground">
-        {members} {members === 1 ? "member" : "members"}
-        {me && ` · you are ${me.name}`}. Invite people and manage the org in{" "}
-        <Link href="/settings" className="underline">
-          settings
-        </Link>
-        .
-      </p>
-      <Button nativeButton={false} render={<Link href="/brain" />}>
-        Open the brain
-      </Button>
+    <main className="mx-auto max-w-xl">
+      <Card className="shadow-float ring-0">
+        <CardContent className="space-y-4 px-6 py-2">
+          <h1 className="font-serif text-3xl leading-tight italic">
+            {orgName}
+          </h1>
+          <p className="text-muted-foreground">
+            {members} {members === 1 ? "member" : "members"}
+            {me && ` · you are ${me.name}`}. Invite people and manage the org in{" "}
+            <Link href="/settings" className="text-foreground underline">
+              settings
+            </Link>
+            .
+          </p>
+          <Button nativeButton={false} render={<Link href="/brain" />}>
+            Open the brain
+          </Button>
+        </CardContent>
+      </Card>
     </main>
   );
 }

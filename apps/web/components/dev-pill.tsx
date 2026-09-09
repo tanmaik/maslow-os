@@ -75,7 +75,7 @@ export function DevPill({
   return (
     <div
       className={cn(
-        "bg-primary text-primary-foreground fixed right-5 bottom-5 z-50 flex h-11 items-center rounded-full shadow-lg select-none",
+        "bg-primary text-primary-foreground fixed bottom-5 left-5 z-50 flex h-11 items-center rounded-full shadow-lg select-none",
         "animate-in fade-in zoom-in-50 spin-in-90 duration-500 ease-[cubic-bezier(.34,1.2,.64,1)]",
       )}
     >
@@ -122,7 +122,7 @@ export function DevPill({
               <ChevronsUpDown className="opacity-60" />
             </PopoverTrigger>
             <PopoverContent
-              align="end"
+              align="start"
               sideOffset={12}
               className="w-64 space-y-3"
             >

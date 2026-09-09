@@ -192,6 +192,7 @@ export async function smokeBrain(stack) {
         }),
         unnamed: await brain.read(q, { type: "commitment" }),
         beep: (await brain.get(q, [opened.beep.id]))[0],
+        waiting: await brain.waiting(q),
         people: await brain.read(q, {
           type: "person",
           owner: acme.users[0].id,
@@ -215,13 +216,14 @@ export async function smokeBrain(stack) {
       `${seen.theirs.records.length} of Wile's commitments, ${seen.unnamed.records.length} named without an owner, ${seen.commitment?.properties.length} fields`,
     );
     check(
-      "a record shared alone opens it and its type, and no other record of it",
+      "a record shared alone opens it and its type, and no other record of it, and waits on nobody",
       seen.beep?.title === "Road Runner" &&
+        seen.waiting === 0 &&
         seen.person?.own === false &&
         seen.person.properties.some((f) => f.name === "emails") &&
         seen.people.records.length === 1 &&
         seen.people.records[0].id === opened.beep.id,
-      `${seen.beep?.title ?? "hidden"}, type ${seen.person ? "listed" : "missing"}, ${seen.people.records.length} of Wile's people in view`,
+      `${seen.beep?.title ?? "hidden"}, type ${seen.person ? "listed" : "missing"}, ${seen.people.records.length} of Wile's people in view, ${seen.waiting} waiting`,
     );
     const wileNote = (await me(acme)((q) => brain.catalog(q))).types.find(
       (k) => k.name === "note",
@@ -1380,7 +1382,13 @@ export async function smokeBrain(stack) {
           reason: "x",
         }),
       );
-      return { ask, nobody, tooMuch, waiting: await brain.requestsOf(q) };
+      return {
+        ask,
+        nobody,
+        tooMuch,
+        waiting: await brain.requestsOf(q),
+        count: await brain.waiting(q),
+      };
     });
     const askedByOther = await as(otto)((q) =>
       attempt(() =>
@@ -1448,6 +1456,7 @@ export async function smokeBrain(stack) {
       "the agent asks to share and the owner decides",
       asked.ask.subjects.length === 2 &&
         asked.waiting.length === 1 &&
+        asked.count === 1 &&
         asked.nobody === "NotFound" &&
         asked.tooMuch === "Invalid" &&
         askedByOther === "NotFound" &&

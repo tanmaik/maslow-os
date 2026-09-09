@@ -110,6 +110,14 @@ export async function askToShare(
   return rows[0]!;
 }
 
+// How much waits on the caller: their open asks to share.
+export async function waiting(q: Query): Promise<number> {
+  const { rows } = await q.query<{ n: string }>(
+    "select count(*) as n from share_requests",
+  );
+  return Number(rows[0]!.n);
+}
+
 // The caller's open asks, oldest first.
 export async function requestsOf(q: Query): Promise<ShareRequest[]> {
   const { rows } = await q.query<Row>(
