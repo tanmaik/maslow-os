@@ -1,4 +1,4 @@
-import { switchTo } from "@placeholder/db/auth";
+import { switchTo } from "@maslow/db/auth";
 
 import { origin } from "@/lib/origin";
 import { destination, principal, signedIn } from "@/lib/session";

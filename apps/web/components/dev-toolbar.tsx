@@ -1,5 +1,5 @@
-import { fullName } from "@placeholder/db/auth";
-import { orgs } from "@placeholder/db/seed";
+import { fullName } from "@maslow/db/auth";
+import { orgs } from "@maslow/db/seed";
 
 import { DevPill } from "@/components/dev-pill";
 import { deployment } from "@/lib/deployment";

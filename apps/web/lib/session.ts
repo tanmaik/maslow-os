@@ -4,7 +4,7 @@ import {
   resolveSession,
   type Principal,
   type Session,
-} from "@placeholder/db/auth";
+} from "@maslow/db/auth";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { cache } from "react";

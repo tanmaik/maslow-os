@@ -10,8 +10,8 @@ import {
   unlink,
   unmerge,
   type Patch,
-} from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
+} from "@maslow/brain";
+import { asPerson } from "@maslow/db";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";

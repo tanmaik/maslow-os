@@ -1,7 +1,7 @@
-import type { Query } from "@placeholder/db";
-import type { Principal } from "@placeholder/db/auth";
-import { allow } from "@placeholder/db/throttle";
-import { spend } from "@placeholder/db/usage";
+import type { Query } from "@maslow/db";
+import type { Principal } from "@maslow/db/auth";
+import { allow } from "@maslow/db/throttle";
+import { spend } from "@maslow/db/usage";
 
 import {
   composio,

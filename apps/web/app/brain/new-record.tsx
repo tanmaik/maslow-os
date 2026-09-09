@@ -1,6 +1,6 @@
 "use client";
 
-import type { BrainType, Datatype, Property } from "@placeholder/brain";
+import type { BrainType, Datatype, Property } from "@maslow/brain";
 import { XIcon } from "lucide-react";
 import { useState } from "react";
 

@@ -1,4 +1,4 @@
-import { leaveOrg } from "@placeholder/db/settings";
+import { leaveOrg } from "@maslow/db/settings";
 import { NextResponse } from "next/server";
 
 import { settle } from "@/lib/orphans";

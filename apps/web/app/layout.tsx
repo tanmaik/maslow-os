@@ -11,7 +11,7 @@ import { DevToolbar } from "@/components/dev-toolbar";
 import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
 
-export const metadata = { title: "placeholder" };
+export const metadata = { title: "Maslow" };
 
 // The canvas is the screen: the chrome floats over it, and every page sits
 // under the chrome.

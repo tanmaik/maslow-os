@@ -1,5 +1,5 @@
-import { asPerson, Gone } from "@placeholder/db";
-import { resolveSession, type Session } from "@placeholder/db/auth";
+import { asPerson, Gone } from "@maslow/db";
+import { resolveSession, type Session } from "@maslow/db/auth";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { NextResponse } from "next/server";
 

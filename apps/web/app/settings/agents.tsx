@@ -1,4 +1,4 @@
-import type { Agent } from "@placeholder/db/auth";
+import type { Agent } from "@maslow/db/auth";
 
 import { Button } from "@/components/ui/button";
 import {

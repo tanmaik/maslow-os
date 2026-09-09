@@ -1,4 +1,4 @@
-import type { Size } from "@placeholder/db/computers";
+import type { Size } from "@maslow/db/computers";
 
 // The ladder of sizes, each its CPUs and memory and no price; the disk is
 // apart from it. Every computer starts at the first rung. Shared by the

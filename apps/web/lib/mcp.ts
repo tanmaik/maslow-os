@@ -1,7 +1,7 @@
-import * as brain from "@placeholder/brain";
-import { asPerson, Gone, type Query } from "@placeholder/db";
-import { fullName, type Session } from "@placeholder/db/auth";
-import { spend } from "@placeholder/db/usage";
+import * as brain from "@maslow/brain";
+import { asPerson, Gone, type Query } from "@maslow/db";
+import { fullName, type Session } from "@maslow/db/auth";
+import { spend } from "@maslow/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 

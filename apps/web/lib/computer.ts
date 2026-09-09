@@ -1,5 +1,5 @@
-import { asMeter, asOrg, type Query } from "@placeholder/db";
-import type { Principal } from "@placeholder/db/auth";
+import { asMeter, asOrg, type Query } from "@maslow/db";
+import type { Principal } from "@maslow/db/auth";
 import {
   allComputers,
   claimComputer,
@@ -20,7 +20,7 @@ import {
   setSize,
   setVolume,
   type Computer,
-} from "@placeholder/db/computers";
+} from "@maslow/db/computers";
 
 import { createHmac } from "node:crypto";
 

@@ -7,7 +7,7 @@ import {
   restoreMember,
   setRole,
   uninvite,
-} from "@placeholder/db/settings";
+} from "@maslow/db/settings";
 import { NextResponse } from "next/server";
 
 import { sweepMember } from "@/lib/meter";

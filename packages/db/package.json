@@ -1,5 +1,5 @@
 {
-  "name": "@placeholder/db",
+  "name": "@maslow/db",
   "private": true,
   "type": "module",
   "exports": {

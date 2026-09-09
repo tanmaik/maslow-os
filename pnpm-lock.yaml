@@ -38,10 +38,10 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 1.30.0
         version: 1.30.0(zod@4.5.4)
-      '@placeholder/brain':
+      '@maslow/brain':
         specifier: workspace:*
         version: link:../../packages/brain
-      '@placeholder/db':
+      '@maslow/db':
         specifier: workspace:*
         version: link:../../packages/db
       '@shadcn/react':

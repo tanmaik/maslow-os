@@ -1,5 +1,5 @@
-import { asOrg } from "@placeholder/db";
-import { computerOf } from "@placeholder/db/computers";
+import { asOrg } from "@maslow/db";
+import { computerOf } from "@maslow/db/computers";
 
 import { advance } from "@/lib/computer";
 import { regionFor } from "@/lib/region";

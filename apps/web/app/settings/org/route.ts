@@ -1,9 +1,4 @@
-import {
-  Forbidden,
-  orgOf,
-  renameOrg,
-  setOrgLogo,
-} from "@placeholder/db/settings";
+import { Forbidden, orgOf, renameOrg, setOrgLogo } from "@maslow/db/settings";
 import { NextResponse } from "next/server";
 
 import { sweepMember } from "@/lib/meter";

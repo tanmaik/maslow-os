@@ -1,12 +1,12 @@
-import { isUuid } from "@placeholder/db";
+import { isUuid } from "@maslow/db";
 import {
   addToGroup,
   defineGroup,
   deleteGroup,
   Missing,
   removeFromGroup,
-} from "@placeholder/db/groups";
-import { Forbidden } from "@placeholder/db/settings";
+} from "@maslow/db/groups";
+import { Forbidden } from "@maslow/db/settings";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";

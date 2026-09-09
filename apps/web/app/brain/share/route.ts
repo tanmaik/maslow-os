@@ -8,8 +8,8 @@ import {
   type Access,
   type Subject,
   type Target,
-} from "@placeholder/brain";
-import { asPerson, isUuid } from "@placeholder/db";
+} from "@maslow/brain";
+import { asPerson, isUuid } from "@maslow/db";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";

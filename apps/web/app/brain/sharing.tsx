@@ -1,7 +1,7 @@
 "use client";
 
-import type { Share, Subject, Target } from "@placeholder/brain";
-import type { Group } from "@placeholder/db/groups";
+import type { Share, Subject, Target } from "@maslow/brain";
+import type { Group } from "@maslow/db/groups";
 
 import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";

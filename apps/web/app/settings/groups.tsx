@@ -1,4 +1,4 @@
-import type { Group } from "@placeholder/db/groups";
+import type { Group } from "@maslow/db/groups";
 import { XIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";

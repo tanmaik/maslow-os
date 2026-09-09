@@ -3,7 +3,7 @@ import {
   type Datatype,
   type Property,
   type PropertyDefinition,
-} from "@placeholder/brain";
+} from "@maslow/brain";
 import { isValid, parseISO } from "date-fns";
 
 // A form field's text as the value its declared field says, or undefined

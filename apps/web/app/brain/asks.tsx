@@ -1,5 +1,5 @@
-import type { BrainType, ShareRequest, Stub } from "@placeholder/brain";
-import type { Group } from "@placeholder/db/groups";
+import type { BrainType, ShareRequest, Stub } from "@maslow/brain";
+import type { Group } from "@maslow/db/groups";
 import Link from "next/link";
 
 import { Button } from "@/components/ui/button";

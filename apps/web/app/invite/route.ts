@@ -1,5 +1,5 @@
-import { asOrg } from "@placeholder/db";
-import { invite } from "@placeholder/db/auth";
+import { asOrg } from "@maslow/db";
+import { invite } from "@maslow/db/auth";
 import { NextResponse } from "next/server";
 
 import { deployment } from "@/lib/deployment";

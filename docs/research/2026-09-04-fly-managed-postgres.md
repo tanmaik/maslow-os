@@ -1,4 +1,4 @@
-# Should placeholder move from Neon to Fly Managed Postgres (MPG)?
+# Should Maslow move from Neon to Fly Managed Postgres (MPG)?
 
 Researched 2026-09-04 against primary sources only: fly.io/docs/mpg/*,
 fly.io/mpg, fly.io/docs/about/pricing, Fly staff posts on community.fly.io,
@@ -310,7 +310,7 @@ with previews.
   ([community 28124](https://community.fly.io/t/mpg-superuser-permissions-for-extensions/28124)).
 - **Postgres versions:** `--pg-major-version` "Supported versions are 16
   and 17. (default 16)" (`fly mpg create --help`, local). Our Neon project
-  is Postgres 18 (memory: placeholder-repo-infra), so moving is a major
+  is Postgres 18 (memory: maslow-repo-infra), so moving is a major
   downgrade; whether any migration relies on PG 18 behaviour is
   **unverified**.
 - **Connections/pooling:** PgBouncer on every cluster, session (default) or
@@ -394,7 +394,7 @@ transaction that reads it.
 Named against the repo as it stands; every step that touches an unverified
 capability says so.
 
-1. **Cluster.** `fly mpg create -n placeholder-prod --plan Basic -r iad
+1. **Cluster.** `fly mpg create -n maslow-prod --plan Basic -r iad
 --pg-major-version 17 --volume-size 10` (v2 in `iad` is a precondition;
    PG 18 → 17 downgrade must be tested with `pg_dump | psql` first). One
    cluster, two logical databases at least: `prod` and a `preview-parent`

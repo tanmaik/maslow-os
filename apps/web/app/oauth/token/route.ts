@@ -1,5 +1,5 @@
-import { createSession } from "@placeholder/db/auth";
-import { redeemCode } from "@placeholder/db/oauth";
+import { createSession } from "@maslow/db/auth";
+import { redeemCode } from "@maslow/db/oauth";
 import { NextResponse } from "next/server";
 
 const NO_STORE = { "Cache-Control": "no-store", Pragma: "no-cache" };

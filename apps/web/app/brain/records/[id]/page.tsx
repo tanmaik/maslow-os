@@ -9,9 +9,9 @@ import {
   type BrainRecord,
   type Edge,
   type Stub,
-} from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
-import { groupsIn } from "@placeholder/db/groups";
+} from "@maslow/brain";
+import { asPerson } from "@maslow/db";
+import { groupsIn } from "@maslow/db/groups";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 

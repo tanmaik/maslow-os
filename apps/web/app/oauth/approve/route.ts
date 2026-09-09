@@ -1,4 +1,4 @@
-import { issueCode } from "@placeholder/db/oauth";
+import { issueCode } from "@maslow/db/oauth";
 
 import { authorizationRequest } from "@/lib/oauth";
 import { principal } from "@/lib/session";

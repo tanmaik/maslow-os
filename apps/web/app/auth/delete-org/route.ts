@@ -1,4 +1,4 @@
-import { deleteOrg, Forbidden } from "@placeholder/db/settings";
+import { deleteOrg, Forbidden } from "@maslow/db/settings";
 
 import { settle } from "@/lib/orphans";
 import { NextResponse } from "next/server";

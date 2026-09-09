@@ -1,5 +1,5 @@
-import { asOrg } from "@placeholder/db";
-import { computerOf, setKeys } from "@placeholder/db/computers";
+import { asOrg } from "@maslow/db";
+import { computerOf, setKeys } from "@maslow/db/computers";
 
 import { pushKeys } from "@/lib/computer";
 import { origin } from "@/lib/origin";

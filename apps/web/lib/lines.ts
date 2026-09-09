@@ -4,7 +4,7 @@ import type {
   Edge,
   Event,
   Person,
-} from "@placeholder/brain";
+} from "@maslow/brain";
 
 // How the brain reads to an agent: one line per thing, the id first, then
 // only what is there.

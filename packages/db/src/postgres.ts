@@ -42,7 +42,7 @@ function native(): { root: string; bin: string; lib: string } {
   };
 }
 
-const ROOT_BOX_USER = "placeholder-pg";
+const ROOT_BOX_USER = "maslow-pg";
 
 // Where the cluster lives and who runs it. On a root box Postgres runs as a
 // dedicated user from /var/tmp, because the checkout is usually mode 0700.
@@ -65,7 +65,7 @@ function layout(dataDir: string, fresh: boolean): Layout {
   const version = JSON.parse(
     fs.readFileSync(path.join(root, "package.json"), "utf8"),
   ).version;
-  const base = path.join("/var/tmp", "placeholder-pg");
+  const base = path.join("/var/tmp", "maslow-pg");
   const binaries = path.join(base, "native", version);
   if (!fs.existsSync(binaries)) {
     fs.cpSync(path.join(root, "native"), binaries, { recursive: true });

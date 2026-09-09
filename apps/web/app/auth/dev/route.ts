@@ -1,5 +1,5 @@
-import { asOrg } from "@placeholder/db";
-import { orgs } from "@placeholder/db/seed";
+import { asOrg } from "@maslow/db";
+import { orgs } from "@maslow/db/seed";
 
 import { deployment } from "@/lib/deployment";
 import { origin } from "@/lib/origin";

@@ -1,5 +1,5 @@
-import { asOrg } from "@placeholder/db";
-import { pictureInUse } from "@placeholder/db/settings";
+import { asOrg } from "@maslow/db";
+import { pictureInUse } from "@maslow/db/settings";
 
 import { destroy } from "./computer.ts";
 import { connections } from "./connections.ts";

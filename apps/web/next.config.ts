@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
-  transpilePackages: ["@placeholder/brain", "@placeholder/db"],
+  transpilePackages: ["@maslow/brain", "@maslow/db"],
   agentRules: false,
   devIndicators: false,
   distDir: process.env.NEXT_DIST_DIR ?? ".next",

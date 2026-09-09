@@ -1,4 +1,4 @@
-import { renameSelf, setAvatar } from "@placeholder/db/settings";
+import { renameSelf, setAvatar } from "@maslow/db/settings";
 import { NextResponse } from "next/server";
 
 import { sweepMember } from "@/lib/meter";

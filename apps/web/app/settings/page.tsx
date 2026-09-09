@@ -1,8 +1,8 @@
-import { asOrg } from "@placeholder/db";
-import { agentsOf } from "@placeholder/db/auth";
-import { computerOf } from "@placeholder/db/computers";
-import { groupsOf } from "@placeholder/db/groups";
-import { orgOf } from "@placeholder/db/settings";
+import { asOrg } from "@maslow/db";
+import { agentsOf } from "@maslow/db/auth";
+import { computerOf } from "@maslow/db/computers";
+import { groupsOf } from "@maslow/db/groups";
+import { orgOf } from "@maslow/db/settings";
 import { redirect } from "next/navigation";
 
 import {

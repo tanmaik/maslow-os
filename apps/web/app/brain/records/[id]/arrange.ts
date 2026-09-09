@@ -1,4 +1,4 @@
-import type { Graph } from "@placeholder/brain";
+import type { Graph } from "@maslow/brain";
 import {
   forceSimulation,
   forceX,

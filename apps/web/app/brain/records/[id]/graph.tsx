@@ -2,7 +2,7 @@
 
 import "@xyflow/react/dist/style.css";
 
-import type { Graph } from "@placeholder/brain";
+import type { Graph } from "@maslow/brain";
 import {
   applyNodeChanges,
   BaseEdge,

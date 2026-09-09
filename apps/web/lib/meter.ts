@@ -1,5 +1,5 @@
-import { asMeter, asOrg, type Query } from "@placeholder/db";
-import { picturesIn, type Resource, type Unit } from "@placeholder/db/usage";
+import { asMeter, asOrg, type Query } from "@maslow/db";
+import { picturesIn, type Resource, type Unit } from "@maslow/db/usage";
 
 import { reconcile } from "./computer.ts";
 import { settle } from "./orphans.ts";

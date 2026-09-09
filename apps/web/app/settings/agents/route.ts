@@ -1,5 +1,5 @@
-import { isUuid } from "@placeholder/db";
-import { disconnectAgent } from "@placeholder/db/auth";
+import { isUuid } from "@maslow/db";
+import { disconnectAgent } from "@maslow/db/auth";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";

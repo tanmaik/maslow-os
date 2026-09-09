@@ -1,4 +1,4 @@
-import { foundOrg, personOf } from "@placeholder/db/auth";
+import { foundOrg, personOf } from "@maslow/db/auth";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";

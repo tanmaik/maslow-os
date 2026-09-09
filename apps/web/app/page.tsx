@@ -1,4 +1,4 @@
-import { asOrg } from "@placeholder/db";
+import { asOrg } from "@maslow/db";
 import Link from "next/link";
 
 import { after } from "next/server";

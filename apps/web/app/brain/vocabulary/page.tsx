@@ -1,6 +1,6 @@
-import { typeSharesOf, type BrainType } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
-import { groupsIn } from "@placeholder/db/groups";
+import { typeSharesOf, type BrainType } from "@maslow/brain";
+import { asPerson } from "@maslow/db";
+import { groupsIn } from "@maslow/db/groups";
 import { redirect } from "next/navigation";
 
 import {

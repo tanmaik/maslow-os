@@ -1,4 +1,4 @@
-import type { Principal } from "@placeholder/db/auth";
+import type { Principal } from "@maslow/db/auth";
 import { randomUUID } from "node:crypto";
 
 import { type Account, type App, composio } from "./composio.ts";

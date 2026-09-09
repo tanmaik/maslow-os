@@ -1,7 +1,7 @@
-import { waiting } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
-import { membershipsByEmail } from "@placeholder/db/auth";
-import { orgOf } from "@placeholder/db/settings";
+import { waiting } from "@maslow/brain";
+import { asPerson } from "@maslow/db";
+import { membershipsByEmail } from "@maslow/db/auth";
+import { orgOf } from "@maslow/db/settings";
 
 import { EagerLink } from "@/components/eager-link";
 import { Tabs } from "@/components/tabs";

@@ -1,5 +1,5 @@
-import { asOrg } from "@placeholder/db";
-import { fullName, membershipsOf } from "@placeholder/db/auth";
+import { asOrg } from "@maslow/db";
+import { fullName, membershipsOf } from "@maslow/db/auth";
 import { redirect } from "next/navigation";
 
 import { SignIn, notice, type Notice } from "@/components/sign-in";

@@ -1,5 +1,5 @@
 {
-  "name": "@placeholder/computer",
+  "name": "@maslow/computer",
   "private": true,
   "dependencies": {
     "@anthropic-ai/claude-code": "2.1.263",

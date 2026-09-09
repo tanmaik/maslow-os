@@ -1,4 +1,4 @@
-import type { Property } from "@placeholder/brain";
+import type { Property } from "@maslow/brain";
 
 import { DateField } from "@/components/date-field";
 import { Input } from "@/components/ui/input";

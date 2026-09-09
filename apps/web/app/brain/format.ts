@@ -1,4 +1,4 @@
-import type { BrainType, Datatype, Property } from "@placeholder/brain";
+import type { BrainType, Datatype, Property } from "@maslow/brain";
 import { format } from "date-fns";
 
 // How the brain's values read on screen.

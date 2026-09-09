@@ -1,6 +1,6 @@
-import { catalog, type BrainType } from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
-import type { Principal } from "@placeholder/db/auth";
+import { catalog, type BrainType } from "@maslow/brain";
+import { asPerson } from "@maslow/db";
+import type { Principal } from "@maslow/db/auth";
 import { cache } from "react";
 
 import { peopleOf } from "./people";

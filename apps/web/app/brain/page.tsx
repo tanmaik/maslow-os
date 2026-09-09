@@ -1,12 +1,6 @@
-import {
-  Invalid,
-  list,
-  requestsOf,
-  stubs,
-  type Stub,
-} from "@placeholder/brain";
-import { asPerson } from "@placeholder/db";
-import { groupsIn } from "@placeholder/db/groups";
+import { Invalid, list, requestsOf, stubs, type Stub } from "@maslow/brain";
+import { asPerson } from "@maslow/db";
+import { groupsIn } from "@maslow/db/groups";
 import { SearchIcon } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";

@@ -1,6 +1,6 @@
 "use client";
 
-import type { Property } from "@placeholder/brain";
+import type { Property } from "@maslow/brain";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 

@@ -1,4 +1,4 @@
-import { allow, clear } from "@placeholder/db/throttle";
+import { allow, clear } from "@maslow/db/throttle";
 
 import { deployment } from "@/lib/deployment";
 import { send } from "@/lib/mail";

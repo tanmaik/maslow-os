@@ -1,4 +1,4 @@
-import { type Identity, identity } from "@placeholder/db/auth";
+import { type Identity, identity } from "@maslow/db/auth";
 
 import { deployment } from "./deployment.ts";
 

@@ -1,4 +1,4 @@
-import type { Query } from "@placeholder/brain";
+import type { Query } from "@maslow/brain";
 
 // Every current member of the org by id, for naming who wrote, owns or
 // shared something.
