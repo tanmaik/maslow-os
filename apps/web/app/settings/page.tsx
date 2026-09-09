@@ -2,7 +2,7 @@ import { asOrg } from "@maslow/db";
 import { agentsOf } from "@maslow/db/auth";
 import { computerOf } from "@maslow/db/computers";
 import { groupsOf } from "@maslow/db/groups";
-import { orgOf } from "@maslow/db/settings";
+import { orgOf, type Member } from "@maslow/db/settings";
 import { redirect } from "next/navigation";
 
 import {
@@ -17,15 +17,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -34,12 +26,13 @@ import {
 import { ImageInput } from "@/components/image-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { Agents } from "@/app/settings/agents";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { Connections } from "@/app/settings/connections";
 import { Groups } from "@/app/settings/groups";
+import { Rail } from "@/app/settings/rail";
+import { Section } from "@/app/settings/section";
 import { connections } from "@/lib/connections";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
@@ -134,7 +127,32 @@ const NOTICES: Record<string, string> = {
   "agent=gone": "That agent was already disconnected.",
 };
 
-// The signed-in person's org and profile, and who is in the org.
+// A line the last save left, under the form it came from.
+const Said = ({ text }: { text: string | null }) =>
+  text && <p className="text-muted-foreground text-sm">{text}</p>;
+
+// A person's picture, or their initials.
+function Picture({
+  person,
+  className = "size-7",
+}: {
+  person: Pick<Member, "name" | "avatarKey">;
+  className?: string;
+}) {
+  return (
+    <Avatar className={className}>
+      {person.avatarKey && (
+        <AvatarImage src={storage.url(person.avatarKey)} alt="" />
+      )}
+      <AvatarFallback className="text-[11px] font-semibold">
+        {initials(person.name)}
+      </AvatarFallback>
+    </Avatar>
+  );
+}
+
+// The signed-in person's settings, then the org's: who they are, their
+// apps, agents and keys; the org, who is in it, its groups.
 export default async function Settings({
   searchParams,
 }: {
@@ -169,40 +187,48 @@ export default async function Settings({
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
   const uploads = deployment.storage.kind !== "none";
+  const role = (m: Member) =>
+    m.id === org.principalId
+      ? "principal"
+      : m.role === "owner"
+        ? "owner"
+        : "member";
 
   return (
-    <main className="mx-auto w-full max-w-3xl space-y-6">
-      <h1 className="text-2xl font-semibold">Settings</h1>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>You</CardTitle>
-          <CardDescription>{me.email}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form
-            action="/settings/profile"
-            method="post"
-            encType="multipart/form-data"
-            className="space-y-4"
-          >
-            <div className="flex items-center gap-4">
-              {uploads ? (
-                <ImageInput
-                  id="avatar"
-                  name="avatar"
-                  src={me.avatarKey ? storage.url(me.avatarKey) : null}
-                  fallback={initials(me.name)}
-                />
-              ) : (
-                <Avatar className="size-16">
-                  {me.avatarKey && (
-                    <AvatarImage src={storage.url(me.avatarKey)} alt="" />
-                  )}
-                  <AvatarFallback>{initials(me.name)}</AvatarFallback>
-                </Avatar>
-              )}
-              <div className="grid min-w-0 flex-1 grid-cols-2 gap-4">
+    <main className="gap-6 md:grid md:grid-cols-[13.75rem_minmax(0,1fr)]">
+      <h1 className="sr-only">Settings</h1>
+      <Rail orgName={org.name} owner={owner} holder={holder} />
+      <div className="mt-4 grid items-start gap-6 md:mt-0 xl:grid-cols-2">
+        <div className="space-y-6">
+          <Section id="you" title="You">
+            <form
+              action="/settings/profile"
+              method="post"
+              encType="multipart/form-data"
+              className="space-y-4"
+            >
+              <div className="flex items-center gap-4">
+                {uploads ? (
+                  <ImageInput
+                    id="avatar"
+                    name="avatar"
+                    src={me.avatarKey ? storage.url(me.avatarKey) : null}
+                    fallback={initials(me.name)}
+                  />
+                ) : (
+                  <Picture person={me} className="size-16 text-lg" />
+                )}
+                <div className="min-w-0">
+                  <p className="truncate font-serif text-2xl leading-tight">
+                    {me.name}
+                  </p>
+                  <p className="text-muted-foreground truncate text-sm">
+                    {me.email} ·{" "}
+                    {holder ? `principal of ${org.name}` : role(me)}
+                  </p>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="first-name">First name</Label>
                   <Input
@@ -223,403 +249,357 @@ export default async function Settings({
                   />
                 </div>
               </div>
-            </div>
-            {!uploads && (
-              <p className="text-muted-foreground text-sm">
-                Avatars need object storage, which is not set up yet.
-              </p>
-            )}
-            <div className="flex items-center gap-3">
-              <Button type="submit">Save</Button>
-              {said("profile") && (
-                <p className="text-muted-foreground text-sm">
-                  {said("profile")}
-                </p>
-              )}
-            </div>
-          </form>
-          {holder ? (
-            <p className="text-muted-foreground mt-4 text-sm">
-              {said("leave") ??
-                "You hold the org. Hand it to someone else before you leave, or delete it below."}
-            </p>
-          ) : (
-            <AlertDialog>
-              <AlertDialogTrigger
-                render={<Button variant="ghost" size="sm" className="mt-4" />}
-              >
-                Leave {org.name}
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Leave {org.name}?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    You become a past member. What you wrote stays under your
-                    name, seen by nobody, and an owner can bring you back.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Stay</AlertDialogCancel>
-                  <form action="/auth/leave" method="post">
-                    <AlertDialogAction variant="destructive" type="submit">
-                      Leave
-                    </AlertDialogAction>
-                  </form>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>SSH</CardTitle>
-          <CardDescription>
-            The public keys that open your computer from your own terminal, one
-            per line. The Computer page says how to connect.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form action="/settings/keys" method="post" className="space-y-2">
-            <Textarea
-              name="keys"
-              rows={3}
-              defaultValue={computer?.authorizedKeys ?? ""}
-              placeholder="ssh-ed25519 AAAA… you@yourmac"
-              spellCheck={false}
-              className="font-mono text-xs"
-            />
-            {said("keys") && (
-              <p className="text-muted-foreground text-sm">{said("keys")}</p>
-            )}
-            <Button type="submit" variant="outline">
-              Save keys
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <Connections
-        enabled={connections.enabled}
-        connections={connected}
-        mostUsed={mostUsed}
-        focus={n.account ?? null}
-        said={said("connection")}
-      />
-
-      <Agents agents={agents} said={said("agent")} />
-
-      {owner && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Org</CardTitle>
-            <CardDescription>What everyone in it sees.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form
-              action="/settings/org"
-              method="post"
-              encType="multipart/form-data"
-              className="space-y-4"
-            >
-              <div className="flex items-center gap-4">
-                {uploads ? (
-                  <ImageInput
-                    id="logo"
-                    name="logo"
-                    src={org.logoKey ? storage.url(org.logoKey) : null}
-                    fallback={initials(org.name)}
-                    className="rounded-md"
-                  />
-                ) : (
-                  <Avatar className="size-16 rounded-md">
-                    {org.logoKey && (
-                      <AvatarImage src={storage.url(org.logoKey)} alt="" />
-                    )}
-                    <AvatarFallback className="rounded-md">
-                      {initials(org.name)}
-                    </AvatarFallback>
-                  </Avatar>
-                )}
-                <div className="min-w-0 flex-1 space-y-2">
-                  <Label htmlFor="org-name">Name</Label>
-                  <Input
-                    id="org-name"
-                    name="name"
-                    defaultValue={org.name}
-                    required
-                    maxLength={80}
-                  />
-                </div>
-              </div>
               {!uploads && (
                 <p className="text-muted-foreground text-sm">
-                  Logos need object storage, which is not set up yet.
+                  Avatars need object storage, which is not set up yet.
                 </p>
               )}
               <div className="flex items-center gap-3">
                 <Button type="submit">Save</Button>
-                {said("org") && (
-                  <p className="text-muted-foreground text-sm">{said("org")}</p>
-                )}
+                <Said text={said("profile")} />
               </div>
             </form>
-          </CardContent>
-        </Card>
-      )}
+            {holder ? (
+              <p className="text-muted-foreground text-sm">
+                {said("leave") ??
+                  "You hold the org. Hand it to someone before you leave."}
+              </p>
+            ) : (
+              <AlertDialog>
+                <AlertDialogTrigger
+                  render={<Button variant="ghost" size="sm" />}
+                >
+                  Leave {org.name}
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Leave {org.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      You become a past member. What you wrote stays under your
+                      name, seen by nobody, and an owner can bring you back.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Stay</AlertDialogCancel>
+                    <form action="/auth/leave" method="post">
+                      <AlertDialogAction variant="destructive" type="submit">
+                        Leave
+                      </AlertDialogAction>
+                    </form>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </Section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Members</CardTitle>
-          <CardDescription>
-            {members.length} in the org
-            {invited.length > 0 && `, ${invited.length} invited`}
-            {!owner && ". Owners manage the org and its members."}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <form action="/invite" method="post" className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                name="email"
-                type="email"
-                required
-                placeholder="colleague@example.com"
+          <Connections
+            orgName={org.name}
+            enabled={connections.enabled}
+            connections={connected}
+            mostUsed={mostUsed}
+            focus={n.account ?? null}
+            said={said("connection")}
+          />
+
+          <Agents orgName={org.name} agents={agents} said={said("agent")} />
+
+          <Section
+            id="ssh"
+            title="SSH"
+            description="The public keys that open your computer from your own terminal, one per line. The Computer page says how to connect."
+          >
+            <form action="/settings/keys" method="post" className="space-y-2">
+              <Textarea
+                name="keys"
+                rows={3}
+                defaultValue={computer?.authorizedKeys ?? ""}
+                placeholder="ssh-ed25519 AAAA… you@yourmac"
+                spellCheck={false}
+                className="font-mono text-xs"
               />
-              <Button type="submit">Invite</Button>
-            </div>
-            {(said("invite") ?? said("member")) && (
-              <p className="text-muted-foreground text-sm">
-                {said("invite") ?? said("member")}
-              </p>
-            )}
-            {deployment.mail.kind === "none" && (
-              <p className="text-muted-foreground text-sm">
-                No mail is configured, so tell them yourself: they sign in with
-                this address and they&apos;re in.
-              </p>
-            )}
-          </form>
-          <Table>
-            <TableBody>
-              {members.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="w-10">
-                    <Avatar className="size-8">
-                      {m.avatarKey && (
-                        <AvatarImage src={storage.url(m.avatarKey)} alt="" />
+              <Said text={said("keys")} />
+              <Button type="submit" variant="outline">
+                Save keys
+              </Button>
+            </form>
+          </Section>
+        </div>
+
+        <div className="space-y-6">
+          {owner && (
+            <Section
+              id="org"
+              title="Org"
+              description="What everyone in it sees."
+            >
+              <form
+                action="/settings/org"
+                method="post"
+                encType="multipart/form-data"
+                className="space-y-4"
+              >
+                <div className="flex items-center gap-4">
+                  {uploads ? (
+                    <ImageInput
+                      id="logo"
+                      name="logo"
+                      src={org.logoKey ? storage.url(org.logoKey) : null}
+                      fallback={initials(org.name)}
+                      className="rounded-[12px]"
+                    />
+                  ) : (
+                    <Avatar className="size-16 rounded-[12px]">
+                      {org.logoKey && (
+                        <AvatarImage src={storage.url(org.logoKey)} alt="" />
                       )}
-                      <AvatarFallback>{initials(m.name)}</AvatarFallback>
+                      <AvatarFallback className="bg-primary text-primary-foreground rounded-[12px] text-lg font-semibold">
+                        {initials(org.name)}
+                      </AvatarFallback>
                     </Avatar>
-                  </TableCell>
-                  <TableCell>
-                    <p className="truncate">{m.name}</p>
-                    <p className="text-muted-foreground truncate text-sm">
+                  )}
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <Label htmlFor="org-name">Name</Label>
+                    <Input
+                      id="org-name"
+                      name="name"
+                      defaultValue={org.name}
+                      required
+                      maxLength={80}
+                    />
+                    <p className="text-muted-foreground text-sm">
+                      {members.length}{" "}
+                      {members.length === 1 ? "member" : "members"},{" "}
+                      {invited.length} invited, {past.length} past.
+                    </p>
+                  </div>
+                </div>
+                {!uploads && (
+                  <p className="text-muted-foreground text-sm">
+                    Logos need object storage, which is not set up yet.
+                  </p>
+                )}
+                <div className="flex items-center gap-3">
+                  <Button type="submit">Save</Button>
+                  <Said text={said("org")} />
+                </div>
+              </form>
+            </Section>
+          )}
+
+          <Section
+            id="members"
+            title="Members"
+            description={
+              <>
+                {members.length} in {org.name}
+                {invited.length > 0 && `, ${invited.length} invited`}
+                {!owner && ". Owners manage the org and its members."}
+              </>
+            }
+          >
+            <form action="/invite" method="post" className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  name="email"
+                  type="email"
+                  required
+                  placeholder="colleague@example.com"
+                />
+                <Button type="submit">Invite</Button>
+              </div>
+              <Said text={said("invite") ?? said("member")} />
+              {deployment.mail.kind === "none" && (
+                <p className="text-muted-foreground text-sm">
+                  No mail is configured, so tell them yourself: they sign in
+                  with this address and they&apos;re in.
+                </p>
+              )}
+            </form>
+            <div className="divide-border divide-y">
+              {members.map((m) => (
+                <div key={m.id} className="flex items-center gap-3 py-2">
+                  <Picture person={m} />
+                  <div className="min-w-0 flex-1 leading-tight">
+                    <p className="truncate text-sm font-medium">{m.name}</p>
+                    <p className="text-muted-foreground truncate text-xs">
                       {m.email}
                     </p>
-                  </TableCell>
-                  <TableCell className="space-x-1 text-right">
-                    {m.id === p.userId && (
-                      <Badge variant="secondary">you</Badge>
-                    )}
-                    {m.id === org.principalId ? (
-                      <Badge variant="outline">principal</Badge>
-                    ) : (
-                      m.role === "owner" && (
-                        <Badge variant="outline">owner</Badge>
-                      )
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {owner && m.id !== p.userId && m.id !== org.principalId && (
-                      <form
-                        action="/settings/members"
-                        method="post"
-                        className="flex justify-end gap-1"
+                  </div>
+                  <span
+                    className={`text-xs whitespace-nowrap ${
+                      m.role === "owner" ? "" : "text-muted-foreground"
+                    }`}
+                  >
+                    {m.id === p.userId && "you · "}
+                    {role(m)}
+                  </span>
+                  {owner && m.id !== p.userId && m.id !== org.principalId && (
+                    <form
+                      action="/settings/members"
+                      method="post"
+                      className="flex gap-1"
+                    >
+                      {holder && (
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          type="submit"
+                          name="handover"
+                          value={m.id}
+                        >
+                          Hand over
+                        </Button>
+                      )}
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        type="submit"
+                        name={m.role === "owner" ? "demote" : "promote"}
+                        value={m.id}
                       >
-                        {holder && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            type="submit"
-                            name="handover"
-                            value={m.id}
-                          >
-                            Hand over
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="submit"
-                          name={m.role === "owner" ? "demote" : "promote"}
-                          value={m.id}
-                        >
-                          {m.role === "owner" ? "Make member" : "Make owner"}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          type="submit"
-                          name="remove"
-                          value={m.id}
-                        >
-                          Remove
-                        </Button>
-                      </form>
-                    )}
-                  </TableCell>
-                </TableRow>
+                        {m.role === "owner" ? "Make member" : "Make owner"}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        type="submit"
+                        name="remove"
+                        value={m.id}
+                      >
+                        Remove
+                      </Button>
+                    </form>
+                  )}
+                </div>
               ))}
               {invited.map((email) => (
-                <TableRow key={email} className="text-muted-foreground">
-                  <TableCell className="w-10">
-                    <Avatar className="size-8">
-                      <AvatarFallback>?</AvatarFallback>
-                    </Avatar>
-                  </TableCell>
-                  <TableCell className="truncate">{email}</TableCell>
-                  <TableCell className="text-right">
-                    <Badge variant="outline">invited</Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {owner && (
-                      <form action="/settings/members" method="post">
-                        <input type="hidden" name="uninvite" value={email} />
-                        <Button variant="ghost" size="sm" type="submit">
-                          Withdraw
-                        </Button>
-                      </form>
-                    )}
-                  </TableCell>
-                </TableRow>
+                <div
+                  key={email}
+                  className="text-muted-foreground flex items-center gap-3 py-2"
+                >
+                  <Avatar className="size-7">
+                    <AvatarFallback className="text-[11px]">?</AvatarFallback>
+                  </Avatar>
+                  <p className="min-w-0 flex-1 truncate text-sm">{email}</p>
+                  <span className="text-xs">invited</span>
+                  {owner && (
+                    <form action="/settings/members" method="post">
+                      <input type="hidden" name="uninvite" value={email} />
+                      <Button variant="ghost" size="xs" type="submit">
+                        Withdraw
+                      </Button>
+                    </form>
+                  )}
+                </div>
               ))}
-            </TableBody>
-          </Table>
-          {owner && past.length > 0 && (
-            <Collapsible>
-              <CollapsibleTrigger
-                render={<Button variant="ghost" size="sm" className="group" />}
-              >
-                <span className="group-data-panel-open:hidden">
-                  Show {past.length} past{" "}
-                  {past.length === 1 ? "member" : "members"}
-                </span>
-                <span className="hidden group-data-panel-open:inline">
-                  Hide past members
-                </span>
-              </CollapsibleTrigger>
-              <CollapsibleContent keepMounted>
-                <Table>
-                  <TableBody>
+            </div>
+            {owner && past.length > 0 && (
+              <Collapsible>
+                <CollapsibleTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-muted-foreground group"
+                    />
+                  }
+                >
+                  <span className="group-data-panel-open:hidden">
+                    {past.length} past{" "}
+                    {past.length === 1 ? "member" : "members"}, kept with what
+                    they wrote
+                  </span>
+                  <span className="hidden group-data-panel-open:inline">
+                    Hide past members
+                  </span>
+                </CollapsibleTrigger>
+                <CollapsibleContent keepMounted>
+                  <div className="divide-border text-muted-foreground divide-y">
                     {past.map((m) => (
-                      <TableRow key={m.id} className="text-muted-foreground">
-                        <TableCell className="w-10">
-                          <Avatar className="size-8">
-                            {m.avatarKey && (
-                              <AvatarImage
-                                src={storage.url(m.avatarKey)}
-                                alt=""
-                              />
-                            )}
-                            <AvatarFallback>{initials(m.name)}</AvatarFallback>
-                          </Avatar>
-                        </TableCell>
-                        <TableCell>
-                          <p className="truncate">{m.name}</p>
-                          <p className="truncate text-sm">{m.email}</p>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Badge variant="outline">
-                            left {m.removedAt.toISOString().slice(0, 10)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1">
-                            <form action="/settings/members" method="post">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                type="submit"
-                                name="restore"
-                                value={m.id}
-                              >
-                                Bring back
-                              </Button>
-                            </form>
-                            <AlertDialog>
-                              <AlertDialogTrigger
-                                render={<Button variant="ghost" size="sm" />}
-                              >
-                                Purge
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>
-                                    Purge {m.name}?
-                                  </AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    Their membership and everything they wrote
-                                    in the brain are deleted, including anything
-                                    others may depend on. Nothing brings it
-                                    back. Inviting them again starts them fresh.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Keep</AlertDialogCancel>
-                                  <form
-                                    action="/settings/members"
-                                    method="post"
+                      <div key={m.id} className="flex items-center gap-3 py-2">
+                        <Picture person={m} />
+                        <div className="min-w-0 flex-1 leading-tight">
+                          <p className="truncate text-sm">{m.name}</p>
+                          <p className="truncate text-xs">{m.email}</p>
+                        </div>
+                        <span className="text-xs whitespace-nowrap">
+                          left {m.removedAt.toISOString().slice(0, 10)}
+                        </span>
+                        <div className="flex gap-1">
+                          <form action="/settings/members" method="post">
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              type="submit"
+                              name="restore"
+                              value={m.id}
+                            >
+                              Bring back
+                            </Button>
+                          </form>
+                          <AlertDialog>
+                            <AlertDialogTrigger
+                              render={<Button variant="ghost" size="xs" />}
+                            >
+                              Purge
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>
+                                  Purge {m.name}?
+                                </AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Their membership and everything they wrote in
+                                  the brain are deleted, including anything
+                                  others may depend on. Nothing brings it back.
+                                  Inviting them again starts them fresh.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Keep</AlertDialogCancel>
+                                <form action="/settings/members" method="post">
+                                  <AlertDialogAction
+                                    variant="destructive"
+                                    type="submit"
+                                    name="purge"
+                                    value={m.id}
                                   >
-                                    <AlertDialogAction
-                                      variant="destructive"
-                                      type="submit"
-                                      name="purge"
-                                      value={m.id}
-                                    >
-                                      Purge
-                                    </AlertDialogAction>
-                                  </form>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
-                          </div>
-                        </TableCell>
-                      </TableRow>
+                                    Purge
+                                  </AlertDialogAction>
+                                </form>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
                     ))}
-                  </TableBody>
-                </Table>
-              </CollapsibleContent>
-            </Collapsible>
-          )}
-        </CardContent>
-      </Card>
-
-      <Groups
-        groups={groups}
-        members={members.map((m) => ({ id: m.id, name: m.name }))}
-        owner={owner}
-        said={said("group")}
-      />
-
-      {holder && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Delete {org.name}</CardTitle>
-            <CardDescription>
-              Everything in it goes with it, for everyone in it. Hand the org
-              over instead if someone else should keep it.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex items-center gap-3">
-            <DeleteOrg name={org.name} />
-            {said("delete") && (
-              <p className="text-muted-foreground text-sm">{said("delete")}</p>
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
             )}
-          </CardContent>
-        </Card>
-      )}
+          </Section>
+
+          <Groups
+            groups={groups}
+            members={members.map((m) => ({ id: m.id, name: m.name }))}
+            owner={owner}
+            said={said("group")}
+          />
+
+          {holder && (
+            <Section
+              id="delete"
+              title={`Delete ${org.name}`}
+              description="Everything in it goes with it, for everyone in it. Hand the org over instead if someone else should keep it."
+            >
+              <div className="flex items-center gap-3">
+                <DeleteOrg name={org.name} />
+                <Said text={said("delete")} />
+              </div>
+            </Section>
+          )}
+        </div>
+      </div>
     </main>
   );
 }

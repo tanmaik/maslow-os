@@ -378,7 +378,7 @@ try {
     "member removed",
     pimRemove.headers.get("location")?.endsWith("member=removed") &&
       !button("remove").test(afterRemove) &&
-      afterRemove.includes("Show 1 past member") &&
+      afterRemove.includes("1 past member, kept") &&
       button("restore").test(afterRemove),
     "off the roster, under past members",
   );
@@ -389,7 +389,7 @@ try {
   );
   check(
     "a member sees no past members",
-    !(await settingsPage(otto)).includes("Show 1 past member"),
+    !(await settingsPage(otto)).includes("1 past member, kept"),
     "no past members for Otto",
   );
   const bakery = orgs.find((o) => o.users.some((u) => u.id === pimId));
@@ -1118,7 +1118,7 @@ try {
       !/name="remove"[^>]*value="10000000-0000-4000-8000-000000000002"|value="10000000-0000-4000-8000-000000000002"[^>]*name="remove"/.test(
         acmeAfter,
       ) &&
-      acmeAfter.includes("Show 1 past member"),
+      acmeAfter.includes("1 past member, kept"),
     "signed out, under Acme's past members",
   );
   const wileLeaves = await fetch(`${stack.url}/auth/leave`, {
