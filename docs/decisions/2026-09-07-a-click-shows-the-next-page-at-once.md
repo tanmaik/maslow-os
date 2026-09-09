@@ -104,3 +104,8 @@ everyone, read by a member who owns none of them:
 
 `share_level` remains, for `access_level`, which answers for one record and
 calls it once.
+
+Timed afterwards on production from a laptop, the whole server render of a
+page and the round trip to Ohio together: the brain's list 231 ms, a type's
+records 195 ms, one record's page 190 to 276 ms. They were around half a
+second before.
