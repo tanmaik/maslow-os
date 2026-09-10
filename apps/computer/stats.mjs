@@ -117,7 +117,11 @@ async function ports() {
       if (/code-server|\/opt\/maslow\//.test(cmd)) continue;
       const name = await readFile(`/proc/${pid}/comm`, "utf8").catch(() => "");
       if (name.trim() === "claude") continue;
-      out.push({ port, name: name.trim() });
+      // What started it, not merely what it is: a dev server and a database
+      // are both `node` and only the command tells them apart. The
+      // arguments arrive separated by nothing, as the kernel keeps them.
+      const ran = cmd.replace(/\0+$/, "").split("\0").join(" ").slice(0, 120);
+      out.push({ port, name: name.trim(), ran });
     }
   }
   return out.sort((a, b) => a.port - b.port);

@@ -1,6 +1,7 @@
 import * as brain from "@maslow/brain";
 import { asPerson, Gone, type Query } from "@maslow/db";
 import { fullName, type Session } from "@maslow/db/auth";
+import { computerOf } from "@maslow/db/computers";
 import { spend } from "@maslow/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -488,7 +489,7 @@ export function brainServer(
     "share",
     {
       description:
-        "Asks the person to share records or types of theirs with colleagues: what, with whom (everyone, a colleague's email, or a group's name), at what level, and why. Nothing is shared until the person accepts the ask on their brain's pages; they see the reason. One ask carries many items to many people.",
+        "Asks the person to share records or types of theirs, or ports on their computer, with colleagues: what, with whom (everyone, a colleague's email, or a group's name), at what level, and why. Nothing is shared until the person accepts the ask on their pages; they see the reason. One ask carries many items to many people. A port is only ever looked at, so it is asked for at view.",
       inputSchema: {
         records: ids.optional(),
         types: z
@@ -496,6 +497,11 @@ export function brainServer(
           .max(20)
           .optional()
           .describe("the person's own types, by name"),
+        ports: z
+          .array(z.number().int().min(1).max(65535))
+          .max(20)
+          .optional()
+          .describe("ports listening on the person's computer, by number"),
         to: z
           .array(z.string())
           .min(1)
@@ -511,6 +517,13 @@ export function brainServer(
       },
     },
     door(async (q, a) => {
+      if (a.ports?.length) {
+        const c = await computerOf(q, s.userId);
+        if (!c?.readyAt)
+          throw new brain.Invalid(
+            "the person has no computer ready to share a port of",
+          );
+      }
       const ask = await brain.askToShare(q, a);
       return {
         text: `asked ${ask.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,

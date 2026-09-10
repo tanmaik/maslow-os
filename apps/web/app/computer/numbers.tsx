@@ -1,11 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Area, AreaChart, YAxis } from "recharts";
+import { Area, AreaChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, type ChartConfig } from "@/components/ui/chart";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+  type ChartConfig,
+} from "@/components/ui/chart";
+import { SIZES, specs, type SizeKey } from "@/lib/sizes";
+
+import { Ports, type Sharing } from "./ports";
 
 type Stats = {
   model?: "ours" | "mine" | "none";
@@ -13,7 +21,7 @@ type Stats = {
   memory: { used: number; total: number };
   used: number | null;
   disk: number | null;
-  ports: { port: number; name: string }[];
+  ports: { port: number; name: string; ran?: string }[];
 };
 
 // One reading kept per ask, a minute's worth on screen.
@@ -22,19 +30,31 @@ const EVERY = 5000;
 const KEEP = 60_000 / EVERY;
 
 const gb = (bytes: number) => `${(bytes / 1e9).toFixed(1)} GB`;
+// "2 shared CPUs", the first half of a size's specs.
+const cpusOf = (s: (typeof SIZES)[SizeKey]) => specs(s).split(",")[0];
 
-const cpuChart = {
+// Both lines are the same ink: each sits alone on its own card, named by
+// its title, so colour has nothing to tell apart.
+const chart = {
   cpu: { label: "CPU", color: "var(--chart-1)" },
-} satisfies ChartConfig;
-const memoryChart = {
-  memory: { label: "Memory", color: "var(--chart-2)" },
+  memory: { label: "Memory", color: "var(--chart-1)" },
 } satisfies ChartConfig;
 
 // The computer's live numbers: CPU and memory over the last minute, the
-// bytes used, and the ports listening inside, each a link that opens it.
+// bytes used, and the ports listening inside, each named by what started it
+// and opening at an address of its own.
 // The cap on our key where this deployment mints one; null where it does
-// not.
-export function Numbers({ capUsd }: { capUsd: number | null }) {
+// not, and who each port is already given to.
+export function Numbers({
+  capUsd,
+  sharing,
+  size,
+}: {
+  capUsd: number | null;
+  sharing: Sharing | null;
+  // The rung the computer is on, or null when it is on none.
+  size: SizeKey | null;
+}) {
   const [now, setNow] = useState<Stats | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [failed, setFailed] = useState<string | null>(null);
@@ -85,6 +105,7 @@ export function Numbers({ capUsd }: { capUsd: number | null }) {
   const hot =
     minute.length >= KEEP &&
     (minute.every((s) => s.cpu > 85) || minute.every((s) => s.memory > 90));
+  const memoryPct = Math.round((now.memory.used / now.memory.total) * 100);
   return (
     <div className="space-y-4">
       {hot && (
@@ -95,16 +116,18 @@ export function Numbers({ capUsd }: { capUsd: number | null }) {
           </AlertDescription>
         </Alert>
       )}
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid max-w-xl gap-4 sm:grid-cols-2">
         <Live
-          title={`CPU ${now.cpu}%`}
-          config={cpuChart}
+          title="CPU"
+          value={`${now.cpu}%`}
+          of={size ? `of ${cpusOf(SIZES[size])}` : "of its CPUs"}
           field="cpu"
           samples={samples}
         />
         <Live
-          title={`Memory ${gb(now.memory.used)}`}
-          config={memoryChart}
+          title="Memory"
+          value={gb(now.memory.used)}
+          of={`of ${gb(now.memory.total)}, ${memoryPct}%`}
           field="memory"
           samples={samples}
         />
@@ -128,66 +151,91 @@ export function Numbers({ capUsd }: { capUsd: number | null }) {
               ? "Claude Code runs on your own Anthropic account: this computer holds no key of ours."
               : "Claude Code's account will show once the computer is on the newest image."}
       </p>
-      {now.ports.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-sm font-medium">Open ports</p>
-          <ul className="text-sm">
-            {now.ports.map((p) => (
-              <li key={p.port}>
-                <a
-                  className="underline underline-offset-4"
-                  href={`/computer/open?to=/proxy/${p.port}/`}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  {p.port}
-                </a>
-                {p.name && (
-                  <span className="text-muted-foreground"> {p.name}</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      <Ports ports={now.ports} sharing={sharing} />
     </div>
   );
 }
 
+// One measure: the number now, what it is of, and the last minute of it
+// drawn on a fixed scale from nothing to everything, so a flat line low
+// down means idle and one along the top means full.
 function Live({
   title,
-  config,
+  value,
+  of,
   field,
   samples,
 }: {
   title: string;
-  config: ChartConfig;
+  value: string;
+  of: string;
   field: "cpu" | "memory";
   samples: Sample[];
 }) {
+  const at = (ms: number) =>
+    new Date(ms).toLocaleTimeString(undefined, { timeStyle: "medium" });
   return (
     <Card size="sm">
-      <CardHeader>
-        <CardTitle className="text-sm">{title}</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer config={config} className="h-24 w-full">
+      <CardContent className="space-y-2">
+        <div>
+          <p className="text-muted-foreground text-sm">{title}</p>
+          <p className="text-2xl font-semibold tabular-nums">{value}</p>
+          <p className="text-muted-foreground text-sm">{of}</p>
+        </div>
+        <ChartContainer config={chart} className="h-16 w-full">
           <AreaChart
             data={samples}
-            margin={{ top: 4, right: 0, bottom: 0, left: 0 }}
+            margin={{ top: 8, right: 0, bottom: 1, left: 0 }}
           >
+            <XAxis
+              dataKey="at"
+              type="number"
+              domain={["dataMin", "dataMax"]}
+              hide
+            />
             <YAxis domain={[0, 100]} hide />
+            <ReferenceLine
+              y={100}
+              stroke="var(--border)"
+              label={{
+                value: "100%",
+                position: "insideTopRight",
+                fontSize: 10,
+                fill: "var(--muted-foreground)",
+              }}
+            />
+            <ReferenceLine
+              y={50}
+              stroke="var(--border)"
+              strokeDasharray="2 3"
+            />
+            <ChartTooltip
+              cursor={{ stroke: "var(--border)" }}
+              content={
+                <ChartTooltipContent
+                  hideIndicator
+                  labelFormatter={(_, payload) =>
+                    at((payload[0]?.payload as Sample).at)
+                  }
+                  formatter={(v) => `${v}%`}
+                />
+              }
+            />
             <Area
               dataKey={field}
               type="monotone"
               stroke={`var(--color-${field})`}
+              strokeWidth={2}
               fill={`var(--color-${field})`}
-              fillOpacity={0.2}
+              fillOpacity={0.12}
+              baseValue={0}
               isAnimationActive={false}
               dot={false}
+              activeDot={{ r: 4 }}
             />
           </AreaChart>
         </ChartContainer>
+        <p className="text-muted-foreground text-xs">The last minute.</p>
       </CardContent>
     </Card>
   );

@@ -63,6 +63,14 @@ export function Asks({
                   >
                     {records.get(it.record)?.title || "a record"}
                   </Link>
+                ) : "port" in it ? (
+                  <Link
+                    key={i}
+                    href="/computer"
+                    className="font-medium underline"
+                  >
+                    port {it.port} on your computer
+                  </Link>
                 ) : (
                   <Link
                     key={i}

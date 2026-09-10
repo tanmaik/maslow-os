@@ -10,6 +10,7 @@ import {
   asSelf,
   Gone,
 } from "../packages/db/src/index.ts";
+import { portsReaching, sharePort } from "../packages/db/src/computers.ts";
 import { orgs } from "../packages/db/src/seed.ts";
 
 const pg = createRequire(
@@ -164,6 +165,214 @@ export async function smokeDb({ pgPort }) {
             bakery.users[0].id,
           );
         }
+      },
+    );
+    await check(
+      "a port is given by its computer's owner and seen by nobody else",
+      async () => {
+        const [wile, road] = acme.users;
+        const marge = bakery.users[0];
+        const mine = {
+          orgId: acme.id,
+          personId: wile.personId,
+          userId: wile.id,
+        };
+        const theirs = {
+          orgId: acme.id,
+          personId: road.personId,
+          userId: road.id,
+        };
+        const computer = await asPerson(mine, async (q) => {
+          await q.query(
+            `insert into computers (user_id, region, cpus, memory_mb, disk_gb, secret)
+             values ($1, 'sjc', 1, 512, 1, 'x')
+             on conflict (org_id, user_id) do update set region = 'sjc'
+             returning id`,
+            [wile.id],
+          );
+          return (await q.query("select id from computers")).rows[0].id;
+        });
+        // Its owner gives it; nobody else can give away what is not theirs.
+        await asPerson(mine, (q) =>
+          q.query(
+            "insert into port_shares (computer_id, port, subject, member_id) values ($1, 3000, 'member', $2)",
+            [computer, road.id],
+          ),
+        );
+        await assert.rejects(
+          asPerson(theirs, (q) =>
+            q.query(
+              "insert into port_shares (computer_id, port, subject, member_id) values ($1, 3001, 'member', $2)",
+              [computer, road.id],
+            ),
+          ),
+          /row-level security/,
+        );
+        // Nobody outside the org can be given one at all.
+        await assert.rejects(
+          asPerson(mine, (q) =>
+            q.query(
+              "insert into port_shares (computer_id, port, subject, member_id) values ($1, 3002, 'member', $2)",
+              [computer, marge.id],
+            ),
+          ),
+          /violates foreign key/,
+        );
+        // The owner sees every share on it; the person given one sees theirs.
+        assert.equal(
+          (await asPerson(mine, (q) => q.query("select 1 from port_shares")))
+            .rowCount,
+          1,
+        );
+        assert.equal(
+          (await asPerson(theirs, (q) => q.query("select 1 from port_shares")))
+            .rowCount,
+          1,
+        );
+        // Taking it away is the owner's: the person it was given to can see
+        // it and cannot remove it, so their delete takes nothing.
+        assert.equal(
+          (await asPerson(theirs, (q) => q.query("delete from port_shares")))
+            .rowCount,
+          0,
+        );
+        await asPerson(mine, (q) => q.query("delete from port_shares"));
+        assert.equal(
+          (await asPerson(mine, (q) => q.query("select 1 from port_shares")))
+            .rowCount,
+          0,
+        );
+        // A port open to everyone reaches everyone in this org and nobody in
+        // another, and one given to a group reaches whoever is in it.
+        const group = await asPerson(mine, async (q) => {
+          const made = await q.query(
+            "insert into groups (name, author) values ('Sled crew', $1) returning id",
+            [wile.id],
+          );
+          await q.query(
+            "insert into group_members (group_id, member_id) values ($1, $2)",
+            [made.rows[0].id, road.id],
+          );
+          return made.rows[0].id;
+        });
+        const seen = (who) =>
+          asPerson(who, async (q) =>
+            Number((await q.query("select 1 from port_shares")).rowCount),
+          );
+        const others = {
+          orgId: bakery.id,
+          personId: marge.personId,
+          userId: marge.id,
+        };
+        await asPerson(mine, (q) =>
+          q.query(
+            "insert into port_shares (computer_id, port, subject) values ($1, 4000, 'everyone')",
+            [computer],
+          ),
+        );
+        assert.equal(await seen(theirs), 1);
+        assert.equal(await seen(others), 0);
+        await asPerson(mine, (q) =>
+          q.query(
+            "insert into port_shares (computer_id, port, subject, group_id) values ($1, 4001, 'group', $2)",
+            [computer, group],
+          ),
+        );
+        assert.equal(await seen(theirs), 2);
+        // What reaches a person is listed for them, with whose it is, and
+        // never their own or another org's.
+        await asPerson(mine, (q) =>
+          q.query("update computers set machine_id = 'smoke-machine'"),
+        );
+        const reaching = (who) =>
+          asPerson(who, async (q) =>
+            (await portsReaching(q)).map((s) => `${s.machineId}:${s.port}`),
+          );
+        assert.deepEqual(await reaching(theirs), [
+          "smoke-machine:4000",
+          "smoke-machine:4001",
+        ]);
+        assert.deepEqual(await reaching(mine), []);
+        assert.deepEqual(await reaching(others), []);
+        // A share must name exactly the one thing it reaches.
+        await assert.rejects(
+          asPerson(mine, (q) =>
+            q.query(
+              "insert into port_shares (computer_id, port, subject, member_id, group_id) values ($1, 4002, 'member', $2, $3)",
+              [computer, road.id, group],
+            ),
+          ),
+          /port_share_names_its_subject/,
+        );
+        await asPerson(mine, (q) => q.query("delete from port_shares"));
+        // The sheet sets a port's whole reach: whoever is unticked is taken
+        // off in the same act, whatever kind of party stays ticked.
+        const reachOf = () =>
+          asPerson(mine, async (q) =>
+            (
+              await q.query(
+                "select subject from port_shares where port = 5000 order by subject",
+              )
+            ).rows
+              .map((r) => r.subject)
+              .join(","),
+          );
+        await asPerson(mine, (q) =>
+          sharePort(q, computer, 5000, {
+            everyone: true,
+            groupIds: [group],
+            memberIds: [road.id],
+          }),
+        );
+        assert.equal(await reachOf(), "everyone,group,member");
+        await asPerson(mine, (q) =>
+          sharePort(q, computer, 5000, {
+            everyone: false,
+            groupIds: [group],
+            memberIds: [],
+          }),
+        );
+        assert.equal(await reachOf(), "group");
+        await asPerson(mine, (q) =>
+          sharePort(q, computer, 5000, {
+            everyone: false,
+            groupIds: [],
+            memberIds: [road.id],
+          }),
+        );
+        assert.equal(await reachOf(), "member");
+        await asPerson(mine, (q) =>
+          sharePort(q, computer, 5000, {
+            everyone: false,
+            groupIds: [],
+            memberIds: [],
+          }),
+        );
+        assert.equal(await reachOf(), "");
+        // Setting one port's reach leaves another port's shares untouched.
+        await asPerson(mine, (q) =>
+          sharePort(q, computer, 6000, {
+            everyone: false,
+            groupIds: [],
+            memberIds: [road.id],
+          }),
+        );
+        await asPerson(mine, (q) =>
+          sharePort(q, computer, 5000, {
+            everyone: true,
+            groupIds: [],
+            memberIds: [],
+          }),
+        );
+        assert.equal(
+          (
+            await asPerson(mine, (q) =>
+              q.query("select 1 from port_shares where port = 6000"),
+            )
+          ).rowCount,
+          1,
+        );
+        await asPerson(mine, (q) => q.query("delete from port_shares"));
       },
     );
   } finally {

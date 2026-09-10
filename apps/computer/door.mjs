@@ -20,15 +20,39 @@ const INSIDE = 8081;
 const COOKIE = "door";
 if (!SECRET) throw new Error("DOOR_SECRET is not set");
 
-// A ticket is its expiry and a signature over it: `<seconds>.<hmac>`.
-function valid(ticket) {
-  const [exp, sig] = (ticket ?? "").split(".");
-  if (!exp || !sig || Number(exp) < Date.now() / 1000) return false;
-  const want = createHmac("sha256", SECRET).update(exp).digest("hex");
-  return (
-    want.length === sig.length &&
-    timingSafeEqual(Buffer.from(want), Buffer.from(sig))
-  );
+// How much of the machine a ticket opens, or null when it is not a ticket
+// of ours or its time has passed. A ticket is its expiry, what it opens,
+// and a signature over both: `<seconds>.<port>.<hmac>` for one port of the
+// person's own, and `<seconds>.<hmac>` for the whole machine, which is
+// minted for its owner alone.
+function scopeOf(ticket) {
+  const parts = (ticket ?? "").split(".");
+  const [exp, scope, sig] =
+    parts.length === 3 ? parts : [parts[0], "", parts[1]];
+  if (!/^\d+$/.test(exp ?? "") || !sig || Number(exp) < Date.now() / 1000)
+    return null;
+  const said = scope ? `${exp}.${scope}` : exp;
+  const want = createHmac("sha256", SECRET).update(said).digest("hex");
+  if (
+    want.length !== sig.length ||
+    !timingSafeEqual(Buffer.from(want), Buffer.from(sig))
+  ) {
+    return null;
+  }
+  return scope;
+}
+
+// A ticket for the whole machine, which is what the door's own endpoints
+// take: nothing about a person's ports reaches them.
+const ours = (ticket) => scopeOf(ticket) === "";
+
+// Whether a ticket opens what is being asked for. A ticket for one port
+// opens that port and nothing else, so a port shared with somebody does not
+// hand them the machine it runs on.
+function opens(ticket, to) {
+  const scope = scopeOf(ticket);
+  if (scope === null) return false;
+  return scope === "" || (to.theirs === true && String(to.port) === scope);
 }
 
 const cookieOf = (req) =>
@@ -38,16 +62,31 @@ const cookieOf = (req) =>
     .find((c) => c.startsWith(`${COOKIE}=`))
     ?.slice(COOKIE.length + 1);
 
-// Where a request goes: VS Code inside, or, when the address names
-// another machine, that machine's own door over the private network.
+// The ports the image itself holds. Nothing the person runs may take one,
+// and no address may reach one, or the door would carry traffic to itself.
+const OURS = new Set([22, 8080, INSIDE, 8082]);
+
+// Where a request goes, from the one label under the domain: a port of the
+// person's own on this machine, VS Code inside, or the same address on
+// another machine, reached over the private network for its door to answer.
 function target(req) {
   const host = (req.headers.host ?? "").replace(/:\d+$/, "");
-  const named =
+  const label =
     DOMAIN && host.endsWith(`.${DOMAIN}`)
       ? host.slice(0, -DOMAIN.length - 1)
       : null;
-  if (named && named !== ME && APP && /^[0-9a-f]{14}$/.test(named))
-    return { host: `${named}.vm.${APP}.internal`, port: 8080, mine: false };
+  const named = /^(?:(\d{1,5})-)?([0-9a-f]{14})$/.exec(label ?? "");
+  const machine = named?.[2];
+  const port = named?.[1] ? Number(named[1]) : null;
+  const elsewhere = machine && machine !== ME && APP;
+  if (elsewhere)
+    return { host: `${machine}.vm.${APP}.internal`, port: 8080, mine: false };
+  // A port of theirs is theirs alone: ours are not addressable, and neither
+  // is anything outside the range a port can have.
+  if (port !== null && machine === ME) {
+    if (port < 1 || port > 65535 || OURS.has(port)) return null;
+    return { host: "127.0.0.1", port, mine: false, theirs: true };
+  }
   return { host: "127.0.0.1", port: INSIDE, mine: true };
 }
 
@@ -70,6 +109,34 @@ const say = (res, status, text) => {
   res.end(text);
 };
 
+// What an app inside is told about the request. Its own name is carried
+// rather than replaced, since a dev server refuses a host it does not know,
+// and it is told the outside is https, which it cannot see from loopback and
+// would otherwise write http into its own links and cookies.
+function forwarded(req) {
+  const host = req.headers.host ?? "";
+  return {
+    ...req.headers,
+    "x-forwarded-proto": "https",
+    "x-forwarded-host": host,
+    "x-forwarded-for": req.socket.remoteAddress ?? "",
+  };
+}
+
+// What comes back, with anywhere it points rewritten to the address the
+// person is actually at: an app on loopback names itself by the port it
+// binds, which is a place nobody outside the machine can go.
+function outward(answer, req) {
+  const location = answer.headers.location;
+  if (!location) return answer.headers;
+  const inside = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?/i;
+  if (!inside.test(location)) return answer.headers;
+  return {
+    ...answer.headers,
+    location: location.replace(inside, `https://${req.headers.host ?? ""}`),
+  };
+}
+
 const server = http.createServer(async (req, res) => {
   let url;
   try {
@@ -78,13 +145,14 @@ const server = http.createServer(async (req, res) => {
     return say(res, 400, "That is not an address.");
   }
   const to = target(req);
+  if (!to) return say(res, 404, "Nothing of yours is listening there.");
   if (to.mine && url.pathname === "/maslow/health")
     return (await insideAnswers())
       ? say(res, 200, "ok")
       : say(res, 503, "VS Code is not answering yet.");
   // The numbers, for our server alone: it signs its ask with the secret.
   if (to.mine && url.pathname === "/maslow/stats") {
-    if (!valid(req.headers["x-maslow-ticket"]))
+    if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(JSON.stringify(await stats()));
@@ -92,7 +160,7 @@ const server = http.createServer(async (req, res) => {
   // Backups, for our server alone: it asks with an address to upload to,
   // and reads what came of the last one.
   if (to.mine && url.pathname === "/maslow/backup") {
-    if (!valid(req.headers["x-maslow-ticket"]))
+    if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     if (req.method === "GET") {
       res.writeHead(200, { "content-type": "application/json" });
@@ -124,7 +192,7 @@ const server = http.createServer(async (req, res) => {
     url.pathname === "/maslow/browser/act" &&
     req.method === "POST"
   ) {
-    if (!valid(req.headers["x-maslow-ticket"]))
+    if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     const onward = http.request(
       {
@@ -151,7 +219,7 @@ const server = http.createServer(async (req, res) => {
   // What the browser is looking at, for our server alone: the picture the
   // browser server draws of its newest tab, or nothing while it is closed.
   if (to.mine && url.pathname === "/maslow/browser") {
-    if (!valid(req.headers["x-maslow-ticket"]))
+    if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     const shot = http.get(
       { host: "127.0.0.1", port: 8082, path: "/screenshot", timeout: 8000 },
@@ -170,7 +238,7 @@ const server = http.createServer(async (req, res) => {
   // The keys that open SSH, for our server alone: written beside the
   // server's own, outside the person's Linux.
   if (to.mine && url.pathname === "/maslow/keys" && req.method === "PUT") {
-    if (!valid(req.headers["x-maslow-ticket"]))
+    if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     const text = await new Promise((resolve) => {
       let s = "";
@@ -185,7 +253,7 @@ const server = http.createServer(async (req, res) => {
   // over and keeps their home. The mark is on the disk, outside their
   // Linux, so nothing inside can set or clear it.
   if (to.mine && url.pathname === "/maslow/reset" && req.method === "POST") {
-    if (!valid(req.headers["x-maslow-ticket"]))
+    if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     // Forced onto the disk before the answer: the restart that follows is
     // a hard stop, and a mark still in memory would be lost with it.
@@ -198,22 +266,60 @@ const server = http.createServer(async (req, res) => {
     fs.closeSync(dir);
     return say(res, 200, "reset at the next boot");
   }
-  if (to.mine) {
+  // Signing out of Maslow throws the ticket kept here away. A cookie on
+  // this machine's own name is beyond the reach of our server, which lives
+  // at another, so sign-out sends the browser through here on its way out.
+  // Where it goes next is signed with the same secret a ticket is, or this
+  // would carry anybody anywhere under our name.
+  if (to.mine && url.pathname === "/maslow/leave") {
+    const onward = url.searchParams.get("to") ?? "";
+    const said = url.searchParams.get("sig") ?? "";
+    // Signed under its own label, so what signs a way out can never be
+    // read as a ticket in.
+    const want = createHmac("sha256", SECRET)
+      .update(`leave:${onward}`)
+      .digest("hex");
+    if (
+      want.length !== said.length ||
+      !timingSafeEqual(Buffer.from(want), Buffer.from(said))
+    ) {
+      return say(res, 403, "Nobody asked for that.");
+    }
+    // Thrown away rather than set, and arriving in the middle of a hop that
+    // began at our server, which a browser counts as another site: a cookie
+    // that says Lax would be dropped here and the ticket would live on. It
+    // carries nothing, so saying None gives nothing away.
+    res.writeHead(303, {
+      location: onward,
+      "set-cookie": `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`,
+    });
+    return res.end();
+  }
+  // Everything on this machine is behind a ticket, whether it is ours or a
+  // port of theirs. Another machine's door asks for its own.
+  if (to.mine || to.theirs) {
     const ticket = url.searchParams.get("ticket");
     if (ticket) {
-      if (!valid(ticket)) return say(res, 403, "That ticket is not good here.");
+      if (!opens(ticket, to))
+        return say(res, 403, "That ticket is not good here.");
       // Then to where it was going, if that is a path on this machine: one
       // leading slash, and no backslash anywhere, which a browser would
       // read as a second slash.
-      const to = url.searchParams.get("to") ?? "/";
+      const onto = url.searchParams.get("to") ?? "/";
+      // The cookie dies with the ticket in it, so a browser never carries
+      // one long after it stopped opening anything.
+      const left = Math.max(
+        1,
+        Math.floor(Number(ticket.split(".")[0]) - Date.now() / 1000),
+      );
       res.writeHead(303, {
-        location: /^\/(?!\/)[^\\\s]*$/.test(to) ? to : "/",
-        "set-cookie": `${COOKIE}=${ticket}; Path=/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`,
+        location: /^\/(?!\/)[^\\\s]*$/.test(onto) ? onto : "/",
+        "set-cookie": `${COOKIE}=${ticket}; Path=/; Max-Age=${left}; HttpOnly; Secure; SameSite=Lax`,
       });
       return res.end();
     }
-    if (!valid(cookieOf(req)))
-      return say(res, 401, "Open your computer from your Computer page.");
+    if (!opens(cookieOf(req), to))
+      return say(res, 401, "Open this from Maslow.");
   }
   const onward = http.request(
     {
@@ -221,10 +327,13 @@ const server = http.createServer(async (req, res) => {
       port: to.port,
       method: req.method,
       path: req.url,
-      headers: req.headers,
+      headers: forwarded(req),
     },
     (answer) => {
-      res.writeHead(answer.statusCode ?? 502, answer.headers);
+      res.writeHead(
+        answer.statusCode ?? 502,
+        to.mine || to.theirs ? outward(answer, req) : answer.headers,
+      );
       answer.on("error", () => res.destroy());
       answer.pipe(res);
     },
@@ -235,28 +344,39 @@ const server = http.createServer(async (req, res) => {
       502,
       to.mine
         ? "VS Code is not answering yet."
-        : "That computer is not answering.",
+        : to.theirs
+          ? "Nothing is answering on that port."
+          : "That computer is not answering.",
     ),
   );
+  // A request the person walked away from takes its answer with it, rather
+  // than leaving a road into their machine open behind them.
+  res.on("close", () => onward.destroy());
   req.pipe(onward);
 });
 
-// VS Code's live connection: the same ticket, then the two sockets are
-// joined; one for another machine is joined to that machine's door.
+// A live connection, to VS Code, to a port of the person's own, or to
+// another machine's door: the same ticket, then the two sockets are joined.
+// Anything modern holds one of these open for its own live reload alone, so
+// a port that cannot upgrade is a port that does not work.
 server.on("upgrade", (req, socket, head) => {
   const to = target(req);
+  if (!to) {
+    socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
+    return;
+  }
   // SSH over a WebSocket: the internet's road to the SSH server outside
   // the person's Linux. No ticket: the key the person set is the lock,
   // as on any machine on the internet.
   if (to.mine && req.url.split("?")[0] === "/maslow/ssh")
     return sshOver(req, socket, head);
-  if (to.mine && !valid(cookieOf(req))) {
+  if ((to.mine || to.theirs) && !opens(cookieOf(req), to)) {
     socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
     return;
   }
   const onward = net.connect(to.port, to.host, () => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
-    for (const [k, v] of Object.entries(req.headers))
+    for (const [k, v] of Object.entries(forwarded(req)))
       lines.push(`${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
     onward.write(lines.join("\r\n") + "\r\n\r\n");
     if (head.length) onward.write(head);

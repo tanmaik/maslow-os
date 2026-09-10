@@ -70,11 +70,10 @@ at Tanmai's word on 2026-09-08: Small, two shared CPUs and 2 GB; Medium,
 four and 4 GB; Large, eight and 8 GB; Dedicated, two dedicated CPUs and
 8 GB. Picking one restarts the machine into it in a few seconds; nothing
 inside can. The row is the truth: the sweep remakes a machine whose size
-is not its row's, as it does for the image. Since 2026-09-08 the sweep
-also moves a computer up one rung on its own when it finds nine tenths of
-its memory in use, up to Large, and never down: Tanmai's own machine at
-Small was starved by a typecheck, Claude Code and VS Code together, and a
-starved machine cannot even show the warning. The page says so. The reporter gives CPU,
+is not its row's, as it does for the image. Nothing changes the size but
+the person: the sweep moved a computer up a rung on its own from
+2026-09-08 when it found nine tenths of its memory in use, and that came
+out on 2026-09-10. The reporter gives CPU,
 memory and disk every few seconds; the page draws them live; near the top
 of the current size, the page says so. Shrinking is the same control. The
 ledger records every change with the size, and prices come later from

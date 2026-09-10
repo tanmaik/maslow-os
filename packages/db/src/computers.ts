@@ -274,3 +274,152 @@ export async function note(
     ],
   );
 }
+
+// A port on a computer and a member who may reach it.
+export type PortShare = {
+  port: number;
+  subject: "everyone" | "group" | "member";
+  memberId: string | null;
+  groupId: string | null;
+};
+
+// Every share on a computer. An org scope shows its owner all of them and
+// everyone else only what reaches them, so nobody learns what another has
+// open.
+export async function sharesOn(
+  q: Query,
+  computerId: string,
+): Promise<PortShare[]> {
+  return (
+    await q.query<PortShare>(
+      `select port, subject, member_id as "memberId", group_id as "groupId"
+       from port_shares where computer_id = $1
+       order by port, subject, member_id, group_id`,
+      [computerId],
+    )
+  ).rows;
+}
+
+// Makes what one port reaches exactly this and nothing else: everyone in
+// the org, or some groups and some people. Everyone is not a row anywhere,
+// so it is a subject of its own rather than a group's id.
+export async function sharePort(
+  q: Query,
+  computerId: string,
+  port: number,
+  to: { everyone: boolean; groupIds: string[]; memberIds: string[] },
+): Promise<void> {
+  await q.query(
+    `delete from port_shares
+     where computer_id = $1 and port = $2
+       and not (subject = 'everyone' and $3)
+       and (group_id is null or group_id <> all($4::uuid[]))
+       and (member_id is null or member_id <> all($5::uuid[]))`,
+    [computerId, port, to.everyone, to.groupIds, to.memberIds],
+  );
+  if (to.everyone) {
+    await q.query(
+      `insert into port_shares (computer_id, port, subject)
+       values ($1, $2, 'everyone') on conflict do nothing`,
+      [computerId, port],
+    );
+  }
+  if (to.groupIds.length > 0) {
+    await q.query(
+      `insert into port_shares (computer_id, port, subject, group_id)
+       select $1, $2, 'group', unnest($3::uuid[]) on conflict do nothing`,
+      [computerId, port, to.groupIds],
+    );
+  }
+  if (to.memberIds.length > 0) {
+    await q.query(
+      `insert into port_shares (computer_id, port, subject, member_id)
+       select $1, $2, 'member', unnest($3::uuid[]) on conflict do nothing`,
+      [computerId, port, to.memberIds],
+    );
+  }
+}
+
+// The computer a machine is, read by anyone in its org. Null when the org
+// holds no such machine.
+export async function computerByMachine(
+  q: Query,
+  machineId: string,
+): Promise<Computer | null> {
+  await q.query("select set_config('app.past_members', 'on', true)");
+  return (
+    (
+      await q.query<Computer>(
+        `select ${COLUMNS} from computers c join users u on u.id = c.user_id and u.org_id = c.org_id
+         where c.machine_id = $1`,
+        [machineId],
+      )
+    ).rows[0] ?? null
+  );
+}
+
+export type SharedPort = { machineId: string; port: number; owner: string };
+
+// The ports other people opened to the member reading, by name, by a group
+// they are in, or to everyone in the org, with whose each is. Their own
+// ports are not among them, and neither is a computer with no machine yet.
+export async function portsReaching(q: Query): Promise<SharedPort[]> {
+  return (
+    await q.query<SharedPort>(
+      `select c.machine_id as "machineId", s.port, u.name as owner
+       from port_shares s
+       join computers c on c.id = s.computer_id
+       join users u on u.id = c.user_id
+       where c.user_id <> current_member() and c.machine_id is not null
+         and (s.subject = 'everyone'
+           or s.member_id = current_member()
+           or exists (select 1 from group_members m
+                      where m.group_id = s.group_id
+                        and m.member_id = current_member()))
+       group by c.machine_id, s.port, u.name
+       order by u.name, s.port`,
+    )
+  ).rows;
+}
+
+// Gives one port to one more subject, leaving whoever already has it. This
+// is what accepting the agent's ask does; the sheet on the page sets the
+// whole reach instead.
+export async function givePort(
+  q: Query,
+  computerId: string,
+  port: number,
+  to: { who: "everyone" } | { who: "group" | "member"; id: string },
+): Promise<void> {
+  await q.query(
+    `insert into port_shares (computer_id, port, subject, member_id, group_id)
+     values ($1, $2, $3, $4, $5) on conflict do nothing`,
+    [
+      computerId,
+      port,
+      to.who,
+      to.who === "member" ? to.id : null,
+      to.who === "group" ? to.id : null,
+    ],
+  );
+}
+
+// Whether one port of one computer reaches the member reading: by name, by
+// a group they are in, or by being open to everyone in the org.
+export async function shares(
+  q: Query,
+  computerId: string,
+  port: number,
+): Promise<boolean> {
+  const said = await q.query(
+    `select 1 from port_shares
+     where computer_id = $1 and port = $2
+       and (subject = 'everyone'
+         or member_id = current_member()
+         or exists (select 1 from group_members m
+                    where m.group_id = port_shares.group_id
+                      and m.member_id = current_member()))`,
+    [computerId, port],
+  );
+  return (said.rowCount ?? 0) > 0;
+}

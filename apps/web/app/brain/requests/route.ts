@@ -7,12 +7,14 @@ import {
   NotFound,
 } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
+import { computerOf, givePort } from "@maslow/db/computers";
 import { NextResponse } from "next/server";
 
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
-// Answers an ask the agent made: share as it asked, or not.
+// Answers an ask the agent made: share as it asked, or not. A port the ask
+// names is given on the person's own computer.
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
@@ -25,8 +27,12 @@ export async function POST(request: Request) {
   }
   try {
     await asPerson(p, async (db) => {
-      if (intent === "accept") await acceptRequest(db, id);
-      else await declineRequest(db, id);
+      if (intent !== "accept") return declineRequest(db, id);
+      await acceptRequest(db, id, async (port, to) => {
+        const c = await computerOf(db, p.userId);
+        if (!c) throw new Invalid("you have no computer to give a port of");
+        await givePort(db, c.id, port, to);
+      });
     });
   } catch (err) {
     if (err instanceof Invalid || err instanceof NotFound) {

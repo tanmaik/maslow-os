@@ -6,13 +6,21 @@ import type { Access, Query, Subject, Target } from "./types.ts";
 // whom, at what level and why, and waits for the owner to accept or decline
 // it. Accepting makes the shares in the owner's name.
 
+// What an ask may name: a record or a type of the brain's, or a port on the
+// person's computer, which is only ever looked at.
+type Asked = Target | { port: number };
+
 export type ShareRequest = {
   id: string;
-  items: Target[];
+  items: Asked[];
   subjects: Subject[];
   level: Access;
   reason: string;
 };
+
+// Gives one port of the caller's computer to one subject; the computer is
+// not the brain's to reach, so whoever accepts an ask hands this in.
+type GivePort = (port: number, subject: Subject) => Promise<void>;
 
 // Whom to share with, as an asker names them: "everyone", a colleague's
 // email (it has an @), or a group's name (it does not).
@@ -20,7 +28,7 @@ export type Whom = string;
 
 type Row = {
   id: string;
-  items: Target[];
+  items: Asked[];
   subjects: Subject[];
   level: Access;
   reason: string;
@@ -76,6 +84,7 @@ export async function askToShare(
   ask: {
     records?: string[];
     types?: string[];
+    ports?: number[];
     to: Whom[];
     level: Access;
     reason: string;
@@ -84,7 +93,7 @@ export async function askToShare(
   if (!LEVELS.has(ask.level))
     throw new Invalid(`"${ask.level}" is not a level`);
   if (!ask.reason.trim()) throw new Invalid("an ask needs a reason");
-  const items: Target[] = [];
+  const items: Asked[] = [];
   for (const id of new Set(ask.records ?? [])) {
     await need(q, id, "owner");
     items.push({ record: id });
@@ -92,7 +101,15 @@ export async function askToShare(
   for (const name of new Set(ask.types ?? [])) {
     items.push({ type: await ownType(q, name) });
   }
-  if (items.length === 0) throw new Invalid("an ask names a record or a type");
+  for (const port of new Set(ask.ports ?? [])) {
+    if (!Number.isInteger(port) || port < 1 || port > 65535)
+      throw new Invalid(`${port} is not a port`);
+    if (ask.level !== "view")
+      throw new Invalid("a port is only ever looked at; ask at view");
+    items.push({ port });
+  }
+  if (items.length === 0)
+    throw new Invalid("an ask names a record, a type or a port");
   const subjects = await whom(q, ask.to);
   if (subjects.some((s) => s.who === "everyone") && ask.level !== "view") {
     throw new Invalid("everyone can only be given view");
@@ -136,8 +153,9 @@ async function take(q: Query, id: string): Promise<Row> {
 }
 
 // What an ask still names: a record or a type removed since the ask was
-// written is left out, since nobody could see it anyway.
-async function stillThere(q: Query, items: Target[]): Promise<Target[]> {
+// written is left out, since nobody could see it anyway. A port stays: the
+// door decides what listens there.
+async function stillThere(q: Query, items: Asked[]): Promise<Asked[]> {
   const records = items.flatMap((it) => ("record" in it ? [it.record] : []));
   const types = items.flatMap((it) => ("type" in it ? [it.type] : []));
   const { rows } = await q.query<{ id: string }>(
@@ -147,7 +165,9 @@ async function stillThere(q: Query, items: Target[]): Promise<Target[]> {
     [records, types],
   );
   const live = new Set(rows.map((r) => r.id));
-  return items.filter((it) => live.has("record" in it ? it.record : it.type));
+  return items.filter(
+    (it) => "port" in it || live.has("record" in it ? it.record : it.type),
+  );
 }
 
 // Who an ask still names: a member who has left or a group deleted since
@@ -166,15 +186,23 @@ async function stillHere(q: Query, subjects: Subject[]): Promise<Subject[]> {
 }
 
 // Accepts an ask: everything it still names, to everyone it still names, at
-// its level, in the caller's name; then the ask is gone. Returns how many
-// shares it made.
-export async function acceptRequest(q: Query, id: string): Promise<number> {
+// its level, in the caller's name; then the ask is gone. A port named is
+// given through the hand passed in, since the computer is not the brain's.
+// Returns how many shares it made.
+export async function acceptRequest(
+  q: Query,
+  id: string,
+  givePort?: GivePort,
+): Promise<number> {
   const ask = await take(q, id);
   let made = 0;
   const subjects = await stillHere(q, ask.subjects);
   for (const item of await stillThere(q, ask.items)) {
     for (const subject of subjects) {
-      await share(q, item, subject, ask.level);
+      if ("port" in item) {
+        if (!givePort) throw new Invalid("nothing here gives a port away");
+        await givePort(item.port, subject);
+      } else await share(q, item, subject, ask.level);
       made += 1;
     }
   }

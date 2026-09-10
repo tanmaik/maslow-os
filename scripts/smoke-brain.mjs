@@ -1580,6 +1580,38 @@ export async function smokeBrain(stack) {
       ),
     );
 
+    // A port on the person's computer is asked for the same way, at view
+    // only, and accepting hands it to whatever gives ports away.
+    const portAsk = await as(marge)(async (q) => {
+      const atEdit = await attempt(() =>
+        brain.askToShare(q, {
+          ports: [3000],
+          to: ["editor@sharing.test"],
+          level: "edit",
+          reason: "x",
+        }),
+      );
+      const ask = await brain.askToShare(q, {
+        ports: [3000],
+        to: ["editor@sharing.test"],
+        level: "view",
+        reason: "The levain's dev server.",
+      });
+      const given = [];
+      const made = await brain.acceptRequest(q, ask.id, async (port, to) => {
+        given.push(`${port} to ${to.who} ${to.id}`);
+      });
+      return { atEdit, made, given, left: (await brain.requestsOf(q)).length };
+    });
+    check(
+      "a port is asked for at view, and accepting gives it",
+      portAsk.atEdit === "Invalid" &&
+        portAsk.made === 1 &&
+        portAsk.given.join() === `3000 to member ${otto.userId}` &&
+        portAsk.left === 0,
+      `at edit ${portAsk.atEdit}; gave ${portAsk.given.join(", ") || "nothing"}; ${portAsk.left} left`,
+    );
+
     // Export and import.
     const owner = new pg.Client({
       connectionString: `postgres://postgres@127.0.0.1:${stack.pgPort}/postgres`,

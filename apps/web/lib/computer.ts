@@ -1,4 +1,4 @@
-import { asMeter, asOrg, type Query } from "@maslow/db";
+import { asMeter, asOrg, asPerson, type Query } from "@maslow/db";
 import type { Principal } from "@maslow/db/auth";
 import {
   allComputers,
@@ -6,11 +6,13 @@ import {
   clearMachine,
   clearVolume,
   clearModelKey,
+  computerByMachine,
   computerOf,
   holdComputer,
   membersWithoutComputers,
   note,
   openComputerSession,
+  portsReaching,
   setBackedUp,
   setDisk,
   setMachine,
@@ -19,7 +21,12 @@ import {
   setReady,
   setSize,
   setVolume,
+  shares,
+  sharesOn,
+  sharePort,
   type Computer,
+  type PortShare,
+  type SharedPort,
 } from "@maslow/db/computers";
 
 import { createHmac } from "node:crypto";
@@ -28,13 +35,13 @@ import { deployment } from "./deployment.ts";
 import { fly, type Backup, type Machine, type Stats } from "./fly.ts";
 import { openrouter } from "./openrouter.ts";
 import { list, presign, remove } from "./s3.ts";
-import { sameSize, SIZES, sizeOf, type SizeKey } from "./sizes.ts";
+import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 
 // Every computer starts at the ladder's first rung, with this much disk.
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v38";
+const IMAGE = "registry.fly.io/maslow-computers-dev:v47";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when VS Code
@@ -443,10 +450,7 @@ async function reconcileOrg(
         const s = await fly
           .stats(c.machineId!, ticket(c, 60))
           .catch(() => null);
-        if (s) {
-          if (await hot(q, c, m, s)) return;
-          await grow(q, c, s);
-        }
+        if (s) await grow(q, c, s);
         await backUp(q, c);
         // The keys again every hour, so a machine remade or reset has them.
         if (c.authorizedKeys)
@@ -551,44 +555,6 @@ async function grow(q: Query, c: Computer, s: Stats): Promise<void> {
   await extend(q, c, "the disk was nearly full");
 }
 
-// The rung above each: memory doubles up the ladder and stops at Large,
-// since Dedicated has no more of it.
-const UP: Partial<Record<SizeKey, SizeKey>> = {
-  small: "medium",
-  medium: "large",
-};
-
-// A computer found with nine tenths of its memory in use is moved up one
-// rung on its own, a restart of seconds, and never down: a starved
-// machine cannot even show the person the warning. At the top, we are
-// told. Whether it was moved.
-async function hot(
-  q: Query,
-  c: Computer,
-  m: Machine,
-  s: Stats,
-): Promise<boolean> {
-  if (s.memory.used < s.memory.total * 0.9) return false;
-  const next = UP[sizeOf(c) ?? "large"];
-  if (!next) {
-    console.error(`computer ${c.id}: memory nearly full at its largest size`);
-    return false;
-  }
-  const size = SIZES[next];
-  await setSize(q, c.id, size);
-  await note(q, {
-    orgId: c.orgId,
-    userId: c.userId,
-    resource: "machine",
-    event: "resized",
-    ref: c.machineId,
-    detail: { cpuKind: size.cpuKind, cpus: size.cpus, memoryMb: size.memoryMb },
-    why: "memory was nearly full",
-  });
-  await remake(q, { ...c, ...size }, m, "memory was nearly full");
-  return true;
-}
-
 // Grows the disk by half again, up to the ceiling; at the ceiling, says
 // so to us and leaves it.
 async function extend(q: Query, c: Computer, why: string): Promise<void> {
@@ -616,11 +582,15 @@ async function extend(q: Query, c: Computer, why: string): Promise<void> {
   }
 }
 
-// A ticket the computer's door takes: its expiry, signed with the
-// computer's secret, which only our server and that machine hold.
-function ticket(c: Computer, seconds: number): string {
+// A ticket the computer's door takes: its expiry and how much of the
+// machine it opens, signed with the computer's secret, which only our
+// server and that machine hold. Named a port, it opens that port alone, so
+// what somebody was given a port for does not become the whole computer.
+// Named nothing, it opens everything, and is minted only for the owner.
+function ticket(c: Computer, seconds: number, port?: number): string {
   const exp = String(Math.floor(Date.now() / 1000) + seconds);
-  return `${exp}.${createHmac("sha256", c.secret).update(exp).digest("hex")}`;
+  const said = port === undefined ? exp : `${exp}.${port}`;
+  return `${said}.${createHmac("sha256", c.secret).update(said).digest("hex")}`;
 }
 
 // The member's ready computer, or null.
@@ -632,10 +602,13 @@ async function ready(p: Principal): Promise<Computer | null> {
 
 // Where a ready computer opens: its machine's own address, with a ticket
 // its door takes for a month, and the path on it to go on to, when that
-// is a path. Null until it is ready.
+// is a path. A port of the person's own has an address of its own under
+// the same name, so the app answering there sits at the root of a host and
+// nothing of its own has to be rewritten. Null until it is ready.
 export async function openLink(
   p: Principal,
   to: string | null = null,
+  port: number | null = null,
 ): Promise<string | null> {
   const d = deployment.computers;
   const c = await ready(p);
@@ -644,7 +617,97 @@ export async function openLink(
   // which a browser would read as a second slash.
   const onward =
     to && /^\/(?!\/)[^\\\s]*$/.test(to) ? `&to=${encodeURIComponent(to)}` : "";
-  return `https://${c.machineId}.${d.domain}/?ticket=${ticket(c, 30 * 24 * 3600)}${onward}`;
+  const one =
+    port !== null && Number.isInteger(port) && port > 0 && port < 65536;
+  const at = one ? `${port}-${c.machineId}` : c.machineId;
+  const key = one ? ticket(c, SHARED_FOR, port) : ticket(c, 30 * 24 * 3600);
+  return `https://${at}.${d.domain}/?ticket=${key}${onward}`;
+}
+
+// How long a ticket for one port lasts. Every visit to a shared port is a
+// fresh one, minted only after the share is looked up again, so taking a
+// share away stops somebody within the hour rather than whenever they
+// happen to close the tab.
+const SHARED_FOR = 3600;
+
+// Where a port somebody else opened is reached, for a member the port was
+// shared with: the machine's own address with a ticket for that port and
+// nothing more. Null when the org holds no such machine, when the machine
+// is not ready, or when this member was not given it.
+export async function sharedLink(
+  p: Principal,
+  machineId: string,
+  port: number,
+): Promise<string | null> {
+  const d = deployment.computers;
+  if (d.kind === "none") return null;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
+  return asPerson(p, async (q) => {
+    const c = await computerByMachine(q, machineId);
+    if (!c?.readyAt || !c.machineId) return null;
+    const allowed = c.userId === p.userId || (await shares(q, c.id, port));
+    if (!allowed) return null;
+    return `https://${port}-${c.machineId}.${d.domain}/?ticket=${ticket(c, SHARED_FOR, port)}`;
+  });
+}
+
+// The person's own machine and who they have given each of its ports to,
+// for the Computer page. Null where they have no ready computer.
+export async function sharingOf(
+  p: Principal,
+): Promise<{ machineId: string; shares: PortShare[] } | null> {
+  return asPerson(p, async (q) => {
+    const c = await computerOf(q, p.userId);
+    if (!c?.readyAt || !c.machineId) return null;
+    return { machineId: c.machineId, shares: await sharesOn(q, c.id) };
+  });
+}
+
+// The ports other people have opened to this person, for the Computer page:
+// each is a link on our own domain, the same one its owner hands out. Empty
+// where this deployment has no computers.
+export async function sharedWithMe(p: Principal): Promise<SharedPort[]> {
+  if (deployment.computers.kind === "none") return [];
+  return asPerson(p, portsReaching);
+}
+
+// Makes what one of the person's own ports reaches exactly this: everyone
+// in the org, or some groups and some people. Nobody outside the org can be
+// named, since the database refuses a member or a group of another org, and
+// there is no level to give, only the port.
+export async function share(
+  p: Principal,
+  port: number,
+  to: { everyone: boolean; groupIds: string[]; memberIds: string[] },
+): Promise<boolean> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
+  return asPerson(p, async (q) => {
+    const c = await computerOf(q, p.userId);
+    // A port is shared only once the computer is ready, so nothing is given
+    // away before there is a machine to open at all.
+    if (!c?.readyAt || !c.machineId) return false;
+    await sharePort(q, c.id, port, to);
+    return true;
+  });
+}
+
+// Where signing out goes on its way home, so the ticket a browser keeps on
+// the machine's own name is thrown away with the session. Our server cannot
+// reach that cookie: it belongs to another name entirely. Where to go next
+// is signed with the computer's secret, so the door carries the browser
+// only where we sent it. Null when there is no machine to pass through, and
+// sign-out then goes straight home.
+export async function leaveLink(
+  p: Principal,
+  home: string,
+): Promise<string | null> {
+  const d = deployment.computers;
+  const c = await ready(p);
+  if (!c || d.kind === "none") return null;
+  const sig = createHmac("sha256", c.secret)
+    .update(`leave:${home}`)
+    .digest("hex");
+  return `https://${c.machineId}.${d.domain}/maslow/leave?to=${encodeURIComponent(home)}&sig=${sig}`;
 }
 
 // Starts the person's Linux over and keeps their home: the door is asked
