@@ -59,6 +59,9 @@ export type HistoryOptions = {
   of?: string;
   // Only changes before this point in the log; the next page.
   before?: number;
+  // Only changes after this point in the log, oldest first: what something
+  // watching the brain has not seen yet.
+  after?: number;
   limit?: number;
 };
 
@@ -485,19 +488,26 @@ export async function graph(
   return { nodes, edges: edges.map(toEdge) };
 }
 
-// The log read backwards, newest first, as a person looks at it.
+// The log read backwards, newest first, as a person looks at it; or
+// forwards from a point, oldest first, as something watching it does.
 export async function history(
   q: Query,
   opts: HistoryOptions = {},
 ): Promise<Event[]> {
+  if (opts.before !== undefined && opts.after !== undefined) {
+    throw new Invalid("before or after, not both");
+  }
+  const forward = opts.after !== undefined;
   const { rows } = await q.query<EventRow>(
     `select ${eventColumns} from events
      where ($1::text is null or subject_id = $1)
        and ($2::bigint is null or seq < $2)
-     order by seq desc limit $3`,
+       and ($3::bigint is null or seq > $3)
+     order by seq ${forward ? "asc" : "desc"} limit $4`,
     [
       opts.of ?? null,
       opts.before ?? null,
+      opts.after ?? null,
       Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT),
     ],
   );

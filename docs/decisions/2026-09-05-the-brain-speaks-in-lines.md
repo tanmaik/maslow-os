@@ -16,6 +16,36 @@ is one line naming only the fields that moved. The format is described once,
 in the server's instructions. Structured output beside the text was rejected:
 clients hand the model both, so it doubles the cost of every answer.
 
+## The same answer as data, for a program that asks
+
+Added 2026-09-09. An app on a person's computer reaches the brain exactly
+as the agent does, through the same door with the machine's session, and
+what it wants is rows, not prose. So a request that carries the header
+`Maslow-Answer: data` gets every tool's answer twice: the lines as always,
+and the same answer as the tool result's structured content, the doors'
+own objects untouched: the read page with its cursor, the records with
+their edges, the graph, what a write made, the log's changes. A model's
+client sends no such header and pays for the lines alone, which keeps the
+earlier decision whole. Only the text is cut to a screenful; the data is
+whole, bounded by the same limits the tools already take.
+
+For something watching the brain, the log pages forward as well as back:
+`history` takes `after`, a place in the log, and answers the changes past
+it oldest first, so a page on the person's computer can ask for what it
+has not seen and redraw only then. For that to be safe the log's numbers
+must land in the order changes commit: a number is handed out when a
+change is written, and until now a change could still be committing while
+a later-numbered one was already visible, so a reader that moved past the
+later one lost the earlier one for good. The log now holds the org's log
+until the transaction commits, so numbers and commits agree and a reader
+past a number can never miss one. Writes in one org queue at the log for
+the length of a transaction, which is milliseconds. Two writers in one
+org that each hold a row the other needs are a deadlock, and the database
+refuses one of them; the brain's door tells that writer another change
+landed at the same moment and it writes again. That was already possible
+between two writers of one person, and nothing here retries on its own,
+since a tool's transaction may have reached an outside app.
+
 ## The handshake says whose brain this is
 
 The instructions an MCP server hands over at connect time were the same for

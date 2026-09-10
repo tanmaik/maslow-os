@@ -138,7 +138,8 @@ applying to it.
 ## The brain
 
 What a person knows lives in records, the links between them, and a log of
-every change. The brain is a graph of a mind, not a copy of its sources:
+every change, numbered in the order changes commit, so something reading
+past a number never misses one. The brain is a graph of a mind, not a copy of its sources:
 nothing mirrors a mailbox or a calendar into it. Whatever writes into it — a
 person today, an agent reading an app through a tool later — writes what it
 concluded, with a confidence and an edge back to what it rests on. What it
@@ -190,7 +191,8 @@ loser behind a pointer to the winner and rewrites nothing, so it reverses.
 A brain exports to a file that imports into any brain, as the importer.
 
 The brain is an MCP server at `/mcp`, and the doors are its tools, answering
-in lines and saying whose brain it is when an app connects. An agent
+in lines, with the same answer as data beside them for a program that asks,
+and saying whose brain it is when an app connects. An agent
 gets in through OAuth on our own sign-in: the person approves it on our page,
 and what it holds is a session, listed and ended from settings like any
 other. Claude Code and claude.ai are the two clients it is checked against.

@@ -26,6 +26,12 @@ async function whoever(request: Request): Promise<Session | null> {
   return session && session.client !== null ? session : null;
 }
 
+// Whether the caller wants each answer as data beside the lines: a program
+// on the person's computer says so with a header; a model's client does
+// not, and pays for the lines alone.
+const wantsData = (request: Request) =>
+  request.headers.get("maslow-answer") === "data";
+
 // The brain as an MCP server. Every request stands alone, answered in one
 // JSON body, so it runs wherever the app does. The one that opens a
 // connection is told whose brain this is and what is in it, with the
@@ -38,7 +44,7 @@ export async function POST(request: Request) {
       sessionIdGenerator: undefined,
       enableJsonResponse: true,
     });
-    const server = brainServer(session, known);
+    const server = brainServer(session, known, wantsData(request));
     await server.connect(transport);
     try {
       return await transport.handleRequest(request);

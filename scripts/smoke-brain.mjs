@@ -822,6 +822,106 @@ export async function smokeBrain(stack) {
       events.denied?.code === "42501",
       events.denied?.code ?? "allowed",
     );
+    // Something watching the brain reads the log forward from where it
+    // left off; backwards stays as it was; both ways at once is refused.
+    const watched = await me(acme)(async (q) => {
+      const [latest] = await brain.history(q, { limit: 1 });
+      const { records } = await brain.write(q, {
+        types: [{ name: "watched" }],
+        records: [
+          { type: "watched", source: "smoke", sourceRef: "w-1", title: "one" },
+          { type: "watched", source: "smoke", sourceRef: "w-2", title: "two" },
+        ],
+      });
+      const after = await brain.history(q, { after: latest.seq });
+      const [first] = await brain.history(q, {
+        after: latest.seq,
+        limit: 1,
+      });
+      const rest = await brain.history(q, { after: first.seq });
+      const before = await brain.history(q, { before: rest[0].seq, limit: 1 });
+      const both = await attempt(() =>
+        brain.history(q, { after: 1, before: 2 }),
+      );
+      return { latest, records, after, first, rest, before, both };
+    });
+    check(
+      "the log pages forward from a point, oldest first",
+      watched.after.length >= 3 &&
+        watched.after.every((e) => e.seq > watched.latest.seq) &&
+        watched.after.every(
+          (e, i) => i === 0 || e.seq > watched.after[i - 1].seq,
+        ) &&
+        watched.after.some((e) => e.subjectId === watched.records[0]) &&
+        watched.after.some((e) => e.subjectId === watched.records[1]) &&
+        watched.first.seq === watched.after[0].seq &&
+        watched.rest.length === watched.after.length - 1 &&
+        watched.rest[0].seq === watched.after[1].seq &&
+        watched.before[0].seq < watched.rest[0].seq &&
+        watched.both === "Invalid",
+      `${watched.after.length} after #${watched.latest.seq}, ${watched.rest.length} after the first, both ${watched.both === "Invalid" ? "refused" : "allowed"}`,
+    );
+
+    // Two changes landing at once are numbered in the order they commit:
+    // the first to start holds the org's log, the second waits for it, and
+    // a reader past a number never sees the later one before the earlier.
+    let landFirst;
+    const held = new Promise((r) => (landFirst = r));
+    let slowWrote;
+    const slowHasWritten = new Promise((r) => (slowWrote = r));
+    const start = await me(acme)(async (q) => {
+      const [latest] = await brain.history(q, { limit: 1 });
+      return latest.seq;
+    });
+    const slow = me(acme)(async (q) => {
+      const { records } = await brain.write(q, {
+        records: [
+          { type: "watched", source: "smoke", sourceRef: "w-3", title: "slow" },
+        ],
+      });
+      slowWrote();
+      await held;
+      return records[0];
+    });
+    await slowHasWritten;
+    const quick = me(acme)(async (q) => {
+      const { records } = await brain.write(q, {
+        records: [
+          {
+            type: "watched",
+            source: "smoke",
+            sourceRef: "w-4",
+            title: "quick",
+          },
+        ],
+      });
+      return records[0];
+    });
+    // Until the second writer is seen waiting at the org's log.
+    for (let i = 0; i < 100; i++) {
+      const waiting = await me(acme)(
+        async (q) =>
+          (
+            await q.query(
+              "select count(*)::int as n from pg_stat_activity where wait_event_type = 'Lock' and wait_event = 'advisory'",
+            )
+          ).rows[0].n,
+      );
+      if (waiting > 0) break;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    const meanwhile = await me(acme)((q) => brain.history(q, { after: start }));
+    landFirst();
+    const [slowId, quickId] = await Promise.all([slow, quick]);
+    const landed = await me(acme)((q) => brain.history(q, { after: start }));
+    check(
+      "changes are numbered in the order they commit, so a reader never misses one",
+      meanwhile.length === 0 &&
+        landed.length === 2 &&
+        landed[0].subjectId === slowId &&
+        landed[1].subjectId === quickId,
+      `${meanwhile.length} seen while the first still landed, then ${landed.map((e) => (e.subjectId === slowId ? "slow" : e.subjectId === quickId ? "quick" : "other")).join(", ")}`,
+    );
 
     const leaked = await me(bakery)((q) => brain.get(q, [written.after.id]));
     check(

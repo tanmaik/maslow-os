@@ -247,13 +247,14 @@ export async function smokeMcp(stack, signIn) {
 
   // The brain, as the app holding the token.
   let seq = 0;
-  const rpc = (bearer, method, params) =>
+  const rpc = (bearer, method, params, headers = {}) =>
     fetch(`${base}/mcp`, {
       method: "POST",
       headers: {
         authorization: `Bearer ${bearer}`,
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
+        ...headers,
       },
       body: JSON.stringify({ jsonrpc: "2.0", id: ++seq, method, params }),
     });
@@ -292,9 +293,11 @@ export async function smokeMcp(stack, signIn) {
     DOORS.every((n) => names.includes(n)),
     names.join(" "),
   );
-  const call = async (bearer, name, args) => {
+  // A call as a model's client makes it; asking for data, as a program on
+  // the person's computer does.
+  const call = async (bearer, name, args, headers = {}) => {
     const res = await (
-      await rpc(bearer, "tools/call", { name, arguments: args })
+      await rpc(bearer, "tools/call", { name, arguments: args }, headers)
     ).json();
     const text = res.result?.content?.[0]?.text ?? JSON.stringify(res.error);
     const refused = res.result?.isError === true || !res.result;
@@ -307,8 +310,10 @@ export async function smokeMcp(stack, signIn) {
       lines,
       rows,
       ids: rows.map((l) => l.split(" ")[0]),
+      data: res.result?.structuredContent,
     };
   };
+  const asData = { "maslow-answer": "data" };
   const mine = await call(grant.access_token, "read", { limit: 200 });
   const acme = seeds[orgs[0].slug];
   check(
@@ -368,6 +373,39 @@ export async function smokeMcp(stack, signIn) {
   );
   const claimId = written.ids[0];
   const log = await call(grant.access_token, "history", { of: claimId });
+  // The same answers as data, for a program that asked; the lines stay.
+  const dataRead = await call(grant.access_token, "read", { limit: 3 }, asData);
+  const dataGet = await call(
+    grant.access_token,
+    "get",
+    { ids: [claimId] },
+    asData,
+  );
+  const dataLog = await call(
+    grant.access_token,
+    "history",
+    { of: claimId },
+    asData,
+  );
+  const dataWrite = await call(
+    grant.access_token,
+    "write",
+    { records: [claim] },
+    asData,
+  );
+  check(
+    "asked for data, a tool answers with the same thing beside its lines",
+    mine.data === undefined &&
+      dataRead.data?.records?.map((r) => r.id).join() === dataRead.ids.join() &&
+      dataRead.lines[0].startsWith("3 records") &&
+      dataGet.data?.records?.[0]?.id === claimId &&
+      Array.isArray(dataGet.data.records[0].edges) &&
+      dataLog.data?.changes?.[0]?.subjectId === claimId &&
+      dataLog.data.changes[0].seq > 0 &&
+      dataWrite.data?.records?.[0] === claimId &&
+      dataWrite.data.changed === 0,
+    `${dataRead.data?.records?.length ?? "no"} records as data, ${dataLog.data?.changes?.length ?? "no"} changes, write ${JSON.stringify(dataWrite.data)}`,
+  );
   check(
     "the log says the model wrote it, in one line",
     log.lines[1]?.startsWith("#") &&
