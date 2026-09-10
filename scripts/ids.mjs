@@ -9,7 +9,7 @@ export const ids = {
   NEON_PARENT_BRANCH: "preview-parent",
   STORAGE_ENDPOINT: "https://fly.storage.tigris.dev",
   STORAGE_REGION: "auto",
-  STORAGE_BUCKET: "placeholder-uploads-dev",
+  STORAGE_BUCKET: "maslow-uploads-dev",
   // The Fly app every computer outside production lives in.
   FLY_COMPUTERS_DEV_APP: "maslow-computers-dev",
 };
