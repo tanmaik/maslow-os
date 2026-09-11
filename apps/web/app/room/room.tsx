@@ -22,6 +22,7 @@ import {
 } from "react";
 
 import { BLOCKS, boxOf, markOf, type Block } from "@/app/room/blocks";
+import { You } from "@/components/you";
 
 // Whether the dock is kept in view, remembered on this device.
 const PINNED = "maslow.dock.pinned";
@@ -66,12 +67,26 @@ const isPort = (t: { kind: Card["kind"] }) => t.kind === "port";
 // a phone, where each window is a page of its own.
 type Page = { id: string; key: string; layout: Screen; cards: Card[] };
 
+// Who is at the desk, for the dock's end: their picture or initials, and
+// under it the other orgs they are in, a new org, and the way out.
+type Me = {
+  name: string;
+  email: string;
+  picture: string | null;
+  others: { userId: string; orgName: string }[];
+};
+
 export function Room({
   desktops: given,
   ports,
+  waiting,
+  you,
 }: {
   desktops: Desktop[];
   ports: Port[];
+  // How much asks something of the person and is still there.
+  waiting: number;
+  you: Me | undefined;
 }) {
   const [desktops, setDesktops] = useState(given);
   const [current, setCurrent] = useState(0);
@@ -321,6 +336,8 @@ export function Room({
         <Toolbar
           wide={wide}
           ports={ports}
+          waiting={waiting}
+          you={you}
           pinned={pinned}
           onPin={() => pin(!pinned)}
           onLeave={() => setPeek(false)}
@@ -596,11 +613,14 @@ function Dots({
 
 // The dock: every block as a mark, along the bottom. A click opens the
 // block in a new window on the desk, as many times as the person likes;
-// a drag opens it where it is dropped. The pin at its end keeps it in
-// view or lets it hide.
+// a drag opens it where it is dropped. After the blocks, the pin that
+// keeps it in view or lets it hide, and you. What waits on you is a
+// count on the Brain.
 function Toolbar({
   wide,
   ports,
+  waiting,
+  you,
   pinned,
   onPin,
   onLeave,
@@ -610,6 +630,8 @@ function Toolbar({
 }: {
   wide: boolean;
   ports: Port[];
+  waiting: number;
+  you: Me | undefined;
   pinned: boolean;
   onPin: () => void;
   onLeave: () => void;
@@ -634,9 +656,17 @@ function Toolbar({
         onDragStart={onBegin(item)}
         onDragEnd={onEnd}
         onClick={() => onPick(item)}
-        className="text-foreground size-10 rounded-none"
+        className="text-foreground relative size-10 rounded-none"
       >
         <Mark className="size-[18px]" />
+        {b.href === "/brain" && waiting > 0 && (
+          <span
+            aria-label={`${waiting} waiting on you`}
+            className="bg-primary text-primary-foreground absolute top-1 right-1 grid size-4 place-items-center rounded-full text-[10px] font-semibold"
+          >
+            {waiting}
+          </span>
+        )}
       </Button>
     );
     return wide ? (
@@ -682,6 +712,11 @@ function Toolbar({
               <BookmarkIcon className="size-[18px]" />
             )}
           </Button>
+          {you && (
+            <span className="grid size-10 shrink-0 place-items-center">
+              <You {...you} />
+            </span>
+          )}
         </TooltipProvider>
       </div>
     </div>

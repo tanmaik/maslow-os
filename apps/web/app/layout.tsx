@@ -1,10 +1,9 @@
 import "@fontsource-variable/inter";
 import "./globals.css";
 
-import { Suspense, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import { Analytics } from "@/components/analytics";
-import { Chrome } from "@/components/chrome";
 import { DevToolbar } from "@/components/dev-toolbar";
 import { beforePaint } from "@/components/look";
 import { deployment } from "@/lib/deployment";
@@ -41,9 +40,6 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-dvh px-6 pt-6 pb-28">
-        <Suspense fallback={null}>
-          <Chrome />
-        </Suspense>
         {children}
         <div className="app-dev-toolbar">
           <DevToolbar />

@@ -348,8 +348,9 @@ as the person likes; the dock's pin keeps it in view or lets it hide so
 the desk takes the whole page. Any window fills the screen with
 one press and comes back. Desks are pages swiped between. A phone shows
 one window at a time. Windows are plain: square, flat, a hairline
-border, a title bar with its buttons, and nothing animates. Bottom
-right, you, and how much waits on you. "Waiting on you" is what asks something of you and is
+border, a title bar with its buttons, and nothing animates. You are the
+last thing on the dock, and how much waits on you is a count on the
+Brain. "Waiting on you" is what asks something of you and is
 still there: the agent's asks, and later the pages teammates' agents put
 in front of you; a shared record is knowledge, not a demand, and nothing
 tracks whether you opened it. The settled designs are

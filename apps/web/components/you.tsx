@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { initials } from "@/lib/initials";
 
-// You, in the corner: your picture or your initials, and under it the
-// other orgs you are in, a new org, and the way out.
+// You, at the end of the dock: your picture or your initials, and under
+// it the other orgs you are in, a new org, and the way out.
 export function You({
   name,
   email,
@@ -33,10 +33,10 @@ export function You({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          className="shadow-float pointer-events-auto rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           render={<button type="button" />}
         >
-          <Avatar className="size-9 after:hidden">
+          <Avatar className="size-7 after:hidden">
             {picture && <AvatarImage src={picture} alt="" />}
             <AvatarFallback className="bg-[oklch(0.32_0.02_55)] text-xs font-semibold text-[oklch(0.9_0.02_70)]">
               {initials(name)}
