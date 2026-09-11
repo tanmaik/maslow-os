@@ -14,8 +14,8 @@ A person's computer is three things.
 - **The machine.** CPU and memory, rented by the second. Nothing on it
   matters. It can be restarted or swapped for a bigger one, and the disk is
   plugged into whichever one is running.
-- **Our image.** The base Linux with our tools in it: the SSH server, VS
-  Code, Claude Code, Chrome, the reporter. We build it; every machine gets
+- **Our image.** The base Linux with our tools in it: the door, Claude
+  Code, Chromium, the reporter. We build it; every machine gets
   the newest one on its next start; the person cannot change it, because
   it is not on their disk.
 
@@ -25,7 +25,7 @@ A computer is per membership: the org pays for it, its files stay inside
 the org, and it goes with the membership or the org. A person in two orgs
 has two. It is claimed the moment they sign in, in the region the sign-in
 came from, and made step by step as the Computer page asks after it: the
-disk, then the machine, then ready when VS Code answers. The page shows a
+disk, then the machine, then ready when its door answers. The page shows a
 progress bar until then. It never sleeps: the hourly sweep starts a
 current member's machine if it is stopped and stops a past member's if it
 runs, and gives a member with none one beside their org's others; an org
@@ -36,8 +36,11 @@ and nothing is running, because dropping is a restart too.
 
 ## What the person sees
 
-They are `me`. Home is `/home/me`: VS Code, SFTP and every new terminal
-open there. `sudo` works with no password, so they are root when they ask
+They are themselves, `wile@acme`, since 2026-09-11: the boot names the
+account after their first name and the machine after their org, and files
+are owned by the number underneath, so a rename touches nothing. Home is
+`/home/me`: every new terminal opens there. `sudo` works with no
+password, so they are root when they ask
 to be, and `apt install` sticks. Everything under `/` is a normal Debian
 and is theirs. `/opt/maslow` is ours: mounted from the image, read-only,
 and fresh from the image on every restart, so nothing done to it lasts. CPU and memory are fixed from outside
@@ -50,13 +53,13 @@ Linux does; the disk is grown before it fills, so it never reads full.
 
 ## Reset keeps home
 
-The disk holds two parts, the person's Linux and their home. The SSH server,
+The disk holds two parts, the person's Linux and their home. The door,
 the reporter and our tools run in the image, as root, outside the person's
 Linux, where even their root cannot stop them. So the only thing they can
 break is their own Linux. A restart is a reboot: every running process,
-terminal and agent ends, and only what is on the disk remains. VS Code
-reopens the same files, Claude Code resumes from its transcript in home,
-Chrome keeps its logins. Restart is automatic only when the machine has
+terminal and agent ends, and only what is on the disk remains. Claude
+Code resumes from its transcript in home, and the browser keeps its
+logins. Restart is automatic only when the machine has
 stopped answering, when nothing was running anyway; every other restart is
 the person's own choice. Reset is a button, never automatic: it throws
 their Linux away, copies a fresh one from the image, and keeps every byte
@@ -89,81 +92,90 @@ full is grown by half again. It cannot shrink; a smaller disk is a copy
 while stopped. There is a ceiling, it is ours, it is 200 GB, and it never
 shows: hitting it alerts us and never walls the person.
 
-## VS Code in the browser first, the key later
+## The door is the way in
 
-The first door is VS Code's own web build, `code-server`, running in the
-image on the person's machine beside their files: tree, editor, terminal,
-extensions, and its own list of open ports. The browser talks to the
-machine directly, carrying a ticket from our sign-in. Files from outside
-come in the way VS Code takes them: dropped onto the tree, straight into
-home, and downloaded from it the same way; nothing is staged through the
-bucket. Large files must work that way too, and the check drops one of
-gigabytes; SFTP, later, is the road for whole folders. The Computer page
-holds what VS Code does not, in two layers since 2026-09-08, at Tanmai's
-word that it read as confusing to a normal person without wanting to lose
-developers: the top is plain, ready, Open, the browser's page, and the
-last backup; everything a developer wants, the live charts and ports,
-the size ladder, SSH, the model switch and reset, sits under one "For
-developers" fold, nothing removed.
+VS Code's web build was the first door from 2026-09-07. It came out on
+2026-09-11, for the reasons in
+[the computer's surface is ours](2026-09-09-the-computer-surface-is-ours.md):
+what a person opens is Talk, a terminal joined straight from their
+browser to a `tmux` session on the machine with Claude Code running in
+it, and View, the machine's browser as video, each a socket to the door
+on a ticket from our sign-in. Ready means the door answers. Files come
+and go through the door too, straight from the browser. The Computer page
+is plain first, ready, Open, the browser's page and the last backup, and
+then the numbers, ports, size, SSH and reset.
 
-A person with the browser needs no key. The SSH front door, built
-2026-09-08: the public keys are pasted under SSH in settings, kept on the
-computer's row, and given to the machine's door, which writes them beside
-the SSH server outside the person's Linux; the sweep gives them again
-every hour, so a remade or reset machine has them. The road in is SSH
-carried over a WebSocket through the same door VS Code uses, at
-`/maslow/ssh` on the machine's own name, with no ticket: the key is the
-lock, as on any machine on the internet, and the SSH server takes keys
-only, one user, no root. A Mac's own `ssh` reaches it through
-`maslow-ssh`, a small Python script served by the app that runs as ssh's
-ProxyCommand and needs nothing installed; the Computer page shows the
-`~/.ssh/config` lines. VS Code's remote SSH and every file app that reads
-that file follow. Raw port 22 at Fly's edge was not possible: the edge
-cannot route a plain TCP connection to a machine by name, and SSH names
-its target only after the handshake. Making a key in the browser comes
-later.
+SSH stays, at Tanmai's word on 2026-09-11, and is set up by one command
+since 2026-09-10. The public key is pasted under "Your public key" in
+settings, checked for the shape `ssh-keygen` writes, kept on the
+computer's row, and given to the machine's door, which writes it beside
+the SSH server outside the person's Linux; the sweep gives it again every
+hour, so a remade or reset machine has it. The road in is SSH carried
+over a WebSocket through the same door, at `/maslow/ssh` on the machine's
+own name, with no ticket: the key is the lock, as on any machine on the
+internet, and the SSH server takes keys only, one user, no root. The user
+it takes is `me`, the account outside the person's Linux; inside, the
+same number is the person's own name. The Computer page shows the
+computer's name, which is its hostname and the org's slug, and one
+command: `curl -fsSL "<this site>/ssh/setup?…" | sh`, carrying a ticket
+the computer's secret signed and good for an hour, so the script knows
+whose computer. The script puts `maslow-ssh`, the small Python
+ProxyCommand the app serves, at `~/.local/bin`, and writes a `Host
+<name>` block to `~/.ssh/config`, or only brings its address up to date
+when the block is there, since a moved computer has a new one; then `ssh
+<name>` works. A login over SSH lands in the same terminal the Terminal
+page shows: sshd's ForceCommand runs `/opt/maslow/ssh-login.sh` inside
+the person's Linux, which joins the tmux session `main` as a grouped
+session, so the Mac's terminal and the page each keep their own size and
+current window while sharing every window, and makes `main` the way the
+page does when it is not there yet; a command given to `ssh` runs plain,
+and a file app gets the SFTP server it asked for. Raw port 22 at Fly's
+edge was not possible: the edge cannot route a plain TCP connection to a
+machine by name, and SSH names its target only after the handshake.
 
 ## Models: a key per person, no gateway
 
 Nothing routes model calls through us. Each person gets their own
 OpenRouter key, minted by us with a spending cap, placed on their machine;
-Claude Code uses it directly. Built 2026-09-08: the key is minted with
-OpenRouter's provisioning key (`OPENROUTER_PROVISIONING_KEY`) when the
-machine is first made, named for the environment, the checkout and the
-computer, capped at twenty dollars a month in production and two
-elsewhere, kept on the computer's row and given to the machine in its
-environment; `claude` on the machine is a wrapper of ours that reads the
-key and the person's choice at every start, from any shell, a bare `ssh
-computer claude` included, and reaches OpenRouter through the
-Anthropic-shaped address it offers with the models named by OpenRouter's
-own ids: GLM 5.3 Flash by default, at Tanmai's word on 2026-09-08, with
-the Claude 5 models one `/model` away. `model mine` in the computer's terminal switches Claude Code to
-the person's own Anthropic account and `model ours` back, at its next
-start; the choice is a file in home, and the machine reports it with its
-numbers so the Computer page says which account is in use. A machine made
-before the deployment minted keys gets one at the next sweep. A
-deployment without the provisioning key mints none and says so on the
-Computer page: Claude Code runs on the person's own account there. The
-sweep copies each key's spend into the ledger and deletes keys carrying
-this deployment's name that no computer holds, reading OpenRouter's own
-list: only on a pass that read every org, and never a key made within
-the hour, whose computer may be mid-making. A key OpenRouter no longer
-has is forgotten and the machine remade with a fresh one. The key is ours, so OpenRouter already holds
-every call it made, with the model, the tokens, the cached tokens and the
-exact cost; nothing polls it. The hourly sweep copies each key's spend into
-the ledger, and anyone with our keys, a person or an agent, reads the
-whole of it from OpenRouter at any time. The cap is the abuse limit. A
-command in the image, which the person cannot edit, flips Claude Code
-between our key and their own; their own is theirs and we never see it.
-Keys are minted per environment, named for the environment and the person,
-capped low outside production, and deleted with the machine.
+Claude Code uses it directly. Built 2026-09-08, restored 2026-09-11 after
+a day out: the key is minted with OpenRouter's provisioning key
+(`OPENROUTER_PROVISIONING_KEY`) when the machine is first made, named for
+the environment, the checkout and the computer, capped at twenty dollars a
+month in production and two elsewhere, kept on the computer's row and
+given to the machine in its environment; the boot writes it to a profile
+file inside the person's Linux, again at every boot, so nothing the
+person does to their files loses it. `claude` on the machine is a wrapper
+of ours on the read-only side, on the path of any shell, a bare `ssh
+computer claude` included, that reads the key and the person's choice at
+every start and reaches OpenRouter through the Anthropic-shaped address
+it offers with the models named by OpenRouter's own ids: GLM 5.3 Flash by
+default, at Tanmai's word on 2026-09-08 and again on 2026-09-11, with the
+Claude 5 models one `/model` away. Ours is the default and the fallback:
+`model mine` in the computer's terminal switches Claude Code to the
+person's own Anthropic account, which they sign in to from that terminal,
+and `model ours` switches it back at its next start, so a person whose
+own plan runs dry keeps working on ours. The choice is a file in home,
+and the machine reports it with its numbers so the Computer page says
+which account is in use. A machine made before the deployment minted keys
+gets one at the next sweep. A deployment without the provisioning key
+mints none and says so on the Computer page: Claude Code runs on the
+person's own account there. The sweep copies each key's spend into the
+ledger and deletes keys carrying this deployment's name that no computer
+holds, reading OpenRouter's own list: only on a pass that read every org,
+and never a key made within the hour, whose computer may be mid-making. A
+key OpenRouter no longer has is forgotten and the machine remade with a
+fresh one. The key is ours, so OpenRouter already holds every call it
+made, with the model, the tokens, the cached tokens and the exact cost;
+nothing polls it, and anyone with our keys, a person or an agent, reads
+the whole of it from OpenRouter at any time. The cap is the abuse limit.
+Their own account is theirs and we never see it.
 
-Which models Claude Code offers is ours to say, and it is one list in the
-settings file our image owns, the same file that names the key. The key
-itself cannot be limited to models, OpenRouter has no such setting, so a
-key taken off the machine can reach any model until its cap. The cap is
-the wall. Caching is Claude Code's and the model's, and OpenRouter passes
-it through for every model that has it; the ledger shows cached tokens on
+Which models Claude Code offers is ours to say, and it is the one list
+the wrapper hands it, in the image the person cannot edit. The key itself
+cannot be limited to models, OpenRouter has no such setting, so a key
+taken off the machine can reach any model until its cap. The cap is the
+wall. Caching is Claude Code's and the model's, and OpenRouter passes it
+through for every model that has it; the ledger shows cached tokens on
 their own so it is seen working.
 
 ## The ledger replaces the meter
@@ -220,12 +232,17 @@ connectors, Composio's apps, find and run, and nothing else: no hand that
 runs a command or reads or writes a file goes into it. The computer is
 where Claude Code runs, not another set of remote tools.
 
-Claude Code is in the image, under `/opt/maslow` from npm like VS Code, so
-it updates with the image and is `claude` on the person's path. For now
-the person signs in to their own Anthropic account from it; our key and
-the switch come later in the order. It knows two MCP servers out of the
-box, seeded into its settings the way VS Code's are, so a person who
-changes or removes one is left alone:
+Claude Code is in the image, under `/opt/maslow` from npm, so it updates
+with the image and is `claude` on the person's path. It runs on our key by
+default, on GLM 5.3 Flash, and `model mine` in its terminal switches it
+to the person's own Anthropic account, `model ours` back. Zed's adapter
+for the Agent Client Protocol is beside it as `claude-code-acp`, so an
+editor on the person's Mac drives the same Claude Code over SSH on the
+same account: the choice and the key are read by a file every login
+shell and both wrappers source, proven 2026-09-11 with one prompt over
+ACP answered on GLM through OpenRouter with no Anthropic login on the
+machine. It knows two MCP servers out of the box, seeded
+into its settings, so a person who changes or removes one is left alone:
 
 - **The browser**, `packages/browser`: the Chrome extension's tools by
   the same names, read the page as a numbered list, find by words, click,
@@ -234,18 +251,19 @@ changes or removes one is left alone:
   `127.0.0.1:8082`, outside the person's Linux but as the person, so it
   updates with the image, reaches only their home, and its Chromium and
   what that needs from Debian are never on their disk. Its profile, logins
-  included, lives on the disk beside the home. It closes after ten idle
-  minutes and opens again at the next call. It has a page of its own,
-  `/browser`, live and in the person's hands: a picture every moment,
-  and their clicks, keys, scrolls and addresses passed back through the
-  door, so a person watches over the agent's shoulder, steps in to sign
+  included, lives on the disk beside the home. Once anything opened it,
+  it stays open for the life of the machine, so a page mid-work outlives
+  whoever was watching it; nothing durable lives in a tab. It has a page
+  of its own, `/browser`, live and in the person's hands: video as the
+  page moves, and their clicks, keys, scrolls and addresses sent up the
+  same socket, so a person watches over the agent's shoulder, steps in to sign
   in to a site for it, and hands it back. Tanmai, 2026-09-08: "it is
   just another port at the end of the day." Words cross both ways: a
   drag selects in the picture and Copy carries the selection into the
   person's own clipboard, paste sends theirs in as typed text, and every
   other chord with Cmd or Ctrl stays with their own browser, whose
   reload and tabs keep working. The Computer page's port list leaves out
-  VS Code's and Claude Code's own listeners.
+  ours and Claude Code's own listeners.
 - **The brain**, at this deployment's `/mcp`, with a session of the
   owner's that our server opens for the computer, named "Your computer"
   beside their apps in settings, and gives the machine with its address.
@@ -292,4 +310,5 @@ Each is one pull request, read before the next starts. As of 2026-09-08:
 9. The disk grows itself. Done.
 10. Claude Code on our key, and the switch. Done.
 11. Backups. Done.
-12. The key and the SSH front door. Done.
+12. The key and the SSH front door. Done, and kept when VS Code came out
+    on 2026-09-11.

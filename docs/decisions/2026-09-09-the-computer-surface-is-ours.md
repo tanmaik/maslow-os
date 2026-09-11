@@ -337,9 +337,8 @@ practice.
 ## How big it is, and where it lives
 
 These are the two facts a person owns about their computer, and both are
-plain controls on the page. Neither is a developer's business. Size sits
-on the page today beside the numbers, SSH and a reset, all in the open.
-Region is not a control at all yet, and becomes one.
+plain controls on the page. Neither is a developer's business. Both sit
+on the page beside the numbers, SSH and a reset, all in the open.
 
 Size is a ladder of CPU and memory, shown without a price, and changing
 rung is a restart of a few seconds on the same disk. Nothing changes the
@@ -400,13 +399,11 @@ forty milliseconds the guess was good and the page says nothing. If it
 comes in above, the guess was wrong, and the page says so plainly and
 offers the move.
 
-That one real number also fixes the estimates. When someone opens the
-picker to choose a region, the rest are worked out from distance, and the
-measured one says how far off distance is running for this person's route.
-A person placed in San Jose and measuring twenty milliseconds is where we
-thought they were; one measuring seventy is not, and every other estimate
-shifts with it. What is measured and what is estimated are labelled as
-such.
+That one real number is the only number shown. Nothing is guessed for
+the regions the person is not in, because nothing can measure them
+honestly. Beside it the page says the address the person arrived from,
+the city that address is in when the request said, and the region nearest
+it, by name: that is the recommendation, and the move button offers it.
 
 Sixteen always-on machines answering pings would give sixteen real
 numbers. They are not worth their standing cost. One free measurement that
@@ -595,6 +592,66 @@ Round trip inside one region is measured and under forty milliseconds.
 **Not this one.** No WebRTC. The codec sits behind the socket and can be
 swapped without touching what is above it.
 
+**Built 2026-09-11, the machine's half.** The door carries two sockets on
+a ticket for the whole machine: `/maslow/talk`, a `node-pty` terminal
+running `tmux new-session -A -s main` inside the person's Linux as them,
+with Claude Code as the first window's command, so a closed tab detaches
+and the next attaches; and `/maslow/view`, on which the browser server's
+CDP screencast of its current tab is fed, one picture per change, into a
+fresh ffmpeg per viewer making baseline H.264, told to start on its first
+picture rather than gather seconds of them as it would for a file, muxed
+as FLV so every tag is one whole picture, and sent as Annex B behind a
+key-frame byte; a still page is drawn once for a new viewer, since the
+screencast speaks only when the page changes. The tabs and which is
+current ride the same socket, and a picked, opened or closed tab moves
+the pictures to the current one with a fresh key frame. The pointer's
+moves go on one request that stays open to the browser server and
+straight to the page as mouse moves, so it hovers, and the cursor the
+page wants under the pointer comes back by name. Acts go on to the
+browser server and come back with their id; a folder of the home is
+watched with `fs.watch`, settled for a quarter second; a ping is answered
+at once. The browser server stops idling away, since nothing durable may
+live in a tab. `$BROWSER` and `xdg-open` on the machine offer an address
+on the person's terminal, and a click there opens it on their own device,
+with their own logins; the machine's browser is the agent's. The `/maslow/browser` screenshot endpoints are gone.
+Measured, driving the capture alone over CDP with twenty wheel scrolls
+on a plain page: two shared CPUs give about two and a half pictures a
+second, every call slow; two dedicated CPUs give one picture per scroll
+with no lag, at least eight a second, limited by the test's own pace.
+The capture keeps up with the hand when the CPU does, so smoothness is
+the size the person picks. The door sends each picture within a third of
+a second. Tried and not taken: the full Chromium's new headless mode,
+which gave fewer pictures at twice the load; begin-frame control, on
+which this headless shell's page dies at the first frame asked for; and
+a lower JPEG quality, which halves the bytes and changes the rate not at
+all.
+
+**The browser is a real Chrome (2026-09-11, image `socket-4`).** The
+headless shell announced itself as headless, and sites that turn bots
+away turned it away: x.com refused outright. Now the full Chromium runs
+headed on Xvfb, an X server that draws to memory and no screen, at the
+view's own 1280x800, with nothing else changed about how it presents
+itself: no stealth plugin, no spoofed fingerprint, no proxy, and
+`navigator.webdriver` left as it is. It is opened at boot, so the first
+look finds it ready. Checked on a Small machine over the View socket, the
+frames decoded with ffmpeg: bot.sannysoft.com shows the user agent green
+and every Fingerprint Scanner row green, with WebDriver, Permissions and
+the WebGL renderer red, since those say the truth; x.com renders its
+sign-in page; github.com's title is on the socket in under half a second
+and its first frame in about a second. Twenty wheel scrolls on a text
+page gave 17 frames a second, no worse than before. Chrome's processes
+sum to about 1.2 GB resident (shared pages counted more than once) and
+Xvfb 75 MB, with the whole machine at 680 MB used of 2 GB. A person's
+hand works as a hand: the pointer's moves hover, the cursor becomes a
+pointer over a link, and a click lands where it was aimed. Whether a
+"verify you are human" box then passes is Cloudflare's judgement of the
+machine's address as much as of the click: nowsecure.nl passed in two
+seconds on the first hover-and-click; two managed challenges, on
+scrapingcourse.com and nopecha.com, took the click, showed "Verifying…",
+and came back with a new Ray ID and the box again, three times running.
+A machine in a datacenter is judged as one, and nothing here pretends
+otherwise.
+
 ### 6. The person is themselves, and SSH comes out
 
 **What it is.** They are `wile@acme` on their own machine. Reaching it from
@@ -611,16 +668,27 @@ across a rename, because Unix owns them by number.
 **Not this one.** SSH does not come back here; when it does it comes back
 through the same door on a ticket.
 
+**Built 2026-09-11, the name half.** The app gives the machine `PERSON`
+and `ORG`, the first name and the org's real slug cut to what Linux
+takes, so the prompt reads `wile@acme-rockets` and follows a renamed org;
+the boot renames whichever account holds uid 1000 inside the person's
+Linux and sets the hostname before anything of theirs runs; `sudo` names
+the uid. SSH stays, at Tanmai's word the same day: the server outside
+keeps the account `me`, and `ssh computer` lands in the renamed one
+inside, since both are the number. How SSH is set up is redesigned in a
+later task.
+
 ### 7. Size and region are plain controls
 
-**What it is.** Both come out of the "For developers" fold. Sixteen North
+**What it is.** Both sit in the open on the Computer page. Sixteen North
 American regions, and no others.
 
-**What changes.** `apps/web/app/computer/making.tsx` moves them up.
-`apps/web/lib/region.ts` drops the other nineteen regions.
+**What changes.** `apps/web/app/computer/making.tsx` shows the region by
+name beside the size. `apps/web/lib/region.ts` drops the other nineteen
+regions.
 
-**What proves it.** A person who never opens the fold can still see where
-their computer is and how big it is.
+**What proves it.** A person who opens nothing can see where their
+computer is and how big it is.
 
 ### 8. The region is checked, and moving is offered
 
@@ -649,3 +717,8 @@ door answers. `apps/computer/seed.mjs` stops seeding its settings.
 smaller. Nothing in the product links to it.
 
 **Not this one.** Nothing, this is the last of it.
+
+**Built 2026-09-11.** `code-server` and its settings seed are out of the
+image and the boot; `/maslow/health` answers when the door is up and the
+browser server behind it answers; the machine's own root answers `ok`;
+the Computer page's Open goes to `/computer/terminal`.

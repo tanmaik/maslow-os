@@ -8,7 +8,7 @@ import { readdir, readFile, readlink, statfs } from "node:fs/promises";
 
 const OS = "/data/os";
 const HOME = "/data/home";
-const OURS = new Set([22, 8080, 8081, 8082]);
+const OURS = new Set([22, 8080, 8082]);
 
 // CPU: the share of ticks not idle between two readings, two seconds apart.
 let cpu = 0;
@@ -109,12 +109,12 @@ async function ports() {
       if (!m || !listening.has(m[1])) continue;
       const port = listening.get(m[1]);
       listening.delete(m[1]);
-      // VS Code's and Claude Code's own listeners are theirs, not a port
-      // the person opened; they are left off the list.
+      // Ours and Claude Code's own listeners are not a port the person
+      // opened; they are left off the list.
       const cmd = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(
         () => "",
       );
-      if (/code-server|\/opt\/maslow\//.test(cmd)) continue;
+      if (/\/opt\/maslow\//.test(cmd)) continue;
       const name = await readFile(`/proc/${pid}/comm`, "utf8").catch(() => "");
       if (name.trim() === "claude") continue;
       // What started it, not merely what it is: a dev server and a database

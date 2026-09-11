@@ -12,12 +12,15 @@ import {
   membersWithoutComputers,
   note,
   openComputerSession,
+  ownerOf,
   portsReaching,
   setBackedUp,
   setDisk,
   setMachine,
   setModelKey,
   setModelSpent,
+  setMove,
+  setPlace,
   setReady,
   setSize,
   setVolume,
@@ -25,15 +28,23 @@ import {
   sharesOn,
   sharePort,
   type Computer,
+  type Move,
   type PortShare,
   type SharedPort,
 } from "@maslow/db/computers";
 
-import { createHmac } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import { fly, type Backup, type Machine, type Stats } from "./fly.ts";
+import {
+  fly,
+  type Backup,
+  type Entry,
+  type Machine,
+  type Stats,
+} from "./fly.ts";
 import { openrouter } from "./openrouter.ts";
+import { regionName, type Region } from "./region.ts";
 import { list, presign, remove } from "./s3.ts";
 import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 
@@ -41,12 +52,28 @@ import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-const IMAGE = "registry.fly.io/maslow-computers-dev:v47";
+const IMAGE = "registry.fly.io/maslow-computers-dev:acp-1";
 
 // How far a computer has got: off, when this deployment makes none;
-// then its disk, its machine, its first start, and ready when VS Code
-// answers.
-export type Progress = "off" | "disk" | "machine" | "starting" | "ready";
+// then its disk, its machine, its first start, and ready when its door
+// answers; moving while it is on its way to another region.
+export type Progress =
+  "off" | "disk" | "machine" | "starting" | "moving" | "ready";
+
+// Where a move stands: the old machine stopping, its disk being copied,
+// the copy being restored in the new region, the machine there starting
+// and being checked, and the old machine and disk being cleared away.
+export type MoveStep =
+  "stopping" | "copying" | "restoring" | "starting" | "clearing";
+
+// Where a computer stands, for the page: how far it has got, where it
+// is, the move under way if any, and what a move that just failed said.
+export type State = {
+  progress: Progress;
+  region: string | null;
+  move: { to: string; step: MoveStep } | null;
+  failed: string | null;
+};
 
 // Fly names carry our ids, so any list from Fly traces back in one look,
 // and a disk or machine made and never recorded is found again by name.
@@ -67,14 +94,36 @@ function tags(c: Computer): Record<string, string> {
   };
 }
 
-export const progressOf = (c: Computer): Progress =>
-  c.readyAt
-    ? "ready"
-    : !c.volumeId
-      ? "disk"
-      : !c.machineId
-        ? "machine"
-        : "starting";
+const progressOf = (c: Computer): Progress =>
+  c.move
+    ? "moving"
+    : c.readyAt
+      ? "ready"
+      : !c.volumeId
+        ? "disk"
+        : !c.machineId
+          ? "machine"
+          : "starting";
+
+const moveStepOf = (m: Move): MoveStep =>
+  m.old
+    ? "clearing"
+    : m.machineId
+      ? "starting"
+      : m.volumeId
+        ? "restoring"
+        : m.snapshotId
+          ? "copying"
+          : "stopping";
+
+export const stateOf = (c: Computer | null): State => ({
+  progress: c ? progressOf(c) : "disk",
+  region: c?.region ?? null,
+  move: c?.move ? { to: c.move.to, step: moveStepOf(c.move) } : null,
+  failed: null,
+});
+
+const OFF: State = { progress: "off", region: null, move: null, failed: null };
 
 // Claims a computer for the member signing in, in the region their
 // sign-in came from. Quick: nothing is made here.
@@ -85,26 +134,30 @@ export async function claim(p: Principal, region: string): Promise<void> {
   );
 }
 
-// Moves the member's computer one step closer to ready and says where it
-// stands: the page asks every few seconds until it is there. A row is
-// claimed if sign-in did not; a request that finds another holding the
-// computer answers with where it stands.
-export async function advance(p: Principal, region: string): Promise<Progress> {
-  if (deployment.computers.kind === "none") return "off";
+// Moves the member's computer one step closer to ready, or a move of it
+// one step on, and says where it stands: the page asks every few seconds
+// until it is there. A row is claimed if sign-in did not; a request that
+// finds another holding the computer answers with where it stands.
+export async function advance(p: Principal, region: string): Promise<State> {
+  if (deployment.computers.kind === "none") return OFF;
   return asOrg(p.orgId, async (q) => {
     let c = await computerOf(q, p.userId);
     if (!c) {
       await claimComputer(q, p.orgId, p.userId, region, FLOOR);
       c = (await computerOf(q, p.userId))!;
     }
-    if (c.readyAt) return "ready";
-    if (!(await holdComputer(q, c.id))) return progressOf(c);
-    await step(q, c, "sign-in");
-    return progressOf((await computerOf(q, p.userId))!);
+    // Ready and not moving, there is nothing to do; a move is taken on
+    // even once the row has turned to the new machine, to clear the old.
+    if ((c.readyAt && !c.move) || !(await holdComputer(q, c.id)))
+      return stateOf(c);
+    let failed = null;
+    if (c.move) failed = await moveOn(q, c, "the page asked");
+    else await step(q, c, "sign-in");
+    return { ...stateOf(await computerOf(q, p.userId)), failed };
   });
 }
 
-// One step: the disk, then the machine, then ready once VS Code answers.
+// One step: the disk, then the machine, then ready once its door answers.
 // Each Fly id is written the moment Fly hands it back; one that cannot be
 // written is destroyed on the spot, and one written but never committed
 // is found again by its name, so nothing at Fly goes unrecorded.
@@ -160,6 +213,7 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
         memoryMb: c.memoryMb,
         secret: c.secret,
         brain: await brainOf(q, c),
+        who: await whoOf(q, c),
         modelKey: await modelKeyOf(q, c),
         metadata: tags(c),
       }));
@@ -233,6 +287,27 @@ async function brainOf(
   return { url: d.brain, token: `${c.orgId}.${sessionId}` };
 }
 
+// Who the person is on their machine, so a prompt reads wile@acme: their
+// first name as the account's name and their org's slug as the machine's,
+// each cut to what Linux takes for one.
+async function whoOf(
+  q: Query,
+  c: Computer,
+): Promise<{ person: string; org: string }> {
+  const { firstName, orgSlug } = await ownerOf(q, c);
+  const plain = (s: string, max: number) =>
+    s
+      .normalize("NFKD")
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^[^a-z]+|-+$/g, "")
+      .slice(0, max);
+  return {
+    person: plain(firstName, 32) || "me",
+    org: plain(orgSlug, 63) || "computer",
+  };
+}
+
 // The sweep's pass, org by org: every current member has a computer and
 // it runs; every past member's is stopped; one cut off mid-making is
 // finished; and outside production every machine's lease is renewed. A
@@ -264,8 +339,8 @@ export async function reconcile(): Promise<void> {
 }
 
 // The machine remade on its disk to the image of the day at its row's
-// size, with the brain's session and a model key, and probed again before
-// it opens.
+// size, with the brain's session and the person's name, and probed again
+// before it opens.
 async function remake(
   q: Query,
   c: Computer,
@@ -280,6 +355,7 @@ async function remake(
     memoryMb: c.memoryMb,
     secret: c.secret,
     brain: await brainOf(q, c),
+    who: await whoOf(q, c),
     modelKey: await modelKeyOf(q, c),
     metadata: m.config?.metadata ?? tags(c),
   });
@@ -369,6 +445,13 @@ async function reconcileOrg(
       // moved since the list was made.
       let c = await computerOf(q, each.userId);
       if (!c) return;
+      // A move the person asked for is taken on, or put back, before
+      // anything else, and nothing else touches the computer meanwhile.
+      if (c.move) {
+        const failed = await moveOn(q, c, "sweep");
+        if (failed) console.error(`computer ${c.id}: ${failed}`);
+        return;
+      }
       // The list from Fly was made before the loop; a machine made since
       // is asked after by name before it is given up on.
       const m = c.machineId
@@ -385,37 +468,43 @@ async function reconcileOrg(
         if (c.current) await step(q, c, "sweep");
         return;
       }
-      // Every machine runs the image of the day at its row's size: one on
-      // an older image, or at another size, is remade on the same disk and
-      // probed again before it opens. Asked before anything else, so a
-      // machine moves at the first sweep after the image does, however it
-      // was left. Fly may name an image with its digest; the tag is what
-      // is compared.
+      // Every machine runs the image of the day at its row's size, in the
+      // person's name: one on an older image, at another size, or made by
+      // hand without the person and their org on it, is remade on the
+      // same disk and probed again before it opens. Asked before anything
+      // else, so a machine moves at the first sweep after the image does,
+      // however it was left. Fly may name an image with its digest; the
+      // tag is what is compared.
       const g = m.config?.guest ?? {};
       const sized =
         g.cpu_kind === c.cpuKind &&
         g.cpus === c.cpus &&
         g.memory_mb === c.memoryMb;
+      const who = await whoOf(q, c);
+      const named =
+        m.config?.env?.PERSON === who.person && m.config?.env?.ORG === who.org;
       // A machine made before this deployment minted keys gets one too.
       const keyed =
         deployment.models.kind !== "openrouter" || c.modelKeyHash !== null;
       if (
         c.current &&
-        (m.config?.image?.split("@")[0] !== IMAGE || !sized || !keyed)
+        (m.config?.image?.split("@")[0] !== IMAGE || !sized || !named || !keyed)
       ) {
         await remake(
           q,
           c,
           m,
-          !keyed
-            ? "a key was minted"
-            : sized
-              ? "the image moved on"
-              : "the size was changed",
+          !named
+            ? "the person was named"
+            : !keyed
+              ? "a key was minted"
+              : sized
+                ? "the image moved on"
+                : "the size was changed",
         );
         return;
       }
-      // A running machine not yet known to answer is probed for VS Code;
+      // A running machine not yet known to answer is probed at its door;
       // a stopped one is started below and probed next time.
       if (!c.readyAt && c.current && m.state !== "stopped") {
         await step(q, c, "sweep");
@@ -710,6 +799,61 @@ export async function leaveLink(
   return `https://${c.machineId}.${d.domain}/maslow/leave?to=${encodeURIComponent(home)}&sig=${sig}`;
 }
 
+// The person's files on their own computer, through its door with a
+// ticket of the owner's: what a folder holds, a file's bytes, and a file
+// written whole. Paths are relative to the home. Null where there is no
+// ready computer.
+export async function files(p: Principal): Promise<{
+  list(at: string): Promise<Entry[]>;
+  read(at: string, range?: string): Promise<Response>;
+  preview(at: string): Promise<Response>;
+  write(at: string, body: string): Promise<number>;
+} | null> {
+  const c = await ready(p);
+  if (!c) return null;
+  const m = c.machineId!;
+  const t = () => ticket(c, 60);
+  return {
+    list: (at) => fly.files.list(m, t(), at),
+    read: (at, range) => fly.files.read(m, t(), at, range),
+    preview: (at) => fly.files.preview(m, t(), at),
+    write: (at, body) => fly.files.write(m, t(), at, body),
+  };
+}
+
+// Where the person's browser sends an upload: the machine's own door, with
+// a ticket for the whole machine good for an hour, so a large file goes
+// straight to the disk it lands on and never through us. Null where there
+// is no ready computer.
+export async function uploadTarget(
+  p: Principal,
+): Promise<{ door: string; ticket: string } | null> {
+  const d = deployment.computers;
+  const c = await ready(p);
+  if (!c || d.kind === "none") return null;
+  return {
+    door: `https://${c.machineId}.${d.domain}/maslow/files`,
+    ticket: ticket(c, 3600),
+  };
+}
+
+// Where the person's browser opens its live sockets: the machine's own
+// door, with a ticket for the whole machine good for an hour, so the
+// terminal's keys, the browser's video and the files that changed pass
+// straight between them and never through us. Null where there is no
+// ready computer.
+export async function liveTarget(
+  p: Principal,
+): Promise<{ door: string; ticket: string } | null> {
+  const d = deployment.computers;
+  const c = await ready(p);
+  if (!c || d.kind === "none") return null;
+  return {
+    door: `wss://${c.machineId}.${d.domain}`,
+    ticket: ticket(c, 3600),
+  };
+}
+
 // Starts the person's Linux over and keeps their home: the door is asked
 // to mark the disk, the machine is rebooted, and the page watches it come
 // back. The person's own choice, never a monitor's. False when there is
@@ -773,11 +917,192 @@ export async function resize(p: Principal, key: SizeKey): Promise<boolean> {
       memoryMb: size.memoryMb,
       secret: c.secret,
       brain: await brainOf(q, c),
+      who: await whoOf(q, c),
       modelKey: await modelKeyOf(q, c),
       metadata: m?.config?.metadata ?? tags(c),
     });
     return true;
   });
+}
+
+// A move that has run this long is put back, whatever step it is on.
+const MOVE_LIMIT = 30 * 60 * 1000;
+
+// Starts moving a ready computer to a region, at the person's own ask and
+// never otherwise: the row says so, and the page then asks after it step
+// by step until it runs there or is back where it was. False when there
+// is no ready computer; true at once when it is there already.
+export async function move(p: Principal, to: Region): Promise<boolean> {
+  return asOrg(p.orgId, async (q) => {
+    const c = await computerOf(q, p.userId);
+    if (
+      !c?.readyAt ||
+      !c.machineId ||
+      !c.volumeId ||
+      !(await holdComputer(q, c.id))
+    )
+      return false;
+    if (c.region === to) return true;
+    await setMove(q, c.id, { to, askedAt: new Date().toISOString() });
+    await setReady(q, c.id, false);
+    return true;
+  });
+}
+
+// Takes a move on from wherever it stands, one step a call, and says what
+// a step that failed said, or null. The old disk is the only copy of the
+// person's Linux until the new machine answers its door, so it is
+// stopped, copied and left alone until then, and each id is written the
+// moment Fly hands it back, so a call cut off anywhere is taken up by the
+// next. A step that fails, or a move that has run half an hour, is put
+// back to the machine they had.
+async function moveOn(
+  q: Query,
+  c: Computer,
+  why: string,
+): Promise<string | null> {
+  const m = c.move!;
+  const to = regionName(m.to);
+  const on = (more: Partial<Move>) => setMove(q, c.id, { ...m, ...more });
+  const say = (
+    resource: "machine" | "disk" | "snapshot",
+    event: "made" | "stopped" | "destroyed",
+    ref: string,
+    detail?: Record<string, unknown>,
+  ) =>
+    note(q, {
+      orgId: c.orgId,
+      userId: c.userId,
+      resource,
+      event,
+      ref,
+      detail,
+      why: `${why}: moving to ${to}`,
+    });
+  try {
+    if (m.old) {
+      await fly.destroyMachine(m.old.machineId);
+      await say("machine", "destroyed", m.old.machineId);
+      await fly.destroyVolume(m.old.volumeId);
+      await say("disk", "destroyed", m.old.volumeId, {
+        snapshot: m.snapshotId,
+        keptDays: 1,
+      });
+      await setMove(q, c.id, null);
+      return null;
+    }
+    if (Date.now() - Date.parse(m.askedAt) > MOVE_LIMIT)
+      throw new Error("it took longer than half an hour");
+    if (!m.snapshotId) {
+      const old = await fly.machine(c.machineId!);
+      if (!old) throw new Error("the machine is gone");
+      if (old.state === "started") {
+        await fly.stop(old.id);
+        await say("machine", "stopped", old.id);
+      }
+      if (!(await fly.stopped(old.id, 20))) return null;
+      await fly.keepSnapshots(c.volumeId!, 1);
+      const s = await fly.snapshot(c.volumeId!);
+      await on({ snapshotId: s.id });
+      await say("snapshot", "made", s.id, {
+        disk: c.volumeId,
+        region: c.region,
+        keptDays: 1,
+      });
+      return null;
+    }
+    if (!m.volumeId) {
+      const s = (await fly.snapshots(c.volumeId!)).find(
+        (s) => s.id === m.snapshotId,
+      );
+      if (!s) throw new Error("the snapshot is gone");
+      if (s.status !== "created") return null;
+      const v =
+        (await fly.volumes()).find(
+          (v) => v.name === volumeName(c) && v.region === m.to,
+        ) ?? (await fly.restoreVolume(volumeName(c), m.to, c.diskGb, s.id));
+      await on({ volumeId: v.id });
+      await say("disk", "made", v.id, {
+        region: m.to,
+        gb: c.diskGb,
+        snapshot: s.id,
+      });
+      return null;
+    }
+    if (!m.machineId) {
+      const v = await fly.volume(m.volumeId);
+      if (!v) throw new Error("the new disk is gone");
+      if (v.state !== "created") return null;
+      const name = `${machineName(c)}-${m.to}`;
+      const made =
+        (await fly.machines()).find(
+          (x) => x.name === name && x.config?.metadata?.computer === c.id,
+        ) ??
+        (await fly.createMachine({
+          name,
+          region: m.to,
+          image: IMAGE,
+          volumeId: m.volumeId,
+          cpuKind: c.cpuKind,
+          cpus: c.cpus,
+          memoryMb: c.memoryMb,
+          secret: c.secret,
+          brain: await brainOf(q, c),
+          who: await whoOf(q, c),
+          modelKey: await modelKeyOf(q, c),
+          metadata: tags(c),
+        }));
+      await on({ machineId: made.id });
+      await say("machine", "made", made.id, {
+        region: m.to,
+        cpuKind: c.cpuKind,
+        cpus: c.cpus,
+        memoryMb: c.memoryMb,
+        image: IMAGE,
+      });
+      return null;
+    }
+    if (!(await fly.answers(m.machineId))) return null;
+    await setPlace(q, c.id, {
+      region: m.to,
+      volumeId: m.volumeId,
+      machineId: m.machineId,
+    });
+    await setReady(q, c.id, true);
+    await on({ old: { machineId: c.machineId!, volumeId: c.volumeId! } });
+    return null;
+  } catch (err) {
+    // Once the row has turned to the new machine the old one is owed to
+    // Fly, and the next call pays it.
+    if (m.old) throw err;
+    const reason = (err as Error).message;
+    await moveBack(q, c, reason);
+    return `Could not move to ${to}: ${reason}. Your computer is running where it was.`;
+  }
+}
+
+// Puts a move back: the machine and disk made in the new region go, the
+// machine the person had is started again, and the snapshot stays its
+// day.
+async function moveBack(q: Query, c: Computer, reason: string): Promise<void> {
+  const m = c.move!;
+  const why = `the move to ${regionName(m.to)} failed: ${reason}`;
+  const say = (
+    resource: "machine" | "disk",
+    event: "started" | "destroyed",
+    ref: string,
+  ) => note(q, { orgId: c.orgId, userId: c.userId, resource, event, ref, why });
+  if (m.machineId) {
+    await fly.destroyMachine(m.machineId);
+    await say("machine", "destroyed", m.machineId);
+  }
+  if (m.volumeId) {
+    await fly.destroyVolume(m.volumeId);
+    await say("disk", "destroyed", m.volumeId);
+  }
+  await fly.start(c.machineId!);
+  await say("machine", "started", c.machineId!);
+  await setMove(q, c.id, null);
 }
 
 // Gives a ready computer's machine the keys that open it over SSH, as the
@@ -786,26 +1111,6 @@ export async function pushKeys(p: Principal): Promise<void> {
   const c = await ready(p);
   if (!c) return;
   await fly.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
-}
-
-// What the computer's browser is looking at, or null while it is closed
-// or the computer is not ready.
-export async function browserShotOf(p: Principal): Promise<Uint8Array | null> {
-  const c = await ready(p);
-  if (!c) return null;
-  return fly.browserShot(c.machineId!, ticket(c, 60)).catch(() => null);
-}
-
-// A person's hand on their computer's browser, and what it answered: the
-// selected words for a copy, nothing for the rest. Null when the computer
-// is not ready; the door's word when the browser refuses.
-export async function browserAct(
-  p: Principal,
-  act: unknown,
-): Promise<string | null> {
-  const c = await ready(p);
-  if (!c) return null;
-  return await fly.browserAct(c.machineId!, ticket(c, 60), act);
 }
 
 // Whose account Claude Code on the computer runs on: ours, with the cap,
@@ -817,15 +1122,52 @@ export function modelOf(): { kind: "ours"; capUsd: number } | { kind: "mine" } {
     : { kind: "mine" };
 }
 
-// Where a ready computer answers SSH, and whether any key opens it. Null
-// until it is ready.
+// The way in from the person's own terminal: the computer's name, which
+// is both its hostname and `ssh`'s word for it; the one command that
+// sets a Mac up to reach it, carrying a ticket good for an hour so the
+// script it fetches knows whose computer; and whether a key opens it
+// yet. Null until it is ready.
 export async function sshOf(
   p: Principal,
-): Promise<{ host: string; keys: boolean } | null> {
-  const d = deployment.computers;
+  site: string,
+): Promise<{ name: string; command: string; keys: boolean } | null> {
   const c = await ready(p);
-  if (!c || d.kind === "none") return null;
-  return { host: `${c.machineId}.${d.domain}`, keys: c.authorizedKeys !== "" };
+  if (!c) return null;
+  const { org } = await asOrg(p.orgId, (q) => whoOf(q, c));
+  const link = `${site}/ssh/setup?o=${c.orgId}&c=${c.machineId}&t=${ticket(c, 3600)}`;
+  return {
+    name: org,
+    command: `curl -fsSL "${link}" | sh`,
+    keys: c.authorizedKeys !== "",
+  };
+}
+
+// The computer a setup link names, as the script it serves needs it: its
+// name and where it answers SSH. Null when the link is stale, forged or
+// names no machine.
+export async function sshTarget(
+  orgId: string,
+  machineId: string,
+  t: string,
+): Promise<{ name: string; host: string } | null> {
+  const d = deployment.computers;
+  if (d.kind === "none" || !/^[0-9a-f-]{36}$/.test(orgId)) return null;
+  const c = await asOrg(orgId, (q) => computerByMachine(q, machineId));
+  if (!c || !honours(c, t)) return null;
+  const { org } = await asOrg(orgId, (q) => whoOf(q, c));
+  return { name: org, host: `${machineId}.${d.domain}` };
+}
+
+// Whether a ticket for the whole machine is one this computer's secret
+// signed and its hour has not passed.
+function honours(c: Computer, t: string): boolean {
+  const [exp, sig] = t.split(".");
+  if (!exp || !sig || Number(exp) * 1000 < Date.now()) return false;
+  const want = createHmac("sha256", c.secret).update(exp).digest("hex");
+  return (
+    sig.length === want.length &&
+    timingSafeEqual(Buffer.from(sig), Buffer.from(want))
+  );
 }
 
 // The computer's numbers this moment, asked of its door with a ticket

@@ -30,6 +30,21 @@ export type Computer = {
   sessionId: string | null;
   // Whether its member is current; a past member's machine is stopped.
   current: boolean;
+  // The move under way, if any.
+  move: Move | null;
+};
+
+// A move of a computer to another region, as far as it has got: the
+// region, when it was asked for, the snapshot of the old disk, the disk
+// and machine made from it there, and, once the row has turned to them,
+// the old machine and disk still to be destroyed.
+export type Move = {
+  to: string;
+  askedAt: string;
+  snapshotId?: string;
+  volumeId?: string;
+  machineId?: string;
+  old?: { machineId: string; volumeId: string };
 };
 
 // Shared CPUs, or dedicated ones: "performance" in Fly's words.
@@ -42,7 +57,7 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.backed_up_at as "backedUpAt", c.authorized_keys as "authorizedKeys",
   c.model_key as "modelKey", c.model_key_hash as "modelKeyHash",
   c.model_spent_usd::float as "modelSpentUsd",
-  c.session_id as "sessionId", (u.removed_at is null) as current`;
+  c.session_id as "sessionId", c.move, (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
 // membership, however many sign-ins race for it.
@@ -106,6 +121,24 @@ export async function setKeys(q: Query, id: string, keys: string) {
     id,
     keys,
   ]);
+}
+
+// Whose a computer is, as its machine names them: the member's first name
+// and their org's slug.
+export async function ownerOf(
+  q: Query,
+  c: Computer,
+): Promise<{ firstName: string; orgSlug: string }> {
+  await q.query("select set_config('app.past_members', 'on', true)");
+  const owner = (
+    await q.query<{ firstName: string; orgSlug: string }>(
+      `select u.first_name as "firstName", o.slug as "orgSlug"
+       from users u join orgs o on o.id = u.org_id where u.id = $1`,
+      [c.userId],
+    )
+  ).rows[0];
+  if (!owner) throw new Error(`computer ${c.id}: nobody by id ${c.userId}`);
+  return owner;
 }
 
 // When the home was last archived.
@@ -232,6 +265,26 @@ export async function openComputerSession(
   return sessionId;
 }
 
+// How far the move has got, or null once it is over.
+export async function setMove(q: Query, id: string, move: Move | null) {
+  await q.query("update computers set move = $2 where id = $1", [
+    id,
+    move === null ? null : JSON.stringify(move),
+  ]);
+}
+
+// Turns the row to the machine and disk made in the new region.
+export async function setPlace(
+  q: Query,
+  id: string,
+  at: { region: string; volumeId: string; machineId: string },
+) {
+  await q.query(
+    "update computers set region = $2, volume_id = $3, machine_id = $4 where id = $1",
+    [id, at.region, at.volumeId, at.machineId],
+  );
+}
+
 export async function setReady(q: Query, id: string, ready: boolean) {
   await q.query(
     "update computers set ready_at = case when $2 then coalesce(ready_at, now()) else null end where id = $1",
@@ -245,7 +298,7 @@ export async function note(
   entry: {
     orgId: string;
     userId: string | null;
-    resource: "machine" | "disk" | "backup" | "key";
+    resource: "machine" | "disk" | "snapshot" | "backup" | "key";
     event:
       | "made"
       | "started"

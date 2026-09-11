@@ -2,14 +2,14 @@ import * as brain from "@maslow/brain";
 import { asPerson, Gone, type Query } from "@maslow/db";
 import { fullName, type Session } from "@maslow/db/auth";
 import { computerOf } from "@maslow/db/computers";
-import { spend } from "@maslow/db/usage";
+import { spend, spentSince } from "@maslow/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 
 import { connections } from "./connections";
-import { embed, model } from "./embeddings";
+import { embed, model, RateLimited } from "./embeddings";
 import * as lines from "./lines";
-import { PRICES } from "./prices";
+import { CEILINGS, PRICES } from "./prices";
 import { named, Refused, tools, type Action } from "./tools";
 
 // Who and what an agent is connected to, read once when it connects.
@@ -170,6 +170,7 @@ const said = (text: string): Result => ({
 type Answer = string | { text: string; data: Record<string, unknown> };
 
 const REFUSALS = [
+  RateLimited,
   brain.Invalid,
   brain.NotFound,
   brain.Conflict,
@@ -732,26 +733,46 @@ export function brainServer(
     // batch at a time until none are behind, each batch in a transaction
     // of its own, so what was made stays made if the model fails midway.
     // One ask does at most fifty batches; a brain larger than that fills
-    // in over a few.
-    const catchUp = async () => {
+    // in over a few. The catch-up ends early, and says so, rather than
+    // ending the ask, when the org is at its month's ceiling for vectors
+    // or the model turns it away for asking too often: what has a vector
+    // is still recalled.
+    const catchUp = async (): Promise<string | null> => {
+      const month = new Date();
+      month.setUTCDate(1);
+      month.setUTCHours(0, 0, 0, 0);
       for (let batch = 0; batch < 50; batch++) {
-        const caught = await asPerson(s, async (q) => {
-          const behind = await brain.stale(q, vectors);
-          if (behind.length === 0) return true;
-          const made = await metered(
-            q,
-            behind.map((b) => b.text),
-            "document",
-          );
-          await brain.remember(
-            q,
-            vectors,
-            behind.map((b, i) => ({ ...b, embedding: made[i]! })),
-          );
-          return false;
-        });
-        if (caught) return;
+        try {
+          const step = await asPerson(s, async (q) => {
+            const behind = await brain.stale(q, vectors);
+            if (behind.length === 0) return "done";
+            const used = await spentSince(q, "vectors", month);
+            if (used >= CEILINGS.vectors) {
+              console.error(
+                `vectors: org ${s.orgId} at the ceiling of ${CEILINGS.vectors} tokens this month`,
+              );
+              return "this month's room for vectors is used up";
+            }
+            const made = await metered(
+              q,
+              behind.map((b) => b.text),
+              "document",
+            );
+            await brain.remember(
+              q,
+              vectors,
+              behind.map((b, i) => ({ ...b, embedding: made[i]! })),
+            );
+            return "more";
+          });
+          if (step === "done") return null;
+          if (step !== "more") return step;
+        } catch (err) {
+          if (err instanceof RateLimited) return err.message;
+          throw err;
+        }
       }
+      return null;
     };
     server.registerTool(
       "recall",
@@ -771,7 +792,7 @@ export function brainServer(
         refusing(async () => {
           if (!/[\p{L}\p{N}]/u.test(a.question))
             throw new brain.Invalid("a question needs a word");
-          await catchUp();
+          const behind = await catchUp();
           return asPerson(s, async (q) => {
             const [asked] = await metered(q, [a.question], "query");
             const found = await brain.recall(q, vectors, asked!, {
@@ -787,9 +808,14 @@ export function brainServer(
             return {
               text: [
                 head,
+                ...(behind
+                  ? [
+                      `records changed since their vector was made are not among them: ${behind}`,
+                    ]
+                  : []),
                 ...found.map((f) => `${f.score.toFixed(2)} ${line(f.record)}`),
               ].join("\n"),
-              data: { records: found },
+              data: { records: found, behind },
             };
           });
         }),

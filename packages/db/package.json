@@ -13,6 +13,7 @@
     "./usage": "./src/usage.ts",
     "./computers": "./src/computers.ts",
     "./groups": "./src/groups.ts",
+    "./desktops": "./src/desktops.ts",
     "./oauth": "./src/oauth.ts"
   },
   "scripts": {

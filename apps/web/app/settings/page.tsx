@@ -156,11 +156,13 @@ function Picture({
 export default async function Settings({
   searchParams,
 }: {
-  searchParams: Promise<Notice>;
+  searchParams: Promise<Notice & { only?: string }>;
 }) {
   const p = await principal();
   if (!p) redirect("/");
   const n = await searchParams;
+  // One section alone, as a block in the room: no rail, no grid around it.
+  const only = n.only ?? null;
   const said = (k: keyof Notice) => (n[k] ? NOTICES[`${k}=${n[k]}`] : null);
   const [{ org, members, invited, past }, groups, agents, computer] =
     await Promise.all([
@@ -195,10 +197,18 @@ export default async function Settings({
         : "member";
 
   return (
-    <main className="gap-6 md:grid md:grid-cols-[13.75rem_minmax(0,1fr)]">
+    <main
+      className={
+        only ? "" : "gap-6 md:grid md:grid-cols-[13.75rem_minmax(0,1fr)]"
+      }
+    >
       <h1 className="sr-only">Settings</h1>
-      <Rail orgName={org.name} owner={owner} holder={holder} />
-      <div className="mt-4 grid items-start gap-6 md:mt-0 xl:grid-cols-2">
+      {!only && <Rail orgName={org.name} owner={owner} holder={holder} />}
+      <div
+        className={
+          only ? "" : "mt-4 grid items-start gap-6 md:mt-0 xl:grid-cols-2"
+        }
+      >
         <div className="space-y-6">
           <Section id="you" title="You">
             <form
@@ -305,8 +315,8 @@ export default async function Settings({
 
           <Section
             id="ssh"
-            title="SSH"
-            description="The public keys that open your computer from your own terminal, one per line. The Computer page says how to connect."
+            title="Your public key"
+            description="What opens your computer from your own terminal, one key per line. 1Password's SSH agent or ssh-keygen gives you one; paste its public half. The Computer page has the one command that sets your Mac up."
           >
             <form action="/settings/keys" method="post" className="space-y-2">
               <Textarea
@@ -319,7 +329,7 @@ export default async function Settings({
               />
               <Said text={said("keys")} />
               <Button type="submit" variant="outline">
-                Save keys
+                Save key
               </Button>
             </form>
           </Section>
@@ -417,7 +427,10 @@ export default async function Settings({
             </form>
             <div className="divide-border divide-y">
               {members.map((m) => (
-                <div key={m.id} className="flex items-center gap-3 py-2">
+                <div
+                  key={m.id}
+                  className="flex flex-wrap items-center gap-3 py-2"
+                >
                   <Picture person={m} />
                   <div className="min-w-0 flex-1 leading-tight">
                     <p className="truncate text-sm font-medium">{m.name}</p>
@@ -516,7 +529,10 @@ export default async function Settings({
                 <CollapsibleContent keepMounted>
                   <div className="divide-border text-muted-foreground divide-y">
                     {past.map((m) => (
-                      <div key={m.id} className="flex items-center gap-3 py-2">
+                      <div
+                        key={m.id}
+                        className="flex flex-wrap items-center gap-3 py-2"
+                      >
                         <Picture person={m} />
                         <div className="min-w-0 flex-1 leading-tight">
                           <p className="truncate text-sm">{m.name}</p>

@@ -22,14 +22,14 @@ const config: NextConfig = {
       destination: "https://us.i.posthog.com/:path*",
     },
   ],
-  // No page of ours is framed by another site, and no address of ours is
-  // told to one.
+  // Our own pages frame each other in the room, so a page of ours is framed
+  // only by our own site and no other, and no address of ours is told to one.
   headers: async () => [
     {
       source: "/(.*)",
       headers: [
-        { key: "X-Frame-Options", value: "DENY" },
-        { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
+        { key: "X-Frame-Options", value: "SAMEORIGIN" },
+        { key: "Content-Security-Policy", value: "frame-ancestors 'self'" },
         { key: "Referrer-Policy", value: "same-origin" },
         { key: "X-Content-Type-Options", value: "nosniff" },
       ],

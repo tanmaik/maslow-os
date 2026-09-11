@@ -9,10 +9,34 @@ export type Machine = {
   created_at: string;
   config?: {
     image?: string;
+    env?: Record<string, string>;
     guest?: { cpu_kind?: string; cpus?: number; memory_mb?: number };
     metadata?: Record<string, string>;
     mounts?: { volume: string; path: string }[];
   };
+};
+
+// A disk as Fly has it: restoring while it is filled from a snapshot,
+// created once it is whole, and the machine holding it, if one does.
+export type Volume = {
+  id: string;
+  name: string;
+  region: string;
+  state: string;
+  size_gb: number;
+  attached_machine_id: string | null;
+};
+
+// A copy of a disk at a moment, running until it is whole.
+export type Snapshot = { id: string; status: string };
+
+// One thing in a folder of the person's home: its name, what kind of thing
+// it is, its size in bytes, and when it last changed.
+export type Entry = {
+  name: string;
+  kind: "dir" | "file" | "link" | "other";
+  size: number;
+  modified: string;
 };
 
 // What a machine says of itself: CPU percent over the last moment, memory
@@ -41,8 +65,8 @@ export type Backup = {
 };
 
 // What a machine is made of: its image, its door's secret and domain, the
-// brain's address and the session it reaches it with, its size, its disk,
-// its one port behind Fly's edge, and its tags.
+// brain's address and the session it reaches it with, who the person is on
+// it, its size, its disk, its one port behind Fly's edge, and its tags.
 export type Shape = {
   image: string;
   volumeId: string;
@@ -51,6 +75,8 @@ export type Shape = {
   memoryMb: number;
   secret: string;
   brain: { url: string; token: string } | null;
+  // The account's name and the machine's, so a prompt reads wile@acme.
+  who: { person: string; org: string };
   // The OpenRouter key Claude Code inside runs on, or none.
   modelKey: string | null;
   metadata: Record<string, string>;
@@ -61,6 +87,8 @@ const shape = (m: Shape) => ({
   env: {
     DOOR_SECRET: m.secret,
     DOMAIN: config().domain,
+    PERSON: m.who.person,
+    ORG: m.who.org,
     ...(m.brain ? { BRAIN_URL: m.brain.url, BRAIN_TOKEN: m.brain.token } : {}),
     ...(m.modelKey ? { MODEL_KEY: m.modelKey } : {}),
   },
@@ -142,8 +170,62 @@ export const fly = {
     return call("GET", "/machines");
   },
 
-  volumes(): Promise<{ id: string; name: string }[]> {
+  volumes(): Promise<Volume[]> {
     return call("GET", "/volumes");
+  },
+
+  // Null once Fly no longer has it.
+  volume(id: string): Promise<Volume | null> {
+    return call("GET", `/volumes/${id}`, undefined, "null");
+  },
+
+  // How many days Fly keeps the disk's snapshots, from the next one on.
+  async keepSnapshots(id: string, days: number): Promise<void> {
+    await call("PUT", `/volumes/${id}`, { snapshot_retention: days });
+  },
+
+  // A copy of the disk this moment, made in the background: the copy's
+  // id, which its listing then says the status of.
+  async snapshot(volumeId: string): Promise<Snapshot> {
+    const r = await call<{ Msg?: { backup?: { graph_id?: string } } }>(
+      "POST",
+      `/volumes/${volumeId}/snapshots`,
+    );
+    const id = r?.Msg?.backup?.graph_id;
+    if (!id) throw new Error("Fly made a snapshot but did not name it.");
+    return { id, status: "running" };
+  },
+
+  snapshots(volumeId: string): Promise<Snapshot[]> {
+    return call("GET", `/volumes/${volumeId}/snapshots`);
+  },
+
+  // A disk filled from a snapshot, in a region, no smaller than the disk
+  // the snapshot was of. Fly fills it in the background: the disk says
+  // "created" once it is whole.
+  restoreVolume(
+    name: string,
+    region: string,
+    sizeGb: number,
+    snapshotId: string,
+  ): Promise<{ id: string }> {
+    return call("POST", "/volumes", {
+      name,
+      region,
+      size_gb: sizeGb,
+      snapshot_id: snapshotId,
+    });
+  },
+
+  // Whether the machine has come to a stop, waited for up to the seconds
+  // given.
+  async stopped(id: string, seconds: number): Promise<boolean> {
+    for (let i = 0; i < seconds; i++) {
+      const m = await fly.machine(id);
+      if (!m || m.state === "stopped") return true;
+      await new Promise((r) => setTimeout(r, 1000));
+    }
+    return false;
   },
 
   // Grows a disk to a size while its machine runs. Fly says whether the
@@ -263,50 +345,6 @@ export const fly = {
     return true;
   },
 
-  // What the machine's browser is looking at this moment, as a JPEG, or
-  // null while it is closed. Asked of the door with a ticket it takes.
-  async browserShot(
-    machineId: string,
-    ticket: string,
-  ): Promise<Uint8Array | null> {
-    const res = await fetch(`https://${config().app}.fly.dev/maslow/browser`, {
-      headers: {
-        "fly-force-instance-id": machineId,
-        "x-maslow-ticket": ticket,
-      },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (res.status === 204) return null;
-    if (!res.ok) throw new Error(`the door answered ${res.status}`);
-    return new Uint8Array(await res.arrayBuffer());
-  },
-
-  // A person's hand on the machine's browser, through its door with a
-  // ticket it takes, and what the browser answered: the selected words
-  // for a copy, nothing for the rest. The door's word when it refuses.
-  async browserAct(
-    machineId: string,
-    ticket: string,
-    act: unknown,
-  ): Promise<string> {
-    const res = await fetch(
-      `https://${config().app}.fly.dev/maslow/browser/act`,
-      {
-        method: "POST",
-        headers: {
-          "fly-force-instance-id": machineId,
-          "x-maslow-ticket": ticket,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify(act),
-        signal: AbortSignal.timeout(20_000),
-      },
-    );
-    if (!res.ok)
-      throw new Error((await res.text()) || `the door answered ${res.status}`);
-    return res.status === 204 ? "" : await res.text();
-  },
-
   // Gives the machine's door the keys that open SSH, with a ticket it takes.
   async pushKeys(
     machineId: string,
@@ -340,7 +378,105 @@ export const fly = {
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
   },
 
-  // Whether the machine's door answers at Fly's edge.
+  // The person's files through the machine's door, with a ticket it takes:
+  // what a folder holds, a file's bytes as a stream, whole or the range
+  // asked for, a small picture of a file, and a file written whole. Paths
+  // are relative to the home; the door refuses one that leaves it. Uploads
+  // do not pass through here: the browser sends those to the door itself,
+  // in pieces, with a ticket of its own.
+  files: {
+    async list(
+      machineId: string,
+      ticket: string,
+      at: string,
+    ): Promise<Entry[]> {
+      const res = await fetch(
+        `https://${config().app}.fly.dev/maslow/files?path=${encodeURIComponent(at)}`,
+        {
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+          },
+          signal: AbortSignal.timeout(8_000),
+        },
+      );
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return (await res.json()) as Entry[];
+    },
+    async read(
+      machineId: string,
+      ticket: string,
+      at: string,
+      range?: string,
+    ): Promise<Response> {
+      const res = await fetch(
+        `https://${config().app}.fly.dev/maslow/files/read?path=${encodeURIComponent(at)}`,
+        {
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+            ...(range ? { range } : {}),
+          },
+        },
+      );
+      if (!res.ok && res.status !== 416)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return res;
+    },
+    async preview(
+      machineId: string,
+      ticket: string,
+      at: string,
+    ): Promise<Response> {
+      const res = await fetch(
+        `https://${config().app}.fly.dev/maslow/files/preview?path=${encodeURIComponent(at)}`,
+        {
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+          },
+          signal: AbortSignal.timeout(150_000),
+        },
+      );
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return res;
+    },
+    async write(
+      machineId: string,
+      ticket: string,
+      at: string,
+      body: string,
+    ): Promise<number> {
+      const res = await fetch(
+        `https://${config().app}.fly.dev/maslow/files/write?path=${encodeURIComponent(at)}`,
+        {
+          method: "PUT",
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+          },
+          body,
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return ((await res.json()) as { size: number }).size;
+    },
+  },
+
+  // Whether the machine's door answers at Fly's edge, with the browser
+  // server up behind it: what a ready computer is.
   async answers(machineId: string): Promise<boolean> {
     try {
       const res = await fetch(`https://${config().app}.fly.dev/maslow/health`, {

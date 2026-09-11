@@ -1,2 +1,3 @@
-# The person is root whenever they ask to be, with no password.
-me ALL=(ALL) NOPASSWD: ALL
+# The person is root whenever they ask to be, with no password. Named by
+# number, since the boot names the account after the person.
+#1000 ALL=(ALL) NOPASSWD: ALL

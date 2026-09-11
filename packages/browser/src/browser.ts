@@ -39,7 +39,6 @@ export class Browser {
   // a fresh one for its own life and says so. Tabs the profile reopened
   // on its own are numbered too.
   async open(): Promise<BrowserContext> {
-    this.touch();
     if (this.context) return this.context;
     // Two callers at once open one browser: the second waits on the first.
     this.opening ??= this.launch().finally(() => (this.opening = null));
@@ -47,20 +46,6 @@ export class Browser {
   }
 
   private opening: Promise<BrowserContext> | null = null;
-
-  // Closes the browser after so long without a call, giving its memory
-  // back; the next call opens it again. Off until asked for.
-  private idleMs = 0;
-  private timer: NodeJS.Timeout | null = null;
-  idle(ms: number) {
-    this.idleMs = ms;
-  }
-  private touch() {
-    if (!this.idleMs) return;
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = setTimeout(() => void this.quit(), this.idleMs);
-    this.timer.unref();
-  }
 
   private async launch(): Promise<BrowserContext> {
     const dir =
@@ -146,31 +131,68 @@ export class Browser {
     return out;
   }
 
-  // The newest open tab without opening the browser, or null while it is
-  // closed: what a watcher sees.
+  // The tab the person picked to watch, while it is open.
+  private chosen: number | null = null;
+
+  // The current tab without opening the browser, or null while it is
+  // closed: the one the person picked, else the newest. What a watcher
+  // sees and what a hand lands on.
   current(): Page | null {
     if (!this.context) return null;
+    const chosen = this.chosen === null ? null : this.tabs.get(this.chosen);
+    if (chosen && !chosen.isClosed()) return chosen;
     return [...this.tabs.values()].filter((p) => !p.isClosed()).at(-1) ?? null;
   }
 
-  // The tab asked for, or the newest when none is named.
+  // Makes a tab the current one.
+  show(id: number): void {
+    if (!this.tabs.has(id)) throw new Error(`There is no tab ${id}.`);
+    this.chosen = id;
+  }
+
+  // Every open tab with its title and address, and which is current,
+  // without opening the browser: none while it is closed.
+  async openTabs(): Promise<{
+    tabs: { id: number; title: string; url: string }[];
+    current: number | null;
+  }> {
+    const now = this.current();
+    const tabs = [];
+    let current: number | null = null;
+    for (const [id, page] of this.tabs) {
+      if (page.isClosed()) continue;
+      if (page === now) current = id;
+      tabs.push({
+        id,
+        title: await page.title().catch(() => ""),
+        url: page.url(),
+      });
+    }
+    return { tabs, current };
+  }
+
+  // The tab asked for, or the current one when none is named.
   async tab(id?: number): Promise<Tab> {
     await this.open();
     if (id === undefined) {
-      const last = [...this.tabs.entries()].at(-1);
-      if (!last) throw new Error("There is no tab open; create one.");
-      return { id: last[0], page: last[1] };
+      const page = this.current();
+      const found = [...this.tabs.entries()].find(([, p]) => p === page);
+      if (!found) throw new Error("There is no tab open; create one.");
+      return { id: found[0], page: found[1] };
     }
     const page = this.tabs.get(id);
     if (!page) throw new Error(`There is no tab ${id}.`);
     return { id, page };
   }
 
+  // A new tab, which becomes the current one.
   async create(): Promise<Tab> {
     const context = await this.open();
     const page = await context.newPage();
     this.track(page);
-    return this.tab([...this.tabs.entries()].find(([, p]) => p === page)![0]);
+    const id = [...this.tabs.entries()].find(([, p]) => p === page)![0];
+    this.chosen = id;
+    return this.tab(id);
   }
 
   async close(id: number): Promise<void> {
@@ -188,8 +210,6 @@ export class Browser {
   }
 
   async quit(): Promise<void> {
-    if (this.timer) clearTimeout(this.timer);
-    this.timer = null;
     await this.context?.close();
     this.context = null;
     this.tabs.clear();

@@ -1,22 +1,16 @@
 // Seeds ours into a file of the person's and keeps it current: an entry
 // the person has not touched follows the image, one they changed or
-// removed is theirs. Two seeds: VS Code's settings, and the MCP servers
-// Claude Code knows, the browser and the brain. Two halves: as root, the
-// record of every set of defaults the image ever gave, kept beside the
-// disk's root out of their Linux, and whether each was written; as the
-// person, the file itself, so nothing they put in their home can reach
-// past it. Nothing here stops the boot.
+// removed is theirs. One seed: the MCP servers Claude Code knows, the
+// browser and the brain. Two halves: as root, the record of every set of
+// defaults the image ever gave, kept beside the disk's root out of their
+// Linux, and whether each was written; as the person, the file itself, so
+// nothing they put in their home can reach past it. Nothing here stops
+// the boot.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
 const SEEDS = {
-  settings: {
-    file: ".local/share/code-server/User/settings.json",
-    ours: "/opt/maslow/etc/settings.json",
-    memo: "/data/.settings-seeded.json",
-    at: null,
-  },
   mcp: {
     file: ".claude.json",
     ours: "/opt/maslow/etc/mcp.json",

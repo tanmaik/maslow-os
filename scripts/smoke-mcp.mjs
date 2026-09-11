@@ -116,7 +116,7 @@ export async function smokeMcp(stack, signIn) {
     `${base}/oauth/authorize?${new URLSearchParams(params)}`;
   check(
     "authorize signed out is the sign-in",
-    (await page(authorize())).includes("Pick a person from the pill"),
+    (await page(authorize())).includes("Sign in as one of the seeded people"),
     "sign-in page",
   );
   const wile = await signIn(orgs[0].users[0].id);

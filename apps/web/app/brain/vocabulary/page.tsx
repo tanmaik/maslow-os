@@ -34,7 +34,7 @@ export default async function Page() {
   return (
     <div className="space-y-4">
       <div className="space-y-1">
-        <h1 className="font-serif text-[26px] leading-[30px] tracking-[-0.01em]">
+        <h1 className="page-title font-serif text-[26px] leading-[30px] tracking-[-0.01em]">
           Types and fields
         </h1>
         <p className="text-muted-foreground text-sm">

@@ -3,18 +3,20 @@ import type { Principal } from "@maslow/db/auth";
 import { computerOf, type SharedPort } from "@maslow/db/computers";
 import { groupsOf } from "@maslow/db/groups";
 import { orgOf } from "@maslow/db/settings";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { Making } from "@/app/computer/making";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   modelOf,
-  progressOf,
   sharedWithMe,
   sharingOf,
   sshOf,
+  stateOf,
 } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
+import { whereFrom } from "@/lib/region";
 import { sizeOf } from "@/lib/sizes";
 import { principal } from "@/lib/session";
 
@@ -43,13 +45,19 @@ async function sharing(p: Principal) {
 export default async function ComputerPage() {
   const p = await principal();
   if (!p) redirect("/");
-  const off = deployment.computers.kind === "none";
-  const c = off ? null : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  const d = deployment.computers;
+  const c =
+    d.kind === "none"
+      ? null
+      : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  const h = await headers();
+  // This site as the browser reached it, for the command the person runs.
+  const site = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
   return (
     <>
       <main className="space-y-4">
-        <h1 className="text-2xl font-semibold">Computer</h1>
-        {off ? (
+        <h1 className="page-title text-2xl font-semibold">Computer</h1>
+        {d.kind === "none" ? (
           <Alert>
             <AlertTitle>Computers are off here</AlertTitle>
             <AlertDescription>
@@ -58,15 +66,16 @@ export default async function ComputerPage() {
           </Alert>
         ) : (
           <Making
-            at={c ? progressOf(c) : "disk"}
-            region={c?.region ?? null}
+            state={stateOf(c)}
+            door={c?.machineId ? `https://${c.machineId}.${d.domain}` : null}
+            where={await whereFrom(h)}
             size={c ? sizeOf(c) : null}
             backedUp={
               deployment.storage.kind === "s3"
                 ? (c?.backedUpAt?.toISOString() ?? null)
                 : "off"
             }
-            ssh={await sshOf(p)}
+            ssh={await sshOf(p, site)}
             model={modelOf()}
             sharing={await sharing(p)}
           />

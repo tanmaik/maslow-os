@@ -1,4 +1,5 @@
-# The SSH server runs outside the person's Linux and drops `me` inside it.
+# The SSH server runs outside the person's Linux and drops `me` inside it,
+# where a login lands in the person's terminal and a command runs plain.
 # Keys only, one user, host keys kept on the disk so they outlive a restart.
 Port 22
 HostKey /data/ssh/ssh_host_ed25519_key
@@ -10,3 +11,4 @@ AllowUsers me
 Subsystem sftp internal-sftp
 Match User me
   ChrootDirectory /data/os
+  ForceCommand /opt/maslow/ssh-login.sh

@@ -1,6 +1,3 @@
-import { asOrg } from "@maslow/db";
-import { computerOf } from "@maslow/db/computers";
-
 import { advance } from "@/lib/computer";
 import { regionFor } from "@/lib/region";
 import { principal } from "@/lib/session";
@@ -12,7 +9,5 @@ export const maxDuration = 60;
 export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
-  const progress = await advance(p, await regionFor(request));
-  const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
-  return Response.json({ progress, region: c?.region ?? null });
+  return Response.json(await advance(p, await regionFor(request)));
 }

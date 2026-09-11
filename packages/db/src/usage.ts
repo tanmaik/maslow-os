@@ -26,6 +26,21 @@ export async function spend(
   );
 }
 
+// What the org has spent of a resource since a moment, in its unit. Read
+// inside the org's scope.
+export async function spentSince(
+  q: Query,
+  resource: Resource,
+  since: Date,
+): Promise<number> {
+  const { rows } = await q.query<{ sum: string | null }>(
+    `select sum(quantity)::text as sum from usage
+     where resource = $1 and from_at >= $2`,
+    [resource, since],
+  );
+  return Number(rows[0]?.sum ?? 0);
+}
+
 export type Picture = {
   kind: "photo" | "logo";
   size: number;

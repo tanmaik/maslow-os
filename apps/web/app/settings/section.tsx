@@ -1,3 +1,6 @@
+"use client";
+
+import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
 import {
@@ -9,7 +12,8 @@ import {
 } from "@/components/ui/card";
 
 // One card of settings: a place the rail points at, its name, one line on
-// what it holds, and the rest.
+// what it holds, and the rest. Asked for one section alone, with ?only=,
+// as a block in the room is, every other section stays out of the way.
 export function Section({
   id,
   title,
@@ -21,10 +25,19 @@ export function Section({
   description?: ReactNode;
   children: ReactNode;
 }) {
+  const only = useSearchParams().get("only");
+  if (only && only !== id) return null;
   return (
-    <Card id={id} className="scroll-mt-24 rounded-[14px]">
+    <Card
+      id={id}
+      className={
+        only
+          ? "rounded-none bg-transparent ring-0 [--card-spacing:--spacing(2)]"
+          : "scroll-mt-24 rounded-[14px]"
+      }
+    >
       <CardHeader>
-        <CardTitle className="text-sm font-semibold">
+        <CardTitle className="page-title text-sm font-semibold">
           <h2>{title}</h2>
         </CardTitle>
         {description && <CardDescription>{description}</CardDescription>}

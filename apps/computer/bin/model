@@ -1,9 +1,11 @@
 #!/bin/bash
-# Which account Claude Code on this computer runs on: ours, the key
-# Maslow minted for you with a monthly cap, or yours, your own Anthropic
-# sign-in. The choice is a file in your home, read every time `claude`
-# starts. A computer with no key from Maslow runs on your account whatever
-# the choice, and says so.
+# Which account Claude Code on this computer runs on: ours, the OpenRouter
+# key Maslow minted for you with a monthly cap, running GLM 5.3 Flash; or
+# yours, your own Anthropic sign-in. Ours unless you say otherwise, and
+# ours again the moment you say so, so running dry on your own plan never
+# stops the work. The choice is a file in your home, read every time
+# `claude` starts. A computer with no key from Maslow runs on your account
+# whatever the choice, and says so.
 set -euo pipefail
 choice=$HOME/.config/maslow/model
 [ -r /etc/profile.d/maslow-model-key.sh ] && . /etc/profile.d/maslow-model-key.sh
@@ -11,18 +13,24 @@ now=$(cat "$choice" 2>/dev/null || echo ours)
 case ${1:-status} in
   ours | mine)
     if [ -z "${MASLOW_MODEL_KEY:-}" ]; then
-      echo "This computer has no key from Maslow, so Claude Code runs on your own account either way."
+      echo "This computer has no key from Maslow, so Claude Code runs on your own Anthropic account either way."
       exit 0
     fi
     mkdir -p "$(dirname "$choice")"
     echo "$1" >"$choice"
-    echo "Claude Code runs on $([ "$1" = ours ] && echo "Maslow's key" || echo "your own account") from its next start."
+    if [ "$1" = ours ]; then
+      echo "Claude Code runs on Maslow's key, on GLM 5.3 Flash, from its next start. Switch back with: model mine."
+    else
+      echo "Claude Code runs on your own Anthropic account from its next start; sign in when it asks. If that plan runs dry, model ours puts it back on Maslow's key."
+    fi
     ;;
   status)
     if [ -z "${MASLOW_MODEL_KEY:-}" ]; then
-      echo "This computer has no key from Maslow; Claude Code runs on your own account."
+      echo "This computer has no key from Maslow; Claude Code runs on your own Anthropic account."
+    elif [ "$now" = mine ]; then
+      echo "Claude Code runs on your own Anthropic account. Switch with: model ours."
     else
-      echo "Claude Code runs on $([ "$now" = ours ] && echo "Maslow's key" || echo "your own account"). Switch with: model ours, or model mine."
+      echo "Claude Code runs on Maslow's key, on GLM 5.3 Flash. Switch with: model mine."
     fi
     ;;
   *)

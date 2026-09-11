@@ -84,6 +84,12 @@ async function page(cookie) {
   return (await res.text()).replaceAll("<!-- -->", "");
 }
 
+// The settings page, where the org and who is in it are named.
+async function settingsPage(cookie) {
+  const res = await fetch(`${stack.url}/settings`, { headers: { cookie } });
+  return (await res.text()).replaceAll("<!-- -->", "");
+}
+
 // Who the page says you are: the name under your picture in the corner.
 const youOn = (html) =>
   html.match(/<span class="sr-only">([^<]*)<\/span>/)?.[1];
@@ -95,6 +101,9 @@ const offers = (html, orgName) => html.includes(`\\"orgName\\":\\"${orgName}`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// What the sign-in page says outside production.
+const SIGNED_OUT = "Sign in as one of the seeded people";
+
 let failed = false;
 const check = (label, ok, detail) => {
   console.log(`${ok ? "ok  " : "FAIL"}  ${label.padEnd(40)} ${detail}`);
@@ -105,17 +114,14 @@ try {
   await stack.ready();
 
   const out = await page();
-  check(
-    "signed out",
-    out.includes("Pick a person from the pill"),
-    "sign-in page",
-  );
+  check("signed out", out.includes(SIGNED_OUT), "sign-in page");
 
   // The first org signs in again at the end: its second visit reuses a pooled
   // connection where an old org setting exists as '' rather than missing.
   for (const org of [...orgs, orgs[0]]) {
-    const html = await page(await signIn(org.users[0].id));
-    const got = html.match(/(\d+) members?/);
+    const cookie = await signIn(org.users[0].id);
+    const html = await page(cookie);
+    const got = (await settingsPage(cookie)).match(/(\d+) in /);
     check(
       `${org.users[0].firstName} (${org.name})`,
       new RegExp(`<h1[^>]*>${org.name}</h1>`).test(html) &&
@@ -151,7 +157,7 @@ try {
   );
   check(
     "old cookie worthless after sign-out",
-    (await page(marge)).includes("Pick a person from the pill"),
+    (await page(marge)).includes(SIGNED_OUT),
     "sign-in page",
   );
 
@@ -170,12 +176,6 @@ try {
     invited.headers.get("location")?.endsWith("/settings?invite=sent") === true,
     `answered ${invited.status} → ${invited.headers.get("location")?.split("?")[1]}`,
   );
-  const settingsPage = async (cookie) =>
-    (
-      await (
-        await fetch(`${stack.url}/settings`, { headers: { cookie } })
-      ).text()
-    ).replaceAll("<!-- -->", "");
   check(
     "invitation pending",
     (await settingsPage(wile)).includes("hire@acme-rockets.test"),
@@ -198,17 +198,15 @@ try {
     firstName: "New",
     lastName: "Hire",
   });
-  const after = await page(wile);
+  const after = await settingsPage(wile);
   check(
     "invited person admitted",
     hire.orgId === orgs[0].id &&
-      /3 members?/.test(after) &&
+      /3 in /.test(after) &&
       !/invited/.test(
-        (await settingsPage(wile))
-          .split("hire@acme-rockets.test")[1]
-          ?.slice(0, 200) ?? "",
+        after.split("hire@acme-rockets.test")[1]?.slice(0, 200) ?? "",
       ),
-    after.match(/\d+ members?/)?.[0] ?? "no match",
+    after.match(/\d+ in /)?.[0] ?? "no match",
   );
   const stranger = await admit({
     email: "solo@example.test",
@@ -257,9 +255,7 @@ try {
   const [, wileSession] = wile.replace("session=", "").split(".");
   check(
     "session under another org",
-    (await page(`session=${orgs[1].id}.${wileSession}`)).includes(
-      "Pick a person from the pill",
-    ),
+    (await page(`session=${orgs[1].id}.${wileSession}`)).includes(SIGNED_OUT),
     "sign-in page",
   );
 
@@ -384,7 +380,7 @@ try {
   );
   check(
     "removed member's session is dead",
-    (await page(pim)).includes("Pick a person from the pill"),
+    (await page(pim)).includes(SIGNED_OUT),
     "sign-in page",
   );
   check(
@@ -1228,8 +1224,8 @@ try {
       leftOfLate.users === 0 &&
       leftOfLate.records === 0 &&
       latePerson === 1 &&
-      (await page(lateCookie)).includes("Pick a person from the pill") &&
-      (await page(mateCookie)).includes("Pick a person from the pill"),
+      (await page(lateCookie)).includes(SIGNED_OUT) &&
+      (await page(mateCookie)).includes(SIGNED_OUT),
     `note ${lateNote.status}; ${leftOfLate.orgs} orgs, ${leftOfLate.users} users, ${leftOfLate.records} records, ${latePerson} person, Mate signed out`,
   );
 
@@ -1292,11 +1288,7 @@ try {
   const stale = await page(
     "session=00000000-0000-4000-8000-000000000001.00000000-0000-4000-8000-000000000009",
   );
-  check(
-    "unknown session",
-    stale.includes("Pick a person from the pill"),
-    "sign-in page",
-  );
+  check("unknown session", stale.includes(SIGNED_OUT), "sign-in page");
   // Every suite runs, whatever failed before it.
   failed = !(await smokeConnections(stack, signIn)) || failed;
   failed = !(await smokeDb(stack)) || failed;

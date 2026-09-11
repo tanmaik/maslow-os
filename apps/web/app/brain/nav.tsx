@@ -67,7 +67,10 @@ export function BrainNav({
         )
       : pathname;
   return (
-    <Card className="gap-0 rounded-2xl p-2">
+    <Card
+      className="brain-nav gap-0 rounded-2xl p-2"
+      data-away={pathname === "/brain" ? undefined : ""}
+    >
       <nav className="flex gap-0.5 overflow-x-auto md:flex-col md:overflow-visible">
         <div className="hidden items-baseline justify-between px-2.5 pt-0.5 pb-1.5 text-xs md:flex">
           <span className="text-muted-foreground font-medium">Your brain</span>

@@ -29,7 +29,7 @@ export default async function Layout({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div className="gap-6 md:grid md:grid-cols-[13.75rem_minmax(0,1fr)]">
+    <div className="brain-layout gap-6 md:grid md:grid-cols-[13.75rem_minmax(0,1fr)]">
       <BrainNav
         records={records}
         types={types.filter((t) => t.own).map((t) => t.name)}

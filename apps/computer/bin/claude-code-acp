@@ -1,0 +1,7 @@
+#!/bin/bash
+# Claude Code as an editor starts it over the Agent Client Protocol, Zed's
+# wire between an editor and an agent: the same Claude Code, on the same
+# account `model` chose, read at every start.
+set -euo pipefail
+. /opt/maslow/bin/model-env
+exec /opt/maslow/node_modules/.bin/claude-code-acp "$@"

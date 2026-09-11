@@ -1,13 +1,20 @@
 #!/bin/bash
 # Boots the computer: the person's Linux and home onto the disk, the
-# kernel's views and ours bound into it, then the SSH server outside and
-# VS Code inside, as the person. Every step is safe to run again, so a
-# boot cut off anywhere is finished by the next.
+# kernel's views and ours bound into it, the person named as themselves,
+# then the door outside and the browser as the person. Every step is safe
+# to run again, so a boot cut off anywhere is finished by the next.
 set -euo pipefail
 
 DISK=/data
 OS=$DISK/os
 HOME_DIR=$DISK/home
+# Who the person is on their machine, as the app gave it: their first name
+# at their org, so a prompt reads wile@acme. A machine made by hand, given
+# nothing or something Linux would refuse, is me at computer.
+PERSON=${PERSON:-me}
+ORG=${ORG:-computer}
+[[ $PERSON =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || PERSON=me
+[[ $ORG =~ ^[a-z0-9][a-z0-9-]{0,62}$ ]] || ORG=computer
 
 # A reset asked for through the door: the person's Linux is thrown away
 # and copied fresh below; their home, its own folder, is not touched. The
@@ -45,9 +52,6 @@ if [ ! -d "$HOME_DIR" ]; then
   chown -R 1000:1000 "$HOME_DIR"
 fi
 
-# The machine is called computer, so a prompt reads me@computer.
-hostname computer || true
-
 # What the person's Linux sees: the kernel, ours read-only, their home.
 for d in proc sys dev; do mount --rbind "/$d" "$OS/$d"; done
 mount -t tmpfs tmpfs "$OS/run"
@@ -55,12 +59,25 @@ mount --bind /opt/maslow "$OS/opt/maslow"
 mount -o remount,bind,ro "$OS/opt/maslow"
 mount --bind "$HOME_DIR" "$OS/home/me"
 
+# The person is themselves: the account with their number takes their
+# name, and the machine is called after their org. Files are owned by the
+# number, so the rename touches nothing of theirs, and nothing of theirs
+# runs yet, so it is safe.
+was=$(chroot "$OS" getent passwd 1000 | cut -d: -f1)
+if [ "$was" != "$PERSON" ]; then
+  chroot "$OS" usermod -l "$PERSON" "$was"
+  chroot "$OS" groupmod -n "$PERSON" "$was"
+fi
+hostname "$ORG" || true
+echo "$ORG" >"$OS/etc/hostname"
+
 # The deployment's own files, current from the image on every boot.
 for f in etc/resolv.conf etc/hosts etc/sudoers.d/me etc/profile.d/me.sh etc/pip.conf; do
   cp "/$f" "$OS/$f"
 done
+cp /opt/maslow/etc/tmux.conf "$OS/etc/tmux.conf"
 chmod 0440 "$OS/etc/sudoers.d/me"
-echo "127.0.1.1 computer" | tee -a /etc/hosts >>"$OS/etc/hosts"
+echo "127.0.1.1 $ORG" | tee -a /etc/hosts >>"$OS/etc/hosts"
 # Every interactive shell, login or not, gets the person's PATH.
 grep -q profile.d/me.sh "$OS/etc/bash.bashrc" ||
   echo '. /etc/profile.d/me.sh' >>"$OS/etc/bash.bashrc"
@@ -78,10 +95,16 @@ else
   rm -f "$OS/etc/profile.d/maslow-model-key.sh"
 fi
 # Ours on the path of every shell, a bare `ssh computer claude` included,
-# which reads no profile: `claude` here is the wrapper that reads the key
-# and the person's choice at every start.
+# which reads no profile: `claude` and `claude-code-acp` are the wrappers
+# that read the key and the person's choice at every start, `model` is
+# that choice, and `xdg-open` opens an address in the computer's own
+# browser. Every login shell reads the same choice, so an editor that
+# starts Claude Code its own way finds the same account.
 ln -sf /opt/maslow/bin/claude "$OS/usr/local/bin/claude"
+ln -sf /opt/maslow/bin/claude-code-acp "$OS/usr/local/bin/claude-code-acp"
 ln -sf /opt/maslow/bin/model "$OS/usr/local/bin/model"
+ln -sf /opt/maslow/bin/open "$OS/usr/local/bin/xdg-open"
+ln -sf /opt/maslow/bin/model-env "$OS/etc/profile.d/maslow-model.sh"
 
 # Claude Code inside reaches the brain with a session of the owner's,
 # given to the machine by our server; a machine our server cannot be
@@ -92,14 +115,10 @@ else
   rm -f "$OS/etc/profile.d/maslow-brain.sh"
 fi
 
-# VS Code starts plain: no welcome page, no AI panel, dot files hidden, a
-# port that opens shows inside VS Code. Claude Code knows the browser and
-# the brain. Ours are seeded into the person's files and kept current
-# there, except where the person changed one. Ten seconds each at most,
-# so nothing in the home can hold the boot.
-for seed in settings mcp; do
-  timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" $seed || echo "$seed: could not be seeded; left alone"
-done
+# Claude Code knows the browser and the brain: ours are seeded into the
+# person's files and kept current there, except where the person changed
+# one. Ten seconds at most, so nothing in the home can hold the boot.
+timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" mcp || echo "mcp: could not be seeded; left alone"
 
 # The image carries no package lists; the person's Linux fetches its own
 # behind the boot, so the first install finds its package.
@@ -119,21 +138,22 @@ keep() {
   done
 }
 keep /usr/sbin/sshd -D -e -f /opt/maslow/etc/sshd_config &
-# The door, outside the person's Linux, is what the internet reaches; VS
-# Code inside answers only to it.
+# The door, outside the person's Linux, is what the internet reaches: it
+# joins the terminal and the view to what runs inside.
 keep node /opt/maslow/door.mjs &
 # The browser, ours, outside the person's Linux but run as the person, so
 # it updates with the image and reaches only their home; Claude Code
 # inside finds it on 8082. Its profile, logins included, is on the disk.
+# It is a real, headed Chrome on a display nobody looks at, Xvfb, the
+# size of the view: a headless one announces itself, and sites that turn
+# bots away turn it away too.
+keep Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
 mkdir -p "$DISK/browser"
 chown 1000:1000 "$DISK/browser"
 keep chroot --userspec=1000:1000 --groups=1000 / \
   /usr/bin/env -i HOME=/data/home BROWSER_PROFILE=/data/browser BROWSER_PATHS=/home/me=/data/home \
-  PLAYWRIGHT_BROWSERS_PATH=/opt/maslow/browsers \
+  PLAYWRIGHT_BROWSERS_PATH=/opt/maslow/browsers DISPLAY=:99 BROWSER_HEADED=1 \
   /usr/local/bin/node /opt/maslow/browser/bin/browser-mcp.mjs --http 8082 &
-keep chroot --userspec=1000:1000 --groups=1000 "$OS" \
-  /usr/bin/env -i HOME=/home/me USER=me LOGNAME=me SHELL=/bin/bash LANG=C.UTF-8 TERM=xterm-256color \
-  /bin/bash -lc 'cd && exec code-server --host 127.0.0.1 --port 8081 --auth none --app-name Maslow --disable-telemetry --disable-update-check --disable-workspace-trust --disable-getting-started-override /home/me' &
 
 # A stop is a hard stop: what is still in memory is written to the disk
 # first, so the last seconds of work survive a restart or a new image.

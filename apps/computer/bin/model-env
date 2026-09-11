@@ -1,0 +1,26 @@
+# The environment Claude Code runs under on this computer, from the key
+# Maslow gave the machine and the person's choice: OpenRouter's
+# Anthropic-shaped address, our key, GLM 5.3 Flash by default with the
+# Claude models one /model away. Nothing of ours when the person chose
+# their own account with `model mine` or the machine holds no key; then
+# what we set before is taken back, and nothing of theirs is touched.
+# Sourced, never run: by `claude`, by `claude-code-acp`, and by every
+# login shell, so any way of starting Claude Code finds the same account.
+[ -r /etc/profile.d/maslow-model-key.sh ] && . /etc/profile.d/maslow-model-key.sh
+if [ "$(cat "$HOME/.config/maslow/model" 2>/dev/null || echo ours)" != mine ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
+  export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+  export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_KEY"
+  export ANTHROPIC_API_KEY=""
+  export ANTHROPIC_MODEL="z-ai/glm-5.3-flash"
+  export ANTHROPIC_DEFAULT_FABLE_MODEL="anthropic/claude-fable-5.1"
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="anthropic/claude-opus-5"
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="anthropic/claude-sonnet-5"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="anthropic/claude-haiku-4.5"
+  export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash"
+  export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
+elif [ "${ANTHROPIC_BASE_URL:-}" = "https://openrouter.ai/api" ]; then
+  unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL \
+    ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
+    ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
+    CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK
+fi

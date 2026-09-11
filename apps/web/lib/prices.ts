@@ -18,3 +18,11 @@ export const PRICES = {
   // calls its free plan includes are ours the same way.
   actions: 0.0003,
 };
+
+// How much of a vendor one org may use in a calendar month before we stop
+// and are told: ours, never shown. Vectors are capped in tokens: fifty
+// million is a dollar at Voyage's price and ten times the largest brain
+// so far, so nothing short of a runaway reaches it.
+export const CEILINGS = {
+  vectors: 50_000_000,
+};

@@ -269,34 +269,62 @@ built in its order, one pull request at a time.
 
 It is per membership, claimed at sign-in in the person's region and made
 as the page asks after it, and it never sleeps; the
-page is blocked until it is ready. They are `me`, home is `/home/me`,
+page is blocked until it is ready. They are themselves on it, `wile@acme`:
+the account is named after their first name and the machine after their
+org at every boot, and files are owned by the number underneath, so a
+rename touches nothing. Home is `/home/me`,
 `sudo` needs no password, and `/opt/maslow` is ours and read-only. Reset
 throws their Linux away and keeps home; it is a button, never automatic.
 Sizes are a ladder of CPU and memory, shown without a price, and a
 restart of a few seconds; nothing changes a computer's size but the
 person; the disk grows
-before it fills and never shows a cap. The Computer page is plain first,
-ready, Open, the browser, the last backup, and then its numbers, size,
-SSH and reset in the open. A port is the person's until they share it
+before it fills and never shows a cap. Where it is is one of sixteen
+North American regions, guessed at sign-in from where the request came
+and said on the page by name beside the one honest number, the round
+trip the person's own browser measures to it; over forty milliseconds
+the page says so and names the region nearest them. A move is a button
+of the person's and nothing else's: the machine stops, its disk is
+snapshotted, the snapshot is restored in the new region, a machine there
+must answer its door, and only then do the old machine and disk go, the
+snapshot kept a day; a step that fails puts them back where they were,
+and the page is blocked for the minutes it takes. The Computer page is
+plain first, ready, Open, the browser, the last backup, and then its
+numbers, size, where, SSH and reset in the open. A port is the person's until they share it
 with a person, a group or everyone in the org, and it opens or is a 404;
 the agent asks for a port through the same share tool it asks for a
-record with, and never shares one itself. VS Code in the browser is the first
-door; the second is SSH, carried over a WebSocket through the same door
-with no ticket, opened by the public keys a person sets in settings, and
-reached from a Mac's own `ssh` through a Python script the app serves as
-its ProxyCommand. Model calls never route through
-us: each person holds an OpenRouter key we minted with a cap, OpenRouter
-holds the record, and the sweep copies it; Claude Code runs on it by
-default, on GLM 5.3 Flash, with the Claude models one `/model` away;
-`model mine` in the computer's terminal switches it to the person's own
-Anthropic account, and a
-deployment without our provisioning key runs everyone on their own, and
-says so. Laptops, previews and
+record with, and never shares one itself. The door is the one way in, and
+ready means the door answers. Two sockets go straight from the person's
+browser to it, each on a ticket from our sign-in and never through our
+server: Talk, a terminal joined to a `tmux` session on the machine with
+Claude Code already running in it, so closing the tab kills nothing and
+the next tab finds it mid-output; and View, the machine's browser as real
+H.264 video decoded in the tab, its tabs, the person's hands and pointer
+on it, the cursor the page wants under that pointer, and what
+changed in a folder of their home, on one socket. Nothing durable lives in
+a tab: the tab is a view onto state on the machine, and the machine's
+browser never idles away. An address a program on the machine opens goes
+to that browser, never the laptop. SSH is a third road in, carried over a
+WebSocket through the same door with no ticket, opened by the public key
+a person sets in settings, set up on a Mac by the one command the
+Computer page shows, which installs the Python script the app serves as
+ssh's ProxyCommand and writes a `Host` named after the computer, and
+landing in the same tmux session the Terminal page shows, as a grouped
+session of its own; a command given to `ssh` runs plain. Model calls never
+route through us: each person holds an OpenRouter key we minted with a
+cap, OpenRouter holds the record, and the sweep copies it; Claude Code
+runs on it by default, on GLM 5.3 Flash, with the Claude models one
+`/model` away; `model mine` in the computer's terminal switches it to
+the person's own Anthropic account, which they sign in to from that
+terminal, and `model ours` switches it back, so a person whose own plan
+runs dry keeps working on ours; a deployment without our provisioning
+key runs everyone on their own, and says so. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
 ever calls home. Claude Code is in the image and is `claude` on the
-person's path. It knows two MCP servers out of the box, seeded into its
-settings like VS Code's defaults: the browser tool, `packages/browser`,
+person's path, and an editor drives the same Claude Code over the Agent
+Client Protocol through `claude-code-acp`, on the same account. It knows
+two MCP servers out of the box, seeded into its
+settings: the browser tool, `packages/browser`,
 running on the machine as its own server outside the person's Linux but
 as the person, with its profile on the disk and a page of its own,
 `/browser`, where the person watches it live and takes it over with their
@@ -310,22 +338,30 @@ no hand that runs a command or reads or writes a file goes into it.
 ## Interface
 
 The canvas is the screen and the chrome floats over it: dark, warm, quiet,
-one look with no light one. Top left, the org, the four places in the
-house, Team, Brain, Computer and Settings, and how much waits on you;
-bottom right, you. Team is home. "Waiting on you" is what asks something
-of you and is still there: the agent's asks, and later the pages
-teammates' agents put in front of you; a shared record is knowledge, not a
-demand, and nothing tracks whether you opened it. The settled design is
-`docs/decisions/2026-09-09-the-canvas-is-the-screen.md`.
+one look with no light one. Home is a desk the size of the display that
+never scrolls, and every surface of Maslow is a window on it, placed
+anywhere, at any size the person drags it to, overlapping if they like,
+coming to the front when touched; nothing lays windows out for them and
+nothing resizes one because another changed. Windows open from a dock
+along the bottom with one click, at the block's own size, as many times
+as the person likes; the dock's pin keeps it in view or lets it hide so
+the desk takes the whole page. Any window fills the screen with
+one press and comes back. Desks are pages swiped between. A phone shows
+one window at a time. Windows are plain: square, flat, a hairline
+border, a title bar with its buttons, and nothing animates. Bottom
+right, you, and how much waits on you. "Waiting on you" is what asks something of you and is
+still there: the agent's asks, and later the pages teammates' agents put
+in front of you; a shared record is knowledge, not a demand, and nothing
+tracks whether you opened it. The settled designs are
+`docs/decisions/2026-09-09-the-canvas-is-the-screen.md` and
+`docs/decisions/2026-09-11-the-screen-is-a-desk.md`.
 
 Every component is shadcn, and every shadcn component is installed under
 `apps/web/components/ui`. Nothing is hand-rolled beside them: no bespoke
 button, input, dialog or table, and no other component library. Styling is
-Tailwind on shadcn's theme tokens. The typefaces are Instrument Sans and
-Instrument Serif, shipped from npm inside the bundle; nothing is fetched
-from anywhere at build or at run. VS Code in the browser is not a
-component: it is `code-server`, whole, running on the person's machine and
-shown in a frame.
+Tailwind on shadcn's theme tokens. The typeface is Inter, and only Inter,
+shipped from npm inside the bundle; nothing is fetched from anywhere at
+build or at run.
 
 A click shows the next page at once. Every link is `next/link`, so a click
 swaps only what changed and the page it points at is fetched before the

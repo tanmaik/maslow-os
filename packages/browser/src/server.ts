@@ -1,8 +1,9 @@
-import { createServer } from "node:http";
+import { createServer, type ServerResponse } from "node:http";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import type { CDPSession, Page } from "playwright";
 import { z } from "zod";
 
 import {
@@ -46,12 +47,38 @@ const coordinate = z
 // What a person watching can do to the browser by hand.
 type Act =
   | { kind: "navigate"; url: string }
+  | { kind: "back" | "forward" | "reload" }
   | { kind: "click"; x: number; y: number }
   | { kind: "type"; text: string }
   | { kind: "key"; key: string }
   | { kind: "scroll"; x: number; y: number; dy: number }
   | { kind: "select"; x: number; y: number; x2: number; y2: number }
   | { kind: "copy" };
+
+// One thing on the pictures stream a watcher reads: its length in four
+// bytes, then a byte for what it is, a picture or the cursor's name, then
+// the thing itself.
+const PICTURE = 0;
+const CURSOR = 1;
+function record(res: ServerResponse, kind: number, body: Buffer): void {
+  const head = Buffer.alloc(5);
+  head.writeUInt32BE(body.length + 1);
+  head[4] = kind;
+  res.write(Buffer.concat([head, body]));
+}
+
+// A CDP session on a page for the person's own hand, kept for the page's
+// life, so a pointer move costs one message and no waiting.
+const hands = new WeakMap<Page, Promise<CDPSession>>();
+function handOn(page: Page): Promise<CDPSession> {
+  let session = hands.get(page);
+  if (!session) {
+    session = page.context().newCDPSession(page);
+    hands.set(page, session);
+    page.once("close", () => hands.delete(page));
+  }
+  return session;
+}
 
 // A path as the caller names it, on the machine's disk: on a computer the
 // caller is inside the person's Linux, where home is /home/me, and the
@@ -624,8 +651,9 @@ function findRefs(query: string, lines: string[]): string[] {
 
 // Serves the browser: over stdio until the client hangs up, or on the
 // machine itself at http://127.0.0.1:<port>/mcp, every request answered
-// on its own, where the browser closes after ten idle minutes and opens
-// again at the next call, with its profile kept.
+// on its own, where the browser stays open for the life of the machine
+// once anything opened it, so a page mid-work outlives whoever was
+// watching, with its profile kept.
 export async function serve(http?: number): Promise<void> {
   const browser = new Browser();
   const gif = new Gif();
@@ -637,9 +665,146 @@ export async function serve(http?: number): Promise<void> {
     process.stdin.on("close", bye);
     return;
   }
-  browser.idle(10 * 60_000);
+  // Whoever is watching the pictures stream, told the cursor's name too.
+  const watchers = new Set<ServerResponse>();
   createServer(async (req, res) => {
     const path = new URL(req.url ?? "/", "http://browser").pathname;
+    // The tabs as a watcher sees them, and which is current; none while
+    // the browser is closed.
+    if (path === "/tabs" && req.method === "GET") {
+      res
+        .writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify(await browser.openTabs()));
+      return;
+    }
+    // A tab the person picked, opened or closed, in the words the view
+    // socket carries: {"tab":n}, {"newTab":true} or {"closeTab":n}.
+    if (path === "/tabs" && req.method === "POST") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      try {
+        const said = JSON.parse(body) as Record<string, unknown>;
+        if (typeof said.tab === "number") browser.show(said.tab);
+        else if (said.newTab === true) await browser.create();
+        else if (typeof said.closeTab === "number")
+          await browser.close(said.closeTab);
+        else throw new Error("That is not a tab to show, open or close.");
+        res.writeHead(204).end();
+      } catch (err) {
+        res
+          .writeHead(400, { "content-type": "text/plain" })
+          .end((err as Error).message.split("\n")[0]);
+      }
+      return;
+    }
+    // The current tab as pictures, one whenever it changes, for a person
+    // watching, with the name of the cursor the page wants under their
+    // pointer when that changes: each behind its length and its kind,
+    // until the watcher leaves, the tab closes, or another becomes
+    // current. Nothing while the browser is closed.
+    if (path === "/screencast") {
+      const page = browser.current();
+      if (!page) {
+        res.writeHead(204).end();
+        return;
+      }
+      res.writeHead(200, { "content-type": "application/octet-stream" });
+      watchers.add(res);
+      const cdp = await page.context().newCDPSession(page);
+      const still = setInterval(() => {
+        if (browser.current() !== page) res.end();
+      }, 100);
+      const done = () => {
+        clearInterval(still);
+        watchers.delete(res);
+        cdp.detach().catch(() => {});
+        res.end();
+      };
+      cdp.on("Page.screencastFrame", (f) => {
+        record(res, PICTURE, Buffer.from(f.data, "base64"));
+        cdp
+          .send("Page.screencastFrameAck", { sessionId: f.sessionId })
+          .catch(() => {});
+      });
+      page.once("close", done);
+      res.on("close", done);
+      await cdp
+        .send("Page.startScreencast", {
+          format: "jpeg",
+          quality: 80,
+          maxWidth: 1280,
+          maxHeight: 800,
+          everyNthFrame: 1,
+        })
+        .catch(done);
+      // The screencast speaks only when the page changes, so a still page
+      // is drawn once for the watcher, who otherwise waits on nothing.
+      const now = await page
+        .screenshot({ type: "jpeg", quality: 80 })
+        .catch(() => null);
+      if (now && !res.writableEnded) record(res, PICTURE, now);
+      return;
+    }
+    // The person's pointer moving over the current tab, many times a
+    // second, as lines of {"x":n,"y":n} on one request that stays open:
+    // each is a mouse move sent straight to the page, so it hovers as a
+    // page does under a hand; and a tenth of a second after moves at the
+    // most, the cursor the page wants at that point is told to whoever
+    // watches, when it changed.
+    if (path === "/moves" && req.method === "POST") {
+      let rest = "";
+      let at: { x: number; y: number } | null = null;
+      let said: string | null = null;
+      let due: NodeJS.Timeout | null = null;
+      const look = async () => {
+        due = null;
+        const page = browser.current();
+        if (!page || !at) return;
+        const cursor = await page
+          .evaluate(
+            ([x, y]) =>
+              getComputedStyle(
+                document.elementFromPoint(x!, y!) ?? document.body,
+              ).cursor,
+            [at.x, at.y],
+          )
+          .catch(() => null);
+        if (!cursor || cursor === said) return;
+        said = cursor;
+        for (const w of watchers) record(w, CURSOR, Buffer.from(cursor));
+      };
+      req.on("data", (chunk) => {
+        rest += chunk;
+        const lines = rest.split("\n");
+        rest = lines.pop()!;
+        for (const line of lines) {
+          let move: { x?: unknown; y?: unknown };
+          try {
+            move = JSON.parse(line) as { x?: unknown; y?: unknown };
+          } catch {
+            continue;
+          }
+          if (typeof move.x !== "number" || typeof move.y !== "number")
+            continue;
+          at = { x: move.x, y: move.y };
+          const page = browser.current();
+          if (!page) continue;
+          handOn(page)
+            .then((hand) =>
+              hand.send("Input.dispatchMouseEvent", {
+                type: "mouseMoved",
+                x: move.x as number,
+                y: move.y as number,
+              }),
+            )
+            .catch(() => {});
+          due ??= setTimeout(look, 100);
+        }
+      });
+      req.on("end", () => res.writeHead(204).end());
+      req.on("error", () => res.destroy());
+      return;
+    }
     // What the newest tab looks like now, for a person watching over the
     // agent's shoulder; nothing while the browser is closed.
     if (path === "/screenshot") {
@@ -673,6 +838,12 @@ export async function serve(http?: number): Promise<void> {
               waitUntil: "domcontentloaded",
             },
           );
+        else if (act.kind === "back")
+          await page.goBack({ waitUntil: "domcontentloaded" });
+        else if (act.kind === "forward")
+          await page.goForward({ waitUntil: "domcontentloaded" });
+        else if (act.kind === "reload")
+          await page.reload({ waitUntil: "domcontentloaded" });
         else if (act.kind === "click") await page.mouse.click(act.x, act.y);
         else if (act.kind === "type") await page.keyboard.type(act.text);
         else if (act.kind === "key")
@@ -717,4 +888,6 @@ export async function serve(http?: number): Promise<void> {
   }).listen(http, "127.0.0.1", () =>
     console.log(`the browser is open on ${http}`),
   );
+  // Opened at boot, so the first look and the first hand find it ready.
+  void browser.open();
 }

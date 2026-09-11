@@ -2,12 +2,13 @@
 # The road from a Mac's own ssh to a Maslow computer: this runs as ssh's
 # ProxyCommand, opens the computer's door over TLS, asks for the SSH
 # tunnel, and carries bytes both ways over the WebSocket the door gives.
-# Only what Python ships with; nothing to install.
+# Only what Python ships with; nothing to install. The Computer page's
+# one command puts it at ~/.local/bin/maslow-ssh and writes the Host:
 #
-#   Host computer
+#   Host <the computer's name>
 #     HostName <machine>.computers.maslow.tech
 #     User me
-#     ProxyCommand python3 ~/.ssh/maslow-ssh %h
+#     ProxyCommand ~/.local/bin/maslow-ssh %h
 import base64
 import os
 import select

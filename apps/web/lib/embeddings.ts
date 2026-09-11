@@ -9,6 +9,9 @@ import { deployment } from "./deployment";
 
 const DIMENSION = 512;
 
+// The model turned us away for asking too often, in its own words.
+export class RateLimited extends Error {}
+
 // Which vectors this deployment makes, or null when it makes none.
 export function model(): string | null {
   const e = deployment.embeddings;
@@ -78,6 +81,10 @@ export async function embed(
     }),
     signal: AbortSignal.timeout(30_000),
   });
+  if (res.status === 429)
+    throw new RateLimited(
+      `the vector model is rate limited: ${(await res.text()).slice(0, 300)}`,
+    );
   if (!res.ok) {
     throw new Error(
       `Voyage answered ${res.status}: ${(await res.text()).slice(0, 300)}`,

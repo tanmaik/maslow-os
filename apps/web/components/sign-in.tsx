@@ -1,5 +1,7 @@
+import { orgs } from "@maslow/db/seed";
 import type { ReactNode } from "react";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -99,6 +101,7 @@ export async function SignIn({
             </form>
           </>
         )}
+        <Seeded next={next} />
       </Door>
     );
   }
@@ -106,21 +109,55 @@ export async function SignIn({
   return (
     <Door>
       <p className="text-muted-foreground">
-        No identity provider is configured. Pick a person from the pill in the
-        corner.
+        No identity provider is configured. Sign in as one of the seeded people.
       </p>
       {said && <p className="text-destructive text-sm">{said}</p>}
+      <Seeded next={next} />
     </Door>
   );
 }
 
-// The sign-in as one card on the canvas.
+// The way in without an email, outside production: pick one of the seeded
+// people. Impossible in production, where the route behind it is not there
+// at all, and marked here so nobody mistakes it for the real door.
+function Seeded({ next }: { next?: string }) {
+  if (!deployment.seededSignIn) return null;
+  return (
+    <div className="space-y-3">
+      <Alert>
+        <AlertTitle>Not the real sign-in</AlertTitle>
+        <AlertDescription>
+          These people are made up, and this way in does not exist in
+          production.
+        </AlertDescription>
+      </Alert>
+      {orgs.map((org) => (
+        <div key={org.id} className="space-y-1">
+          <p className="text-muted-foreground text-sm">{org.name}</p>
+          <div className="flex flex-wrap gap-2">
+            {org.users.map((u) => (
+              <form key={u.id} action="/auth/dev" method="post">
+                <input type="hidden" name="user" value={u.id} />
+                {next && <input type="hidden" name="next" value={next} />}
+                <Button variant="outline" size="sm" type="submit">
+                  {u.firstName} {u.lastName}
+                </Button>
+              </form>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// The sign-in, as one card in the middle of the page.
 function Door({ children }: { children: ReactNode }) {
   return (
     <main className="mx-auto max-w-md pt-[12dvh]">
       <Card className="shadow-float ring-0">
         <CardContent className="space-y-4 px-6 py-2">
-          <h1 className="font-serif text-3xl leading-tight italic">Sign in</h1>
+          <h1 className="font-semibold">Sign in</h1>
           {children}
         </CardContent>
       </Card>

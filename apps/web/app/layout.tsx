@@ -1,6 +1,4 @@
-import "@fontsource-variable/instrument-sans";
-import "@fontsource/instrument-serif";
-import "@fontsource/instrument-serif/400-italic.css";
+import "@fontsource-variable/inter";
 import "./globals.css";
 
 import { Suspense, type ReactNode } from "react";
@@ -8,13 +6,19 @@ import { Suspense, type ReactNode } from "react";
 import { Analytics } from "@/components/analytics";
 import { Chrome } from "@/components/chrome";
 import { DevToolbar } from "@/components/dev-toolbar";
+import { beforePaint } from "@/components/look";
 import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
 
-export const metadata = { title: "Maslow" };
+// On a phone Maslow is an app of its own: added to the home screen it
+// opens without the browser's chrome, edge to edge.
+export const metadata = {
+  title: "Maslow",
+  appleWebApp: { capable: true, title: "Maslow", statusBarStyle: "default" },
+};
+export const viewport = { viewportFit: "cover" };
 
-// The canvas is the screen: the chrome floats over it, and every page sits
-// under the chrome.
+// Every page sits under the one bar that floats along the bottom.
 export default async function RootLayout({
   children,
 }: {
@@ -22,13 +26,28 @@ export default async function RootLayout({
 }) {
   const p = await principal();
   return (
-    <html lang="en">
-      <body className="min-h-dvh px-6 pb-24">
-        <Suspense fallback={p && <div className="h-22" />}>
+    <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* Two things settled before the first paint, so nothing flashes:
+            which look the person is in, and whether this page is framed as
+            a window in the room, in which case it wears none of the chrome
+            the room already has around it. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              beforePaint +
+              ";try{if(window.self!==window.top)document.documentElement.dataset.framed=''}catch(e){document.documentElement.dataset.framed=''}",
+          }}
+        />
+      </head>
+      <body className="min-h-dvh px-6 pt-6 pb-28">
+        <Suspense fallback={null}>
           <Chrome />
         </Suspense>
         {children}
-        <DevToolbar />
+        <div className="app-dev-toolbar">
+          <DevToolbar />
+        </div>
         <Analytics
           config={deployment.analytics}
           where={deployment.where}

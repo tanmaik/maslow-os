@@ -2,14 +2,32 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
-/* Every component's dark styling is its only styling here. */
-@custom-variant dark (&);
+/* Both looks. The dark one applies under .dark, set on the root before paint. */
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
+  /* One face and one size. Inter, from npm, in the bundle; hierarchy is
+     carried by weight alone, so every step of the scale is the same step. */
   --font-sans:
-    "Instrument Sans Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
+    "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-serif: var(--font-sans);
   --font-heading: var(--font-sans);
+  --text-xs: 14px;
+  --text-xs--line-height: 20px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
+  --text-lg: 14px;
+  --text-lg--line-height: 20px;
+  --text-xl: 14px;
+  --text-xl--line-height: 20px;
+  --text-2xl: 14px;
+  --text-2xl--line-height: 20px;
+  --text-3xl: 14px;
+  --text-3xl--line-height: 20px;
+  --text-4xl: 14px;
+  --text-4xl--line-height: 20px;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -50,6 +68,15 @@
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
   --shadow-float: var(--float);
+  /* No shadows anywhere: each is a shadow of nothing rather than none, so a
+     ring, which is a box-shadow of its own, still draws beside it. */
+  --shadow-2xs: 0 0 #0000;
+  --shadow-xs: 0 0 #0000;
+  --shadow-sm: 0 0 #0000;
+  --shadow-md: 0 0 #0000;
+  --shadow-lg: 0 0 #0000;
+  --shadow-xl: 0 0 #0000;
+  --shadow-2xl: 0 0 #0000;
 }
 
 /* The label of a tool the agent is running: a highlight sweeps across it. */
@@ -81,43 +108,83 @@
   }
 }
 
-/* The one look: a dark, warm canvas, and everything on it floating. */
+/* Black and white. Light is the root; dark is a class set before paint. */
 :root {
-  color-scheme: dark;
-  --canvas: oklch(0.19 0.012 60);
-  --background: oklch(0.235 0.012 60);
-  --foreground: oklch(0.94 0.012 75);
-  --card: oklch(0.235 0.012 60);
-  --card-foreground: oklch(0.94 0.012 75);
-  --popover: oklch(0.235 0.012 60);
-  --popover-foreground: oklch(0.94 0.012 75);
-  --primary: oklch(0.74 0.14 30);
-  --primary-foreground: oklch(0.2 0.03 30);
-  --secondary: oklch(0.3 0.012 60);
-  --secondary-foreground: oklch(0.94 0.012 75);
-  --muted: oklch(0.3 0.012 60);
-  --muted-foreground: oklch(0.62 0.015 65);
-  --accent: oklch(0.275 0.012 60);
-  --accent-foreground: oklch(0.94 0.012 75);
-  --destructive: oklch(0.74 0.14 30);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 8%);
-  --ring: oklch(0.74 0.14 30 / 60%);
-  --chart-1: oklch(0.85 0.02 70);
-  --chart-2: oklch(0.62 0.015 65);
-  --chart-3: oklch(0.52 0.015 65);
-  --chart-4: oklch(0.42 0.015 62);
-  --chart-5: oklch(0.32 0.02 55);
+  color-scheme: light;
+  --canvas: oklch(1 0 0); /* the page and a card are one surface */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.14 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.14 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.14 0 0);
+  --primary: oklch(0.14 0 0);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.94 0 0);
+  --secondary-foreground: oklch(0.14 0 0);
+  --muted: oklch(0.94 0 0);
+  --muted-foreground: oklch(0.52 0 0);
+  --accent: oklch(0.955 0 0);
+  --accent-foreground: oklch(0.14 0 0);
+  --destructive: oklch(0.45 0 0);
+  --border: oklch(0 0 0 / 11%);
+  --input: oklch(0 0 0 / 11%);
+  --ring: oklch(0.14 0 0 / 35%);
+  --chart-1: oklch(0.2 0 0);
+  --chart-2: oklch(0.38 0 0);
+  --chart-3: oklch(0.55 0 0);
+  --chart-4: oklch(0.7 0 0);
+  --chart-5: oklch(0.84 0 0);
   --radius: 0.875rem;
-  --float: 0 0 0 1px oklch(1 0 0 / 8%), 0 8px 24px rgb(0 0 0 / 30%);
-  --sidebar: oklch(0.235 0.012 60);
-  --sidebar-foreground: oklch(0.94 0.012 75);
-  --sidebar-primary: oklch(0.74 0.14 30);
-  --sidebar-primary-foreground: oklch(0.2 0.03 30);
-  --sidebar-accent: oklch(0.275 0.012 60);
-  --sidebar-accent-foreground: oklch(0.94 0.012 75);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.74 0.14 30 / 60%);
+  --float: none;
+  --dot: transparent;
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.14 0 0);
+  --sidebar-primary: oklch(0.14 0 0);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.955 0 0);
+  --sidebar-accent-foreground: oklch(0.14 0 0);
+  --sidebar-border: oklch(0 0 0 / 11%);
+  --sidebar-ring: oklch(0.14 0 0 / 35%);
+}
+
+.dark {
+  color-scheme: dark;
+  --canvas: oklch(0.16 0 0);
+  --background: oklch(0.19 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.19 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.19 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.97 0 0);
+  --primary-foreground: oklch(0.16 0 0);
+  --secondary: oklch(0.27 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.27 0 0);
+  --muted-foreground: oklch(0.64 0 0);
+  --accent: oklch(0.25 0 0);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.75 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.97 0 0 / 35%);
+  --chart-1: oklch(0.9 0 0);
+  --chart-2: oklch(0.74 0 0);
+  --chart-3: oklch(0.58 0 0);
+  --chart-4: oklch(0.44 0 0);
+  --chart-5: oklch(0.32 0 0);
+  --radius: 0.875rem;
+  --float: none;
+  --dot: transparent;
+  --sidebar: oklch(0.19 0 0);
+  --sidebar-foreground: oklch(0.97 0 0);
+  --sidebar-primary: oklch(0.97 0 0);
+  --sidebar-primary-foreground: oklch(0.16 0 0);
+  --sidebar-accent: oklch(0.25 0 0);
+  --sidebar-accent-foreground: oklch(0.97 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.97 0 0 / 35%);
 }
 
 @layer base {
@@ -126,16 +193,69 @@
   }
   body {
     @apply bg-canvas text-foreground;
-    background-image: radial-gradient(
-      oklch(0.255 0.012 60) 1px,
-      transparent 1px
-    );
-    background-size: 24px 24px;
   }
   html {
     @apply font-sans;
   }
+  /* The one type spec: 14 on 20, tracked in very slightly. On body and not
+     the root, where a smaller size would resize every rem in the product. */
+  body {
+    font-size: 14px;
+    line-height: 20px;
+    letter-spacing: -0.0064em;
+  }
+  /* Nothing sets its own size; the few that ask for one in the markup are
+     answered by the scale above. Weight and colour carry the hierarchy. */
+  :is(h1, h2, h3, h4, h5, h6) {
+    font-size: 14px;
+    line-height: 20px;
+  }
   [data-slot="button"] {
     @apply rounded-full;
   }
+}
+
+/* A page framed as a window in the room is only its own content, set in
+   from the window's edge by one even margin: the dock, the developer's
+   tools and the room's own spacing belong to the room around it; a title
+   that only repeats the window's is not shown; a card that is the whole
+   window, and the brain's rail of views, need no frame of their own; and
+   the brain's rail is not shown at all in a window that is one record or
+   the types, nor is the room it would take. */
+html[data-framed],
+html[data-framed] body {
+  height: 100%;
+  min-height: 0;
+}
+html[data-framed] body {
+  padding: 0 !important;
+}
+html[data-framed] main {
+  box-sizing: border-box;
+  padding: 0.75rem;
+}
+html[data-framed] .app-dock,
+html[data-framed] .app-dev-toolbar {
+  display: none !important;
+}
+html[data-framed] .page-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border-width: 0;
+}
+html[data-framed] main > [data-slot="card"],
+html[data-framed] .brain-nav {
+  box-shadow: none !important;
+}
+html[data-framed] .brain-nav[data-away] {
+  display: none;
+}
+html[data-framed] .brain-layout:has(.brain-nav[data-away]) {
+  display: block;
 }
