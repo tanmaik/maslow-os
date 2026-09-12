@@ -421,8 +421,9 @@ not come.
 ## Merging
 
 A pull request merges when nothing lingers behind it. The gate is mechanical
-where it can be, and Macroscope where it cannot. What a reviewer walks by
-hand is `REVIEW.md`.
+where it can be, and a reader where it cannot: Codex, run as `codex exec
+review` against the base branch, or a review agent of Claude's. What a
+reviewer walks by hand is `REVIEW.md`.
 
 - `check` is green: typecheck, format, unused code, the secrets check —
   the database URLs are named only where they are opened, and shipped code
@@ -430,8 +431,10 @@ hand is `REVIEW.md`.
   empty database and signs in as every seeded org.
 - The preview built and its database migrated. Both are required checks, so a
   change that fails `next build` or a migration never reaches main.
-- Macroscope read it. A finding is fixed or answered in its thread, and every
-  thread is resolved before merge.
+- A reader read it: Codex or a review agent, on the whole diff against main,
+  before the merge, and its findings are fixed or answered in the pull
+  request. Since 2026-09-11; Macroscope, which did this before, ran out of
+  credits and is off.
 - Every environment is answered: it works locally with no credentials, on the
   preview, and in production. A vendor it adds is in `docs/dependencies.md`
   in the same commit.
