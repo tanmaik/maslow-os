@@ -107,15 +107,26 @@ else
 fi
 # Ours on the path of every shell, a bare `ssh computer claude` included,
 # which reads no profile: `claude` and `claude-code-acp` are the wrappers
-# that read the key and the person's choice at every start, `model` is
+# that read the key and the person's choice at every start, `auth` is
 # that choice, and `xdg-open` opens an address in the computer's own
 # browser. Every login shell reads the same choice, so an editor that
-# starts Claude Code its own way finds the same account.
+# starts Claude Code its own way finds the same auth.
 ln -sf /opt/maslow/bin/claude "$OS/usr/local/bin/claude"
 ln -sf /opt/maslow/bin/claude-code-acp "$OS/usr/local/bin/claude-code-acp"
-ln -sf /opt/maslow/bin/model "$OS/usr/local/bin/model"
+ln -sf /opt/maslow/bin/auth "$OS/usr/local/bin/auth"
 ln -sf /opt/maslow/bin/open "$OS/usr/local/bin/xdg-open"
-ln -sf /opt/maslow/bin/model-env "$OS/etc/profile.d/maslow-model.sh"
+rm -f "$OS/usr/local/bin/model" "$OS/etc/profile.d/maslow-model.sh"
+ln -sf /opt/maslow/bin/auth-env "$OS/etc/profile.d/maslow-auth.sh"
+# A choice made under the old name, model mine or ours, is kept under the
+# new one, auth own or managed, once, and the old file goes. Done inside
+# the person's Linux as the person, since the files are theirs: a link
+# they left among them then reaches only what they already reach.
+chroot --userspec=1000:1000 "$OS" /bin/sh -c '
+  cd /home/me/.config/maslow 2>/dev/null || exit 0
+  [ -f model ] || exit 0
+  [ -e auth ] || { [ "$(cat model)" = mine ] && echo own || echo managed; } >auth
+  rm -f model
+' || true
 
 # Claude Code inside reaches the brain with a session of the owner's,
 # given to the machine by our server; a machine our server cannot be

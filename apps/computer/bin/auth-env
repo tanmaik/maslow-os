@@ -1,0 +1,42 @@
+# The environment Claude Code runs under on this computer, from the key
+# Maslow gave the machine and the person's choice of auth: managed, our
+# key through OpenRouter's Anthropic-shaped address, GLM 5.3 Flash by
+# default with the Claude models one /model away; or own, whatever the
+# person set up themselves, in which case nothing of ours is set and what
+# we set before is taken back, and nothing of theirs is touched. Own is
+# also what a machine with no key of ours gets. Sourced, never run: by
+# `claude`, by `claude-code-acp`, and by every login shell, so any way of
+# starting Claude Code finds the same auth. MASLOW_AUTH in the
+# environment before this is read is a request, ours alone: a session of
+# ours, a watchdog's or a timer's, is started with MASLOW_AUTH=managed,
+# which outranks the person's choice. This file answers in maslow_auth,
+# managed or own, and sets nothing named MASLOW_AUTH itself, so a login
+# shell never turns the person's later choice into a request; the
+# wrappers hand the answer to Claude Code as MASLOW_AUTH.
+[ -r /etc/profile.d/maslow-model-key.sh ] && . /etc/profile.d/maslow-model-key.sh
+maslow_auth=${MASLOW_AUTH:-$(cat "$HOME/.config/maslow/auth" 2>/dev/null || echo managed)}
+if [ "$maslow_auth" != own ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
+  maslow_auth=managed
+  export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+  export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_KEY"
+  export ANTHROPIC_API_KEY=""
+  export ANTHROPIC_MODEL="z-ai/glm-5.3-flash"
+  export ANTHROPIC_DEFAULT_FABLE_MODEL="anthropic/claude-fable-5.1"
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="anthropic/claude-opus-5"
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="anthropic/claude-sonnet-5"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="anthropic/claude-haiku-4.5"
+  export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash"
+  export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
+  # GLM 5.3 Flash takes 1,310,720 tokens; Claude Code does not know the
+  # model, so it is told, or it would compact at 200k.
+  export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1310720
+else
+  maslow_auth=own
+  if [ "${ANTHROPIC_BASE_URL:-}" = "https://openrouter.ai/api" ]; then
+    unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL \
+      ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
+      ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
+      CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK \
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS
+  fi
+fi

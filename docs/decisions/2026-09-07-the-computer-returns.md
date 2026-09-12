@@ -151,16 +151,23 @@ every start and reaches OpenRouter through the Anthropic-shaped address
 it offers with the models named by OpenRouter's own ids: GLM 5.3 Flash by
 default, at Tanmai's word on 2026-09-08 and again on 2026-09-11, with the
 Claude 5 models one `/model` away. Ours is the default and the fallback:
-`model mine` in the computer's terminal switches Claude Code to the
-person's own Anthropic account, which they sign in to from that terminal,
-and `model ours` switches it back at its next start, so a person whose
-own plan runs dry keeps working on ours. A session of ours rather than
-the person's, a watchdog's or a timer's, is started with
-`MASLOW_MODEL=ours` in its environment, which the wrapper reads before
-the person's choice, so nothing of ours ever spends their own plan;
-their own terminal never sets it. Every session carries the answer in
-one word, `MASLOW_ACCOUNT`, ours or mine, so a program on the machine
-knows whose account it is on without asking. The choice is a file in home,
+that is managed auth, and `auth own` in the computer's terminal
+switches Claude Code to credentials the person provides, an Anthropic
+sign-in from that terminal or a key of their own, since Anthropic itself
+has more than one way in and none of them is ours to name; `auth managed`
+switches it back at its next start, so a person whose own runs dry keeps
+working on ours. Named on 2026-09-12, over `model`, which it never was,
+and `account`, which it is not either: the one distinction that is ours
+is who provides the credential. A session of ours rather than the
+person's, a watchdog's or a timer's, is started with `MASLOW_AUTH=managed`
+in its environment, which the wrapper reads before the person's choice,
+so nothing of ours ever spends what they provided; their own terminal
+never sets it, and on a machine with no key of ours such a session
+refuses to start. Every Claude Code session is handed the answer in the
+same word, `MASLOW_AUTH`, managed or own, so a program it runs knows
+without asking; a login shell is not, since there the word is a request
+and a shell's later `auth` must still be heard. A choice made under the
+old name is carried over once at boot. The choice is a file in home,
 and the machine reports it with its numbers so the Computer page says
 which account is in use. A machine made before the deployment minted keys
 gets one at the next sweep. A deployment without the provisioning key
@@ -240,8 +247,8 @@ where Claude Code runs, not another set of remote tools.
 
 Claude Code is in the image, under `/opt/maslow` from npm, so it updates
 with the image and is `claude` on the person's path. It runs on our key by
-default, on GLM 5.3 Flash, and `model mine` in its terminal switches it
-to the person's own Anthropic account, `model ours` back. Zed's adapter
+default, on GLM 5.3 Flash, and `auth own` in its terminal switches it to
+credentials the person provides, `auth managed` back. Zed's adapter
 for the Agent Client Protocol is beside it as `claude-code-acp`, so an
 editor on the person's Mac drives the same Claude Code over SSH on the
 same account: the choice and the key are read by a file every login

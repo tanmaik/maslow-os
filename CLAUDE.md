@@ -314,11 +314,12 @@ session of its own; a command given to `ssh` runs plain. Model calls never
 route through us: each person holds an OpenRouter key we minted with a
 cap, OpenRouter holds the record, and the sweep copies it; Claude Code
 runs on it by default, on GLM 5.3 Flash, with the Claude models one
-`/model` away; `model mine` in the computer's terminal switches it to
-the person's own Anthropic account, which they sign in to from that
-terminal, and `model ours` switches it back, so a person whose own plan
-runs dry keeps working on ours; a session of ours on their machine is
-started with `MASLOW_MODEL=ours` and never spends their plan; a deployment without our provisioning
+`/model` away; that is managed auth. `auth own` in the computer's
+terminal switches it to credentials the person provides, an Anthropic
+sign-in or a key of theirs, and `auth managed` switches it back, so a
+person whose own runs dry keeps working on ours; a session of ours on
+their machine is started with `MASLOW_AUTH=managed` and never spends
+what they provided; a deployment without our provisioning
 key runs everyone on their own, and says so. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine

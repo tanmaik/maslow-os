@@ -127,21 +127,21 @@ async function ports() {
   return out.sort((a, b) => a.port - b.port);
 }
 
-// Whose account Claude Code runs on here: ours while the machine holds
-// a key and the person has not chosen their own; theirs otherwise; none
-// when the machine holds no key at all.
-async function model() {
+// Whose credentials Claude Code runs on here: managed while the machine
+// holds a key of ours and the person has not chosen their own; own
+// otherwise; none when the machine holds no key at all.
+async function auth() {
   if (!process.env.MODEL_KEY) return "none";
-  const choice = await readFile(`${HOME}/.config/maslow/model`, "utf8").catch(
-    () => "ours",
+  const choice = await readFile(`${HOME}/.config/maslow/auth`, "utf8").catch(
+    () => "managed",
   );
-  return choice.trim() === "mine" ? "mine" : "ours";
+  return choice.trim() === "own" ? "own" : "managed";
 }
 
 export async function stats() {
   const disk = await statfs("/data").catch(() => null);
   return {
-    model: await model(),
+    auth: await auth(),
     cpu,
     memory: memory(),
     used,

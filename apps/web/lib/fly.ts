@@ -50,7 +50,7 @@ export type Stats = {
   // Room left on the whole disk; absent from a machine on an older image.
   free?: number | null;
   // Whose account Claude Code runs on there; absent from an older image.
-  model?: "ours" | "mine" | "none";
+  auth?: "managed" | "own" | "none";
   ports: { port: number; name: string }[];
 };
 

@@ -148,8 +148,8 @@ first and a laptop second.
 
 **Talk.** A terminal, opened by a ticket
 rather than an SSH key, because the person is already signed in. Which
-account it runs on is a control on the page, not a command called `model`
-that nobody will type. The choice is already a file in their home read at
+account it runs on is a control on the page, not only a command in the
+terminal. The choice is already a file in their home read at
 every start, their Anthropic sign-in already survives switching, and the
 numbers already say which account is in use.
 

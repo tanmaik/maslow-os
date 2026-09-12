@@ -16,7 +16,7 @@ import { SIZES, specs, type SizeKey } from "@/lib/sizes";
 import { Ports, type Sharing } from "./ports";
 
 type Stats = {
-  model?: "ours" | "mine" | "none";
+  auth?: "managed" | "own" | "none";
   cpu: number;
   memory: { used: number; total: number };
   used: number | null;
@@ -143,13 +143,13 @@ export function Numbers({
         )}
       </p>
       <p className="text-muted-foreground text-sm">
-        {now.model === "ours"
-          ? `Claude Code runs on a key of ours, capped at $${capUsd ?? "?"} a month. In its terminal, "model mine" switches it to your own Anthropic account.`
-          : now.model === "mine"
-            ? 'Claude Code runs on your own Anthropic account, by your choice. In its terminal, "model ours" switches it back to our key.'
-            : now.model === "none"
-              ? "Claude Code runs on your own Anthropic account: this computer holds no key of ours."
-              : "Claude Code's account will show once the computer is on the newest image."}
+        {now.auth === "managed"
+          ? `Claude Code runs on a key of ours, capped at $${capUsd ?? "?"} a month. In its terminal, "auth own" switches it to credentials you provide.`
+          : now.auth === "own"
+            ? 'Claude Code runs on credentials you provided, by your choice. In its terminal, "auth managed" switches it back to our key.'
+            : now.auth === "none"
+              ? "Claude Code runs on credentials you provide: this computer holds no key of ours."
+              : "Whose credentials Claude Code runs on will show once the computer is on the newest image."}
       </p>
       <Ports ports={now.ports} sharing={sharing} />
     </div>
