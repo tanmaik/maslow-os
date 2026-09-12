@@ -18,9 +18,13 @@ if [ "$(cat "$HOME/.config/maslow/model" 2>/dev/null || echo ours)" != mine ] &&
   export ANTHROPIC_DEFAULT_HAIKU_MODEL="anthropic/claude-haiku-4.5"
   export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash"
   export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
+  # GLM 5.3 Flash takes 1,310,720 tokens; Claude Code does not know the
+  # model, so it is told, or it would compact at 200k.
+  export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1310720
 elif [ "${ANTHROPIC_BASE_URL:-}" = "https://openrouter.ai/api" ]; then
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL \
     ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
     ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
-    CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK
+    CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK \
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS
 fi

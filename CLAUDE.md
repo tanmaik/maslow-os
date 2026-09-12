@@ -339,7 +339,8 @@ no hand that runs a command or reads or writes a file goes into it.
 
 The canvas is the screen and the chrome floats over it: dark, warm, quiet,
 one look with no light one. Home is a desk the size of the display that
-never scrolls, and every surface of Maslow is a window on it, placed
+never scrolls, and every surface of Maslow is a window on it, drawn in
+the window with its controls in the window's bar, placed
 anywhere, at any size the person drags it to, overlapping if they like,
 coming to the front when touched; nothing lays windows out for them and
 nothing resizes one because another changed. Windows open from a dock

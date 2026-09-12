@@ -9,6 +9,7 @@ import {
 } from "@heroicons/react/24/solid";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { InBar } from "@/app/room/panel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { liveSocket } from "@/lib/live";
@@ -365,55 +366,58 @@ export function LiveBrowser() {
           <PlusIcon />
         </Button>
       </div>
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (url.trim()) act({ kind: "navigate", url: url.trim() });
-        }}
-      >
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Back"
-          onClick={() => act({ kind: "back" })}
+      <InBar>
+        <form
+          className="flex min-w-0 flex-1 items-center gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (url.trim()) act({ kind: "navigate", url: url.trim() });
+          }}
         >
-          <ArrowLeftIcon />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Forward"
-          onClick={() => act({ kind: "forward" })}
-        >
-          <ArrowRightIcon />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          aria-label="Reload"
-          onClick={() => act({ kind: "reload" })}
-        >
-          <ArrowPathIcon />
-        </Button>
-        <Input
-          ref={address}
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="An address to go to"
-          autoComplete="off"
-          spellCheck={false}
-        />
-        <Button type="submit" variant="outline">
-          Go
-        </Button>
-        <Button type="button" variant="outline" onClick={copy}>
-          Copy
-        </Button>
-      </form>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Back"
+            onClick={() => act({ kind: "back" })}
+          >
+            <ArrowLeftIcon />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Forward"
+            onClick={() => act({ kind: "forward" })}
+          >
+            <ArrowRightIcon />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Reload"
+            onClick={() => act({ kind: "reload" })}
+          >
+            <ArrowPathIcon />
+          </Button>
+          <Input
+            ref={address}
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="An address to go to"
+            autoComplete="off"
+            spellCheck={false}
+            className="h-7 min-w-0 flex-1 text-sm"
+          />
+          <Button type="submit" variant="ghost" size="sm">
+            Go
+          </Button>
+          <Button type="button" variant="ghost" size="sm" onClick={copy}>
+            Copy
+          </Button>
+        </form>
+      </InBar>
       {/* The canvas stays, shown or not, so the first frame has somewhere
           to land before the door has said the browser is open. */}
       <canvas

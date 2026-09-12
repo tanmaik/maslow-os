@@ -65,6 +65,20 @@ border, a flat title bar with its buttons, flat strips for the toolbar
 and the dots, and nothing that animates. Gödel Terminal is the
 reference: click a thing, it opens at its size, move it, resize it.
 
+## A window is a panel, not a page
+
+Settled 2026-09-11, after a day of framing pages: a window that loads one
+of our pages in a frame carries two sets of chrome, the window's bar and
+the page's own header and margins, and never feels like one thing. So a
+surface is drawn in the window itself, and the few controls it needs sit
+in the window's bar after the name: Files puts its path and Upload
+there, the Browser its address with back, forward and reload, the
+Terminal nothing. A panel says so by rendering its controls inside
+`InBar`, which draws them in the bar when the panel is in a window and
+where they are when the same component is a page of its own. Terminal,
+Files and Browser are panels; every other surface still frames as the
+page it is until it is made one.
+
 ## What is stored
 
 A desk is stored as its windows, in the order they stack, each with what
@@ -78,7 +92,7 @@ address not our own, or two windows of one name.
 ## Built and not yet built
 
 Built: the desk, its windows, each with a name of its own so one block
-may be open twice, a click on the toolbar that opens a window, drag and
+may be open twice, Terminal, Files and Browser as panels, a click on the toolbar that opens a window, drag and
 drop from the toolbar, drag to move and a corner to resize, front on
 touch, fill screen, desks as pages, the desk's menu, the phone's one
 window at a time, the conversion of older desks. Not yet built: the

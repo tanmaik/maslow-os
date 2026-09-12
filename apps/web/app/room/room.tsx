@@ -16,12 +16,17 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ComponentType,
   type DragEvent,
   type PointerEvent,
   type ReactNode,
 } from "react";
 
+import { LiveBrowser } from "@/app/browser/live";
+import { Finder } from "@/app/computer/files/finder";
+import { Terminal } from "@/app/computer/terminal/terminal";
 import { BLOCKS, boxOf, markOf, type Block } from "@/app/room/blocks";
+import { BarSlot } from "@/app/room/panel";
 import { You } from "@/components/you";
 
 // Whether the dock is kept in view, remembered on this device.
@@ -62,6 +67,14 @@ type Point = { x: number; y: number };
 
 const EMPTY: Screen = { cards: [] };
 const isPort = (t: { kind: Card["kind"] }) => t.kind === "port";
+
+// The surfaces that are panels: drawn in the window itself, their
+// controls in its bar. Every other surface is framed as the page it is.
+const PANELS: Record<string, ComponentType> = {
+  "/computer/terminal": Terminal,
+  "/computer/files": Finder,
+  "/browser": LiveBrowser,
+};
 
 // One page of the rail: a desk on a wide display, or one of its windows on
 // a phone, where each window is a page of its own.
@@ -754,6 +767,9 @@ function Frame({
 }) {
   const Mark = markOf(card);
   const free = wide && !full;
+  const Panel = PANELS[card.href];
+  // Where the panel's own controls go, in the bar after the name.
+  const [slot, setSlot] = useState<HTMLDivElement | null>(null);
 
   // A drag by the bar moves the window; a drag by the corner resizes it.
   // The pointer is held until it lifts, so a fast hand never loses it.
@@ -798,9 +814,19 @@ function Frame({
         }`}
       >
         <Mark className="text-muted-foreground size-4 shrink-0" />
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+        <span
+          className={`truncate text-sm font-medium ${Panel ? "shrink-0" : "min-w-0 flex-1"}`}
+        >
           {card.title}
         </span>
+        {Panel && (
+          <div
+            ref={setSlot}
+            onPointerDown={(e) => e.stopPropagation()}
+            onDoubleClick={(e) => e.stopPropagation()}
+            className="flex min-w-0 flex-1 items-center gap-1 pl-2"
+          />
+        )}
         <Button
           variant="ghost"
           size="icon-sm"
@@ -826,17 +852,28 @@ function Frame({
           <XMarkIcon />
         </Button>
       </div>
-      <iframe
-        src={card.href}
-        title={card.title}
-        onFocus={onFront}
-        className="min-h-0 flex-1 bg-white"
-        sandbox={
-          isPort(card)
-            ? "allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
-            : undefined
-        }
-      />
+      {Panel ? (
+        <div
+          onPointerDownCapture={onFront}
+          className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <BarSlot value={slot}>
+            <Panel />
+          </BarSlot>
+        </div>
+      ) : (
+        <iframe
+          src={card.href}
+          title={card.title}
+          onFocus={onFront}
+          className="min-h-0 flex-1 bg-white"
+          sandbox={
+            isPort(card)
+              ? "allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
+              : undefined
+          }
+        />
+      )}
       {free && (
         <div
           aria-hidden

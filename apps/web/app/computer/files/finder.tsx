@@ -11,6 +11,7 @@ import {
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import { Editor } from "@/app/computer/files/editor";
+import { InBar } from "@/app/room/panel";
 
 import {
   Breadcrumb,
@@ -338,8 +339,13 @@ export function Finder() {
         take(e.dataTransfer.files);
       }}
     >
-      {/* On a narrow screen the bar keeps clear of you in the corner. */}
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3 max-sm:pr-14">
+      <InBar
+        as={(controls) => (
+          <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
+            {controls}
+          </div>
+        )}
+      >
         <Breadcrumb className="min-w-0 flex-1">
           <BreadcrumbList className="flex-nowrap overflow-hidden">
             <BreadcrumbItem>
@@ -386,14 +392,14 @@ export function Finder() {
           }}
         />
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           className="shrink-0"
           onClick={() => input.current?.click()}
         >
           <ArrowUpTrayIcon /> Upload
         </Button>
-      </div>
+      </InBar>
 
       {Object.keys(uploads).length > 0 && (
         <div className="space-y-2 border-b px-3 py-2">
