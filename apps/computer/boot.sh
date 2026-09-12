@@ -63,10 +63,21 @@ mount --bind "$HOME_DIR" "$OS/home/me"
 # name, and the machine is called after their org. Files are owned by the
 # number, so the rename touches nothing of theirs, and nothing of theirs
 # runs yet, so it is safe.
+# A name Debian already uses for an account of its own, bin or man, is
+# taken with a number after it rather than stopping the boot.
 was=$(chroot "$OS" getent passwd 1000 | cut -d: -f1)
-if [ "$was" != "$PERSON" ]; then
-  chroot "$OS" usermod -l "$PERSON" "$was"
-  chroot "$OS" groupmod -n "$PERSON" "$was"
+name=$PERSON
+n=1
+while [ "$(chroot "$OS" getent passwd "$name" | cut -d: -f3)" != "" ] &&
+  [ "$(chroot "$OS" getent passwd "$name" | cut -d: -f3)" != 1000 ] ||
+  [ "$(chroot "$OS" getent group "$name" | cut -d: -f3)" != "" ] &&
+  [ "$(chroot "$OS" getent group "$name" | cut -d: -f3)" != 1000 ]; do
+  n=$((n + 1))
+  name="$PERSON$n"
+done
+if [ "$was" != "$name" ]; then
+  chroot "$OS" usermod -l "$name" "$was"
+  chroot "$OS" groupmod -n "$name" "$was"
 fi
 hostname "$ORG" || true
 echo "$ORG" >"$OS/etc/hostname"

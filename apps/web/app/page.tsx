@@ -6,6 +6,7 @@ import { after } from "next/server";
 
 import { Room } from "@/app/room/room";
 import { SignIn, notice, type Notice } from "@/components/sign-in";
+import { deployment } from "@/lib/deployment";
 import { sweepIfDue } from "@/lib/meter";
 import { roomOf } from "@/lib/room";
 import { principal } from "@/lib/session";
@@ -39,6 +40,7 @@ export default async function Page({
         desktops={desktops}
         ports={ports}
         waiting={open}
+        computers={deployment.computers.kind !== "none"}
         you={
           me && {
             name: me.name,

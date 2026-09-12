@@ -110,12 +110,6 @@ const isVideo = (e: Entry) => e.kind === "file" && VIDEO.has(ending(e.name));
 const isPdf = (e: Entry) => e.kind === "file" && ending(e.name) === "pdf";
 const isDocument = (e: Entry) =>
   e.kind === "file" && DOCUMENT.has(ending(e.name));
-// A picture is made on the machine for these; a small SVG is shown as is.
-const pictured = (e: Entry) =>
-  (isImage(e) && ending(e.name) !== "svg") ||
-  isVideo(e) ||
-  isPdf(e) ||
-  isDocument(e);
 
 // Bytes in words a person reads at a glance.
 const size = (n: number) =>
@@ -223,17 +217,22 @@ export function Finder() {
       sock.current.send(JSON.stringify({ watch: dir || "." }));
   }, [dir]);
 
+  // Which file was picked last, so a slow read of an earlier one lands
+  // nowhere.
+  const picking = useRef(0);
   const open = async (e: Entry) => {
     if (e.kind === "dir") {
       setPath([...path, e.name]);
       return;
     }
+    const mine = ++picking.current;
     setPicked(e);
     setText(null);
     setDirty(false);
     if (isText(e)) {
       const res = await fetch(readHref(at(e.name)));
-      setText(res.ok ? await res.text() : "");
+      const got = res.ok ? await res.text() : "";
+      if (picking.current === mine) setText(got);
     }
   };
 
@@ -270,7 +269,10 @@ export function Finder() {
         ticket: string;
       };
       const head = { "x-maslow-ticket": ticket };
-      const where = `${door}/upload?path=${encodeURIComponent(key)}`;
+      // The file is named to the door by its length and last change, so
+      // a part left by an earlier upload of another file by this name is
+      // never carried on from.
+      const where = `${door}/upload?path=${encodeURIComponent(key)}&total=${file.size}&modified=${file.lastModified}`;
       const have = async () =>
         (
           (await (await fetch(where, { headers: head })).json()) as {
@@ -279,7 +281,9 @@ export function Finder() {
         ).have;
       let done = await have();
       let stumbles = 0;
-      while (done < file.size) {
+      // An empty file is one piece of nothing, sent so it exists.
+      let sent = false;
+      while (done < file.size || (file.size === 0 && !sent)) {
         try {
           const res = await fetch(
             `${where}&offset=${done}&total=${file.size}`,
@@ -293,8 +297,10 @@ export function Finder() {
             done = ((await res.json()) as { have: number }).have;
           } else if (res.status === 201) {
             done = file.size;
+            sent = true;
           } else if (res.ok) {
             done = ((await res.json()) as { have: number }).have;
+            sent = true;
           } else throw new Error(await res.text());
           stumbles = 0;
         } catch (err) {
@@ -319,10 +325,6 @@ export function Finder() {
     for (const f of Array.from(list)) void upload(f);
   };
 
-  const crumbs = path.map((name, i) => ({
-    name,
-    to: path.slice(0, i + 1),
-  }));
   const shown = entries?.filter((e) => dotfiles || !e.name.startsWith("."));
 
   return (
@@ -359,21 +361,22 @@ export function Finder() {
                 </BreadcrumbLink>
               )}
             </BreadcrumbItem>
-            {crumbs.map((c, i) => (
-              <Fragment key={c.to.join("/")}>
+            {path.map((name, i) => (
+              <Fragment key={i}>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>
-                  {i === crumbs.length - 1 ? (
-                    <BreadcrumbPage className="truncate">
-                      {c.name}
-                    </BreadcrumbPage>
+                  {i === path.length - 1 ? (
+                    <BreadcrumbPage className="truncate">{name}</BreadcrumbPage>
                   ) : (
                     <BreadcrumbLink
                       render={
-                        <button type="button" onClick={() => setPath(c.to)} />
+                        <button
+                          type="button"
+                          onClick={() => setPath(path.slice(0, i + 1))}
+                        />
                       }
                     >
-                      {c.name}
+                      {name}
                     </BreadcrumbLink>
                   )}
                 </BreadcrumbItem>
@@ -564,10 +567,11 @@ export function Finder() {
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     key={picked.name}
+                    // A picture is made on the machine; a small SVG is shown as is.
                     src={
-                      pictured(picked)
-                        ? previewHref(at(picked.name), picked.modified)
-                        : readHref(at(picked.name))
+                      ending(picked.name) === "svg"
+                        ? readHref(at(picked.name))
+                        : previewHref(at(picked.name), picked.modified)
                     }
                     alt={picked.name}
                     className="max-h-full max-w-full rounded-md object-contain"

@@ -582,6 +582,14 @@ function view(ws) {
     }
     hands.write(`${JSON.stringify({ x, y })}\n`);
   };
+  // Acts and tab changes happen one after another, in the order they
+  // came, so a copy asked for right after a selection copies that
+  // selection; a pointer move never waits.
+  let queue = Promise.resolve();
+  const inTurn = (work) => {
+    queue = queue.then(work, work);
+    return queue;
+  };
   ws.text = async (text) => {
     const said = parse(text);
     if (!said) return;
@@ -595,10 +603,13 @@ function view(ws) {
     } else if (said.act?.kind === "leave") {
       hands?.end();
       hands = null;
-    } else if ("act" in said) send({ id: said.id, ...(await act(said.act)) });
+    } else if ("act" in said)
+      await inTurn(async () => send({ id: said.id, ...(await act(said.act)) }));
     else if ("tab" in said || "newTab" in said || "closeTab" in said) {
-      await tabsTold(text);
-      await ask();
+      await inTurn(async () => {
+        await tabsTold(text);
+        await ask();
+      });
     } else if ("watch" in said) {
       watcher?.close();
       watcher = watch(said.watch, (name) => send({ changed: name }));
@@ -692,12 +703,16 @@ function stream(ws, send) {
   let on = true;
   let asking = null;
   let encoder = null;
+  let retry = null;
   // At once when the pictures ended because another tab is current; in a
-  // second when there was no tab, or no answer, to show.
+  // second when there was no tab, or no answer, to show. Not at all once
+  // the viewer has gone.
   const again = (wait) => {
-    if (on) setTimeout(go, wait);
+    clearTimeout(retry);
+    if (on) retry = setTimeout(go, wait);
   };
   const go = () => {
+    if (!on) return;
     asking = http.get(
       { host: "127.0.0.1", port: BROWSER, path: "/screencast" },
       (res) => {
@@ -710,16 +725,24 @@ function stream(ws, send) {
         encoder = ff;
         let buf = Buffer.alloc(0);
         let latest = null;
+        // One picture in the encoder at a time; the next waits in its
+        // place and goes the moment the write is done, so the last change
+        // always reaches the viewer.
+        let writing = false;
         const feed = (jpeg) => {
-          if (ff.stdin.writableLength === 0) ff.stdin.write(jpeg);
-          else latest = jpeg;
+          if (writing) {
+            latest = jpeg;
+            return;
+          }
+          writing = true;
+          ff.stdin.write(jpeg, () => {
+            writing = false;
+            if (!latest) return;
+            const next = latest;
+            latest = null;
+            feed(next);
+          });
         };
-        ff.stdin.on("drain", () => {
-          if (!latest) return;
-          const jpeg = latest;
-          latest = null;
-          feed(jpeg);
-        });
         // Each thing on the stream: its length, a byte for what it is, a
         // picture or the cursor's name, then the thing.
         res.on("data", (chunk) => {
@@ -747,6 +770,7 @@ function stream(ws, send) {
   return {
     stop() {
       on = false;
+      clearTimeout(retry);
       asking?.destroy();
       encoder?.kill("SIGKILL");
     },
@@ -901,7 +925,10 @@ function websocket(req, socket, head) {
       if (!fin) continue;
       const whole = pieces.length === 1 ? pieces[0] : Buffer.concat(pieces);
       pieces = [];
-      if (kind === 0x1) ws.text(whole.toString());
+      // A handler that throws, now or later, takes down its socket's
+      // message and nothing else.
+      if (kind === 0x1)
+        void Promise.try(() => ws.text(whole.toString())).catch(() => {});
       else if (kind === 0x2) ws.bytes(whole);
     }
   });

@@ -134,8 +134,4 @@ export const boxOf = (t: { kind: Kind; href: string }): Box =>
 // did not offer it, like a port or a record.
 export const markOf = (t: { kind: Kind; href: string }): Mark =>
   BLOCKS.find((b) => b.href === t.href)?.mark ??
-  (t.kind === "port"
-    ? WindowIcon
-    : t.kind === "record"
-      ? DocumentIcon
-      : WindowIcon);
+  (t.kind === "record" ? DocumentIcon : WindowIcon);

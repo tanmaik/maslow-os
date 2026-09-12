@@ -19,6 +19,18 @@ export function InBar({
   as?: (controls: ReactNode) => ReactNode;
 }) {
   const slot = useContext(Bar);
-  if (slot) return createPortal(children, slot);
+  if (slot)
+    return createPortal(
+      // The controls are the panel's, not a handle on the window: a press
+      // on them neither drags nor fills the screen.
+      <span
+        className="contents"
+        onPointerDown={(e) => e.stopPropagation()}
+        onDoubleClick={(e) => e.stopPropagation()}
+      >
+        {children}
+      </span>,
+      slot,
+    );
   return <>{as ? as(children) : children}</>;
 }

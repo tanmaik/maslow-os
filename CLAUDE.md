@@ -270,7 +270,8 @@ built in its order, one pull request at a time.
 It is per membership, claimed at sign-in in the person's region and made
 as the page asks after it, and it never sleeps; the
 page is blocked until it is ready. They are themselves on it, `wile@acme`:
-the account is named after their first name and the machine after their
+the account is named after their first name, with a number after it
+when Debian already has that name, and the machine after their
 org at every boot, and files are owned by the number underneath, so a
 rename touches nothing. Home is `/home/me`,
 `sudo` needs no password, and `/opt/maslow` is ours and read-only. Reset

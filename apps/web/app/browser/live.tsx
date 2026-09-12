@@ -230,26 +230,20 @@ export function LiveBrowser() {
     if (answer) waiting.current.set(id, answer);
     ws.send(JSON.stringify({ act: a, id }));
   };
-  const act = (a: Act) => send(a);
 
   // The same, waiting for what the browser answered: the selected words,
   // or why there are none to be had.
   const ask = (a: Act) => new Promise<Answer>((answer) => send(a, answer));
 
-  // A word to the door that is not a hand on the page: which tab to show,
-  // a new one, or one to close.
+  // A word to the door that nothing waits on: which tab to show, a new
+  // one, one to close, or where the pointer is, unnumbered so the page's
+  // hover states follow it at once.
   const tell = (
-    word: { tab: number } | { newTab: true } | { closeTab: number },
+    word:
+      { tab: number } | { newTab: true } | { closeTab: number } | { act: Act },
   ) => {
     const ws = sock.current;
     if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(word));
-  };
-
-  // The pointer's whereabouts, unnumbered and unanswered: nothing waits on
-  // them, and where they go the page's hover states follow.
-  const point = (a: Act) => {
-    const ws = sock.current;
-    if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ act: a }));
   };
   const moved = (to: { x: number; y: number }) => {
     pointer.current = to;
@@ -257,7 +251,7 @@ export function LiveBrowser() {
     framed.current = true;
     requestAnimationFrame(() => {
       framed.current = false;
-      if (pointer.current) point({ kind: "move", ...pointer.current });
+      if (pointer.current) tell({ act: { kind: "move", ...pointer.current } });
     });
   };
 
@@ -320,7 +314,7 @@ export function LiveBrowser() {
     if (!el) return;
     const on = (e: WheelEvent) => {
       e.preventDefault();
-      act({ kind: "scroll", ...at(el, e), dy: Math.round(e.deltaY) });
+      send({ kind: "scroll", ...at(el, e), dy: Math.round(e.deltaY) });
     };
     el.addEventListener("wheel", on, { passive: false });
     return () => el.removeEventListener("wheel", on);
@@ -371,7 +365,7 @@ export function LiveBrowser() {
           className="flex min-w-0 flex-1 items-center gap-1"
           onSubmit={(e) => {
             e.preventDefault();
-            if (url.trim()) act({ kind: "navigate", url: url.trim() });
+            if (url.trim()) send({ kind: "navigate", url: url.trim() });
           }}
         >
           <Button
@@ -379,7 +373,7 @@ export function LiveBrowser() {
             variant="ghost"
             size="icon-sm"
             aria-label="Back"
-            onClick={() => act({ kind: "back" })}
+            onClick={() => send({ kind: "back" })}
           >
             <ArrowLeftIcon />
           </Button>
@@ -388,7 +382,7 @@ export function LiveBrowser() {
             variant="ghost"
             size="icon-sm"
             aria-label="Forward"
-            onClick={() => act({ kind: "forward" })}
+            onClick={() => send({ kind: "forward" })}
           >
             <ArrowRightIcon />
           </Button>
@@ -397,7 +391,7 @@ export function LiveBrowser() {
             variant="ghost"
             size="icon-sm"
             aria-label="Reload"
-            onClick={() => act({ kind: "reload" })}
+            onClick={() => send({ kind: "reload" })}
           >
             <ArrowPathIcon />
           </Button>
@@ -410,10 +404,21 @@ export function LiveBrowser() {
             spellCheck={false}
             className="h-7 min-w-0 flex-1 text-sm"
           />
-          <Button type="submit" variant="ghost" size="sm">
+          <Button
+            type="submit"
+            variant="ghost"
+            size="sm"
+            className="@max-xl:hidden"
+          >
             Go
           </Button>
-          <Button type="button" variant="ghost" size="sm" onClick={copy}>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="@max-xl:hidden"
+            onClick={copy}
+          >
             Copy
           </Button>
         </form>
@@ -453,11 +458,11 @@ export function LiveBrowser() {
           const moved =
             Math.abs(end.x - start.x) > 4 || Math.abs(end.y - start.y) > 4;
           if (moved) {
-            act({ kind: "select", ...start, x2: end.x, y2: end.y });
+            send({ kind: "select", ...start, x2: end.x, y2: end.y });
             held.current = ask({ kind: "copy" });
           } else {
             held.current = null;
-            act({ kind: "click", ...end });
+            send({ kind: "click", ...end });
           }
         }}
         // A drag let go of somewhere else is no drag at all, and the page
@@ -465,7 +470,7 @@ export function LiveBrowser() {
         onMouseLeave={() => {
           from.current = null;
           pointer.current = null;
-          point({ kind: "leave" });
+          tell({ act: { kind: "leave" } });
           setCursor("default");
         }}
         // A chord with Cmd or Ctrl stays the person's own browser's:
@@ -479,13 +484,13 @@ export function LiveBrowser() {
           }
           if (e.metaKey || e.ctrlKey) return;
           e.preventDefault();
-          if (e.key.length === 1) act({ kind: "type", text: e.key });
-          else act({ kind: "key", key: e.key });
+          if (e.key.length === 1) send({ kind: "type", text: e.key });
+          else send({ kind: "key", key: e.key });
         }}
         onPaste={(e) => {
           e.preventDefault();
           const text = e.clipboardData.getData("text");
-          if (text) act({ kind: "type", text });
+          if (text) send({ kind: "type", text });
         }}
       />
       {(state !== "open" || !decodes) && (

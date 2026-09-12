@@ -58,6 +58,11 @@ export async function GET(request: Request) {
             .map((h) => [h, answer.headers.get(h)!]),
         ),
         "x-content-type-options": "nosniff",
+        // A picture that can carry a script is shown as no one: sandboxed,
+        // so opened on its own it cannot reach anything of the person's.
+        ...(TYPES[ending] === "image/svg+xml"
+          ? { "content-security-policy": "sandbox" }
+          : {}),
       },
     });
   } catch (err) {

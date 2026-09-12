@@ -144,6 +144,10 @@ async function read(req, res, at) {
     "accept-ranges": "bytes",
     "content-disposition": `inline; filename*=UTF-8''${encodeURIComponent(path.basename(at))}`,
   };
+  if (s.size === 0) {
+    res.writeHead(200, { ...head, "content-length": 0 });
+    return res.end();
+  }
   const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range ?? "");
   let from = 0;
   let to = s.size - 1;
@@ -308,13 +312,30 @@ async function folderFor(at) {
   await fsp.chown(dir, OWNER, OWNER).catch(() => {});
 }
 
+// A file made fresh beside its final place, exclusively and never through
+// a link left there, since the door writes as root and a link could point
+// it anywhere.
+async function fresh(tmp, mode) {
+  await fsp.rm(tmp, { force: true });
+  const flags =
+    fs.constants.O_WRONLY |
+    fs.constants.O_CREAT |
+    fs.constants.O_EXCL |
+    fs.constants.O_NOFOLLOW;
+  return fsp.open(tmp, flags, mode);
+}
+
 // Writes a whole file: to a file beside it first, then into place, so a
-// write cut short leaves the old file whole.
+// write cut short leaves the old file whole. A file that was there keeps
+// its mode, so an editable script stays executable.
 async function write(req, res, at) {
   try {
     await folderFor(at);
+    const was = await fsp.lstat(at).catch(() => null);
+    const mode = was?.isFile() ? was.mode & 0o7777 : 0o644;
     const tmp = `${at}.writing`;
-    await pipeline(req, fs.createWriteStream(tmp, { mode: 0o644 }));
+    const fd = await fresh(tmp, mode);
+    await pipeline(req, fd.createWriteStream());
     await fsp.chown(tmp, OWNER, OWNER).catch(() => {});
     await fsp.rename(tmp, at);
     json(res, 200, { size: (await fsp.stat(at)).size });
@@ -323,11 +344,42 @@ async function write(req, res, at) {
   }
 }
 
-// How far an upload has got, so a client that lost its connection carries
-// on from there rather than from nothing.
-async function have(res, at) {
-  const s = await fsp.stat(`${at}.uploading`).catch(() => null);
-  json(res, 200, { have: s?.size ?? 0 });
+// An upload in flight lives in a folder of ours beside the home on the
+// same disk, where nothing of the person's can reach or replace it: the
+// part so far, named for where it will go, and a note beside it saying
+// which file it is a part of, the length and last change the browser
+// reported.
+const UPLOADS = path.join(path.dirname(HOME), "uploads");
+const partOf = (at) =>
+  path.join(UPLOADS, createHash("sha1").update(at).digest("hex"));
+const noteOf = (at) => `${partOf(at)}.json`;
+const whichOf = (url) =>
+  JSON.stringify({
+    total: Number(url.searchParams.get("total")),
+    modified: url.searchParams.get("modified") ?? "",
+  });
+
+// A part that is a plain file, of the file the browser is uploading now;
+// anything else is thrown away so nothing is stitched onto it.
+async function partFor(at, which) {
+  await fsp.mkdir(UPLOADS, { recursive: true, mode: 0o700 });
+  const part = partOf(at);
+  const s = await fsp.lstat(part).catch(() => null);
+  const note = await fsp.readFile(noteOf(at), "utf8").catch(() => null);
+  if (s?.isFile() && note === which) return s.size;
+  await fsp.rm(part, { force: true });
+  await fsp.rm(noteOf(at), { force: true });
+  return 0;
+}
+
+// How far an upload of this file has got, so a client that lost its
+// connection carries on from there rather than from nothing.
+async function have(res, at, url) {
+  try {
+    json(res, 200, { have: await partFor(at, whichOf(url)) });
+  } catch (err) {
+    say(res, 500, `Could not look: ${err.code ?? err.message}`);
+  }
 }
 
 // One piece of an upload, written at its offset into the file being
@@ -344,21 +396,27 @@ async function upload(req, res, at, url) {
     total < 0
   )
     return say(res, 400, "An upload says its offset and its total length.");
-  const part = `${at}.uploading`;
+  const part = partOf(at);
   try {
     await folderFor(at);
-    const had = (await fsp.stat(part).catch(() => null))?.size ?? 0;
+    const which = whichOf(url);
+    const had = await partFor(at, which);
     if (offset > had) return json(res, 409, { have: had });
-    if (had === 0) await fsp.writeFile(part, "", { mode: 0o644 });
-    await pipeline(
-      req,
-      fs.createWriteStream(part, { flags: "r+", start: offset }),
+    if (had === 0) {
+      await (await fresh(part, 0o644)).close();
+      await fsp.writeFile(noteOf(at), which, { mode: 0o600 });
+    }
+    const fd = await fsp.open(
+      part,
+      fs.constants.O_WRONLY | fs.constants.O_NOFOLLOW,
     );
+    await pipeline(req, fd.createWriteStream({ start: offset }));
     const size = (await fsp.stat(part)).size;
     if (size < total) return json(res, 202, { have: size });
     if (size > total) await fsp.truncate(part, total);
     await fsp.chown(part, OWNER, OWNER).catch(() => {});
     await fsp.rename(part, at);
+    await fsp.rm(noteOf(at), { force: true });
     json(res, 201, { size: total });
   } catch (err) {
     say(res, 500, `Could not take that: ${err.code ?? err.message}`);
@@ -375,7 +433,7 @@ export async function serve(req, res, url) {
   if (what === "/read" && req.method === "GET") return read(req, res, at);
   if (what === "/preview" && req.method === "GET") return preview(res, at);
   if (what === "/write" && req.method === "PUT") return write(req, res, at);
-  if (what === "/upload" && req.method === "GET") return have(res, at);
+  if (what === "/upload" && req.method === "GET") return have(res, at, url);
   if (what === "/upload" && req.method === "PUT")
     return upload(req, res, at, url);
   say(res, 404, "Nothing of the files is there.");

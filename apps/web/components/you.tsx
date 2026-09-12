@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { NewOrgDialog } from "@/components/new-org";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -22,16 +22,22 @@ export function You({
   email,
   picture,
   others,
+  onBusy,
 }: {
   name: string;
   email: string;
   picture: string | null;
   others: { userId: string; orgName: string }[];
+  // Told while the menu or the new-org dialog is open, so what holds
+  // this stays put meanwhile.
+  onBusy?: (busy: boolean) => void;
 }) {
   const [makingOrg, setMakingOrg] = useState(false);
+  const [open, setOpen] = useState(false);
+  useEffect(() => onBusy?.(open || makingOrg), [open, makingOrg, onBusy]);
   return (
     <>
-      <DropdownMenu>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
           className="rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           render={<button type="button" />}

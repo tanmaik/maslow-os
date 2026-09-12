@@ -66,7 +66,6 @@ type Dragged = { kind: Card["kind"]; title: string; href: string; box: Box };
 type Point = { x: number; y: number };
 
 const EMPTY: Screen = { cards: [] };
-const isPort = (t: { kind: Card["kind"] }) => t.kind === "port";
 
 // The surfaces that are panels: drawn in the window itself, their
 // controls in its bar. Every other surface is framed as the page it is.
@@ -94,12 +93,15 @@ export function Room({
   ports,
   waiting,
   you,
+  computers,
 }: {
   desktops: Desktop[];
   ports: Port[];
   // How much asks something of the person and is still there.
   waiting: number;
   you: Me | undefined;
+  // Whether this deployment makes computers at all.
+  computers: boolean;
 }) {
   const [desktops, setDesktops] = useState(given);
   const [current, setCurrent] = useState(0);
@@ -121,6 +123,7 @@ export function Room({
   // back for a moment.
   const [pinned, setPinned] = useState(true);
   const [peek, setPeek] = useState(false);
+  const [busy, setBusy] = useState(false);
   useEffect(() => {
     setPinned(localStorage.getItem(PINNED) !== "no");
   }, []);
@@ -129,7 +132,7 @@ export function Room({
     setPeek(false);
     localStorage.setItem(PINNED, to ? "yes" : "no");
   };
-  const dock = pinned || peek;
+  const dock = pinned || peek || busy;
 
   const [wide, setWide] = useState(true);
   useEffect(() => {
@@ -143,7 +146,7 @@ export function Room({
   // Escape brings an expanded window back down.
   useEffect(() => {
     const key = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" || e.defaultPrevented) return;
       setExpanded(null);
     };
     window.addEventListener("keydown", key);
@@ -181,8 +184,23 @@ export function Room({
       body: JSON.stringify({ id, layout }),
     });
   };
-  const setScreen = (id: string, layout: Screen, save = true) => {
-    setDesktops((was) => was.map((d) => (d.id === id ? { ...d, layout } : d)));
+  // The desks as they are this moment, for a change made from a pointer
+  // handler that closed over an earlier render; kept once, sent once.
+  const latest = useRef(desktops);
+  latest.current = desktops;
+  const setScreen = (
+    id: string,
+    to: (layout: Screen) => Screen | null,
+    save = true,
+  ) => {
+    const d = latest.current.find((x) => x.id === id);
+    if (!d) return;
+    const layout = to(d.layout ?? EMPTY);
+    if (!layout) return;
+    latest.current = latest.current.map((x) =>
+      x.id === id ? { ...x, layout } : x,
+    );
+    setDesktops(latest.current);
     if (save) void persist(id, layout);
   };
 
@@ -217,44 +235,32 @@ export function Room({
       await addScreen([open([])]);
       return;
     }
-    const s = screens.find((x) => x.id === id);
-    if (!s) return;
-    setScreen(id, { cards: [...s.layout.cards, open(s.layout.cards)] });
+    setScreen(id, (l) => ({ cards: [...l.cards, open(l.cards)] }));
   };
 
   const close = (id: string, key: string) => {
-    const s = screens.find((x) => x.id === id);
-    if (!s) return;
     if (expanded === key) setExpanded(null);
-    setScreen(id, { cards: s.layout.cards.filter((c) => c.id !== key) });
+    setScreen(id, (l) => ({ cards: l.cards.filter((c) => c.id !== key) }));
   };
 
   // A window changed by hand: moved or resized, live while the pointer is
   // down and kept when it lifts.
-  const shape = (id: string, key: string, to: Partial<Card>, save: boolean) => {
-    const s = screens.find((x) => x.id === id);
-    if (!s) return;
+  const shape = (id: string, key: string, to: Partial<Card>, save: boolean) =>
     setScreen(
       id,
-      {
-        cards: s.layout.cards.map((c) =>
-          c.id === key ? clamp({ ...c, ...to }) : c,
-        ),
-      },
+      (l) => ({
+        cards: l.cards.map((c) => (c.id === key ? clamp({ ...c, ...to }) : c)),
+      }),
       save,
     );
-  };
 
   // A window touched comes to the front.
-  const front = (id: string, key: string) => {
-    const s = screens.find((x) => x.id === id);
-    if (!s || s.layout.cards.at(-1)?.id === key) return;
-    const c = s.layout.cards.find((x) => x.id === key);
-    if (!c) return;
-    setScreen(id, {
-      cards: [...s.layout.cards.filter((x) => x.id !== key), c],
+  const front = (id: string, key: string) =>
+    setScreen(id, (l) => {
+      if (l.cards.at(-1)?.id === key) return null;
+      const c = l.cards.find((x) => x.id === key);
+      return c ? { cards: [...l.cards.filter((x) => x.id !== key), c] } : null;
     });
-  };
 
   const removeScreen = async (id: string) => {
     if (desktops.length <= 1) return;
@@ -300,6 +306,7 @@ export function Room({
             page={p}
             wide={wide}
             dock={dock}
+            computers={computers}
             carrying={carrying}
             preview={preview?.id === p.id ? preview.at : null}
             expanded={expanded}
@@ -351,6 +358,7 @@ export function Room({
           ports={ports}
           waiting={waiting}
           you={you}
+          onBusy={setBusy}
           pinned={pinned}
           onPin={() => pin(!pinned)}
           onLeave={() => setPeek(false)}
@@ -383,6 +391,7 @@ function Desk({
   page,
   wide,
   dock,
+  computers,
   carrying,
   preview,
   expanded,
@@ -400,6 +409,7 @@ function Desk({
   page: Page;
   wide: boolean;
   dock: boolean;
+  computers: boolean;
   carrying: React.RefObject<Dragged | null>;
   preview: Point | null;
   expanded: string | null;
@@ -435,30 +445,18 @@ function Desk({
       y: Math.min(1, Math.max(0, (clientY - r.top) / size.h)),
     };
   };
-  const rectOf = (c: Card) => ({
+  const rectOf = (c: Box & Point) => ({
     left: c.x * size.w,
     top: c.y * size.h,
     width: c.w * size.w,
     height: c.h * size.h,
   });
 
-  // What is about to land: the carried block where it is over the desk.
-  const landing =
+  // Where the carried block would land, while it is over the desk.
+  const ghost =
     preview && carrying.current
-      ? { at: preview, item: carrying.current }
+      ? rectOf(clamp({ ...carrying.current.box, ...preview }))
       : null;
-  const ghost = landing
-    ? rectOf(
-        clamp({
-          id: "ghost",
-          kind: landing.item.kind,
-          title: landing.item.title,
-          href: landing.item.href,
-          ...landing.item.box,
-          ...landing.at,
-        }),
-      )
-    : null;
 
   return (
     <div
@@ -509,33 +507,45 @@ function Desk({
           />
         )}
         {size.h > 0 &&
-          page.cards.map((c) => {
-            const full = expanded === c.id;
-            return (
-              <div
-                key={c.id}
-                className={
-                  full
-                    ? `fixed inset-0 z-50 max-sm:pt-[env(safe-area-inset-top)] ${dock ? "sm:pb-[4.75rem] max-sm:pb-[calc(env(safe-area-inset-bottom)+4.75rem)]" : "max-sm:pb-[env(safe-area-inset-bottom)]"}`
-                    : "absolute"
-                }
-                style={full ? undefined : wide ? rectOf(c) : { inset: 0 }}
-              >
-                <Frame
-                  card={c}
-                  full={full}
-                  wide={wide}
-                  desk={size}
-                  onClose={() => onClose(c.id)}
-                  onShape={(to, save) => onShape(c.id, to, save)}
-                  onFront={() => onFront(c.id)}
-                  onCarry={onCarry}
-                  onExpand={() => onExpand(c.id)}
-                  onCollapse={onCollapse}
-                />
-              </div>
-            );
-          })}
+          // Drawn in one steady order and stacked by number, so raising a
+          // window never moves another's element, which would reload it.
+          [...page.cards]
+            .sort((a, b) => (a.id < b.id ? -1 : 1))
+            .map((c) => {
+              const full = expanded === c.id;
+              const layer = page.cards.findIndex((x) => x.id === c.id);
+              return (
+                <div
+                  key={c.id}
+                  className={
+                    full
+                      ? `fixed inset-0 z-50 max-sm:pt-[env(safe-area-inset-top)] ${dock ? "sm:pb-[4.75rem] max-sm:pb-[calc(env(safe-area-inset-bottom)+4.75rem)]" : "max-sm:pb-[env(safe-area-inset-bottom)]"}`
+                      : "absolute"
+                  }
+                  style={
+                    full
+                      ? undefined
+                      : wide
+                        ? { ...rectOf(c), zIndex: layer }
+                        : { inset: 0, zIndex: layer }
+                  }
+                >
+                  <Frame
+                    card={c}
+                    computers={computers}
+                    full={full}
+                    wide={wide}
+                    desk={size}
+                    onClose={() => onClose(c.id)}
+                    onShape={(to, save) => onShape(c.id, to, save)}
+                    onFront={() => onFront(c.id)}
+                    onCarry={onCarry}
+                    onExpand={() => onExpand(c.id)}
+                    onCollapse={onCollapse}
+                  />
+                </div>
+              );
+            })}
       </div>
     </div>
   );
@@ -634,6 +644,7 @@ function Toolbar({
   ports,
   waiting,
   you,
+  onBusy,
   pinned,
   onPin,
   onLeave,
@@ -645,6 +656,7 @@ function Toolbar({
   ports: Port[];
   waiting: number;
   you: Me | undefined;
+  onBusy: (busy: boolean) => void;
   pinned: boolean;
   onPin: () => void;
   onLeave: () => void;
@@ -653,13 +665,7 @@ function Toolbar({
   onPick: (b: Dragged) => void;
 }) {
   const one = (b: Block): ReactNode => {
-    const Mark = b.mark;
-    const item: Dragged = {
-      kind: b.kind,
-      title: b.title,
-      href: b.href,
-      box: b.box,
-    };
+    const { mark: Mark, ...item } = b;
     const button = (
       <Button
         variant="ghost"
@@ -727,7 +733,7 @@ function Toolbar({
           </Button>
           {you && (
             <span className="grid size-10 shrink-0 place-items-center">
-              <You {...you} />
+              <You {...you} onBusy={onBusy} />
             </span>
           )}
         </TooltipProvider>
@@ -744,6 +750,7 @@ function Toolbar({
 // session.
 function Frame({
   card,
+  computers,
   full,
   wide,
   desk,
@@ -755,6 +762,7 @@ function Frame({
   onCollapse,
 }: {
   card: Card;
+  computers: boolean;
   full: boolean;
   wide: boolean;
   desk: { w: number; h: number };
@@ -804,7 +812,7 @@ function Frame({
   };
 
   return (
-    <div className="bg-card relative flex h-full flex-col overflow-hidden border">
+    <div className="bg-card @container relative flex h-full flex-col overflow-hidden border">
       <div
         onPointerDown={free ? drag("move") : undefined}
         onDoubleClick={full ? onCollapse : onExpand}
@@ -822,8 +830,6 @@ function Frame({
         {Panel && (
           <div
             ref={setSlot}
-            onPointerDown={(e) => e.stopPropagation()}
-            onDoubleClick={(e) => e.stopPropagation()}
             className="flex min-w-0 flex-1 items-center gap-1 pl-2"
           />
         )}
@@ -852,7 +858,11 @@ function Frame({
           <XMarkIcon />
         </Button>
       </div>
-      {Panel ? (
+      {Panel && !computers ? (
+        <p className="text-muted-foreground p-3 text-sm">
+          Computers are off here: this deployment has no Fly token.
+        </p>
+      ) : Panel ? (
         <div
           onPointerDownCapture={onFront}
           className="flex min-h-0 flex-1 flex-col overflow-hidden"
@@ -868,7 +878,7 @@ function Frame({
           onFocus={onFront}
           className="min-h-0 flex-1 bg-white"
           sandbox={
-            isPort(card)
+            card.kind === "port"
               ? "allow-scripts allow-same-origin allow-forms allow-popups allow-downloads"
               : undefined
           }

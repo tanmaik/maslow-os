@@ -22,7 +22,7 @@ const clamp01 = (n: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, n));
 
 // A window held inside the desk at no less than the smallest size.
-export function clamp(c: Card): Card {
+export function clamp<T extends Box & { x: number; y: number }>(c: T): T {
   const w = clamp01(c.w, MIN.w, 1);
   const h = clamp01(c.h, MIN.h, 1);
   return {
