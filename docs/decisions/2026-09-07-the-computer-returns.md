@@ -98,8 +98,8 @@ VS Code's web build was the first door from 2026-09-07. It came out on
 2026-09-11, for the reasons in
 [the computer's surface is ours](2026-09-09-the-computer-surface-is-ours.md):
 what a person opens is Talk, a terminal joined straight from their
-browser to a `tmux` session on the machine with Claude Code running in
-it, and View, the machine's browser as video, each a socket to the door
+browser to a `tmux` session on the machine, a plain shell with Claude
+Code the word `claude` away, and View, the machine's browser as video, each a socket to the door
 on a ticket from our sign-in. Ready means the door answers. Files come
 and go through the door too, straight from the browser. The Computer page
 is plain first, ready, Open, the browser's page and the last backup, and

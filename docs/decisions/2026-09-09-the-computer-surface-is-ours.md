@@ -146,7 +146,7 @@ invalidates every machine address in existence.
 The Computer page becomes three things, all ours, all drawn for a phone
 first and a laptop second.
 
-**Talk.** A terminal with Claude Code already running, opened by a ticket
+**Talk.** A terminal, opened by a ticket
 rather than an SSH key, because the person is already signed in. Which
 account it runs on is a control on the page, not a command called `model`
 that nobody will type. The choice is already a file in their home read at
@@ -595,7 +595,8 @@ swapped without touching what is above it.
 **Built 2026-09-11, the machine's half.** The door carries two sockets on
 a ticket for the whole machine: `/maslow/talk`, a `node-pty` terminal
 running `tmux new-session -A -s main` inside the person's Linux as them,
-with Claude Code as the first window's command, so a closed tab detaches
+a plain shell in its first window since 2026-09-11, when Tanmai chose it
+over Claude Code starting by itself, so a closed tab detaches
 and the next attaches; and `/maslow/view`, on which the browser server's
 CDP screencast of its current tab is fed, one picture per change, into a
 fresh ffmpeg per viewer making baseline H.264, told to start on its first

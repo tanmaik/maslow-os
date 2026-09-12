@@ -7,8 +7,9 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
 
-// The person's computer's terminal, with Claude Code already in it: the
-// same session every time it is opened, from any screen.
+// The person's computer's terminal: a plain shell, the same session every
+// time it is opened, from any screen, with Claude Code the word `claude`
+// away.
 export default async function TerminalPage() {
   const p = await principal();
   if (!p) redirect("/");

@@ -295,9 +295,9 @@ the agent asks for a port through the same share tool it asks for a
 record with, and never shares one itself. The door is the one way in, and
 ready means the door answers. Two sockets go straight from the person's
 browser to it, each on a ticket from our sign-in and never through our
-server: Talk, a terminal joined to a `tmux` session on the machine with
-Claude Code already running in it, so closing the tab kills nothing and
-the next tab finds it mid-output; and View, the machine's browser as real
+server: Talk, a terminal joined to a `tmux` session on the machine, a
+plain shell with Claude Code the word `claude` away, so closing the tab
+kills nothing and the next tab finds it mid-output; and View, the machine's browser as real
 H.264 video decoded in the tab, its tabs, the person's hands and pointer
 on it, the cursor the page wants under that pointer, and what
 changed in a folder of their home, on one socket. Nothing durable lives in
