@@ -317,7 +317,8 @@ runs on it by default, on GLM 5.3 Flash, with the Claude models one
 `/model` away; `model mine` in the computer's terminal switches it to
 the person's own Anthropic account, which they sign in to from that
 terminal, and `model ours` switches it back, so a person whose own plan
-runs dry keeps working on ours; a deployment without our provisioning
+runs dry keeps working on ours; a session of ours on their machine is
+started with `MASLOW_MODEL=ours` and never spends their plan; a deployment without our provisioning
 key runs everyone on their own, and says so. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine

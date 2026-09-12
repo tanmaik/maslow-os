@@ -3,4 +3,10 @@
 # `model` chose, read at every start so a switch takes at once.
 set -euo pipefail
 . /opt/maslow/bin/model-env
+# A session of ours has nothing to run on where the machine holds no key
+# of ours, and never runs on the person's own account instead.
+if [ "${MASLOW_MODEL:-}" = ours ] && [ -z "${MASLOW_MODEL_KEY:-}" ]; then
+  echo "This computer holds no key of Maslow's, so a session of Maslow's cannot run here." >&2
+  exit 78
+fi
 exec /opt/maslow/node_modules/.bin/claude "$@"

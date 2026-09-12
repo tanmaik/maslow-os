@@ -6,8 +6,14 @@
 # what we set before is taken back, and nothing of theirs is touched.
 # Sourced, never run: by `claude`, by `claude-code-acp`, and by every
 # login shell, so any way of starting Claude Code finds the same account.
+# A session of ours, a watchdog's or a timer's, is started with
+# MASLOW_MODEL=ours in its environment, which outranks the person's
+# choice: nothing of ours ever spends the person's own plan.
 [ -r /etc/profile.d/maslow-model-key.sh ] && . /etc/profile.d/maslow-model-key.sh
-if [ "$(cat "$HOME/.config/maslow/model" 2>/dev/null || echo ours)" != mine ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
+# Which account this session is on, in one word any program can read:
+# ours, or mine, the person's own Anthropic account.
+if [ "${MASLOW_MODEL:-$(cat "$HOME/.config/maslow/model" 2>/dev/null || echo ours)}" != mine ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
+  export MASLOW_ACCOUNT=ours
   export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
   export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_KEY"
   export ANTHROPIC_API_KEY=""
@@ -21,7 +27,10 @@ if [ "$(cat "$HOME/.config/maslow/model" 2>/dev/null || echo ours)" != mine ] &&
   # GLM 5.3 Flash takes 1,310,720 tokens; Claude Code does not know the
   # model, so it is told, or it would compact at 200k.
   export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1310720
-elif [ "${ANTHROPIC_BASE_URL:-}" = "https://openrouter.ai/api" ]; then
+else
+  export MASLOW_ACCOUNT=mine
+fi
+if [ "$MASLOW_ACCOUNT" = mine ] && [ "${ANTHROPIC_BASE_URL:-}" = "https://openrouter.ai/api" ]; then
   unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL \
     ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
     ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \

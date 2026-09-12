@@ -154,7 +154,13 @@ Claude 5 models one `/model` away. Ours is the default and the fallback:
 `model mine` in the computer's terminal switches Claude Code to the
 person's own Anthropic account, which they sign in to from that terminal,
 and `model ours` switches it back at its next start, so a person whose
-own plan runs dry keeps working on ours. The choice is a file in home,
+own plan runs dry keeps working on ours. A session of ours rather than
+the person's, a watchdog's or a timer's, is started with
+`MASLOW_MODEL=ours` in its environment, which the wrapper reads before
+the person's choice, so nothing of ours ever spends their own plan;
+their own terminal never sets it. Every session carries the answer in
+one word, `MASLOW_ACCOUNT`, ours or mine, so a program on the machine
+knows whose account it is on without asking. The choice is a file in home,
 and the machine reports it with its numbers so the Computer page says
 which account is in use. A machine made before the deployment minted keys
 gets one at the next sweep. A deployment without the provisioning key
