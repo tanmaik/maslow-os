@@ -432,7 +432,7 @@ export function LiveBrowser() {
         }}
         width={WIDTH}
         height={HEIGHT}
-        aria-label="Your computer's browser"
+        aria-label="Your agent's browser"
         tabIndex={0}
         className={`bg-muted min-h-0 w-full flex-1 touch-none border object-contain outline-none focus:ring-2 ${state === "open" && decodes ? "" : "hidden"}`}
         style={{ cursor }}
@@ -500,7 +500,7 @@ export function LiveBrowser() {
             : state === "closed"
               ? "Closed. Go to an address above, or wait for Claude Code to open it."
               : state === "failed"
-                ? "Could not reach your computer's browser. Trying again."
+                ? "Could not reach your agent's browser. Trying again."
                 : "Looking…"}
         </div>
       )}

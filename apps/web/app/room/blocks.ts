@@ -64,7 +64,7 @@ export const BLOCKS: Block[] = [
   },
   {
     kind: "page",
-    title: "Browser",
+    title: "Agent's browser",
     href: "/browser",
     mark: GlobeAltIcon,
     box: { w: 0.6, h: 0.76 },

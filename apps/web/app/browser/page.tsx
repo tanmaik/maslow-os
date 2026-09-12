@@ -17,7 +17,9 @@ export default async function BrowserPage() {
   const ready = c?.readyAt !== null && c?.readyAt !== undefined;
   return (
     <main className="flex h-full flex-col gap-4">
-      <h1 className="page-title text-2xl font-semibold">Browser</h1>
+      <h1 className="page-title text-2xl font-semibold">
+        Agent&rsquo;s browser
+      </h1>
       {off ? (
         <Alert>
           <AlertTitle>Computers are off here</AlertTitle>

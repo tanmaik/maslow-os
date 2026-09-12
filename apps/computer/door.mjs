@@ -247,6 +247,23 @@ const server = http.createServer(async (req, res) => {
     }
     if (!/^https?:$/.test(open.protocol))
       return say(res, 400, "Only a web address can be opened.");
+    // A sign-in that answers to a port on this machine cannot be finished
+    // on the person's own device: the localhost their browser would come
+    // back to is theirs, not this one, and nothing is listening on it. It
+    // goes to the machine's own browser, the one place the answer lands,
+    // and the terminal says where to finish it. Anything else is still
+    // theirs to open, with their own logins.
+    const back = open.searchParams.get("redirect_uri") ?? "";
+    if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/.test(back)) {
+      const went = await onTheMachine(open.href);
+      if (went) {
+        for (const t of talkers)
+          t.sendText(JSON.stringify({ signIn: open.href }));
+        return say(res, 200, "opened on the machine's browser");
+      }
+      // With no browser of ours to answer, the person's own is better
+      // than nothing, and they are told what will happen there.
+    }
     for (const t of talkers) t.sendText(JSON.stringify({ open: open.href }));
     return say(res, 200, talkers.size ? "offered" : "nobody is at a terminal");
   }
@@ -690,20 +707,73 @@ function watch(rel, changed) {
   };
 }
 
+// Sends the machine's browser to an address, on its newest tab, which
+// opens it if it was closed. True when it went.
+function onTheMachine(href) {
+  return new Promise((done) => {
+    const body = JSON.stringify({ kind: "navigate", url: href });
+    const ask = http.request(
+      {
+        host: "127.0.0.1",
+        port: BROWSER,
+        path: "/act",
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "content-length": Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        res.resume();
+        res.on("end", () =>
+          done(res.statusCode !== undefined && res.statusCode < 400),
+        );
+      },
+    );
+    ask.on("error", () => done(false));
+    ask.end(body);
+  });
+}
+
 // The browser as video for one viewer: the browser server's pictures of its
 // current tab, one whenever the page changes, into an encoder of the
 // viewer's own, and the cursor's name when the page changes it under the
-// pointer. A picture arriving while the encoder still takes in the last is
-// kept in its place, so the encoder never falls behind the page and the
-// last change is never lost. The pictures end when another tab becomes
-// current, and start again on it with a fresh encoder, so the first frame
-// of it is whole; while the browser is closed there is no picture, and it
-// is asked for again every second until there is.
+// pointer. The pictures end when another tab becomes current and are asked
+// for again at once, into the same encoder, so a tab change is a cut in
+// one stream rather than a stream that stops and starts; while the browser
+// is closed there is no picture, and it is asked for again every second
+// until there is.
 function stream(ws, send) {
   let on = true;
   let asking = null;
   let encoder = null;
   let retry = null;
+  // One encoder for as long as this viewer watches. A tab becoming
+  // current changes which pictures arrive, not what turns them into
+  // video, so the video is one unbroken stream: the viewer never waits
+  // on a new encoder to make a frame it can begin on.
+  //
+  // One picture in the encoder at a time; the next waits in its place
+  // and goes the moment the write is done, so the last change always
+  // reaches the viewer.
+  let latest = null;
+  let writing = false;
+  const feed = (jpeg) => {
+    const ff = encoder;
+    if (!ff) return;
+    if (writing) {
+      latest = jpeg;
+      return;
+    }
+    writing = true;
+    ff.stdin.write(jpeg, () => {
+      writing = false;
+      if (!latest) return;
+      const next = latest;
+      latest = null;
+      feed(next);
+    });
+  };
   // At once when the pictures ended because another tab is current; in a
   // second when there was no tab, or no answer, to show. Not at all once
   // the viewer has gone.
@@ -721,28 +791,18 @@ function stream(ws, send) {
           res.on("end", () => again(1000));
           return;
         }
-        const ff = encode(ws);
-        encoder = ff;
-        let buf = Buffer.alloc(0);
-        let latest = null;
-        // One picture in the encoder at a time; the next waits in its
-        // place and goes the moment the write is done, so the last change
-        // always reaches the viewer.
-        let writing = false;
-        const feed = (jpeg) => {
-          if (writing) {
-            latest = jpeg;
-            return;
-          }
-          writing = true;
-          ff.stdin.write(jpeg, () => {
+        if (!encoder) {
+          const ff = encode(ws);
+          encoder = ff;
+          // An encoder that stops on its own is made again on the next
+          // pictures, rather than leaving the viewer with none.
+          ff.on("exit", () => {
+            if (encoder === ff) encoder = null;
             writing = false;
-            if (!latest) return;
-            const next = latest;
             latest = null;
-            feed(next);
           });
-        };
+        }
+        let buf = Buffer.alloc(0);
         // Each thing on the stream: its length, a byte for what it is, a
         // picture or the cursor's name, then the thing.
         res.on("data", (chunk) => {
@@ -757,11 +817,7 @@ function stream(ws, send) {
             buf = buf.subarray(4 + n);
           }
         });
-        res.on("close", () => {
-          ff.kill("SIGKILL");
-          encoder = null;
-          again(0);
-        });
+        res.on("close", () => again(0));
       },
     );
     asking.on("error", () => again(1000));
@@ -773,6 +829,7 @@ function stream(ws, send) {
       clearTimeout(retry);
       asking?.destroy();
       encoder?.kill("SIGKILL");
+      encoder = null;
     },
   };
 }

@@ -667,6 +667,11 @@ export async function serve(http?: number): Promise<void> {
   }
   // Whoever is watching the pictures stream, told the cursor's name too.
   const watchers = new Set<ServerResponse>();
+  // How good a picture on its way to the encoder has to be. It is seen by
+  // nothing but the encoder, and a smaller one is made faster, carried
+  // faster and decoded faster; what the person sees is the video's own
+  // quality, which this does not set.
+  const QUICK = 55;
   createServer(async (req, res) => {
     const path = new URL(req.url ?? "/", "http://browser").pathname;
     // The tabs as a watcher sees them, and which is current; none while
@@ -710,28 +715,36 @@ export async function serve(http?: number): Promise<void> {
       }
       res.writeHead(200, { "content-type": "application/octet-stream" });
       watchers.add(res);
-      const cdp = await page.context().newCDPSession(page);
-      const still = setInterval(() => {
-        if (browser.current() !== page) res.end();
-      }, 100);
+      // Listened for before anything is awaited: a tab that becomes
+      // current while this one is still being wired up would otherwise be
+      // missed, and this stream would sit on a tab nobody is looking at.
+      const moved = browser.watch((now) => {
+        if (now !== page) res.end();
+      });
       const done = () => {
-        clearInterval(still);
+        moved();
         watchers.delete(res);
-        cdp.detach().catch(() => {});
+        cdp?.detach().catch(() => {});
         res.end();
       };
+      res.on("close", done);
+      page.once("close", done);
+      let cdp: CDPSession | null = null;
+      cdp = await page.context().newCDPSession(page);
+      if (res.writableEnded) return done();
       cdp.on("Page.screencastFrame", (f) => {
         record(res, PICTURE, Buffer.from(f.data, "base64"));
         cdp
-          .send("Page.screencastFrameAck", { sessionId: f.sessionId })
+          ?.send("Page.screencastFrameAck", { sessionId: f.sessionId })
           .catch(() => {});
       });
-      page.once("close", done);
-      res.on("close", done);
       await cdp
         .send("Page.startScreencast", {
           format: "jpeg",
-          quality: 80,
+          // These pictures are nobody's to look at: each is decoded and
+          // encoded again as video within a few milliseconds, so what it
+          // costs to make and to carry is the whole of its price.
+          quality: QUICK,
           maxWidth: 1280,
           maxHeight: 800,
           everyNthFrame: 1,
@@ -740,7 +753,7 @@ export async function serve(http?: number): Promise<void> {
       // The screencast speaks only when the page changes, so a still page
       // is drawn once for the watcher, who otherwise waits on nothing.
       const now = await page
-        .screenshot({ type: "jpeg", quality: 80 })
+        .screenshot({ type: "jpeg", quality: QUICK })
         .catch(() => null);
       if (now && !res.writableEnded) record(res, PICTURE, now);
       return;

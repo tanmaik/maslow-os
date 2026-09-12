@@ -73,6 +73,7 @@ export class Browser {
     // Published only once it is whole, so nobody sees a browser without
     // its first tab.
     this.context = context;
+    this.settle();
     return context;
   }
 
@@ -116,7 +117,11 @@ export class Browser {
         })
         .catch(() => {});
     });
-    page.on("close", () => this.tabs.delete(id));
+    page.on("close", () => {
+      this.tabs.delete(id);
+      this.settle();
+    });
+    this.settle();
   }
 
   async list(): Promise<{ id: number; title: string; url: string }[]> {
@@ -134,6 +139,25 @@ export class Browser {
   // The tab the person picked to watch, while it is open.
   private chosen: number | null = null;
 
+  // Whoever is watching the current tab, told the moment it becomes a
+  // different one. Only this browser changes which tab is current, so it
+  // is the one thing that can say when: nobody has to keep asking.
+  private watchers = new Set<(page: Page | null) => void>();
+  private said: Page | null = null;
+
+  watch(fn: (page: Page | null) => void): () => void {
+    this.watchers.add(fn);
+    return () => void this.watchers.delete(fn);
+  }
+
+  // Says which tab is current, when it is not the one last said.
+  private settle(): void {
+    const now = this.current();
+    if (now === this.said) return;
+    this.said = now;
+    for (const fn of this.watchers) fn(now);
+  }
+
   // The current tab without opening the browser, or null while it is
   // closed: the one the person picked, else the newest. What a watcher
   // sees and what a hand lands on.
@@ -148,6 +172,7 @@ export class Browser {
   show(id: number): void {
     if (!this.tabs.has(id)) throw new Error(`There is no tab ${id}.`);
     this.chosen = id;
+    this.settle();
   }
 
   // Every open tab with its title and address, and which is current,
@@ -192,6 +217,7 @@ export class Browser {
     this.track(page);
     const id = [...this.tabs.entries()].find(([, p]) => p === page)![0];
     this.chosen = id;
+    this.settle();
     return this.tab(id);
   }
 
@@ -199,6 +225,7 @@ export class Browser {
     const { page } = await this.tab(id);
     await page.close();
     this.tabs.delete(id);
+    this.settle();
   }
 
   consoleOf(page: Page): ConsoleLine[] {
