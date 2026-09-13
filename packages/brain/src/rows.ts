@@ -15,6 +15,18 @@ export const recordSelect = `${recordColumns}, access_level(id) as access`;
 // back is a Stub, which the types will not let anyone save back as a record.
 export const stubSelect = recordSelect.replace("body,", "'' as body,");
 
+// How much of a body a list shows: one line under the title, and never
+// more than this much of it, whatever the document behind it holds.
+const OPENING = 200;
+
+// The same again with that much of the body and no more, for a list that
+// reads a line of each record. What comes back is not the record's body and
+// is never written back.
+export const openingSelect = recordSelect.replace(
+  "body,",
+  `left(body, ${OPENING}) as body,`,
+);
+
 export type RecordRow = {
   id: string;
   type: string;

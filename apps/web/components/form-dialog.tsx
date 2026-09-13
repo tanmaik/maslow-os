@@ -17,16 +17,20 @@ export function FormDialog({
   description,
   children,
   variant = "outline",
+  className,
 }: {
   trigger: ReactNode;
   title: string;
   description?: string;
   children: ReactNode;
   variant?: "outline" | "default" | "ghost";
+  className?: string;
 }) {
   return (
     <Dialog>
-      <DialogTrigger render={<Button variant={variant} size="sm" />}>
+      <DialogTrigger
+        render={<Button variant={variant} size="sm" className={className} />}
+      >
         {trigger}
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">

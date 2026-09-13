@@ -12,7 +12,7 @@ import { BrainNav } from "./nav";
 export default async function Layout({ children }: { children: ReactNode }) {
   const p = await principal();
   if (!p) redirect("/");
-  const { types, records, people } = await vocabulary(p);
+  const { types, records, held, people } = await vocabulary(p);
   const groups = sharedGroups(types, people);
   // An owner goes by first name unless another owner shares it.
   const first = (name: string) => name.split(" ")[0]!;
@@ -20,22 +20,41 @@ export default async function Layout({ children }: { children: ReactNode }) {
     groups.filter((g) => first(g.owner) === first(name)).length > 1
       ? name
       : first(name);
-  const shared = groups.flatMap((g) =>
-    g.types.map((t) => ({
+  // A bar is read against the fullest type beside it, not the fullest in
+  // the brain: a colleague who shared a thousand would otherwise flatten
+  // every type of the person's own to nothing.
+  const fullest = (kinds: { held: number }[]) =>
+    Math.max(1, ...kinds.map((k) => k.held));
+  const shared = groups.map((g) => {
+    const kinds = g.types.map((t) => ({
       name: t.name,
-      owner: short(g.owner),
       href: typeHref(t.name, t.ownerId),
-    })),
-  );
+      held: held.get(`${t.ownerId}:${t.name}`) ?? 0,
+    }));
+    return {
+      owner: short(g.owner),
+      ownerId: g.ownerId,
+      types: kinds,
+      most: fullest(kinds),
+    };
+  });
+  const mine = types
+    .filter((t) => t.own)
+    .map((t) => ({
+      name: t.name,
+      href: typeHref(t.name),
+      held: held.get(`${t.ownerId}:${t.name}`) ?? 0,
+    }));
 
   return (
     <div className="brain-layout gap-6 md:grid md:grid-cols-[13.75rem_minmax(0,1fr)]">
       <BrainNav
         records={records}
-        types={types.filter((t) => t.own).map((t) => t.name)}
+        types={mine}
         shared={shared}
+        most={fullest(mine)}
       />
-      <main className="mt-4 min-w-0 md:mt-0">{children}</main>
+      <main className="mt-4 min-h-full min-w-0 md:mt-0">{children}</main>
     </div>
   );
 }

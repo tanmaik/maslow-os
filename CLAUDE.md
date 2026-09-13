@@ -149,6 +149,19 @@ citation to a copy. A question the brain cannot answer is answered outside
 it, and the answer and what it rests on are written so the next time is a
 read.
 
+The brain's pages are read far more often than written, since most of what
+is in them the agent put there. The records page is a rail of the person's
+types beside the records themselves: each type carries a bar of how full it
+is against the fullest beside it, the types a colleague shared fold under
+that person's name, and a brain of many types is narrowed by typing one.
+The records are rows of a title and the first line of what they say, cut
+either into their types or into the days they happened, and marked with
+whose they are where they are not the reader's. A record is a document: its
+body takes its shape as it is typed, a slash offers what a line can become,
+and markdown is what is stored, so an agent writes and a person writes the
+same text. The editor is Tiptap, which is not a component and has no shadcn
+equivalent, as CodeMirror is not for the Files editor.
+
 Types are the person's own vocabulary, open to them and their agent. A type
 is a name and the fields it declares, nothing more: no description, since
 the name is what a model needs. Every person's starts empty: whoever writes

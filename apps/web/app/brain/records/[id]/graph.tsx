@@ -8,7 +8,6 @@ import {
   BaseEdge,
   EdgeLabelRenderer,
   Handle,
-  MiniMap,
   Position,
   ReactFlow,
   ReactFlowProvider,
@@ -167,25 +166,6 @@ function VerbLine({
         </EdgeLabelRenderer>
       )}
     </>
-  );
-}
-
-// The minimap, on a pane wide enough to spare the corner.
-function MapIfRoom() {
-  const wide = useStore((s) => s.width >= 480);
-  if (!wide) return null;
-  return (
-    <MiniMap
-      pannable
-      zoomable
-      nodeColor={(n) => typeColor((n as RecordNode).data.type)}
-      nodeStrokeWidth={0}
-      bgColor="var(--muted)"
-      maskColor="color-mix(in oklch, var(--background) 60%, transparent)"
-      position="top-right"
-      className="rounded-md! border!"
-      style={{ width: 120, height: 80 }}
-    />
   );
 }
 
@@ -363,9 +343,7 @@ function Canvas({
       // A chip stays where it was put; only its neighbours settle.
       onNodeDragStop={() => physics.current?.simulation.alphaTarget(0)}
       className="bg-background"
-    >
-      <MapIfRoom />
-    </ReactFlow>
+    ></ReactFlow>
   );
 }
 

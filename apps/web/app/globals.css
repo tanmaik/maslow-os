@@ -257,4 +257,9 @@ html[data-framed] .brain-nav[data-away] {
 }
 html[data-framed] .brain-layout:has(.brain-nav[data-away]) {
   display: block;
+  height: 100%;
+}
+html[data-framed] .brain-layout:has(.brain-nav[data-away]) > main {
+  height: 100%;
+  margin-top: 0;
 }

@@ -12,3 +12,6 @@ next-env.d.ts
 
 # Codex CLI keeps its local settings here
 .codex/
+
+# The package store is the machine's, not the repo's.
+.pnpm-store/

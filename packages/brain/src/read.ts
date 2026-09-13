@@ -4,6 +4,7 @@ import { accepts, expected, propertiesOf, sqlType } from "./properties.ts";
 import {
   edgeColumns,
   eventColumns,
+  openingSelect,
   recordSelect,
   stubSelect,
   toEdge,
@@ -271,6 +272,22 @@ export async function count(q: Query): Promise<number> {
   return rows[0]!.n;
 }
 
+// How many live records each type holds, the reader's own and every type
+// shared into their brain, keyed by whose it is and its name. A type with
+// nothing in it is absent.
+export async function counts(q: Query): Promise<Map<string, number>> {
+  const { rows } = await q.query<{
+    person_id: string;
+    type: string;
+    n: number;
+  }>(
+    `select person_id, type, count(*)::int as n from records
+     where deleted_at is null and merged_into is null
+     group by person_id, type`,
+  );
+  return new Map(rows.map((r) => [`${r.person_id}:${r.type}`, r.n]));
+}
+
 // Records by id, in no particular order. Missing ids are simply absent.
 export async function get(q: Query, ids: string[]): Promise<BrainRecord[]> {
   if (ids.length === 0) return [];
@@ -293,6 +310,12 @@ export async function list(
     records: page.records.map(({ body: _body, ...rest }) => rest),
     cursor: page.cursor,
   };
+}
+
+// Records as a list shows them, with the opening of each body and no more:
+// enough for a line under the title, never the whole of a document.
+export async function opened(q: Query, opts: ReadOptions = {}): Promise<Page> {
+  return read(q, opts, openingSelect);
 }
 
 // The same records without their bodies, for a caller that renders titles:

@@ -1,6 +1,17 @@
 "use client";
 
 import type { Property } from "@maslow/brain";
+import {
+  CalendarClockIcon,
+  CalendarIcon,
+  GaugeIcon,
+  HashIcon,
+  ListIcon,
+  TagIcon,
+  TextIcon,
+  ToggleLeftIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 
@@ -8,6 +19,7 @@ import { DateField } from "@/components/date-field";
 import { LocalTime } from "@/components/local-time";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
 import {
   Select,
   SelectContent,
@@ -18,6 +30,18 @@ import {
 
 import { cell, percent } from "../../format";
 import { save } from "./save";
+
+// The mark on a line, by what the field holds, so a glance says what kind
+// of thing the value is before it is read.
+const MARKS: Record<string, LucideIcon> = {
+  text: TextIcon,
+  number: HashIcon,
+  boolean: ToggleLeftIcon,
+  date: CalendarIcon,
+  datetime: CalendarClockIcon,
+  enum: TagIcon,
+  list: ListIcon,
+};
 
 // What a record holds beside its words, as a grid of lines: each field,
 // how sure, when it happened. A line is clicked into to change it and kept
@@ -90,6 +114,15 @@ export function Properties({
     return c;
   };
   const whenShown = valueOf("occurred_at", occurredAt) as string | null;
+  // How sure is kept as a part of one and shown as a percentage, and what
+  // was just chosen is a percentage on its way.
+  const sureChosen = chosen["confidence"];
+  const sureShown =
+    sureChosen === undefined
+      ? confidence
+      : sureChosen === ""
+        ? null
+        : Number(sureChosen) / 100;
   const open = (line: string) => {
     setPending(null);
     setEditing(line);
@@ -106,11 +139,12 @@ export function Properties({
   );
 
   return (
-    <dl className="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">
+    <dl className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] border-b pb-2 text-sm">
       {fields.map((f) => (
         <Line
           key={f.id}
           label={f.name}
+          mark={MARKS[f.datatype] ?? TextIcon}
           shown={cell(valueOf(`p.${f.name}`, values[f.name], f), f)}
           editing={editing === f.name}
           onOpen={canEdit ? () => open(f.name) : undefined}
@@ -126,14 +160,30 @@ export function Properties({
         </Line>
       ))}
       {undeclared.map((k) => (
-        <Line key={k} label={k} shown={cell(values[k])} editing={false} />
+        <Line
+          key={k}
+          label={k}
+          mark={TextIcon}
+          shown={cell(values[k])}
+          editing={false}
+        />
       ))}
-      {confidence !== null && (
-        <Line label="how sure" shown={percent(confidence)} editing={false} />
+      {(confidence !== null || canEdit) && (
+        <Line
+          label="how sure"
+          mark={GaugeIcon}
+          shown={percent(sureShown)}
+          editing={editing === "how sure"}
+          onOpen={canEdit ? () => open("how sure") : undefined}
+          onClose={() => done("confidence")}
+        >
+          <Sure value={sureShown} onPick={setPending} />
+        </Line>
       )}
       <Line
         label="when"
-        shown={whenShown ? <LocalTime at={whenShown} /> : canEdit ? "add" : ""}
+        mark={CalendarClockIcon}
+        shown={whenShown ? <LocalTime at={whenShown} /> : ""}
         editing={editing === "when"}
         onOpen={canEdit ? () => open("when") : undefined}
         onClose={() => done("occurred_at")}
@@ -155,6 +205,7 @@ export function Properties({
 // being changed, with a way to leave it as it was.
 function Line({
   label,
+  mark: Mark,
   shown,
   editing,
   onOpen,
@@ -162,6 +213,7 @@ function Line({
   children,
 }: {
   label: string;
+  mark: LucideIcon;
   shown: React.ReactNode;
   editing: boolean;
   onOpen?: () => void;
@@ -169,8 +221,15 @@ function Line({
   children?: React.ReactNode;
 }) {
   return (
-    <>
-      <dt className="text-muted-foreground truncate leading-7">{label}</dt>
+    <div
+      className={`col-span-2 grid grid-cols-subgrid items-baseline rounded-lg py-0.5 ${
+        editing ? "" : "hover:bg-muted/40"
+      }`}
+    >
+      <dt className="text-muted-foreground flex min-w-0 items-center gap-2 px-2 leading-7">
+        <Mark className="size-3.5 shrink-0" />
+        <span className="truncate">{label}</span>
+      </dt>
       <dd className="min-w-0 leading-7">
         {editing ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -191,15 +250,46 @@ function Line({
             variant="ghost"
             size="sm"
             onClick={onOpen}
-            className="-mx-2 h-auto justify-start px-2 py-0.5 font-normal whitespace-normal"
+            className="h-auto w-full justify-start px-2 py-0 font-normal whitespace-normal hover:bg-transparent"
           >
-            {shown || <span className="text-muted-foreground">—</span>}
+            {shown || <span className="text-muted-foreground">Empty</span>}
           </Button>
         ) : (
-          <span>{shown || "—"}</span>
+          <span className="block px-2">
+            {shown || <span className="text-muted-foreground">Empty</span>}
+          </span>
         )}
       </dd>
-    </>
+    </div>
+  );
+}
+
+// How sure, from nothing to certain, read out beside the slider.
+function Sure({
+  value,
+  onPick,
+}: {
+  value: number | null;
+  onPick: (value: string) => void;
+}) {
+  const [now, setNow] = useState(Math.round((value ?? 1) * 100));
+  return (
+    <div className="flex min-w-0 flex-1 items-center gap-3">
+      <Slider
+        aria-label="How sure"
+        className="max-w-44"
+        min={0}
+        max={100}
+        step={5}
+        value={[now]}
+        onValueChange={(v) => {
+          const n = Array.isArray(v) ? (v[0] ?? 0) : v;
+          setNow(n);
+          onPick(String(n));
+        }}
+      />
+      <span className="text-muted-foreground tabular-nums">{now}%</span>
+    </div>
   );
 }
 

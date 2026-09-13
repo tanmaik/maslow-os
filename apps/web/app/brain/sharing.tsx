@@ -3,6 +3,8 @@
 import type { Share, Subject, Target } from "@maslow/brain";
 import type { Group } from "@maslow/db/groups";
 
+import { UsersIcon } from "lucide-react";
+
 import { FormDialog } from "@/components/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -22,7 +24,8 @@ const value = (s: Subject) =>
 
 // Who a record or a type is shared with, and, for its owner, a way to share
 // it with a person, a group or everyone at a level. Sharing a type shares
-// every record of it. Compact, it is one quiet line.
+// every record of it. Compact, it is one quiet line; as a pill, it is one
+// button that says who can see it and opens on it.
 export function Sharing({
   on,
   owner,
@@ -31,6 +34,7 @@ export function Sharing({
   groups,
   members,
   compact = false,
+  pill = false,
 }: {
   on: Target;
   owner: boolean;
@@ -39,6 +43,7 @@ export function Sharing({
   groups: Group[];
   members: { id: string; name: string }[];
   compact?: boolean;
+  pill?: boolean;
 }) {
   const what = "type" in on ? "type" : "record";
   const target =
@@ -52,6 +57,135 @@ export function Sharing({
         ? (groups.find((g) => g.id === s.id)?.name ?? "a group no longer here")
         : (members.find((m) => m.id === s.id)?.name ??
           "someone no longer here");
+  const inside = (
+    <>
+      <form action="/brain/share" method="post" className="grid gap-3">
+        <input type="hidden" name={target.name} value={target.value} />
+        <div className="space-y-1">
+          <Label htmlFor={`${what}-subject`}>With</Label>
+          <Select name="subject" defaultValue="everyone">
+            <SelectTrigger id={`${what}-subject`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="everyone">Everyone in the org</SelectItem>
+              {groups
+                .filter((g) => !g.everyone)
+                .map((g) => (
+                  <SelectItem key={g.id} value={`group:${g.id}`}>
+                    {g.name} (group)
+                  </SelectItem>
+                ))}
+              {members.map((m) => (
+                <SelectItem key={m.id} value={`member:${m.id}`}>
+                  {m.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`${what}-level`}>May</Label>
+          <Select name="level" defaultValue="view">
+            <SelectTrigger id={`${what}-level`} className="w-full">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="view">view</SelectItem>
+              <SelectItem value="edit">edit</SelectItem>
+              <SelectItem value="owner">own</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-muted-foreground text-xs">
+            Everyone can only be given view. Editors change; owners also share,
+            delete and merge.
+          </p>
+        </div>
+        <div>
+          <Button type="submit">Share</Button>
+        </div>
+      </form>
+      {shares.length > 0 && (
+        <Table>
+          <TableBody>
+            {shares.map((g) => (
+              <TableRow key={g.id}>
+                <TableCell>{name(g.subject)}</TableCell>
+                <TableCell>
+                  <Badge variant="outline">{g.level}</Badge>
+                </TableCell>
+                <TableCell className="text-right">
+                  <form action="/brain/share" method="post">
+                    <input type="hidden" name="intent" value="unshare" />
+                    <input
+                      type="hidden"
+                      name={target.name}
+                      value={target.value}
+                    />
+                    <input
+                      type="hidden"
+                      name="subject"
+                      value={value(g.subject)}
+                    />
+                    <Button variant="ghost" size="xs" type="submit">
+                      Stop sharing
+                    </Button>
+                  </form>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
+    </>
+  );
+
+  // Who it is open to, in as few words as a button holds: everyone, one
+  // person by name, or how many.
+  const said =
+    shares.length === 0
+      ? ownerName === "you"
+        ? "Only you"
+        : `${ownerName}'s`
+      : shares.some((g) => g.subject.who === "everyone")
+        ? "Everyone"
+        : shares.length === 1
+          ? name(shares[0]!.subject)
+          : `${shares.length} others`;
+  const title = `Share this ${what}`;
+  const description =
+    what === "type"
+      ? "Who may see every record of this type, change them, or do everything with them. The most any path gives someone is what they can do."
+      : "Who may see it, change it, or do everything with it. The most any path gives someone is what they can do.";
+  if (pill) {
+    if (owner) {
+      return (
+        <FormDialog
+          trigger={
+            <>
+              <UsersIcon />
+              {said}
+            </>
+          }
+          variant="ghost"
+          className="text-muted-foreground shrink-0 rounded-full px-2.5"
+          title={title}
+          description={description}
+        >
+          {inside}
+        </FormDialog>
+      );
+    }
+    // Whose it is is already said beside its type, so this says only what
+    // that does not: that someone else can see it too.
+    if (shares.length === 0) return null;
+    return (
+      <span className="text-muted-foreground flex shrink-0 items-center gap-1 px-1 text-xs">
+        <UsersIcon className="size-3.5" />
+        {said}
+      </span>
+    );
+  }
   return (
     <div
       className={
@@ -84,91 +218,10 @@ export function Sharing({
         <FormDialog
           trigger="Share"
           variant={compact ? "ghost" : "outline"}
-          title={`Share this ${what}`}
-          description={
-            what === "type"
-              ? "Who may see every record of this type, change them, or do everything with them. The most any path gives someone is what they can do."
-              : "Who may see it, change it, or do everything with it. The most any path gives someone is what they can do."
-          }
+          title={title}
+          description={description}
         >
-          <form action="/brain/share" method="post" className="grid gap-3">
-            <input type="hidden" name={target.name} value={target.value} />
-            <div className="space-y-1">
-              <Label htmlFor={`${what}-subject`}>With</Label>
-              <Select name="subject" defaultValue="everyone">
-                <SelectTrigger id={`${what}-subject`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="everyone">Everyone in the org</SelectItem>
-                  {groups
-                    .filter((g) => !g.everyone)
-                    .map((g) => (
-                      <SelectItem key={g.id} value={`group:${g.id}`}>
-                        {g.name} (group)
-                      </SelectItem>
-                    ))}
-                  {members.map((m) => (
-                    <SelectItem key={m.id} value={`member:${m.id}`}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor={`${what}-level`}>May</Label>
-              <Select name="level" defaultValue="view">
-                <SelectTrigger id={`${what}-level`} className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="view">view</SelectItem>
-                  <SelectItem value="edit">edit</SelectItem>
-                  <SelectItem value="owner">own</SelectItem>
-                </SelectContent>
-              </Select>
-              <p className="text-muted-foreground text-xs">
-                Everyone can only be given view. Editors change; owners also
-                share, delete and merge.
-              </p>
-            </div>
-            <div>
-              <Button type="submit">Share</Button>
-            </div>
-          </form>
-          {shares.length > 0 && (
-            <Table>
-              <TableBody>
-                {shares.map((g) => (
-                  <TableRow key={g.id}>
-                    <TableCell>{name(g.subject)}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">{g.level}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <form action="/brain/share" method="post">
-                        <input type="hidden" name="intent" value="unshare" />
-                        <input
-                          type="hidden"
-                          name={target.name}
-                          value={target.value}
-                        />
-                        <input
-                          type="hidden"
-                          name="subject"
-                          value={value(g.subject)}
-                        />
-                        <Button variant="ghost" size="xs" type="submit">
-                          Stop sharing
-                        </Button>
-                      </form>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
+          {inside}
         </FormDialog>
       )}
     </div>
