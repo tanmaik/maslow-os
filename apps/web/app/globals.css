@@ -263,3 +263,28 @@ html[data-framed] .brain-layout:has(.brain-nav[data-away]) > main {
   height: 100%;
   margin-top: 0;
 }
+
+/* Another person's caret in a record's body, with their name on it. The
+   colour is theirs, set on the caret by the editor. */
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  word-break: normal;
+  pointer-events: none;
+}
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.4em;
+  left: -1px;
+  padding: 2px 4px;
+  border-radius: 3px 3px 3px 0;
+  font-size: 11px;
+  line-height: 1;
+  font-weight: 500;
+  color: #fff;
+  white-space: nowrap;
+  user-select: none;
+}

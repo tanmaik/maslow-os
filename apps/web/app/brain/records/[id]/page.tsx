@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
 
 import { vocabulary } from "../../catalog";
@@ -186,6 +187,8 @@ export default async function Page({
             body={r.body}
             seen={seen}
             canEdit={canEdit}
+            me={{ id: p.userId, name: people.get(p.userId) ?? "You" }}
+            liveable={deployment.sync.kind !== "none"}
             fields={
               <Properties
                 id={r.id}

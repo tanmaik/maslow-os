@@ -19,7 +19,7 @@ export function extensions({ undoRedo = true } = {}) {
 // said the same way, so two spellings of it compare equal. An escape is
 // not a spelling: brackets that come back escaped are a task list the
 // editor turned into words, and that is a body it cannot hold.
-const spelled = (md: string) =>
+export const spelled = (md: string) =>
   md
     .replace(/\r\n?/g, "\n")
     .replace(/^[ \t]+|[ \t]+$/gm, "")

@@ -4,14 +4,25 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Avatar, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
 import { Body } from "./body";
+import { useLive } from "./live";
 import { lastChange, save } from "./save";
 
 // How often a page asks whether the record changed elsewhere.
 const WATCH = 3000;
+
+// A name's first letters, for a small round mark.
+const initials = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? "")
+    .join("");
 
 // A record as a document: a title and a body a person edits where they
 // read them, kept as they leave each one. The body takes its shape as it
@@ -26,6 +37,8 @@ export function Document({
   body,
   seen,
   canEdit,
+  me,
+  liveable,
   fields,
 }: {
   id: string;
@@ -34,11 +47,16 @@ export function Document({
   // The number of the last change to the record the page was read with.
   seen: number;
   canEdit: boolean;
+  // The reader, for their caret and for the row of who else is here.
+  me: { id: string; name: string };
+  // Whether this deployment has a relay to join the body to.
+  liveable: boolean;
   // What the record holds beside its words, which reads between the title
   // and the body as it does on a page of notes.
   fields?: ReactNode;
 }) {
   const router = useRouter();
+  const { live, status, others } = useLive(id, liveable, canEdit, me.id);
   const [heading, setHeading] = useState(title);
   const [trouble, setTrouble] = useState<string | null>(null);
   // What a save that fell behind was saving, per field, held until the
@@ -272,11 +290,36 @@ export function Document({
             </Alert>
           ),
       )}
+      {(others.length > 0 || (liveable && status === "off")) && (
+        <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+          {others.length > 0 && (
+            <AvatarGroup>
+              {others.map((o) => (
+                <Avatar key={o.id} className="size-6 text-[10px]">
+                  <AvatarFallback style={{ background: o.color }}>
+                    {initials(o.name)}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+            </AvatarGroup>
+          )}
+          {others.length > 0 && (
+            <span>
+              {others.map((o) => o.name).join(", ")}{" "}
+              {others.length === 1 ? "is" : "are"} here
+            </span>
+          )}
+          {status === "off" && <Badge variant="outline">Not live</Badge>}
+        </div>
+      )}
       <Body
         body={body}
         seen={seen}
         put={put}
         canEdit={canEdit}
+        live={live}
+        joining={status === "joining"}
+        me={me}
         onKeep={(t, base) => keep("body", t, base)}
       />
       {trouble && <p className="text-destructive text-sm">{trouble}</p>}

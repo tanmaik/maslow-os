@@ -1,15 +1,19 @@
 "use client";
 
-import { Markdown as MarkdownFormat } from "tiptap-markdown";
-import StarterKit from "@tiptap/starter-kit";
+import { extensions, spelled, survives } from "@maslow/document/extensions";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import { DOMParser as DOMParse } from "@tiptap/pm/model";
 import type { EditorView } from "@tiptap/pm/view";
 import { useEffect, useRef, useState } from "react";
 
 import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+
+import type * as Y from "yjs";
+
+import { colorOf, type Live } from "./live";
 
 // What the slash menu offers, in the order it offers them: what it is
 // called, and what it does to the block the caret is in.
@@ -35,37 +39,11 @@ const INSERTS: { name: string; run: (e: Editor) => void }[] = [
   { name: "Code", run: (e) => e.chain().focus().toggleCodeBlock().run() },
 ];
 
-// Markdown as the editor spells it: an emphasis in stars rather than
-// underscores, a bullet in dashes, a divider in three dashes, a number
-// with a dot, no indent, no blank line between blocks. The same document
-// said the same way, so two spellings of it compare equal. An escape is
-// not a spelling: brackets that come back escaped are a task list the
-// editor turned into words, and that is a body it cannot hold.
-const spelled = (md: string) =>
-  md
-    .replace(/\r\n?/g, "\n")
-    .replace(/^[ \t]+|[ \t]+$/gm, "")
-    .replace(/^(.+)\n=+$/gm, "# $1")
-    .replace(/^[*+](?= )/gm, "-")
-    .replace(/^(\d+)\)(?= )/gm, "$1.")
-    .replace(/^(?:\*{3,}|_{3,})$/gm, "---")
-    .replace(/__(\S[^_\n]*)__/g, "**$1**")
-    .replace(/_(\S[^_\n]*)_/g, "*$1*")
-    .replace(/\n{2,}/g, "\n")
-    .trim();
-
-// The editor's own markdown: reading it, writing it, and parsing it.
-const store = (e: Editor) =>
+// The editor's own markdown.
+const markdownOf = (e: Editor) =>
   (
-    e.storage as unknown as {
-      markdown: {
-        getMarkdown(): string;
-        serializer: { serialize(content: unknown): string };
-        parser: { parse(md: string, opts?: { inline?: boolean }): string };
-      };
-    }
-  ).markdown;
-const markdownOf = (e: Editor) => store(e).getMarkdown();
+    e.storage as unknown as { markdown: { getMarkdown(): string } }
+  ).markdown.getMarkdown();
 
 // Whether the editor can hold a body whole: a table, an image, anything
 // its schema has no node for comes back changed, and saving that back
@@ -78,33 +56,61 @@ function holds(e: Editor, body: string): boolean {
 // under the line it was opened on.
 const MENU = 268;
 
-// Whether markdown survives the editor: it is parsed as the editor parses
-// it and written straight back out, and what comes back must say the same.
-function survives(e: Editor, md: string): boolean {
-  // Read in a document of its own, where a tag a paste carries neither
-  // loads nor runs.
-  const held = new window.DOMParser().parseFromString(
-    store(e).parser.parse(md),
-    "text/html",
-  );
-  const doc = DOMParse.fromSchema(e.schema).parse(held.body);
-  return spelled(store(e).serializer.serialize(doc.content)) === spelled(md);
+// A body with one line ending, no blank lines before it and nothing after
+// it, to compare letter for letter: a space at the start of a line is a
+// change, in a code block most of all.
+const exact = (md: string) =>
+  md.replace(/\r\n?/g, "\n").replace(/^\n+/, "").trimEnd();
+
+// Resolves once a shared document has changed and reads as wanted, or
+// after the wait: the relay's own rewrite of it, from the saved draft, is
+// what is waited for, so a document that already read the same by text
+// but not by shape is not taken before that.
+function says(doc: Y.Doc, want: string, ms: number): Promise<void> {
+  const text = () =>
+    doc.getXmlFragment("default").toDOM(document).textContent ?? "";
+  return new Promise((done) => {
+    const finish = () => {
+      doc.off("update", look);
+      clearTimeout(timer);
+      done();
+    };
+    const look = () => {
+      if (text() === want) finish();
+    };
+    const timer = setTimeout(finish, ms);
+    doc.on("update", look);
+  });
 }
 
 // A record's body, written the way it reads: what is typed takes its shape
 // as it is typed, and a slash offers what a line can become. Markdown is
 // what is stored, so what an agent writes and what a person writes are the
-// same text.
+// same text. Live, the body is the relay's document: everyone's typing
+// merges as it happens, their carets carry their names, the relay saves,
+// and a reader watches it move; alone, the page saves as the person leaves
+// the text.
 export function Body({
   body,
   seen,
   put,
   canEdit,
+  live,
+  joining,
+  me,
   onKeep,
 }: {
   body: string;
   // The change the page's body rests on.
   seen: number;
+  // The relay's document, when the page is in it, and whether the page is
+  // on its way in: typing then would be thrown away with the copy it went
+  // into, so the text waits.
+  live: Live | null;
+  joining: boolean;
+  // The person, on their caret for everyone else: who, by membership,
+  // and their name.
+  me: { id: string; name: string };
   // A body the person chose, put in the text whether or not they are in
   // it, resting on the change it names; a new count is a new choice.
   put: { n: number; body: string; seen: number } | null;
@@ -134,6 +140,38 @@ export function Body({
   const textNow = useRef(body);
   textNow.current = text;
   const box = useRef<HTMLDivElement>(null);
+  // The relay's document the editor is bound to. It lags the page's by a
+  // save: what was typed alone, before the page was in, is saved first,
+  // so no draft goes with the editor it went into.
+  const [joined, setJoined] = useState<Live | null>(live);
+  const offered = useRef(live);
+  offered.current = live;
+  // Whether a draft is on its way to the brain ahead of the handoff, during
+  // which the text waits too, and the saver as it is now, for an effect
+  // that must not run again for it.
+  const [handing, setHanding] = useState(false);
+  // A handoff that failed waits a while before another try, with the text
+  // free meanwhile; the count is bumped so the wait ends in a rerun.
+  const paused = useRef(false);
+  const [tries, setTries] = useState(0);
+  const keep = useRef(onKeep);
+  keep.current = onKeep;
+  // Which choice of the person's was already put in the text, so a
+  // document that comes and goes does not put it again over newer text.
+  const putDone = useRef(0);
+  // A save the person's leaving of the text set going, not yet landed:
+  // the handoff waits for it.
+  const saving = useRef<Promise<unknown> | null>(null);
+  // What the live text said when its socket dropped, in case the relay
+  // never got the last of it: the text alone starts from it, unsaved, and
+  // resting on the change the page had when the socket opened, so a save
+  // of it cannot write over what landed meanwhile without asking.
+  const parting = useRef<string | null>(null);
+  const joinedAt = useRef(seen);
+  // Whether the text is the relay's document now, for a save's answer that
+  // arrives after the text changed hands.
+  const joinedNow = useRef(joined);
+  joinedNow.current = joined;
   // The editor answers the keyboard before this page sees it, so the menu's
   // keys are read inside it, off what is on screen right now.
   const open = useRef(false);
@@ -152,15 +190,48 @@ export function Body({
     {
       editable: canEdit,
       immediatelyRender: false,
-      extensions: [
-        StarterKit.configure({ underline: false }),
-        MarkdownFormat.configure({ transformPastedText: true }),
-      ],
-      content: body,
+      extensions: joined
+        ? [
+            ...extensions({ undoRedo: false }),
+            Collaboration.configure({ document: joined.doc }),
+            CollaborationCaret.configure({
+              provider: joined.provider,
+              user: { id: me.id, name: me.name, color: colorOf(me.name) },
+            }),
+          ]
+        : extensions(),
+      content: joined ? undefined : body,
       onCreate: ({ editor: e }) => {
         ed.current = e;
+        // Text alone again after a socket dropped: what the live text last
+        // said, if the page does not have it yet, is unsaved here.
+        let holding = body;
+        if (!joined && parting.current !== null) {
+          const was = parting.current;
+          parting.current = null;
+          // What the live text last said is kept only over a page the
+          // editor could hold: a body it cannot — a table the record was
+          // rewritten to — is the newer thing, and is shown instead. A
+          // page no newer than the socket was is not that: it has only
+          // not caught up, and the draft stays.
+          const stale = seen <= joinedAt.current;
+          if (exact(was) !== exact(body) && (holds(e, body) || stale)) {
+            e.commands.setContent(was, { emitUpdate: false });
+            edited.current = true;
+            holding = was;
+            // Resting on the change the page had when the socket opened,
+            // whatever the page has taken since.
+            base.current = joinedAt.current;
+          } else base.current = seen;
+        }
         setBlank(e.isEmpty);
-        if (!holds(e, body)) setWhole(false);
+        // What the editor holds is measured against what it was given, and
+        // the text box's state starts over with this editor.
+        if (!joined) {
+          const whole = holds(e, holding);
+          setText(holding);
+          setWhole(whole);
+        }
       },
       editorProps: {
         handlePaste: (view: EditorView, event?: ClipboardEvent) => {
@@ -191,7 +262,8 @@ export function Body({
         },
       },
       onUpdate: ({ editor: e }) => {
-        edited.current = true;
+        // Live, what changes is the shared document's, not a draft here.
+        if (!joined) edited.current = true;
         setBlank(e.isEmpty);
         // A slash on an empty line is a menu; anything else closes it.
         const { $from } = e.state.selection;
@@ -216,23 +288,37 @@ export function Body({
       },
       onBlur: ({ editor: e }) => {
         setSlash(null);
+        // Live, the relay saves; nothing is kept from here.
+        if (joined || !edited.current) return;
         // One line ending, the one an agent writes, so a body a person
         // touched and a body the agent wrote are the same text. The last
-        // that saved is only forgotten once the next one has.
-        if (!edited.current) return;
+        // that saved is only forgotten once the next one has. Typed and
+        // undone is nothing to save.
         edited.current = false;
         const said = markdownOf(e).replace(/\r\n/g, "\n").trim();
-        void onKeep(said, base.current).then((landed) => {
+        // Unchanged, unless a save is still out that would change it.
+        if (said === kept.current && !saving.current) return;
+        const want = e.state.doc.textContent;
+        const save = onKeep(said, base.current).then(async (landed) => {
           if (typeof landed === "number") {
             kept.current = said;
             base.current = landed;
+            // Typed on since: what is offered waits for that to be saved
+            // too, by the handoff.
+            const doc = offered.current?.doc;
+            if (doc && !edited.current) {
+              await says(doc, want, 6000);
+              if (!edited.current) setJoined(offered.current);
+            }
           }
           // A save that fell behind gives way to what the page has, which
           // may have arrived while the person was still in the text — unless
           // they are back in it, or have written on since, when leaving it
-          // again settles it.
+          // again settles it, or the text is the relay's document by now.
           else if (
             landed === "behind" &&
+            !joinedNow.current &&
+            !e.isDestroyed &&
             !e.isFocused &&
             spelled(markdownOf(e)) === spelled(said)
           )
@@ -241,9 +327,13 @@ export function Body({
           // it again tries once more.
           else edited.current = true;
         });
+        saving.current = save;
+        void save.finally(() => {
+          if (saving.current === save) saving.current = null;
+        });
       },
     },
-    [canEdit],
+    [canEdit, joined?.doc],
   );
 
   // Takes the page's body as what is shown, resting on the page's change.
@@ -272,19 +362,163 @@ export function Body({
   // A page older than what the text already rests on is not followed: the
   // refresh a landed save asked for is still on its way.
   useEffect(() => {
-    if (!editor || editor.isFocused || typing.current) return;
-    if (seen < base.current) return;
-    adopt(editor, { body, seen });
-  }, [body, seen, editor]);
-  useEffect(() => {
-    if (put && editor) adopt(editor, put, true);
-  }, [put, editor]);
+    if (editor && !editor.isDestroyed)
+      editor.setEditable(canEdit && !joining && !handing, false);
+  }, [editor, canEdit, joining, handing]);
 
-  if (!canEdit) return <Markdown>{body}</Markdown>;
-  if (!whole)
+  // The offered document is taken once nothing typed alone is unsaved: a
+  // draft in the text is saved first, and taken up after it lands; one
+  // that will not land keeps the text alone until a later save does.
+  // The text box's focus does not outlive the text box.
+  useEffect(() => {
+    if (whole || joined) typing.current = false;
+  }, [whole, joined]);
+
+  useEffect(() => {
+    if (live === joined || handing || paused.current) return;
+    if (!live) {
+      // The socket dropped: what the live text says is kept for the text
+      // alone, resting on the page's change.
+      // A reader has no draft: what they watched was someone else's. Text
+      // the page already has was saved, and rests on the page's change;
+      // text it does not is kept, resting on the change the page had when
+      // the socket opened, so saving it cannot write over what landed
+      // meanwhile without asking.
+      const e = ed.current;
+      if (joined && canEdit && e && !e.isDestroyed) {
+        const said = markdownOf(e).replace(/\r\n/g, "\n").trim();
+        kept.current = latest.current.body;
+        if (exact(said) === exact(latest.current.body)) {
+          parting.current = null;
+          base.current = latest.current.seen;
+        } else {
+          parting.current = said;
+          base.current = joinedAt.current;
+        }
+      }
+      // Nothing of the live document's is a draft of this text's.
+      edited.current = false;
+      return setJoined(null);
+    }
+    joinedAt.current = latest.current.seen;
+    const e = ed.current;
+    if (!e || e.isDestroyed || joined || !canEdit) return setJoined(live);
+    // A save the person set going by leaving the text lands first.
+    if (saving.current) {
+      setHanding(true);
+      void saving.current.finally(() => {
+        saving.current = null;
+        setHanding(false);
+      });
+      return;
+    }
+    if (!edited.current) return setJoined(live);
+    // The draft as the person sees it: the text box's, when the body is
+    // one the editor could not hold. One that says what was already kept
+    // — typed and undone — has nothing to save.
+    const said = whole
+      ? markdownOf(e).replace(/\r\n/g, "\n").trim()
+      : textNow.current.trim();
+    if (said === kept.current || exact(said) === exact(latest.current.body)) {
+      // The page has it already — the relay saved it before the socket
+      // dropped — so the text rests on the page's change.
+      kept.current = latest.current.body;
+      base.current = latest.current.seen;
+      edited.current = false;
+      return setJoined(live);
+    }
+    setHanding(true);
+    edited.current = false;
+    const want = whole ? e.state.doc.textContent : said;
+    void keep.current(said, base.current).then(async (landed) => {
+      if (typeof landed === "number") {
+        kept.current = said;
+        base.current = landed;
+        // Typed on before the text was held: saved by another round.
+        const now = whole
+          ? markdownOf(e).replace(/\r\n/g, "\n").trim()
+          : textNow.current.trim();
+        if (!e.isDestroyed && now !== said) {
+          edited.current = true;
+          return setHanding(false);
+        }
+        // The relay's document is taken only once it says the draft too,
+        // which it does within a couple of seconds of the save; a document
+        // that never does is taken anyway, since the brain has the draft.
+        const doc = offered.current?.doc;
+        if (doc) await says(doc, want, 6000);
+        setJoined(offered.current);
+        return setHanding(false);
+      }
+      // Fell behind: the page holds the draft for the person's choice, and
+      // the text joins. Not saved at all: another try, in a while.
+      if (landed === "behind") {
+        setJoined(offered.current);
+        return setHanding(false);
+      }
+      edited.current = true;
+      paused.current = true;
+      setHanding(false);
+      setTimeout(() => {
+        paused.current = false;
+        setTries((n) => n + 1);
+      }, 5000);
+    });
+  }, [live, joined, whole, handing, canEdit, tries]);
+
+  // Live, the relay's document is what is shown, and the page's body is
+  // not followed at all.
+  // Nor is a draft not yet saved — after a socket dropped, or a save that
+  // did not land — written over by what the page has.
+  useEffect(() => {
+    if (joined || !editor || editor.isDestroyed) return;
+    if (editor.isFocused || typing.current) return;
+    if (parting.current !== null || seen < base.current) return;
+    if (edited.current) {
+      // A draft that says what the page now says was saved after all; one
+      // the page has since outgrown — a body the editor cannot hold — is
+      // given up for it, since that is the newer thing.
+      const draft = whole ? markdownOf(editor) : textNow.current;
+      const same = exact(draft) === exact(body);
+      // A body that did not move — a title or a field did — outgrows no
+      // draft, whatever the editor can hold of it.
+      if (!same && (body === kept.current || survives(editor, body))) return;
+      edited.current = false;
+      if (!same) {
+        setText(body);
+        setWhole(false);
+      }
+    }
+    adopt(editor, { body, seen });
+  }, [body, seen, editor, joined, whole]);
+  useEffect(() => {
+    if (!put || put.n === putDone.current) return;
+    // Live, the relay's document says what the choice made of the brain;
+    // the choice is spent all the same.
+    if (joined) {
+      putDone.current = put.n;
+      return;
+    }
+    if (editor && !editor.isDestroyed) {
+      putDone.current = put.n;
+      adopt(editor, put, true);
+    }
+  }, [put, editor, joined]);
+
+  const state = joined ? "live" : joining ? "joining" : "off";
+  if (!canEdit) {
+    if (!joined) return <Markdown>{body}</Markdown>;
+    return (
+      <div className="min-h-7" data-live={state}>
+        <EditorContent editor={editor} />
+      </div>
+    );
+  }
+  if (!whole && !joined)
     return (
       <Textarea
         aria-label="Body"
+        readOnly={joining || handing}
         value={text}
         onChange={(e) => {
           edited.current = true;
@@ -298,18 +532,25 @@ export function Body({
           if (!edited.current) return;
           edited.current = false;
           const said = text.trim();
-          void onKeep(said, base.current).then((landed) => {
+          if (said === kept.current && !saving.current) return;
+          const save = onKeep(said, base.current).then((landed) => {
             if (typeof landed === "number") {
               kept.current = said;
               base.current = landed;
             } else if (
               landed === "behind" &&
+              !joinedNow.current &&
               ed.current &&
+              !ed.current.isDestroyed &&
               !typing.current &&
               textNow.current.trim() === said
             )
               adopt(ed.current, latest.current, true);
             else edited.current = true;
+          });
+          saving.current = save;
+          void save.finally(() => {
+            if (saving.current === save) saving.current = null;
           });
         }}
         className="min-h-24 flex-1 field-sizing-content resize-none border-0 bg-transparent px-0 leading-relaxed shadow-none focus-visible:ring-0 md:text-sm dark:bg-transparent"
@@ -331,6 +572,7 @@ export function Body({
   return (
     <div
       ref={box}
+      data-live={state}
       className="relative min-h-24 flex-1 @lg:min-h-32"
       onMouseDown={(e) => {
         // The room under the last line belongs to the body: a click in it

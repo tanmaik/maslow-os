@@ -168,14 +168,20 @@ refreshes as the record changes elsewhere, so an agent's rewrite is on
 screen within seconds. While anyone has a record open, its body is one
 live document in a relay of ours, `packages/sync`, that every editor of
 it is joined to over a socket on a ticket the app signs: keystrokes
-merge as they happen, and the relay saves through the app's own door,
+merge as they happen, each person's caret carries their name, a row
+under the fields says who else is in it, a reader with view watches it
+move, and the relay saves through the app's own door,
 after a second of quiet and before a different person's typing lands,
 so every save is one person's and in their name. The relay holds no
 table and runs the page's own editor headless, so what it saves is what
 the page would; markdown stays the one truth, and the live document is
 forgotten when the last person leaves. A rewrite from elsewhere replaces
 the live text within seconds; a viewer's socket is read-only, and a
-share that ends puts its person out within the minute.
+share that ends puts its person out within the minute. A socket that
+closes ends the page's copy too, and the page opens anew rather than
+carry a copy the relay would merge in twice. A relay that cannot be
+reached, or a body the editor cannot hold, shows "Not live" and the page
+saves as it does alone; the title always saves that way.
 
 Types are the person's own vocabulary, open to them and their agent. A type
 is a name and the fields it declares, nothing more: no description, since
