@@ -1,8 +1,16 @@
-# The computer's image is built from the repo's root and takes only what
-# it copies: the computer's own files and the browser package.
+# The computer's and the relay's images are built from the repo's root
+# and take only what they copy: the computer's own files and the browser
+# package; the relay and the shared editor package, with the workspace's
+# manifests pnpm installs them from.
 *
 !apps/computer
 !packages/browser
+!packages/sync
+!packages/document
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
 apps/computer/fly.toml
+packages/sync/fly.toml
 packages/browser/fixtures
 **/node_modules

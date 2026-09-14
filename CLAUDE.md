@@ -181,7 +181,12 @@ share that ends puts its person out within the minute. A socket that
 closes ends the page's copy too, and the page opens anew rather than
 carry a copy the relay would merge in twice. A relay that cannot be
 reached, or a body the editor cannot hold, shows "Not live" and the page
-saves as it does alone; the title always saves that way.
+saves as it does alone; the title always saves that way. On Vercel the
+relay is one small Fly machine per environment that the hourly sweep
+makes, keeps on the current image and keeps running; previews share one,
+which carries a lease every preview's sweep renews, so it lives while
+previews live and the reap takes it after; production's carries none.
+Production refuses to start without the relay's secret.
 
 Types are the person's own vocabulary, open to them and their agent. A type
 is a name and the fields it declares, nothing more: no description, since

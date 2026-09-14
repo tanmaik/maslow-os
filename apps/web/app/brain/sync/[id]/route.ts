@@ -1,7 +1,8 @@
 import { Conflict, edit, get, history, isId } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
+import { sweepIfDue } from "@/lib/meter";
 import { relayCaller } from "@/lib/sync";
 
 // What the relay asks of a record, in the name of a member: its body, the
@@ -33,6 +34,10 @@ export async function GET(
   if (!p) return new Response(null, { status: 401 });
   const { id } = await params;
   if (!isId(id)) return new Response(null, { status: 404 });
+  // The relay asks every few seconds while anyone is in a record, so the
+  // hour's sweep runs from here as it runs from a page: what keeps the
+  // relay's own lease is somebody using it.
+  after(() => sweepIfDue());
   const now = await said(p, id);
   if (!now) return new Response(null, { status: 404 });
   return NextResponse.json(now);

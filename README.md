@@ -58,12 +58,15 @@ and its filter counts only production. Without the key nothing is reported
 and the pill says so.
 
 A record's body is live while people are in it: the relay in `packages/sync`
-holds the document and saves through the app, on `SYNC_URL` and the
-`SYNC_SECRET` the two share. `pnpm dev` starts one beside the app; without
-one, nothing is live and the page saves as it does alone, production
-included until the relay is hosted.
+holds the document and saves through the app, on the `SYNC_SECRET` the two
+share. `pnpm dev` starts one beside the app on a secret of its own. On
+Vercel the sweep keeps one machine on Fly per environment, on the
+`SYNC_SECRET` set there: previews share one, made when the first preview
+sweeps and reaped a day after the last stops renewing it; production has
+its own. Without a secret nothing is live and the page saves as it does
+alone.
 
-Production refuses to start without WorkOS, mail, storage, analytics, or the
+Production refuses to start without WorkOS, mail, storage, analytics, the relay's secret, or the
 sweep's `CRON_SECRET`.
 
 ## Dev secrets

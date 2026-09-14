@@ -108,6 +108,32 @@ const shape = (m: Shape) => ({
   auto_destroy: false,
 });
 
+// What the relay's machine is made of: its image, the secret it shares
+// with the app, one port behind Fly's edge, and its tags. No disk: it
+// holds nothing that outlives a document being open.
+export type RelayShape = {
+  image: string;
+  secret: string;
+  metadata: Record<string, string>;
+};
+const relayShape = (m: RelayShape) => ({
+  image: m.image,
+  env: { SYNC_PORT: "8080", SYNC_SECRET: m.secret, DOMAIN: config().domain },
+  guest: { cpu_kind: "shared", cpus: 1, memory_mb: 512 },
+  services: [
+    {
+      protocol: "tcp",
+      internal_port: 8080,
+      autostart: false,
+      autostop: "off",
+      ports: [{ port: 443, handlers: ["tls", "http"] }],
+    },
+  ],
+  metadata: m.metadata,
+  restart: { policy: "always" },
+  auto_destroy: false,
+});
+
 function config() {
   const c = deployment.computers;
   if (c.kind !== "fly") throw new Error("Computers are off here.");
@@ -164,6 +190,20 @@ export const fly = {
   // restarts it into it in seconds, on the same disk.
   async reshape(id: string, m: Shape): Promise<void> {
     await call("POST", `/machines/${id}`, { config: shape(m) });
+  },
+
+  // The relay's machine, and the same remade to a newer image.
+  createRelay(
+    m: RelayShape & { name: string; region: string },
+  ): Promise<Machine> {
+    return call("POST", "/machines", {
+      name: m.name,
+      region: m.region,
+      config: relayShape(m),
+    });
+  },
+  async reshapeRelay(id: string, m: RelayShape): Promise<void> {
+    await call("POST", `/machines/${id}`, { config: relayShape(m) });
   },
 
   machines(): Promise<Machine[]> {

@@ -1,5 +1,7 @@
 import { Server, type Connection, type Document } from "@hocuspocus/server";
 import { headless } from "@maslow/document/headless";
+import http from "node:http";
+import net from "node:net";
 import * as Y from "yjs";
 
 import { nameOf, verify, type Claims } from "./ticket.ts";
@@ -241,8 +243,8 @@ export function relay({
     }
   };
 
-  const server = new Server<Claims>({
-    port,
+  const hocuspocus = new Server<Claims>({
+    address: "127.0.0.1",
     unloadImmediately: true,
     // A ticket of ours, for this record, held by someone the app still
     // lets in at that level, to a body the editor can hold whole; a body
@@ -383,11 +385,96 @@ export function relay({
     },
   });
 
+  // The relay's front, on the port given: the documents' own server sits
+  // behind it on loopback, and a request that names another machine under
+  // the deployment's domain is carried on to that machine instead, as a
+  // computer's door carries one on, since Fly hands a request for any
+  // machine of the app to whichever answers.
+  let inner = 0;
+  const where = (req: http.IncomingMessage) =>
+    elsewhere(req) ?? { host: "127.0.0.1", port: inner };
+  const server = http.createServer((req, res) => {
+    const to = where(req);
+    const onward = http.request(
+      { ...to, method: req.method, path: req.url, headers: forwarded(req) },
+      (answer) => {
+        res.writeHead(answer.statusCode ?? 502, answer.headers);
+        answer.on("error", () => res.destroy());
+        answer.pipe(res);
+      },
+    );
+    onward.on("error", () => {
+      res.writeHead(502, { "content-type": "text/plain" });
+      res.end("Not answering.");
+    });
+    // A request the reader walked away from takes its answer with it.
+    res.on("close", () => onward.destroy());
+    req.pipe(onward);
+  });
+  server.on("upgrade", (req, socket, head) => {
+    const to = where(req);
+    const onward = net.connect(to.port, to.host, () => {
+      const lines = [`${req.method} ${req.url} HTTP/1.1`];
+      for (const [k, v] of Object.entries(forwarded(req)))
+        lines.push(`${k}: ${Array.isArray(v) ? v.join(", ") : v}`);
+      onward.write(lines.join("\r\n") + "\r\n\r\n");
+      if (head.length) onward.write(head);
+      socket.pipe(onward).pipe(socket);
+    });
+    onward.on("error", () => socket.destroy());
+    socket.on("error", () => onward.destroy());
+  });
+
   return {
-    listen: () => server.listen(port),
+    listen: async () => {
+      inner = await free();
+      await hocuspocus.listen(inner);
+      // On every address, the private IPv6 one a computer's door carries
+      // a request on to included.
+      await new Promise<void>((r) => server.listen(port, "::", () => r()));
+    },
     destroy: async () => {
-      await server.destroy();
+      await hocuspocus.destroy();
+      await new Promise<void>((r) => server.close(() => r()));
       scratch.destroy();
     },
+  };
+}
+
+// Where a request is really for, when it names another machine of this
+// Fly app under the deployment's domain: that machine's own address
+// inside the app. Null for the relay's own name, or off Fly.
+const DOMAIN = process.env.DOMAIN;
+const ME = process.env.FLY_MACHINE_ID;
+const APP = process.env.FLY_APP_NAME;
+function elsewhere(req: http.IncomingMessage) {
+  if (!DOMAIN || !ME || !APP) return null;
+  const host = (req.headers.host ?? "").replace(/:\d+$/, "");
+  if (!host.endsWith(`.${DOMAIN}`)) return null;
+  const label = host.slice(0, -DOMAIN.length - 1);
+  const named = /^(?:\d{1,5}-)?([0-9a-f]{14})$/.exec(label);
+  const machine = named?.[1];
+  if (!machine || machine === ME) return null;
+  return { host: `${machine}.vm.${APP}.internal`, port: 8080 };
+}
+
+// A loopback port nothing holds, for the documents' server.
+const free = () =>
+  new Promise<number>((r, fail) => {
+    const s = net.createServer();
+    s.listen(0, "127.0.0.1", () => {
+      const { port } = s.address() as net.AddressInfo;
+      s.close(() => r(port));
+    });
+    s.on("error", fail);
+  });
+
+// The headers carried on, with where the request came from added.
+function forwarded(req: http.IncomingMessage) {
+  return {
+    ...req.headers,
+    "x-forwarded-proto": "https",
+    "x-forwarded-host": req.headers.host ?? "",
+    "x-forwarded-for": req.socket.remoteAddress ?? "",
   };
 }

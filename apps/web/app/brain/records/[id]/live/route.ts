@@ -4,12 +4,13 @@ import { mint, nameOf } from "@maslow/sync/ticket";
 import { NextResponse } from "next/server";
 
 import { deployment } from "@/lib/deployment";
+import { relayUrl } from "@/lib/relay";
 import { principal } from "@/lib/session";
 
 // A way into a record's live document: where the relay is, what the
 // document is called there, and a ticket naming this deployment, the
 // person, the record and what they may do in it, good for an hour.
-// Nothing where there is no relay.
+// Nothing where there is no relay, or none running yet.
 export async function GET(
   _: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -18,6 +19,8 @@ export async function GET(
   if (!p) return new Response(null, { status: 401 });
   if (deployment.sync.kind === "none")
     return new Response(null, { status: 404 });
+  const url = await relayUrl();
+  if (!url) return new Response(null, { status: 404 });
   const { id } = await params;
   if (!isId(id)) return new Response(null, { status: 404 });
   const [r] = await asPerson(p, (db) => get(db, [id]));
@@ -34,7 +37,7 @@ export async function GET(
     level,
   };
   return NextResponse.json({
-    url: deployment.sync.url,
+    url,
     name: nameOf(claims),
     ticket: mint(deployment.sync.secret, claims, 3600),
   });

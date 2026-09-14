@@ -2,6 +2,7 @@ import { asMeter, asOrg, type Query } from "@maslow/db";
 import { picturesIn, type Resource, type Unit } from "@maslow/db/usage";
 
 import { reconcile } from "./computer.ts";
+import { reconcile as reconcileRelay } from "./relay.ts";
 import { settle } from "./orphans.ts";
 import { PRICES } from "./prices.ts";
 
@@ -172,6 +173,10 @@ async function sweep(now = new Date()): Promise<number> {
   // Every current member has a computer and it runs.
   await reconcile().catch((err: Error) =>
     console.error(`sweep computers: ${err.message}`),
+  );
+  // The relay for live editing exists and runs.
+  await reconcileRelay().catch((err: Error) =>
+    console.error(`sweep relay: ${err.message}`),
   );
   return appended;
 }

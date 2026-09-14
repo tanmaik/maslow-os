@@ -210,20 +210,26 @@ if (production && !process.env.CRON_SECRET)
 // The relay that holds a record's live document while people are in it,
 // reached by the browser over a socket on a ticket this app signs with the
 // secret the two share. The ticket names where the relay calls this
-// deployment back: its own address, never one a request claimed. Without
-// a relay nothing is live and the page saves as it does alone; production
-// runs without one until the relay is hosted.
+// deployment back: its own address, never one a request claimed. The
+// relay's address is given outright where the dev stack runs one beside
+// the app, and found on Fly otherwise, where the sweep keeps one. Without
+// a secret nothing is live and the page saves as it does alone; production
+// has no such mode.
 type Sync =
-  | { kind: "relay"; url: string; secret: string; origin: string }
+  | { kind: "relay"; url: string | null; secret: string; origin: string }
   | { kind: "none" };
 function sync(): Sync {
   const { SYNC_URL: url, SYNC_SECRET: secret } = process.env;
   const site = production
     ? process.env.VERCEL_PROJECT_PRODUCTION_URL
     : (process.env.VERCEL_BRANCH_URL ?? process.env.APP_URL);
-  if (!url || !secret || !site) return { kind: "none" };
+  if (production && !secret)
+    throw new Error(
+      "No relay for live editing: set SYNC_SECRET. Production has no fallback.",
+    );
+  if (!secret || !site) return { kind: "none" };
   const origin = site.startsWith("http") ? site : `https://${site}`;
-  return { kind: "relay", url, secret, origin };
+  return { kind: "relay", url: url ?? null, secret, origin };
 }
 
 export const deployment = {

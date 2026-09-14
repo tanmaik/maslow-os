@@ -1,0 +1,9 @@
+# The Fly app the relay's image is pushed to. The machine is made by the
+# app's sweep through the Machines API, never by `fly deploy`; this file
+# only names the image. Built from the repo's root:
+#   fly deploy --build-only --push --remote-only --image-label sync-N \
+#     --config packages/sync/fly.toml --dockerfile packages/sync/Dockerfile .
+app = "maslow-computers-dev"
+
+[build]
+  dockerfile = "Dockerfile"
