@@ -1,19 +1,9 @@
-"use client";
-
-import { useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-
-// One card of settings: a place the rail points at, its name, one line on
-// what it holds, and the rest. Asked for one section alone, with ?only=,
-// as a block in the room is, every other section stays out of the way.
+// One well of a pane: a BoardUI card, one line on what it holds, and the
+// rest. The toolbar already says which pane this is, so the name is there
+// for a screen reader and nowhere else. Settings has one radius, 16, the
+// one BoardUI's own settings card carries.
 export function Section({
   id,
   title,
@@ -25,24 +15,18 @@ export function Section({
   description?: ReactNode;
   children: ReactNode;
 }) {
-  const only = useSearchParams().get("only");
-  if (only && only !== id) return null;
   return (
-    <Card
+    <section
       id={id}
-      className={
-        only
-          ? "rounded-none bg-transparent ring-0 [--card-spacing:--spacing(2)]"
-          : "scroll-mt-24 rounded-[14px]"
-      }
+      className="prefs-well relative flex flex-col gap-4 rounded-2xl border border-border-button-default bg-background-primary-default p-5 shadow-card"
     >
-      <CardHeader>
-        <CardTitle className="page-title text-sm font-semibold">
-          <h2>{title}</h2>
-        </CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
-      </CardHeader>
-      <CardContent className="space-y-4">{children}</CardContent>
-    </Card>
+      <h2 className="sr-only">{title}</h2>
+      {description && (
+        <p className="text-body-2-regular text-text-secondary text-pretty">
+          {description}
+        </p>
+      )}
+      {children}
+    </section>
   );
 }

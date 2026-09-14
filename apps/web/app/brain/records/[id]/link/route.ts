@@ -6,6 +6,7 @@ import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
 import { recordHref } from "../../../format";
+import { refused } from "../../../refuse";
 import { confidenceFrom } from "../../../props";
 
 // Links this record to another, in the direction the form chose, as a link
@@ -23,7 +24,10 @@ export async function POST(
   const other = String(form.get("other") ?? "");
   const verb = String(form.get("verb") ?? "");
   const out = form.get("direction") !== "in";
-  if (!isId(other)) return new Response("Choose a record.", { status: 400 });
+  const back = recordHref(id);
+  if (!isId(other)) {
+    return refused(request, back, "A link needs the other record.");
+  }
 
   try {
     await asPerson(p, (db) =>
@@ -39,13 +43,14 @@ export async function POST(
       }),
     );
   } catch (err) {
-    if (err instanceof Invalid || err instanceof NotFound) {
-      return new Response(err.message, { status: 400 });
-    }
-    if (err instanceof Forbidden) {
-      return new Response(err.message, { status: 403 });
+    if (
+      err instanceof Invalid ||
+      err instanceof NotFound ||
+      err instanceof Forbidden
+    ) {
+      return refused(request, back, err.message);
     }
     throw err;
   }
-  return NextResponse.redirect(`${origin(request)}${recordHref(id)}`, 303);
+  return NextResponse.redirect(`${origin(request)}${back}`, 303);
 }

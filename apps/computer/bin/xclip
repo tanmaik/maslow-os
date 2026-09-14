@@ -1,0 +1,42 @@
+#!/bin/bash
+# A picture pasted into the terminal, for whatever runs in the person's own
+# Linux and asks the clipboard for one. There is no display in there and
+# none of our tools, so the door holds the picture and this hands it over
+# in the words the real xclip answers in.
+#
+# Anything but reading a picture — text, other targets, writing — goes to a
+# real xclip where the person has one, and fails as that one would where
+# they have not.
+set -u
+# A real one, if the person installed it; never this file, which answers
+# to the same name.
+me=$(readlink -f "$0")
+real=""
+for p in /usr/bin/xclip /usr/local/bin/xclip /bin/xclip; do
+  [ -x "$p" ] || continue
+  [ "$(readlink -f "$p")" = "$me" ] && continue
+  real=$p
+  break
+done
+pass() { [ -n "$real" ] && exec "$real" "$@"; echo "xclip: no clipboard here" >&2; exit 1; }
+
+# Only a read is ours to answer; -i, or no -o at all, is writing.
+reading=""
+want=""
+for ((i = 1; i <= $#; i++)); do
+  case ${!i} in
+    -o | -out) reading=yes ;;
+    -i | -in) pass "$@" ;;
+    -t | -target) want=${@:i+1:1} ;;
+  esac
+done
+[ -n "$reading" ] || pass "$@"
+
+case $want in
+  TARGETS | image/png) ;;
+  *) pass "$@" ;;
+esac
+
+# With nothing pasted, the real one answers for whatever is really there.
+curl -sf "http://127.0.0.1:8080/maslow/picture?want=$want" && exit 0
+pass "$@"

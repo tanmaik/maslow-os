@@ -1,15 +1,17 @@
 import type { App } from "@/lib/composio";
 import type { Connection } from "@/lib/connections";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Chip } from "@/components/base/badges/chip";
+import { Button } from "@/components/base/buttons/button";
 import { initials } from "@/lib/initials";
 
 import { AccountName } from "./account-name";
 import { Finder } from "./finder";
-import { Item } from "@/components/ui/item";
+import { Row, Rows } from "./row";
+import { Said } from "./said";
 import { Section } from "./section";
+import type { Told } from "./told";
 
 // The apps the signed-in person has connected, as the vendor has them right
 // now, each account under its app with the name the person gave it, and a
@@ -28,7 +30,7 @@ export function Connections({
   connections: Connection[] | null;
   mostUsed: App[] | null;
   focus: string | null;
-  said: string | null;
+  said: Told;
 }) {
   const apps = new Map<string, Connection[]>();
   for (const c of connections ?? [])
@@ -41,50 +43,53 @@ export function Connections({
       description={`Your accounts, for your computer to act in as you. Nobody else in ${orgName} sees them. Name each account so you both can tell them apart.`}
     >
       {!enabled ? (
-        <p className="text-muted-foreground text-sm">
+        <p className="text-body-2-regular text-text-secondary">
           Connections are not set up on this deployment.
         </p>
       ) : (
         <>
-          {said && <p className="text-sm">{said}</p>}
+          <Said {...said} />
           {connections === null ? (
-            <p className="text-muted-foreground text-sm">
+            <p className="text-body-2-regular text-text-secondary">
               Composio didn&apos;t answer, so your connections can&apos;t be
               shown right now. Reload to try again.
             </p>
           ) : (
             apps.size > 0 && (
-              <div className="space-y-2">
+              <div className="flex flex-col gap-3">
                 {[...apps.entries()].map(([slug, accounts]) => (
-                  <Item
-                    variant="muted"
-                    className="items-start rounded-[10px]"
+                  <div
                     key={slug}
                     data-app={slug}
+                    className="flex flex-col gap-2"
                   >
-                    <Avatar className="size-8 rounded-lg">
-                      {accounts[0]!.logo && (
-                        <AvatarImage src={accounts[0]!.logo} alt="" />
-                      )}
-                      <AvatarFallback className="rounded-lg text-xs font-semibold">
-                        {initials(accounts[0]!.appName)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <p className="text-sm font-medium">
+                    <div className="flex items-center gap-2 px-3">
+                      <Avatar
+                        size="sm"
+                        src={accounts[0]!.logo ?? undefined}
+                        initials={initials(accounts[0]!.appName)}
+                        className="rounded-md"
+                      />
+                      <p className="text-body-2-medium text-text-secondary">
                         {accounts[0]!.appName}
                       </p>
+                    </div>
+                    <Rows>
                       {accounts.map((c) => (
-                        <div key={c.id} className="flex items-center gap-2">
-                          <AccountName
-                            account={c.id}
-                            name={c.name}
-                            focus={c.id === focus}
-                          />
+                        <Row
+                          key={c.id}
+                          label={
+                            <AccountName
+                              account={c.id}
+                              name={c.name}
+                              focus={c.id === focus}
+                            />
+                          }
+                        >
                           {c.status !== "ACTIVE" && (
-                            <Badge variant="outline">
+                            <Chip variant="caption" color="yellow">
                               {c.status.toLowerCase()}
-                            </Badge>
+                            </Chip>
                           )}
                           <form action="/settings/connections" method="post">
                             <input
@@ -94,30 +99,30 @@ export function Connections({
                             />
                             <input type="hidden" name="account" value={c.id} />
                             <Button
-                              variant="ghost"
-                              size="xs"
+                              variant="secondary"
+                              size="small"
                               type="submit"
-                              className="text-muted-foreground"
                             >
                               Disconnect
                             </Button>
                           </form>
-                        </div>
+                        </Row>
                       ))}
-                      <form action="/settings/connections" method="post">
-                        <input type="hidden" name="intent" value="connect" />
-                        <input type="hidden" name="app" value={slug} />
-                        <Button
-                          variant="link"
-                          size="xs"
-                          type="submit"
-                          className="text-muted-foreground h-auto px-0"
-                        >
-                          Add another {accounts[0]!.appName} account
-                        </Button>
-                      </form>
-                    </div>
-                  </Item>
+                      <Row label={`Another ${accounts[0]!.appName} account`}>
+                        <form action="/settings/connections" method="post">
+                          <input type="hidden" name="intent" value="connect" />
+                          <input type="hidden" name="app" value={slug} />
+                          <Button
+                            variant="secondary"
+                            size="small"
+                            type="submit"
+                          >
+                            Connect
+                          </Button>
+                        </form>
+                      </Row>
+                    </Rows>
+                  </div>
                 ))}
               </div>
             )

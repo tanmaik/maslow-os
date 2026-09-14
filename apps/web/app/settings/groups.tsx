@@ -1,15 +1,25 @@
 import type { Group } from "@maslow/db/groups";
-import { XIcon } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select";
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import { Chip } from "@/components/base/badges/chip";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 
-import { Item } from "@/components/ui/item";
+import { AddMember } from "./groups/add-member";
+import { Row, Rows } from "./row";
+import { Said } from "./said";
 import { Section } from "./section";
+import type { Told } from "./told";
 
 // A person's first name, as a chip lists who is in a group.
 const first = (name: string) => name.split(/\s+/)[0] ?? name;
@@ -25,7 +35,7 @@ export function Groups({
   groups: Group[];
   members: { id: string; name: string }[];
   owner: boolean;
-  said: string | null;
+  said: Told;
 }) {
   return (
     <Section
@@ -38,108 +48,135 @@ export function Groups({
         </>
       }
     >
-      <div className="space-y-2">
-        {groups.map((g) => (
-          <Item variant="muted" className="flex-wrap rounded-[10px]" key={g.id}>
-            <span className="text-sm font-medium">{g.name}</span>
-            {(!owner || g.everyone || g.members.length === 0) && (
-              <span className="text-muted-foreground text-xs">
-                {g.everyone
-                  ? "every member"
-                  : g.members.length === 0
-                    ? "nobody yet"
-                    : g.members.map((m) => first(m.name)).join(", ")}
-              </span>
-            )}
-            {g.description && (
-              <span className="text-muted-foreground text-xs">
-                · {g.description}
-              </span>
-            )}
-            <span className="flex-1" />
-            {owner && !g.everyone && (
-              <>
-                {g.members.map((m) => (
-                  <form
-                    key={m.id}
-                    action="/settings/groups"
-                    method="post"
-                    className="contents"
-                  >
-                    <input type="hidden" name="intent" value="remove" />
-                    <input type="hidden" name="group" value={g.id} />
-                    <input type="hidden" name="member" value={m.id} />
-                    <Button
-                      type="submit"
-                      variant="ghost"
-                      size="xs"
-                      aria-label={`Remove ${m.name} from ${g.name}`}
-                      className="text-muted-foreground gap-0.5 px-1.5"
+      <Rows>
+        {groups.map((g) => {
+          const out = members.filter(
+            (m) => !g.members.some((x) => x.id === m.id),
+          );
+          return (
+            <Row
+              key={g.id}
+              label={g.name}
+              description={
+                g.everyone
+                  ? "Every member"
+                  : g.description ||
+                    (g.members.length === 0
+                      ? "Nobody yet"
+                      : g.members.map((m) => first(m.name)).join(", "))
+              }
+            >
+              {owner && !g.everyone ? (
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  {g.members.map((m) => (
+                    <form
+                      key={m.id}
+                      action="/settings/groups"
+                      method="post"
+                      className="contents"
                     >
-                      {m.name}
-                      <XIcon className="size-3" />
-                    </Button>
-                  </form>
-                ))}
-                {members.some((m) => !g.members.some((x) => x.id === m.id)) && (
-                  <form
-                    action="/settings/groups"
-                    method="post"
-                    className="flex items-center gap-1"
-                  >
-                    <input type="hidden" name="intent" value="add" />
-                    <input type="hidden" name="group" value={g.id} />
-                    <NativeSelect name="member" className="h-7 text-xs">
-                      {members
-                        .filter((m) => !g.members.some((x) => x.id === m.id))
-                        .map((m) => (
-                          <NativeSelectOption key={m.id} value={m.id}>
-                            {m.name}
-                          </NativeSelectOption>
-                        ))}
-                    </NativeSelect>
-                    <Button variant="outline" size="xs" type="submit">
-                      Add
-                    </Button>
-                  </form>
-                )}
-                <form action="/settings/groups" method="post">
-                  <input type="hidden" name="intent" value="delete" />
-                  <input type="hidden" name="group" value={g.id} />
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    type="submit"
-                    className="text-muted-foreground"
-                  >
-                    Delete group
-                  </Button>
-                </form>
-              </>
-            )}
-          </Item>
-        ))}
-      </div>
+                      <input type="hidden" name="intent" value="remove" />
+                      <input type="hidden" name="group" value={g.id} />
+                      <input type="hidden" name="member" value={m.id} />
+                      <button
+                        type="submit"
+                        aria-label={`Remove ${m.name} from ${g.name}`}
+                        className="cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+                      >
+                        <Chip
+                          variant="caption"
+                          color="neutral"
+                          className="gap-1"
+                        >
+                          {first(m.name)}
+                          <span aria-hidden className="text-text-tertiary">
+                            ×
+                          </span>
+                        </Chip>
+                      </button>
+                    </form>
+                  ))}
+                  {out.length > 0 && <AddMember group={g.id} members={out} />}
+                  <AlertDialog>
+                    <AlertDialogTrigger
+                      render={<Button variant="danger" size="xs" />}
+                    >
+                      Delete group
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Delete {g.name}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          The shares this group held go with it, so whatever was
+                          open to its members through it closes. Nothing brings
+                          it back.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Keep</AlertDialogCancel>
+                        <form action="/settings/groups" method="post">
+                          <input type="hidden" name="intent" value="delete" />
+                          <input type="hidden" name="group" value={g.id} />
+                          <AlertDialogAction
+                            variant="destructive"
+                            type="submit"
+                          >
+                            Delete group
+                          </AlertDialogAction>
+                        </form>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              ) : (
+                <span className="flex flex-wrap justify-end gap-1">
+                  {g.everyone ? (
+                    <Chip variant="caption" color="neutral">
+                      everyone
+                    </Chip>
+                  ) : (
+                    g.members.map((m) => (
+                      <Chip key={m.id} variant="caption" color="neutral">
+                        {first(m.name)}
+                      </Chip>
+                    ))
+                  )}
+                </span>
+              )}
+            </Row>
+          );
+        })}
+      </Rows>
       {owner && (
-        <form action="/settings/groups" method="post" className="space-y-2">
+        <form
+          action="/settings/groups"
+          method="post"
+          className="flex flex-col gap-2"
+        >
           <input type="hidden" name="intent" value="define" />
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-start gap-2">
             <Input
+              aria-label="New group's name"
+              size="small"
               name="name"
-              required
+              isRequired
               maxLength={80}
               placeholder="New group, e.g. Interns"
               className="w-48"
             />
             <Input
+              aria-label="What the group is for"
+              size="small"
               name="description"
               maxLength={200}
               placeholder="What it is for"
-              className="flex-1"
+              className="min-w-40 flex-1"
             />
-            <Button type="submit">New group</Button>
+            <Button type="submit" size="small">
+              New group
+            </Button>
           </div>
-          {said && <p className="text-muted-foreground text-sm">{said}</p>}
+          <Said {...said} />
         </form>
       )}
     </Section>

@@ -2,30 +2,90 @@
 
 import type { Share, Subject, Target } from "@maslow/brain";
 import type { Group } from "@maslow/db/groups";
+import { RiGroupLine } from "@remixicon/react";
 
-import { UsersIcon } from "lucide-react";
-
+import { Chip } from "@/components/base/badges/chip";
+import { Button } from "@/components/base/buttons/button";
+import { Label } from "@/components/base/input/label";
+import { Select, SelectItem } from "@/components/base/select/select";
+import { SettingsCard } from "@/components/application/settings/settings-rows";
 import { FormDialog } from "@/components/form-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
+
+import { FIELD } from "./format";
 
 // A subject as a form value and back: "everyone", "group:<id>", "member:<id>".
 const value = (s: Subject) =>
   s.who === "everyone" ? "everyone" : `${s.who}:${s.id}`;
 
+// The three levels, in the one set of words the brain uses for them
+// everywhere: the dialog, the chips and the agent's asks.
+export const MAY = { view: "view", edit: "edit", owner: "own" } as const;
+
+// Whom a share is given to and what it lets them do: the two fields
+// every share is made of, wherever it is asked for. Nothing is chosen to
+// begin with — opening a record to the whole org is the most
+// consequential act here, and is never a default.
+export function ShareFields({
+  members,
+  groups,
+}: {
+  members: { id: string; name: string }[];
+  // Everyone is not a group here: it is the last choice in the list.
+  groups: { id: string; name: string }[];
+}) {
+  return (
+    <>
+      <div className="flex flex-col gap-1.5">
+        <Label isRequired>With</Label>
+        <Select
+          size="sm"
+          name="subject"
+          aria-label="With"
+          placeholder="Nobody yet"
+          isRequired
+          triggerClassName={`w-full ${FIELD}`}
+          popoverClassName="w-[var(--trigger-width)] max-w-none"
+        >
+          {members.map((m) => (
+            <SelectItem key={m.id} id={`member:${m.id}`}>
+              {m.name}
+            </SelectItem>
+          ))}
+          {groups.map((g) => (
+            <SelectItem key={g.id} id={`group:${g.id}`}>
+              {g.name} (group)
+            </SelectItem>
+          ))}
+          <SelectItem id="everyone">Everyone in the org</SelectItem>
+        </Select>
+      </div>
+      <div className="flex flex-col gap-1.5">
+        <Label>May</Label>
+        <Select
+          size="sm"
+          name="level"
+          aria-label="May"
+          defaultSelectedKey="view"
+          triggerClassName={`w-full ${FIELD}`}
+          popoverClassName="w-[var(--trigger-width)] max-w-none"
+        >
+          <SelectItem id="view">{MAY.view}</SelectItem>
+          <SelectItem id="edit">{MAY.edit}</SelectItem>
+          <SelectItem id="owner">{MAY.owner}</SelectItem>
+        </Select>
+        <p className="text-caption-1-regular text-text-secondary">
+          Everyone can only be given view. Editors change; owners also share,
+          remove and merge.
+        </p>
+      </div>
+    </>
+  );
+}
+
 // Who a record or a type is shared with, and, for its owner, a way to share
 // it with a person, a group or everyone at a level. Sharing a type shares
-// every record of it. Compact, it is one quiet line; as a pill, it is one
-// button that says who can see it and opens on it.
+// every record of it. As a pill, it is one button that says who can see it
+// and opens on it; otherwise it is a line and a button beneath.
 export function Sharing({
   on,
   owner,
@@ -33,7 +93,6 @@ export function Sharing({
   shares,
   groups,
   members,
-  compact = false,
   pill = false,
 }: {
   on: Target;
@@ -42,7 +101,6 @@ export function Sharing({
   shares: Share[];
   groups: Group[];
   members: { id: string; name: string }[];
-  compact?: boolean;
   pill?: boolean;
 }) {
   const what = "type" in on ? "type" : "record";
@@ -58,86 +116,49 @@ export function Sharing({
         : (members.find((m) => m.id === s.id)?.name ??
           "someone no longer here");
   const inside = (
-    <>
-      <form action="/brain/share" method="post" className="grid gap-3">
+    <div className="flex flex-col gap-4">
+      <form action="/brain/share" method="post" className="grid gap-4">
         <input type="hidden" name={target.name} value={target.value} />
-        <div className="space-y-1">
-          <Label htmlFor={`${what}-subject`}>With</Label>
-          <Select name="subject" defaultValue="everyone">
-            <SelectTrigger id={`${what}-subject`} className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="everyone">Everyone in the org</SelectItem>
-              {groups
-                .filter((g) => !g.everyone)
-                .map((g) => (
-                  <SelectItem key={g.id} value={`group:${g.id}`}>
-                    {g.name} (group)
-                  </SelectItem>
-                ))}
-              {members.map((m) => (
-                <SelectItem key={m.id} value={`member:${m.id}`}>
-                  {m.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor={`${what}-level`}>May</Label>
-          <Select name="level" defaultValue="view">
-            <SelectTrigger id={`${what}-level`} className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="view">view</SelectItem>
-              <SelectItem value="edit">edit</SelectItem>
-              <SelectItem value="owner">own</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-muted-foreground text-xs">
-            Everyone can only be given view. Editors change; owners also share,
-            delete and merge.
-          </p>
-        </div>
+        <ShareFields
+          members={members}
+          groups={groups.filter((g) => !g.everyone)}
+        />
         <div>
-          <Button type="submit">Share</Button>
+          <Button size="small" type="submit">
+            {what === "type"
+              ? "Share this type, and every record of it"
+              : "Share this record"}
+          </Button>
         </div>
       </form>
       {shares.length > 0 && (
-        <Table>
-          <TableBody>
-            {shares.map((g) => (
-              <TableRow key={g.id}>
-                <TableCell>{name(g.subject)}</TableCell>
-                <TableCell>
-                  <Badge variant="outline">{g.level}</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <form action="/brain/share" method="post">
-                    <input type="hidden" name="intent" value="unshare" />
-                    <input
-                      type="hidden"
-                      name={target.name}
-                      value={target.value}
-                    />
-                    <input
-                      type="hidden"
-                      name="subject"
-                      value={value(g.subject)}
-                    />
-                    <Button variant="ghost" size="xs" type="submit">
-                      Stop sharing
-                    </Button>
-                  </form>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+        <SettingsCard>
+          {shares.map((g) => (
+            <div
+              key={g.id}
+              className="flex min-h-[52px] w-full items-center justify-between gap-3 border-b border-separator-border py-2.5 pr-2.5 last:border-b-0"
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-body-regular text-text-primary">
+                  {name(g.subject)}
+                </span>
+                <Chip variant="caption" color="soft">
+                  {MAY[g.level]}
+                </Chip>
+              </span>
+              <form action="/brain/share" method="post">
+                <input type="hidden" name="intent" value="unshare" />
+                <input type="hidden" name={target.name} value={target.value} />
+                <input type="hidden" name="subject" value={value(g.subject)} />
+                <Button variant="secondary" size="small" type="submit">
+                  Stop sharing
+                </Button>
+              </form>
+            </div>
+          ))}
+        </SettingsCard>
       )}
-    </>
+    </div>
   );
 
   // Who it is open to, in as few words as a button holds: everyone, one
@@ -161,14 +182,10 @@ export function Sharing({
     if (owner) {
       return (
         <FormDialog
-          trigger={
-            <>
-              <UsersIcon />
-              {said}
-            </>
-          }
-          variant="ghost"
-          className="text-muted-foreground shrink-0 rounded-full px-2.5"
+          trigger={said}
+          leadingIcon={RiGroupLine}
+          variant="secondary"
+          className="shrink-0 gap-1 rounded-full px-2.5 text-text-secondary"
           title={title}
           description={description}
         >
@@ -180,21 +197,15 @@ export function Sharing({
     // that does not: that someone else can see it too.
     if (shares.length === 0) return null;
     return (
-      <span className="text-muted-foreground flex shrink-0 items-center gap-1 px-1 text-xs">
-        <UsersIcon className="size-3.5" />
+      <span className="flex shrink-0 items-center gap-1 px-1 text-caption-1-medium text-text-secondary">
+        <RiGroupLine className="size-3.5" aria-hidden />
         {said}
       </span>
     );
   }
   return (
-    <div
-      className={
-        compact
-          ? "flex w-full items-center justify-between gap-2 text-xs"
-          : "space-y-2 text-sm"
-      }
-    >
-      <p className="text-muted-foreground">
+    <div className="flex flex-col gap-2 text-body-regular">
+      <p className="text-text-secondary">
         {shares.length === 0 ? (
           ownerName === "you" ? (
             "Only you can see this."
@@ -208,7 +219,10 @@ export function Sharing({
             {shares.map((g, i) => (
               <span key={g.id}>
                 {i > 0 && ", "}
-                {name(g.subject)} <Badge variant="outline">{g.level}</Badge>
+                {name(g.subject)}{" "}
+                <Chip variant="caption" color="soft">
+                  {MAY[g.level]}
+                </Chip>
               </span>
             ))}
           </>
@@ -217,7 +231,7 @@ export function Sharing({
       {owner && (
         <FormDialog
           trigger="Share"
-          variant={compact ? "ghost" : "outline"}
+          variant="secondary"
           title={title}
           description={description}
         >

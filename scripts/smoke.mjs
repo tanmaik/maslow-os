@@ -87,15 +87,17 @@ async function page(cookie) {
   return (await res.text()).replaceAll("<!-- -->", "");
 }
 
-// The settings page, where the org and who is in it are named.
-async function settingsPage(cookie) {
-  const res = await fetch(`${stack.url}/settings`, { headers: { cookie } });
+// One pane of settings: the members pane unless another is asked for,
+// since that is where the org and who is in it are named.
+async function settingsPage(cookie, pane = "members") {
+  const res = await fetch(`${stack.url}/settings?pane=${pane}`, {
+    headers: { cookie },
+  });
   return (await res.text()).replaceAll("<!-- -->", "");
 }
 
-// Who the page says you are: the name under your picture in the corner.
-const youOn = (html) =>
-  html.match(/<span class="sr-only">([^<]*)<\/span>/)?.[1];
+// Who the page says you are: the name on the menu bar's right.
+const youOn = (html) => html.match(/data-you[^>]*>([^<]*)</)?.[1];
 
 // Whether the page offers a switch to another org of yours. The offer
 // sits under your picture, drawn in the browser from what the page
@@ -124,7 +126,7 @@ try {
   for (const org of [...orgs, orgs[0]]) {
     const cookie = await signIn(org.users[0].id);
     const html = await page(cookie);
-    const got = (await settingsPage(cookie)).match(/(\d+) in /);
+    const got = (await settingsPage(cookie)).match(/(\d+) members? in /);
     check(
       `${org.users[0].firstName} (${org.name})`,
       new RegExp(`<h1[^>]*>${org.name}</h1>`).test(html) &&
@@ -205,11 +207,11 @@ try {
   check(
     "invited person admitted",
     hire.orgId === orgs[0].id &&
-      /3 in /.test(after) &&
+      /3 members in /.test(after) &&
       !/invited/.test(
         after.split("hire@acme-rockets.test")[1]?.slice(0, 200) ?? "",
       ),
-    after.match(/\d+ in /)?.[0] ?? "no match",
+    after.match(/\d+ members in /)?.[0] ?? "no match",
   );
   const stranger = await admit({
     email: "solo@example.test",
@@ -301,7 +303,7 @@ try {
   );
   orgForm.set("logo", new File([png], "l.png", { type: "image/png" }));
   const renamed = await settings("/settings/org", orgForm);
-  const afterRename = await settingsPage(margeOwner);
+  const afterRename = await settingsPage(margeOwner, "org");
   check(
     "org renamed, logo stored",
     renamed.headers.get("location")?.endsWith("?org=saved") &&

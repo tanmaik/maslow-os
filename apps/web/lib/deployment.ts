@@ -194,12 +194,13 @@ function computers(): Computers {
   return { kind: "none" };
 }
 
-// The cap is the abuse limit: low outside production, where keys are
-// made and thrown away with every checkout and preview.
+// The cap is what a person may spend on models in a week, in dollars: the
+// one ceiling of ours they are shown, and the default a computer's row
+// carries from the day its key is minted.
 function models(): Models {
   const provisioningKey = process.env.OPENROUTER_PROVISIONING_KEY;
   if (!provisioningKey) return { kind: "none" };
-  return { kind: "openrouter", provisioningKey, capUsd: production ? 20 : 2 };
+  return { kind: "openrouter", provisioningKey, capUsd: 10 };
 }
 
 // The sweep is what meters and cleans; production without its cron's

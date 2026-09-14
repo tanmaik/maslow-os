@@ -13,62 +13,65 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Button } from "@/components/base/buttons/button";
+import { RadioGroup } from "@/components/base/radio/radio";
+import { RadioCard } from "@/components/base/radio/radio-card";
 import { SIZES, specs, type SizeKey } from "@/lib/sizes";
 
-// The ladder: the computer's size among the others, each with its CPUs
-// and memory, and a change that asks first, since it is a restart.
+// The ladder: the computer's size among the others, each a card with its
+// CPUs and memory, and a change that asks first, since it is a restart.
 export function Sizes({ current }: { current: SizeKey | null }) {
   const [picked, setPicked] = useState<SizeKey | null>(current);
   const changed = picked !== null && picked !== current;
   const to = picked ? SIZES[picked] : null;
   return (
-    <div className="space-y-2">
-      <p className="text-sm font-medium">Size</p>
+    <div className="flex flex-col gap-2">
+      <p className="px-3 text-body-2-medium text-text-secondary">Size</p>
       <RadioGroup
+        aria-label="Size"
         value={picked ?? ""}
-        onValueChange={(v) => setPicked(v as SizeKey)}
+        onChange={(v) => setPicked(v as SizeKey)}
+        className="grid gap-2 sm:grid-cols-2"
       >
         {(Object.keys(SIZES) as SizeKey[]).map((key) => (
-          <div key={key} className="flex items-center gap-2">
-            <RadioGroupItem value={key} id={`size-${key}`} />
-            <Label htmlFor={`size-${key}`} className="font-normal">
-              <span className="font-medium">{SIZES[key].name}</span>
-              <span className="text-muted-foreground">
-                {" "}
-                {specs(SIZES[key])}
-                {key === current ? ", now" : ""}
-              </span>
-            </Label>
-          </div>
+          <RadioCard
+            key={key}
+            value={key}
+            title={SIZES[key].name}
+            description={`${specs(SIZES[key])}${key === current ? ", now" : ""}`}
+          />
         ))}
       </RadioGroup>
-      <AlertDialog>
-        <AlertDialogTrigger
-          render={<Button variant="outline" disabled={!changed} />}
-        >
-          Change size
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <form action="/computer/size" method="post" className="contents">
-            <input type="hidden" name="size" value={picked ?? ""} />
-            <AlertDialogHeader>
-              <AlertDialogTitle>Move to {to?.name}?</AlertDialogTitle>
-              <AlertDialogDescription>
-                {to ? specs(to) : ""}. Your computer restarts into it in a few
-                seconds: anything running stops, and your files and your Linux
-                stay as they are.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Keep it</AlertDialogCancel>
-              <AlertDialogAction type="submit">Change size</AlertDialogAction>
-            </AlertDialogFooter>
-          </form>
-        </AlertDialogContent>
-      </AlertDialog>
+      {changed && (
+        <div className="flex justify-end">
+          <AlertDialog>
+            <AlertDialogTrigger
+              render={<Button variant="secondary" size="small" />}
+            >
+              Change size
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <form action="/computer/size" method="post" className="contents">
+                <input type="hidden" name="size" value={picked ?? ""} />
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Move to {to?.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {to ? specs(to) : ""}. Your computer restarts into it in a
+                    few seconds: anything running stops, and your files and your
+                    Linux stay as they are.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Keep</AlertDialogCancel>
+                  <AlertDialogAction type="submit">
+                    Change size
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </form>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
     </div>
   );
 }

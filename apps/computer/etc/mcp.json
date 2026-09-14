@@ -5,9 +5,14 @@
   },
   "brain": {
     "type": "http",
-    "url": "${MASLOW_BRAIN_URL}",
+    "url": "${BRAIN_URL}",
     "headers": {
-      "Authorization": "Bearer ${MASLOW_BRAIN_TOKEN}"
+      "Authorization": "Bearer ${BRAIN_TOKEN}"
     }
+  },
+  "boardui": {
+    "type": "stdio",
+    "command": "npx",
+    "args": ["-y", "boardui@latest", "mcp"]
   }
 }

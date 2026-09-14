@@ -1,17 +1,12 @@
-import {
-  acceptRequest,
-  declineRequest,
-  Forbidden,
-  Invalid,
-  isId,
-  NotFound,
-} from "@maslow/brain";
+import { Forbidden, Invalid, isId, NotFound } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
-import { computerOf, givePort } from "@maslow/db/computers";
 import { NextResponse } from "next/server";
 
+import { answerShareAsk } from "@/lib/asks";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
+
+import { refused } from "../refuse";
 
 // Answers an ask the agent made: share as it asked, or not. A port the ask
 // names is given on the person's own computer.
@@ -21,29 +16,25 @@ export async function POST(request: Request) {
   const form = await request.formData();
   const id = String(form.get("request") ?? "");
   if (!isId(id)) return new Response(null, { status: 404 });
+  // Back to the page the ask was answered on: the room, or the brain. A
+  // refusal is said on the brain either way, since that is the page that
+  // holds the asks.
+  const back = form.get("back") === "/" ? "/" : "/brain";
   const intent = form.get("intent");
   if (intent !== "accept" && intent !== "decline") {
-    return new Response("Share, or not now.", { status: 400 });
+    return refused(request, "/brain", "An ask is accepted or declined.");
   }
   try {
-    await asPerson(p, async (db) => {
-      if (intent !== "accept") return declineRequest(db, id);
-      await acceptRequest(db, id, async (port, to) => {
-        const c = await computerOf(db, p.userId);
-        if (!c) throw new Invalid("you have no computer to give a port of");
-        await givePort(db, c.id, port, to);
-      });
-    });
+    await asPerson(p, (db) => answerShareAsk(db, p.userId, id, intent));
   } catch (err) {
-    if (err instanceof Invalid || err instanceof NotFound) {
-      return new Response(err.message, { status: 400 });
-    }
-    if (err instanceof Forbidden) {
-      return new Response(err.message, { status: 403 });
+    if (
+      err instanceof Invalid ||
+      err instanceof NotFound ||
+      err instanceof Forbidden
+    ) {
+      return refused(request, "/brain", err.message);
     }
     throw err;
   }
-  // Back to the page the ask was answered on: the room, or the brain.
-  const back = form.get("back") === "/" ? "/" : "/brain";
   return NextResponse.redirect(`${origin(request)}${back}`, 303);
 }

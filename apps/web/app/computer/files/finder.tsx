@@ -1,42 +1,77 @@
 "use client";
 
 import {
-  ArrowUpTrayIcon,
-  DocumentIcon,
-  DocumentTextIcon,
-  FolderIcon,
-  PhotoIcon,
-  VideoCameraIcon,
-} from "@heroicons/react/24/solid";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+  RiExternalLinkLine,
+  RiFileLine,
+  RiFileTextLine,
+  RiFolderLine,
+  RiHomeLine,
+  RiImageLine,
+  RiLinkM,
+  RiSearchLine,
+  RiSideBarLine,
+  RiUploadLine,
+  RiVideoLine,
+} from "@remixicon/react";
+import { AnimatePresence, motion } from "motion/react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type { SortDescriptor } from "react-aria-components";
 
 import { Editor } from "@/app/computer/files/editor";
-import { InBar } from "@/app/room/panel";
-
+import { InBar, useBeforeClose, useFolded } from "@/app/room/panel";
 import {
   Breadcrumb,
   BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
-import { Button } from "@/components/ui/button";
+} from "@/components/base/breadcrumb/breadcrumb";
+import { Button } from "@/components/base/buttons/button";
+import {
+  ButtonGroup,
+  ButtonGroupItem,
+} from "@/components/base/buttons/button-group";
+import { CloseButton } from "@/components/base/buttons/close-button";
+import { IconButton } from "@/components/base/buttons/icon-button";
+import { InputBase } from "@/components/base/input/input";
+import { Notification } from "@/components/base/notification/notification";
+import { Pagination } from "@/components/base/pagination/pagination";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
+} from "@/components/base/table/table";
+import { ChevronSortDown } from "@/components/foundations/icons/chevrons";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Button as ShadButton } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyTitle,
-} from "@/components/ui/empty";
 import { Progress } from "@/components/ui/progress";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { BASE, FAST, LEAVE } from "@/lib/motion";
 import { liveSocket } from "@/lib/live";
+import { cx } from "@/utils/cx";
+
+// Where the device keeps whether the folders rail is shown.
+const RAIL = "files-rail";
 
 // One thing in a folder, as the door lists it.
 type Entry = {
@@ -52,6 +87,14 @@ type Upload = { done: number; total: number; error?: string };
 // A file goes up in pieces this big, so a dropped connection loses at most
 // one piece and picks up from the last the door kept.
 const PIECE = 8 * 1024 * 1024;
+
+// The most text the editor takes into the tab. Past this a file is opened
+// rather than read here, so a huge log never freezes the window.
+const MOST_TEXT = 2 * 1024 * 1024;
+
+// How many rows a page of a folder holds, so a folder of thousands still
+// draws at once.
+const PER_PAGE = 100;
 
 const TEXT = new Set([
   "txt",
@@ -104,12 +147,28 @@ const DOCUMENT = new Set([
 
 const ending = (name: string) =>
   name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
-const isText = (e: Entry) => e.kind === "file" && TEXT.has(ending(e.name));
-const isImage = (e: Entry) => e.kind === "file" && IMAGE.has(ending(e.name));
-const isVideo = (e: Entry) => e.kind === "file" && VIDEO.has(ending(e.name));
-const isPdf = (e: Entry) => e.kind === "file" && ending(e.name) === "pdf";
-const isDocument = (e: Entry) =>
-  e.kind === "file" && DOCUMENT.has(ending(e.name));
+// A link is followed: until the door says what it points at, it is looked
+// at as a file is.
+const opens = (e: Entry) => e.kind === "file" || e.kind === "link";
+const isText = (e: Entry) => opens(e) && TEXT.has(ending(e.name));
+const isImage = (e: Entry) => opens(e) && IMAGE.has(ending(e.name));
+const isVideo = (e: Entry) => opens(e) && VIDEO.has(ending(e.name));
+const isPdf = (e: Entry) => opens(e) && ending(e.name) === "pdf";
+const isDocument = (e: Entry) => opens(e) && DOCUMENT.has(ending(e.name));
+
+// The mark a thing wears in the list.
+const markOf = (e: Entry) =>
+  e.kind === "dir"
+    ? RiFolderLine
+    : e.kind === "link"
+      ? RiLinkM
+      : isImage(e)
+        ? RiImageLine
+        : isVideo(e)
+          ? RiVideoLine
+          : isText(e)
+            ? RiFileTextLine
+            : RiFileLine;
 
 // Bytes in words a person reads at a glance.
 const size = (n: number) =>
@@ -121,30 +180,232 @@ const size = (n: number) =>
         ? `${(n / 1024 ** 2).toFixed(1)} MB`
         : `${(n / 1024 ** 3).toFixed(2)} GB`;
 
+// A moment as a short date, or the time if it is today.
+const when = (iso: string) => {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const today = new Date().toDateString() === d.toDateString();
+  return today
+    ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+};
+
 const readHref = (path: string) =>
   `/computer/files/read?path=${encodeURIComponent(path)}`;
 const previewHref = (path: string, modified: string) =>
   `/computer/files/preview?path=${encodeURIComponent(path)}&v=${encodeURIComponent(modified)}`;
+
+// One piece of a file, sent with the bytes it has written reported as they
+// go, so the bar moves before the piece lands.
+const sendPiece = (
+  url: string,
+  headers: Record<string, string>,
+  body: Blob,
+  sent: (bytes: number) => void,
+) =>
+  new Promise<{ ok: boolean; status: number; body: string }>(
+    (resolve, reject) => {
+      const call = new XMLHttpRequest();
+      call.open("PUT", url);
+      for (const [name, value] of Object.entries(headers))
+        call.setRequestHeader(name, value);
+      call.upload.onprogress = (e) => sent(e.loaded);
+      call.onload = () =>
+        resolve({
+          ok: call.status >= 200 && call.status < 300,
+          status: call.status,
+          body: call.responseText,
+        });
+      call.onerror = () => reject(new Error("The connection dropped."));
+      call.onabort = () => reject(new Error("The connection dropped."));
+      call.send(body);
+    },
+  );
+
+// The columns a folder is listed in; any of them sorts it. As the list
+// narrows, Size goes before Changed, and what goes moves under the name.
+type Column = "name" | "size" | "modified";
+
+const NARROW = {
+  size: "@max-[520px]/list:hidden",
+  modified: "@max-[400px]/list:hidden",
+};
+
+const COLUMNS: { id: Column; label: string; className: string }[] = [
+  { id: "name", label: "Name", className: "" },
+  { id: "size", label: "Size", className: `w-24 text-right ${NARROW.size}` },
+  {
+    id: "modified",
+    label: "Changed",
+    className: `w-24 text-right ${NARROW.modified}`,
+  },
+];
+
+// The header's sort mark: down for descending, turned over for ascending,
+// and drawn only on the column the list is sorted by.
+function SortMark({ dir }: { dir?: "ascending" | "descending" }) {
+  if (!dir) return null;
+  return (
+    <ChevronSortDown
+      className={cx(
+        // The glyph is small inside its box; the box is kept off the
+        // line so a sorted heading is exactly as tall as a row.
+        "-my-[3px] size-6 shrink-0 text-text-secondary transition-transform duration-instant ease-out-quart motion-reduce:transition-none",
+        dir === "ascending" && "rotate-180",
+      )}
+    />
+  );
+}
 
 // The person's files on their own computer. A folder's contents, folders
 // first; a look at a file beside them, or beneath them when the window is
 // narrow; a small edit saved back; and a file dropped anywhere on the
 // window, sent straight to the machine in pieces, carrying on from where
 // it stopped if the connection drops.
-export function Finder() {
-  const [path, setPath] = useState<string[]>([]);
+// The bar of a Files window: where you are, then what you can do here.
+// Folded onto a phone, the path keeps the strip under the bar and the
+// rest becomes rows in the sheet.
+function Toolbar({
+  folded,
+  where,
+  children,
+}: {
+  folded: boolean;
+  where: ReactNode;
+  children: ReactNode;
+}) {
+  const row = (controls: ReactNode) => (
+    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-separator-border px-3">
+      {controls}
+    </div>
+  );
+  if (!folded)
+    return (
+      <InBar as={row}>
+        {where}
+        {children}
+      </InBar>
+    );
+  return (
+    <>
+      <InBar phone="strip" as={row}>
+        {where}
+      </InBar>
+      <InBar as={row}>{children}</InBar>
+    </>
+  );
+}
+
+// One place in the rail: home, or a folder at the top of it. The mark is a
+// choice, not a hover, so it lands the moment it is made.
+function Place({
+  mark: Mark,
+  on,
+  onClick,
+  children,
+}: {
+  mark: typeof RiFolderLine;
+  on: boolean;
+  onClick: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-current={on ? "true" : undefined}
+      onClick={onClick}
+      className={cx(
+        "flex w-full min-h-11 shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-2lg p-2 text-left outline-none",
+        "focus-visible:ring-2 focus-visible:ring-border-focus-ring sm:min-h-8",
+        on
+          ? "bg-accent-600"
+          : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover",
+      )}
+    >
+      <Mark
+        className={cx(
+          "size-5 shrink-0",
+          on ? "text-text-white" : "text-foreground-icon-secondary",
+        )}
+        aria-hidden
+      />
+      <span
+        className={cx(
+          "truncate text-body-medium",
+          on ? "text-text-white" : "text-text-secondary",
+        )}
+      >
+        {children}
+      </span>
+    </button>
+  );
+}
+
+export function Finder({
+  initialPath,
+}: { initialPath?: string; fresh?: boolean } = {}) {
+  const folded = useFolded();
+  const asked = initialPath?.split("/").filter(Boolean) ?? [];
+  const [path, setPath] = useState<string[]>(asked.slice(0, -1));
+  // A file asked for by name, opened once its folder has loaded.
+  const opening = useRef<string | null>(asked.at(-1) ?? null);
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [picked, setPicked] = useState<Entry | null>(null);
   const [text, setText] = useState<string | null>(null);
+  // A text file too big to take into the tab: shown as a file, not read.
+  const [heavy, setHeavy] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  // What the door said when it would not take a save.
+  const [refused, setRefused] = useState<string | null>(null);
   const [uploads, setUploads] = useState<Record<string, Upload>>({});
   const [dragging, setDragging] = useState(false);
   // Files whose names start with a dot are the machine's own business
   // until asked for.
   const [dotfiles, setDotfiles] = useState(false);
+  // A word typed narrows the list to the names that carry it.
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<SortDescriptor>({
+    column: "name",
+    direction: "ascending",
+  });
+  // What is waiting on an answer about the edit that has not been saved:
+  // where to go once it is answered, and what to tell whoever is waiting
+  // when the answer is to stay.
+  const [ask, setAsk] = useState<{
+    go: () => void;
+    stop?: () => void;
+  } | null>(null);
+  // Whether the folders rail is shown, as the person last left it. On a
+  // phone the rail has nowhere to stand beside the list, so it opens as a
+  // sheet instead, and starts closed rather than remembered.
+  const [rail, setRail] = useState(true);
+  const [sheet, setSheet] = useState(false);
+  const [wide, setWide] = useState(true);
+  useEffect(() => {
+    setRail(localStorage.getItem(RAIL) !== "hidden");
+    const q = matchMedia("(min-width: 640px)");
+    const read = () => setWide(q.matches);
+    read();
+    q.addEventListener("change", read);
+    return () => q.removeEventListener("change", read);
+  }, []);
+  const toggleRail = () => {
+    if (!wide) return setSheet((on) => !on);
+    setRail((on) => {
+      localStorage.setItem(RAIL, on ? "hidden" : "shown");
+      return !on;
+    });
+  };
+  const railShown = wide ? rail : sheet;
+  // What stands at the top of home, whatever folder is in view: the rail's
+  // rows, read once and again whenever home itself is looked at.
+  const [top, setTop] = useState<Entry[]>([]);
   const input = useRef<HTMLInputElement>(null);
+  // The files an upload was given, so a failed one can be tried again.
+  const sending = useRef<Record<string, File>>({});
 
   const dir = path.join("/");
   const at = (name: string) => (dir ? `${dir}/${name}` : name);
@@ -166,7 +427,12 @@ export function Finder() {
   useEffect(() => {
     setPicked(null);
     setText(null);
+    setHeavy(false);
+    setRefused(null);
+    setDirty(false);
     setEntries(null);
+    setQuery("");
+    setPage(1);
     void load();
   }, [load]);
 
@@ -217,37 +483,96 @@ export function Finder() {
       sock.current.send(JSON.stringify({ watch: dir || "." }));
   }, [dir]);
 
+  useEffect(() => {
+    let stopped = false;
+    void fetch("/computer/files/list?path=.")
+      .then((r) => (r.ok ? (r.json() as Promise<Entry[]>) : []))
+      .then((got) => {
+        if (!stopped) setTop(got);
+      })
+      .catch(() => {});
+    return () => {
+      stopped = true;
+    };
+  }, []);
+  useEffect(() => {
+    if (dir === "" && entries) setTop(entries);
+  }, [dir, entries]);
+
+  // Nothing typed is thrown away without asking: anything that would
+  // leave an edited file behind goes through here first.
+  const leaving = (go: () => void) => {
+    if (dirty) setAsk({ go });
+    else go();
+  };
+
+  // The window's own close is the one path the guard above cannot see:
+  // the room asks here before it takes the window away.
+  useBeforeClose(
+    () =>
+      new Promise<boolean>((decide) => {
+        if (!dirty) return decide(true);
+        setAsk({ go: () => decide(true), stop: () => decide(false) });
+      }),
+  );
+
+  // A tab closed or reloaded with an edit in it asks the browser's own
+  // question, which is the only one it will show.
+  useEffect(() => {
+    if (!dirty) return;
+    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", hold);
+    return () => window.removeEventListener("beforeunload", hold);
+  }, [dirty]);
+
   // Which file was picked last, so a slow read of an earlier one lands
   // nowhere.
   const picking = useRef(0);
-  const open = async (e: Entry) => {
-    if (e.kind === "dir") {
-      setPath([...path, e.name]);
-      return;
-    }
-    const mine = ++picking.current;
-    setPicked(e);
-    setText(null);
-    setDirty(false);
-    if (isText(e)) {
-      const res = await fetch(readHref(at(e.name)));
-      const got = res.ok ? await res.text() : "";
-      if (picking.current === mine) setText(got);
-    }
-  };
+  const open = (e: Entry) =>
+    leaving(() => {
+      if (e.kind === "dir") {
+        setPath([...path, e.name]);
+        return;
+      }
+      const mine = ++picking.current;
+      setPicked(e);
+      setText(null);
+      setRefused(null);
+      setDirty(false);
+      setHeavy(isText(e) && e.size > MOST_TEXT);
+      if (isText(e) && e.size <= MOST_TEXT)
+        void (async () => {
+          const res = await fetch(readHref(at(e.name)));
+          const got = res.ok ? await res.text() : "";
+          if (picking.current === mine) setText(got);
+        })();
+    });
+
+  // The file asked for by name, once its folder has answered.
+  useEffect(() => {
+    if (!entries || !opening.current) return;
+    const found = entries.find((e) => e.name === opening.current);
+    opening.current = null;
+    if (found) open(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [entries]);
 
   const save = async () => {
-    if (!picked || text === null) return;
+    if (!picked || text === null) return false;
     setSaving(true);
+    setRefused(null);
     const res = await fetch(
       `/computer/files/write?path=${encodeURIComponent(at(picked.name))}`,
       { method: "PUT", body: text },
     );
     setSaving(false);
-    if (res.ok) {
-      setDirty(false);
-      void load();
+    if (!res.ok) {
+      setRefused((await res.text()) || "The machine would not take it.");
+      return false;
     }
+    setDirty(false);
+    void load();
+    return true;
   };
 
   // Sends one file to the machine's door in pieces. A piece that fails is
@@ -255,10 +580,11 @@ export function Finder() {
   // piece starts there.
   const upload = async (file: File) => {
     const key = at(file.name);
+    sending.current[key] = file;
     const mark = (u: Partial<Upload>) =>
       setUploads((was) => {
         const so_far = was[key] ?? { done: 0, total: file.size };
-        return { ...was, [key]: { ...so_far, ...u } };
+        return { ...was, [key]: { ...so_far, ...u, error: u.error } };
       });
     mark({});
     try {
@@ -285,23 +611,22 @@ export function Finder() {
       let sent = false;
       while (done < file.size || (file.size === 0 && !sent)) {
         try {
-          const res = await fetch(
+          const from = done;
+          const res = await sendPiece(
             `${where}&offset=${done}&total=${file.size}`,
-            {
-              method: "PUT",
-              headers: { ...head, "content-type": "application/octet-stream" },
-              body: file.slice(done, Math.min(done + PIECE, file.size)),
-            },
+            { ...head, "content-type": "application/octet-stream" },
+            file.slice(done, Math.min(done + PIECE, file.size)),
+            (bytes) => mark({ done: Math.min(from + bytes, file.size) }),
           );
           if (res.status === 409) {
-            done = ((await res.json()) as { have: number }).have;
+            done = (JSON.parse(res.body) as { have: number }).have;
           } else if (res.status === 201) {
             done = file.size;
             sent = true;
           } else if (res.ok) {
-            done = ((await res.json()) as { have: number }).have;
+            done = (JSON.parse(res.body) as { have: number }).have;
             sent = true;
-          } else throw new Error(await res.text());
+          } else throw new Error(res.body);
           stumbles = 0;
         } catch (err) {
           if (++stumbles > 20) throw err;
@@ -310,14 +635,19 @@ export function Finder() {
         }
         mark({ done });
       }
-      setUploads((was) => {
-        const { [key]: _gone, ...rest } = was;
-        return rest;
-      });
+      forget(key);
       void load();
     } catch (err) {
       mark({ error: (err as Error).message });
     }
+  };
+
+  const forget = (key: string) => {
+    delete sending.current[key];
+    setUploads((was) => {
+      const { [key]: _gone, ...rest } = was;
+      return rest;
+    });
   };
 
   const take = (list: FileList | null) => {
@@ -325,65 +655,124 @@ export function Finder() {
     for (const f of Array.from(list)) void upload(f);
   };
 
-  const shown = entries?.filter((e) => dotfiles || !e.name.startsWith("."));
+  // Folders first, then by the column the list is sorted on, narrowed to
+  // the word typed and, unless asked, to what is not hidden.
+  const word = query.trim().toLowerCase();
+  const shown = entries
+    ?.filter((e) => dotfiles || !e.name.startsWith("."))
+    .filter((e) => !word || e.name.toLowerCase().includes(word))
+    .sort((a, b) => {
+      if ((a.kind === "dir") !== (b.kind === "dir"))
+        return a.kind === "dir" ? -1 : 1;
+      const flip = sort.direction === "descending" ? -1 : 1;
+      if (sort.column === "size") return (a.size - b.size) * flip;
+      if (sort.column === "modified")
+        return a.modified.localeCompare(b.modified) * flip;
+      return a.name.localeCompare(b.name, undefined, { numeric: true }) * flip;
+    });
+
+  // A folder of thousands is read a hundred at a time, so the list is
+  // drawn in one beat however much is in it.
+  const pages = shown ? Math.max(1, Math.ceil(shown.length / PER_PAGE)) : 1;
+  const here = Math.min(page, pages);
+  const rows = shown?.slice((here - 1) * PER_PAGE, here * PER_PAGE) ?? [];
+
+  const close = () =>
+    leaving(() => {
+      setPicked(null);
+      setText(null);
+      setRefused(null);
+      setDirty(false);
+    });
 
   return (
     <div
       className="@container relative flex min-h-0 flex-1 flex-col"
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && picked) {
+          e.stopPropagation();
+          close();
+        }
+      }}
       onDragOver={(e) => {
         e.preventDefault();
         setDragging(true);
       }}
-      onDragLeave={() => setDragging(false)}
+      onDragLeave={(e) => {
+        // A drag crossing a row leaves the row, not the window: the
+        // overlay only goes when the pointer has left for good.
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null))
+          setDragging(false);
+      }}
       onDrop={(e) => {
         e.preventDefault();
         setDragging(false);
         take(e.dataTransfer.files);
       }}
     >
-      <InBar
-        as={(controls) => (
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b px-3">
-            {controls}
-          </div>
-        )}
-      >
-        <Breadcrumb className="min-w-0 flex-1">
-          <BreadcrumbList className="flex-nowrap overflow-hidden">
-            <BreadcrumbItem>
-              {path.length === 0 ? (
-                <BreadcrumbPage>Home</BreadcrumbPage>
-              ) : (
-                <BreadcrumbLink
-                  render={<button type="button" onClick={() => setPath([])} />}
-                >
-                  Home
-                </BreadcrumbLink>
+      {/* The bar: where this is, a word to narrow the list, and the way
+          to put a file here. On a phone the path stays in view, in a strip
+          that scrolls sideways, and the rest folds into the sheet. */}
+      <Toolbar
+        folded={folded}
+        where={
+          <>
+            {/* The rail is shown or hidden from the bar, where the terminal
+                keeps the same control; on a phone it folds into the sheet
+                the bar opens, as every other control does. */}
+            <InBar leading as={(c) => <>{c}</>}>
+              <IconButton
+                size="small"
+                icon={RiSideBarLine}
+                aria-label={railShown ? "Hide the folders" : "Show the folders"}
+                aria-pressed={railShown}
+                onClick={toggleRail}
+                className={cx(!railShown && "text-foreground-icon-tertiary")}
+              />
+            </InBar>
+            <Breadcrumb
+              className={cx("min-w-0", folded ? "shrink-0" : "-mx-1 flex-1")}
+            >
+              <BreadcrumbItem
+                onClick={
+                  path.length === 0
+                    ? undefined
+                    : () => leaving(() => setPath([]))
+                }
+                current={path.length === 0}
+              >
+                Home
+              </BreadcrumbItem>
+              {path.map((name, i) =>
+                i === path.length - 1 ? (
+                  <BreadcrumbItem key={i} current className="truncate">
+                    {name}
+                  </BreadcrumbItem>
+                ) : (
+                  <BreadcrumbItem
+                    key={i}
+                    onClick={() => leaving(() => setPath(path.slice(0, i + 1)))}
+                  >
+                    {name}
+                  </BreadcrumbItem>
+                ),
               )}
-            </BreadcrumbItem>
-            {path.map((name, i) => (
-              <Fragment key={i}>
-                <BreadcrumbSeparator />
-                <BreadcrumbItem>
-                  {i === path.length - 1 ? (
-                    <BreadcrumbPage className="truncate">{name}</BreadcrumbPage>
-                  ) : (
-                    <BreadcrumbLink
-                      render={
-                        <button
-                          type="button"
-                          onClick={() => setPath(path.slice(0, i + 1))}
-                        />
-                      }
-                    >
-                      {name}
-                    </BreadcrumbLink>
-                  )}
-                </BreadcrumbItem>
-              </Fragment>
-            ))}
-          </BreadcrumbList>
-        </Breadcrumb>
+            </Breadcrumb>
+          </>
+        }
+      >
+        <InputBase
+          aria-label="Search this folder"
+          placeholder="Search"
+          size="small"
+          leadingIcon={RiSearchLine}
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(1);
+          }}
+          fieldClassName={folded ? "w-full" : "w-36 shrink-0"}
+        />
         <input
           ref={input}
           type="file"
@@ -395,114 +784,328 @@ export function Finder() {
           }}
         />
         <Button
-          variant="ghost"
-          size="sm"
+          variant="secondary"
+          size="small"
+          leadingIcon={RiUploadLine}
           className="shrink-0"
           onClick={() => input.current?.click()}
         >
-          <ArrowUpTrayIcon /> Upload
+          Upload
         </Button>
-      </InBar>
+      </Toolbar>
 
       {Object.keys(uploads).length > 0 && (
-        <div className="space-y-2 border-b px-3 py-2">
-          {Object.entries(uploads).map(([key, u]) => (
-            <div key={key} className="space-y-1">
-              <div className="flex items-baseline gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate">
-                  {key.split("/").pop()}
-                </span>
-                <span className="text-muted-foreground shrink-0 tabular-nums">
-                  {u.error
-                    ? "could not be sent"
-                    : `${size(u.done)} of ${size(u.total)}`}
-                </span>
-              </div>
-              <Progress
-                value={(u.done / Math.max(1, u.total)) * 100}
-                className={u.error ? "opacity-50" : ""}
-              />
-              {u.error && <p className="text-destructive text-xs">{u.error}</p>}
-            </div>
-          ))}
+        <div
+          aria-live="polite"
+          className="space-y-2 border-b border-separator-border px-3 py-2"
+        >
+          <AnimatePresence initial={false}>
+            {Object.entries(uploads).map(([key, u]) => {
+              const name = key.split("/").pop() ?? key;
+              const part = Math.round((u.done / Math.max(1, u.total)) * 100);
+              return (
+                <motion.div
+                  key={key}
+                  layout
+                  initial={{ opacity: 0, y: 4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, transition: LEAVE }}
+                  transition={BASE}
+                  className="space-y-1"
+                >
+                  <div className="flex items-baseline gap-2">
+                    <span className="min-w-0 flex-1 truncate text-body-2-medium text-text-primary">
+                      {name}
+                    </span>
+                    <span className="shrink-0 text-caption-1-medium text-text-secondary tabular-nums">
+                      {u.error
+                        ? "Could not be sent."
+                        : `${size(u.done)} of ${size(u.total)}`}
+                    </span>
+                  </div>
+                  <Progress
+                    aria-label={`Sending ${name}`}
+                    value={part}
+                    getAriaValueText={() =>
+                      `${size(u.done)} of ${size(u.total)}`
+                    }
+                    className={cx(u.error && "opacity-50")}
+                  />
+                  {u.error && (
+                    <div className="flex items-center gap-2">
+                      <p className="min-w-0 flex-1 truncate text-caption-1-regular text-text-error-primary">
+                        {u.error}
+                      </p>
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => {
+                          const again = sending.current[key];
+                          if (again) void upload(again);
+                        }}
+                      >
+                        Try again
+                      </Button>
+                      <CloseButton
+                        size="xs"
+                        aria-label={`Close ${name}`}
+                        onClick={() => forget(key)}
+                      />
+                    </div>
+                  )}
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col @md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col bg-background-full @md:flex-row">
+        {/* Home and what stands at the top of it, so any folder is one
+            press from any other: down the side on a wide window, where the
+            list has room to stand beside it; from a sheet on a phone,
+            where it would otherwise cost the list its height. */}
+        {(() => {
+          const places = (
+            <>
+              <Place
+                mark={RiHomeLine}
+                on={path.length === 0}
+                onClick={() =>
+                  leaving(() => {
+                    setPath([]);
+                    if (!wide) setSheet(false);
+                  })
+                }
+              >
+                Home
+              </Place>
+              {top
+                .filter(
+                  (e) =>
+                    e.kind === "dir" && (dotfiles || !e.name.startsWith(".")),
+                )
+                .map((e) => (
+                  <Place
+                    key={e.name}
+                    mark={RiFolderLine}
+                    on={path[0] === e.name}
+                    onClick={() =>
+                      leaving(() => {
+                        setPath([e.name]);
+                        if (!wide) setSheet(false);
+                      })
+                    }
+                  >
+                    {e.name}
+                  </Place>
+                ))}
+            </>
+          );
+          return wide ? (
+            rail && (
+              <nav
+                aria-label="Folders"
+                className="flex w-48 shrink-0 flex-col gap-1 overflow-y-auto border-r border-separator-border bg-background-secondary-default/55 p-2"
+              >
+                {places}
+              </nav>
+            )
+          ) : (
+            <Sheet open={sheet} onOpenChange={setSheet}>
+              <SheetContent
+                side="bottom"
+                className="max-h-[70dvh] gap-2 rounded-t-3xl p-3"
+              >
+                <SheetTitle className="sr-only">Folders</SheetTitle>
+                <nav
+                  aria-label="Folders"
+                  className="flex flex-col gap-1 overflow-y-auto"
+                >
+                  {places}
+                </nav>
+              </SheetContent>
+            </Sheet>
+          );
+        })()}
         <ContextMenu>
           <ContextMenuTrigger
-            className={`flex min-h-0 flex-col ${picked ? "@md:w-2/5 @md:border-r max-h-[40%] @md:max-h-none flex-none @md:flex-1 border-b @md:border-b-0" : "flex-1"}`}
+            className={cx(
+              "@container/list flex min-h-0 flex-col",
+              picked
+                ? "max-h-[40%] flex-none border-b border-separator-border @md:max-h-none @md:w-2/5 @md:shrink-0 @md:border-r @md:border-b-0"
+                : "flex-1",
+            )}
           >
             <ScrollArea className="min-h-0 flex-1">
               {shown === undefined ? (
-                <p className="text-muted-foreground px-3 py-3 text-sm">
-                  Reading…
+                <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
+                  Looking…
                 </p>
               ) : failed ? (
-                <p className="text-destructive px-3 py-3 text-sm">{failed}</p>
-              ) : shown.length === 0 ? (
-                <Empty className="py-10">
-                  <EmptyHeader>
-                    <EmptyTitle>
-                      {entries?.length
+                <p className="grid h-full place-items-center p-3 text-body-medium text-text-error-primary">
+                  {failed}
+                </p>
+              ) : rows.length === 0 ? (
+                // Which nothing this is, and the way out of it.
+                <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
+                  <span className="text-body-medium text-text-secondary">
+                    {word
+                      ? "Nothing is called that."
+                      : entries?.length
                         ? "Only hidden files"
                         : "Nothing here yet"}
-                    </EmptyTitle>
-                    <EmptyDescription>
-                      {entries?.length
+                  </span>
+                  <span className="text-body-regular text-text-tertiary">
+                    {word
+                      ? "Try another word."
+                      : entries?.length
                         ? "Right-click to show them."
-                        : "Drop a file on this window."}
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
+                        : "Drop a file here, or Upload."}
+                  </span>
+                  {!word && !entries?.length && (
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      leadingIcon={RiUploadLine}
+                      onClick={() => input.current?.click()}
+                    >
+                      Upload a file
+                    </Button>
+                  )}
+                </div>
               ) : (
-                <ul className="p-1">
-                  {shown.map((e) => {
-                    const Mark =
-                      e.kind === "dir"
-                        ? FolderIcon
-                        : isImage(e)
-                          ? PhotoIcon
-                          : isVideo(e)
-                            ? VideoCameraIcon
-                            : isText(e)
-                              ? DocumentTextIcon
-                              : DocumentIcon;
-                    return (
-                      <li key={e.name}>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => open(e)}
-                          aria-current={
-                            picked?.name === e.name ? "true" : undefined
-                          }
-                          className={`h-8 w-full justify-start gap-2 rounded-md px-2 font-normal ${
-                            picked?.name === e.name ? "bg-accent" : ""
-                          }`}
-                        >
-                          <Mark
-                            className={`size-4 shrink-0 ${
-                              e.kind === "dir"
-                                ? "text-foreground"
-                                : "text-muted-foreground"
-                            }`}
-                          />
-                          <span className="min-w-0 flex-1 truncate text-left">
-                            {e.name}
-                          </span>
-                          {e.kind !== "dir" && (
-                            <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                              {size(e.size)}
-                            </span>
+                // The folder as a table: the columns it can be sorted by
+                // across the top and staying there, a hairline between
+                // rows, a row per thing with its mark and its name; a
+                // press on a row opens it.
+                <Table
+                  aria-label="Files"
+                  size="sm"
+                  selectionMode="none"
+                  sortDescriptor={sort}
+                  onSortChange={(next) => {
+                    setSort(next);
+                    setPage(1);
+                  }}
+                  onRowAction={(key) => {
+                    const e = rows.find((x) => x.name === key);
+                    if (e) open(e);
+                  }}
+                  containerClassName="overflow-x-visible"
+                  className="table-fixed [&_td]:px-3! [&_th]:px-3! [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:border-t-0!"
+                >
+                  <TableHeader>
+                    {COLUMNS.map((c) => (
+                      <TableColumn
+                        key={c.id}
+                        id={c.id}
+                        isRowHeader={c.id === "name"}
+                        allowsSorting
+                        className={c.className}
+                      >
+                        {/* The mark is drawn from our own state rather
+                            than the column's render prop, which is made
+                            afresh on every sort and so never turns. */}
+                        <span
+                          className={cx(
+                            "inline-flex h-5 cursor-pointer items-center gap-0.5",
+                            c.id !== "name" && "justify-end",
                           )}
-                        </Button>
-                      </li>
-                    );
-                  })}
-                </ul>
+                        >
+                          {c.label}
+                          <SortMark
+                            dir={
+                              sort.column === c.id ? sort.direction : undefined
+                            }
+                          />
+                        </span>
+                      </TableColumn>
+                    ))}
+                  </TableHeader>
+                  <TableBody>
+                    {rows.map((e) => {
+                      const Mark = markOf(e);
+                      const on = picked?.name === e.name;
+                      return (
+                        <TableRow
+                          key={e.name}
+                          id={e.name}
+                          aria-current={on ? "true" : undefined}
+                          className={cx(
+                            "cursor-pointer",
+                            on
+                              ? "bg-background-secondary-default"
+                              : "hover:bg-background-primary-hover",
+                          )}
+                        >
+                          <TableCell>
+                            <span className="flex items-center gap-2 @max-[400px]/list:min-h-8">
+                              <Mark
+                                className="size-5 shrink-0 text-foreground-icon-secondary"
+                                aria-hidden
+                              />
+                              <span className="flex min-w-0 flex-1 flex-col">
+                                <span
+                                  className="truncate text-body-medium"
+                                  title={e.name}
+                                >
+                                  {e.name}
+                                </span>
+                                {/* What the columns had to give up, kept
+                                    where there is no room for them. */}
+                                <span className="hidden truncate text-caption-1-medium text-text-secondary tabular-nums @max-[520px]/list:block">
+                                  {e.kind === "dir" ? "" : size(e.size)}
+                                  <span className="hidden @max-[400px]/list:inline">
+                                    {e.kind === "dir"
+                                      ? when(e.modified)
+                                      : ` · ${when(e.modified)}`}
+                                  </span>
+                                </span>
+                              </span>
+                            </span>
+                          </TableCell>
+                          <TableCell
+                            className={cx(
+                              "text-right whitespace-nowrap",
+                              NARROW.size,
+                            )}
+                          >
+                            <span className="text-text-secondary tabular-nums">
+                              {e.kind === "dir" ? "" : size(e.size)}
+                            </span>
+                          </TableCell>
+                          <TableCell
+                            className={cx(
+                              "text-right whitespace-nowrap",
+                              NARROW.modified,
+                            )}
+                          >
+                            <span className="text-text-secondary tabular-nums">
+                              {when(e.modified)}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
               )}
             </ScrollArea>
+            {shown && shown.length > PER_PAGE && (
+              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-separator-border px-3 py-2">
+                <span className="shrink-0 text-caption-1-medium text-text-secondary tabular-nums">
+                  {(here - 1) * PER_PAGE + 1}–
+                  {Math.min(here * PER_PAGE, shown.length)} of {shown.length}
+                </span>
+                <Pagination
+                  page={here}
+                  totalPages={pages}
+                  onChange={setPage}
+                  className="min-w-0"
+                />
+              </div>
+            )}
           </ContextMenuTrigger>
           <ContextMenuContent>
             <ContextMenuCheckboxItem
@@ -514,104 +1117,210 @@ export function Finder() {
           </ContextMenuContent>
         </ContextMenu>
 
-        {picked && (
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex h-9 shrink-0 items-center gap-2 border-b px-3 text-sm">
-              <span className="min-w-0 flex-1 truncate font-medium">
-                {picked.name}
-              </span>
-              <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
-                {size(picked.size)}
-              </span>
-              {isText(picked) && (
-                <Button
-                  size="sm"
-                  variant={dirty ? "default" : "outline"}
-                  disabled={!dirty || saving}
-                  onClick={save}
-                >
-                  {saving ? "Saving…" : "Save"}
-                </Button>
-              )}
-              <Button
-                size="sm"
-                variant="ghost"
-                nativeButton={false}
-                render={
-                  <a
-                    href={readHref(at(picked.name))}
-                    target="_blank"
-                    rel="noreferrer"
-                  />
-                }
-              >
-                Open
-              </Button>
-            </div>
-            <div className="min-h-0 flex-1">
-              {isVideo(picked) ? (
-                <div className="grid h-full place-items-center bg-black">
-                  {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                  <video
-                    key={picked.name}
-                    controls
-                    playsInline
-                    preload="metadata"
-                    poster={previewHref(at(picked.name), picked.modified)}
-                    src={readHref(at(picked.name))}
-                    className="h-full w-full object-contain"
-                  />
-                </div>
-              ) : isImage(picked) || isPdf(picked) || isDocument(picked) ? (
-                <div className="grid h-full place-items-center overflow-auto p-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    key={picked.name}
-                    // A picture is made on the machine; a small SVG is shown as is.
-                    src={
-                      ending(picked.name) === "svg"
-                        ? readHref(at(picked.name))
-                        : previewHref(at(picked.name), picked.modified)
+        <AnimatePresence initial={false}>
+          {picked && (
+            <motion.div
+              key="look"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, transition: LEAVE }}
+              transition={FAST}
+              className="flex min-h-0 flex-1 flex-col"
+            >
+              {/* The file's own bar: its name and size, what can be done
+                  with it fused into one control, and the way out. */}
+              <div className="flex h-11 shrink-0 items-center gap-2 border-b border-separator-border px-3">
+                <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <span className="min-w-0 truncate text-body-medium text-text-primary">
+                    {picked.name}
+                  </span>
+                  {dirty && (
+                    <span
+                      className="size-1.5 shrink-0 rounded-full bg-accent-500"
+                      title="Not saved yet"
+                      aria-label="Not saved yet"
+                      role="img"
+                    />
+                  )}
+                </span>
+                <span className="shrink-0 text-caption-1-medium text-text-secondary tabular-nums">
+                  {size(picked.size)}
+                </span>
+                <ButtonGroup size="small" aria-label="What to do with it">
+                  {isText(picked) && !heavy && (
+                    <ButtonGroupItem
+                      size="small"
+                      disabled={!dirty || saving}
+                      onClick={() => void save()}
+                    >
+                      <AnimatePresence mode="popLayout" initial={false}>
+                        <motion.span
+                          key={saving ? "saving" : "save"}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0, transition: LEAVE }}
+                          transition={BASE}
+                          className="block"
+                        >
+                          {saving ? "Saving…" : "Save"}
+                        </motion.span>
+                      </AnimatePresence>
+                    </ButtonGroupItem>
+                  )}
+                  <ButtonGroupItem
+                    size="small"
+                    leadingIcon={RiExternalLinkLine}
+                    onClick={() =>
+                      window.open(
+                        readHref(at(picked.name)),
+                        "_blank",
+                        "noopener",
+                      )
                     }
-                    alt={picked.name}
-                    className="max-h-full max-w-full rounded-md object-contain"
+                  >
+                    Open
+                  </ButtonGroupItem>
+                </ButtonGroup>
+                <CloseButton size="sm" aria-label="Close" onClick={close} />
+              </div>
+              {refused && (
+                <div className="shrink-0 border-b border-separator-border p-3">
+                  <Notification
+                    status="error"
+                    title="That was not saved"
+                    description={refused}
+                    dismissible
+                    onDismiss={() => setRefused(null)}
                   />
                 </div>
-              ) : isText(picked) ? (
-                text === null ? (
-                  <p className="text-muted-foreground px-3 py-3 text-sm">
-                    Reading…
-                  </p>
-                ) : (
-                  <Editor
-                    name={picked.name}
-                    value={text}
-                    onChange={(next) => {
-                      setText(next);
-                      setDirty(true);
-                    }}
-                  />
-                )
-              ) : (
-                <Empty className="h-full">
-                  <EmptyHeader>
-                    <EmptyTitle>{picked.name}</EmptyTitle>
-                    <EmptyDescription>
-                      {size(picked.size)}. Open it to download.
-                    </EmptyDescription>
-                  </EmptyHeader>
-                </Empty>
               )}
-            </div>
-          </div>
-        )}
+              <div className="min-h-0 flex-1">
+                {isVideo(picked) ? (
+                  <div className="grid h-full place-items-center bg-background-full">
+                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
+                    <video
+                      key={picked.name}
+                      controls
+                      playsInline
+                      preload="metadata"
+                      poster={previewHref(at(picked.name), picked.modified)}
+                      src={readHref(at(picked.name))}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                ) : isImage(picked) || isPdf(picked) || isDocument(picked) ? (
+                  <div className="grid h-full place-items-center overflow-auto bg-background-secondary-default p-3">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      key={picked.name}
+                      // A picture is made on the machine; a small SVG is shown as is.
+                      src={
+                        ending(picked.name) === "svg"
+                          ? readHref(at(picked.name))
+                          : previewHref(at(picked.name), picked.modified)
+                      }
+                      alt={picked.name}
+                      className="max-h-full max-w-full object-contain shadow-card"
+                    />
+                  </div>
+                ) : isText(picked) && !heavy ? (
+                  text === null ? (
+                    <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
+                      Looking…
+                    </p>
+                  ) : (
+                    <Editor
+                      name={picked.name}
+                      value={text}
+                      onChange={(next) => {
+                        setText(next);
+                        setDirty(true);
+                      }}
+                    />
+                  )
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center">
+                    <span className="text-body-medium text-text-secondary">
+                      {picked.name}
+                    </span>
+                    <span className="text-body-regular text-text-tertiary">
+                      {size(picked.size)}.{" "}
+                      {heavy ? "Too big to open here." : "Nothing to show."}{" "}
+                      Open it to save it.
+                    </span>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      {dragging && (
-        <div className="border-primary/60 bg-background/80 text-muted-foreground pointer-events-none absolute inset-2 grid place-items-center rounded-lg border-2 border-dashed text-sm">
-          Drop to put it here
-        </div>
-      )}
+      <AnimatePresence>
+        {dragging && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.97 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.97, transition: LEAVE }}
+            transition={FAST}
+            className="pointer-events-none absolute inset-2 grid place-items-center rounded-3xl border border-border-focus-ring bg-background-secondary-default/90 text-body-medium text-text-secondary"
+          >
+            Drop it here.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* An edit is never thrown away without a word. */}
+      <AlertDialog
+        open={ask !== null}
+        onOpenChange={(on) => {
+          if (on) return;
+          ask?.stop?.();
+          setAsk(null);
+        }}
+      >
+        <AlertDialogContent size="sm">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Save what you changed in {picked?.name}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              It has not been saved to your computer yet.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <ShadButton
+              variant="outline"
+              onClick={() => {
+                ask?.stop?.();
+                setAsk(null);
+              }}
+            >
+              Cancel
+            </ShadButton>
+            <ShadButton
+              variant="outline"
+              onClick={() => {
+                const go = ask?.go;
+                setDirty(false);
+                setAsk(null);
+                go?.();
+              }}
+            >
+              Discard
+            </ShadButton>
+            <ShadButton
+              onClick={() => {
+                const { go, stop } = ask ?? {};
+                setAsk(null);
+                void save().then((ok) => (ok ? go?.() : stop?.()));
+              }}
+            >
+              Save
+            </ShadButton>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

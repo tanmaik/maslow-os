@@ -502,6 +502,96 @@ export async function smokeBrain(stack) {
       forms.outcomes.join(" ") === "refused refused refused refused accepted",
       forms.outcomes.join(" "),
     );
+
+    // What the brain's views ask the door for: a run of characters inside a
+    // text field, a field left unset, a count of each value a field holds,
+    // time run the other way round, and one person's records with no type.
+    const views = await me(acme)(async (q) => {
+      await brain.defineType(q, {
+        name: "chore",
+        properties: [
+          { name: "due", datatype: "date" },
+          {
+            name: "stage",
+            datatype: "enum",
+            options: ["open", "done", "dropped"],
+          },
+        ],
+      });
+      await brain.write(q, {
+        records: [
+          {
+            type: "chore",
+            source: "smoke",
+            sourceRef: "chore-1",
+            title: "Repaint the tunnel",
+            props: { due: "2026-09-30", stage: "open" },
+          },
+          {
+            type: "chore",
+            source: "smoke",
+            sourceRef: "chore-2",
+            title: "Sweep the mesa",
+            props: { due: "2026-09-29", stage: "open" },
+          },
+          {
+            type: "chore",
+            source: "smoke",
+            sourceRef: "chore-3",
+            title: "Repaint the sign",
+            props: { due: "2026-09-28" },
+          },
+        ],
+      });
+      const one = (opts) => brain.read(q, { type: "chore", ...opts });
+      return {
+        holds: await one({
+          where: [{ property: "stage", op: "contains", value: "PE" }],
+        }),
+        unset: await one({ where: [{ property: "stage", op: "unset" }] }),
+        tally: await brain.tally(q, "stage", { type: "chore" }),
+        oldest: await brain.read(q, {
+          orderBy: { direction: "asc" },
+          limit: 1,
+        }),
+        newest: await brain.read(q, { limit: 1 }),
+        whose: await brain.read(q, { owner: acme.users[0].id, limit: 200 }),
+        badly: await attempt(() =>
+          one({ where: [{ property: "due", op: "contains", value: "x" }] }),
+        ),
+      };
+    });
+    check(
+      "text is searched for what it holds",
+      views.holds.records.length === 2 &&
+        views.holds.records.every((r) => r.props.stage === "open") &&
+        views.badly === "Invalid",
+      `${views.holds.records.length} open, a date holds nothing: ${views.badly}`,
+    );
+    check(
+      "a field with no value is asked for",
+      views.unset.records.length === 1 &&
+        views.unset.records[0].title === "Repaint the sign",
+      views.unset.records.map((r) => r.title).join(",") || "nothing",
+    );
+    check(
+      "each value of a field is counted",
+      views.tally.get("open") === 2 && views.tally.get(null) === 1,
+      [...views.tally].map(([v, n]) => `${v}:${n}`).join(" "),
+    );
+    check(
+      "time runs either way round",
+      views.oldest.records[0] &&
+        views.newest.records[0] &&
+        views.oldest.records[0].id !== views.newest.records[0].id,
+      `${views.oldest.records[0]?.title} … ${views.newest.records[0]?.title}`,
+    );
+    check(
+      "one person's records are read without a type",
+      views.whose.records.length > 0 &&
+        views.whose.records.every((r) => r.ownerId === acme.users[0].id),
+      `${views.whose.records.length} records, all theirs`,
+    );
     check(
       "fields filter and sort across pages",
       forms.heavy.records.length === 2 &&
@@ -1638,6 +1728,58 @@ export async function smokeBrain(stack) {
         portAsk.given.join() === `3000 to member ${otto.userId}` &&
         portAsk.left === 0,
       `at edit ${portAsk.atEdit}; gave ${portAsk.given.join(", ") || "nothing"}; ${portAsk.left} left`,
+    );
+
+    // What waits on a person is the person's alone: a note or an ask left
+    // for one of them is invisible to everyone else, and an ask answers
+    // once, with one of the options it offered.
+    const notices = await import("../packages/db/src/notices.ts");
+    const left = await as(marge)(async (q) => {
+      const note = await notices.leaveNotice(q, {
+        kind: "note",
+        title: "The levain is ready",
+        body: "It doubled overnight.",
+      });
+      const ask = await notices.leaveNotice(q, {
+        kind: "ask",
+        title: "Bake at six?",
+        options: ["Yes", "No"],
+      });
+      const counts = await notices.noticeCounts(q);
+      const outside = await attempt(() =>
+        notices.answerNotice(q, ask.id, "Maybe"),
+      );
+      const answered = await notices.answerNotice(q, ask.id, "Yes");
+      const twice = await attempt(() => notices.answerNotice(q, ask.id, "No"));
+      return {
+        note,
+        ask,
+        counts,
+        outside,
+        answered,
+        twice,
+        after: await notices.noticeCounts(q),
+      };
+    });
+    const others = await as(otto)(async (q) => ({
+      all: (await notices.noticesOf(q)).length,
+      byId: await notices.noticeOf(q, left.note.id),
+      answering: await attempt(() =>
+        notices.answerNotice(q, left.ask.id, "No"),
+      ),
+    }));
+    check(
+      "a notice is the person's alone",
+      left.counts.waiting === 1 &&
+        left.counts.unread === 2 &&
+        left.outside === "Unanswerable" &&
+        left.answered.answer === "Yes" &&
+        left.twice === "Unanswerable" &&
+        left.after.waiting === 0 &&
+        others.all === 0 &&
+        others.byId === null &&
+        others.answering === "Unanswerable",
+      `waiting ${left.counts.waiting}→${left.after.waiting}, unread ${left.counts.unread}; off the options ${left.outside}, twice ${left.twice}; a colleague sees ${others.all} and answering is ${others.answering}`,
     );
 
     // Export and import.

@@ -13,41 +13,24 @@ import {
 } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
 import { groupsIn } from "@maslow/db/groups";
-import { ChevronLeftIcon, EllipsisIcon, PlusIcon, XIcon } from "lucide-react";
+import { RiArrowLeftSLine } from "@remixicon/react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { EagerLink } from "@/components/eager-link";
-import { FormDialog } from "@/components/form-dialog";
-import { HowSure } from "@/components/how-sure";
-import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
 
 import { vocabulary } from "../../catalog";
-import { recordHref } from "../../format";
+import { recordHref, verbText } from "../../format";
 import { Sharing } from "../../sharing";
 import { TypeMark } from "../../type-icon";
 import { Document } from "./document";
-import { OtherRecord } from "./other-record";
+import { LinkForm } from "./link-form";
 import { BrainGraph } from "./lazy";
 import { Properties } from "./properties";
+import { Unlink } from "./unlink";
+import { Whole, type Act } from "./whole";
 
 // A record with links, up to this many, has a map of them; one with more
 // has the list alone.
@@ -126,24 +109,29 @@ export default async function Page({
     r.ownerId === p.userId
       ? "you"
       : (people.get(r.ownerId) ?? "someone no longer here");
+  const act: Act = r.mergedInto
+    ? "unmerge"
+    : r.deletedAt
+      ? "restore"
+      : "remove";
 
   return (
-    <Card className="@container min-h-full rounded-[14px] p-4 sm:p-5">
+    <div className="page-sheet @container flex min-h-full flex-col rounded-3xl border border-border-button-default bg-background-primary-default p-4 sm:p-5">
       <div className="grid flex-1 gap-x-8 gap-y-4 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @2xl:grid-rows-[auto_1fr]">
-        <div className="col-span-full flex items-center gap-1">
-          <p className="text-muted-foreground flex min-w-0 flex-1 items-center gap-2 text-xs">
+        <div className="col-span-full flex items-center gap-2">
+          <p className="flex min-w-0 flex-1 items-center gap-2 text-caption-1-medium text-text-secondary">
             <EagerLink
               href="/brain"
-              className="hover:text-foreground -ml-1 flex shrink-0 items-center gap-0.5 rounded-full px-1 py-0.5"
+              className="-ml-1 flex shrink-0 items-center gap-0.5 rounded-full px-1 py-0.5 transition-colors duration-fast ease-plain hover:text-text-primary"
             >
-              <ChevronLeftIcon className="size-3.5" />
+              <RiArrowLeftSLine className="size-3.5" aria-hidden />
               Your brain
             </EagerLink>
             <span aria-hidden>·</span>
             <TypeMark
               type={r.type}
               owner={r.ownerId === p.userId ? undefined : r.ownerId}
-              className="text-foreground/85 truncate"
+              className="truncate text-text-primary"
             />
             {ownerName !== "you" && (
               <>
@@ -161,15 +149,15 @@ export default async function Page({
             members={[...people].map(([id, name]) => ({ id, name }))}
             pill
           />
-          {isOwner && <More record={r} action={action} />}
+          {isOwner && <Whole action={action} act={act} />}
         </div>
         <div className="flex min-w-0 flex-col gap-3.5">
           {r.mergedInto && (
-            <p className="text-muted-foreground border-l-2 pl-3 text-sm">
+            <p className="border-l-2 border-separator-border pl-3 text-body-regular text-text-secondary">
               Merged into{" "}
               <Link
                 href={recordHref(winner?.id ?? r.mergedInto)}
-                className="underline"
+                className="text-text-primary underline"
               >
                 {winner?.title || r.mergedInto}
               </Link>
@@ -177,8 +165,8 @@ export default async function Page({
             </p>
           )}
           {r.deletedAt && !r.mergedInto && (
-            <p className="text-muted-foreground border-l-2 pl-3 text-sm">
-              Deleted.
+            <p className="border-l-2 border-separator-border pl-3 text-body-regular text-text-secondary">
+              Removed.
             </p>
           )}
           <Document
@@ -201,7 +189,9 @@ export default async function Page({
             }
           />
         </div>
-        <div className="min-w-0 space-y-3">
+        {/* The right column's first heading is 12px type beside a 24px
+            title, so it is dropped to the title's own cap line. */}
+        <div className="flex min-w-0 flex-col gap-3 @2xl:pt-2">
           <Links
             record={r}
             aliases={aliases}
@@ -211,67 +201,30 @@ export default async function Page({
             me={p.userId}
             action={action}
             canEdit={canEdit}
-          >
-            {near && (
-              // A map of two or three records does not need the room a
-              // crowded one does.
+          />
+          {near && (
+            <section className="flex flex-col gap-2">
+              <Heading>Map</Heading>
+              {/* A map of two or three records does not need the room a
+                  crowded one does. */}
               <div
-                className={`overflow-hidden rounded-[10px] border ${
+                className={`overflow-hidden rounded-2xl border border-border-button-default ${
                   near.nodes.length <= 3 ? "h-36" : "h-52"
                 }`}
               >
                 <BrainGraph graph={near} focus={winner?.id ?? r.id} />
               </div>
-            )}
-          </Links>
+            </section>
+          )}
         </div>
       </div>
-    </Card>
-  );
-}
-
-// What is done to a whole record rather than to a word in it: out of the
-// way behind one mark, since a record is read far more often than it is
-// deleted, restored or taken back out of a merge.
-function More({ record, action }: { record: BrainRecord; action: string }) {
-  const [intent, said] = record.mergedInto
-    ? ["unmerge", "Unmerge"]
-    : record.deletedAt
-      ? ["restore", "Restore"]
-      : ["delete", "Delete"];
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            className="text-muted-foreground shrink-0 rounded-full"
-          />
-        }
-      >
-        <EllipsisIcon />
-        <span className="sr-only">More</span>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-40">
-        <form action={action} method="post">
-          <DropdownMenuItem
-            variant={intent === "delete" ? "destructive" : "default"}
-            className="w-full"
-            nativeButton
-            render={<button type="submit" name="intent" value={intent} />}
-          >
-            {said}
-          </DropdownMenuItem>
-        </form>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    </div>
   );
 }
 
 // A section's title.
 const Heading = ({ children }: { children: React.ReactNode }) => (
-  <h2 className="text-muted-foreground text-xs">{children}</h2>
+  <h2 className="text-caption-1-semibold text-text-secondary">{children}</h2>
 );
 
 // The records this one is linked to, or anything merged into it is: one
@@ -287,7 +240,6 @@ function Links({
   me,
   action,
   canEdit,
-  children,
 }: {
   record: BrainRecord;
   aliases: Set<string>;
@@ -297,7 +249,6 @@ function Links({
   me: string;
   action: string;
   canEdit: boolean;
-  children?: React.ReactNode;
 }) {
   // Whose a linked record is, when it is not the reader's own.
   const whose = (r?: Stub) =>
@@ -305,45 +256,38 @@ function Links({
       ? null
       : `${people.get(r.ownerId) ?? "someone no longer here"}'s`;
   return (
-    <section className="space-y-2">
+    <section className="flex flex-col gap-2">
       {(edges.length > 0 || canEdit) && <Heading>Links</Heading>}
-      <ul className="flex flex-wrap items-center gap-1.5 text-sm">
+      <ul className="flex flex-wrap items-center gap-2">
         {edges.map((e) => {
           const otherId = aliases.has(e.fromId) ? e.toId : e.fromId;
           const other = others.get(otherId);
+          const title = aliases.has(otherId)
+            ? `this ${record.type}`
+            : other?.title || "(untitled)";
           return (
             <li
               key={e.id}
-              className="bg-muted/60 flex h-8 items-center gap-1.5 rounded-full pl-3 pr-1.5"
+              className="group flex h-8 items-center gap-1.5 rounded-full bg-background-secondary-default pr-1.5 pl-3"
             >
               <Link
                 href={recordHref(otherId)}
-                className="max-w-64 truncate font-medium hover:underline"
+                className="max-w-64 truncate text-body-medium text-text-primary hover:underline"
               >
-                {aliases.has(otherId)
-                  ? `this ${record.type}`
-                  : other?.title || "(untitled)"}
+                {title}
               </Link>
               {whose(other) && (
-                <span className="text-muted-foreground text-[11.5px]">
+                <span className="text-caption-2-regular text-text-secondary">
                   {whose(other)}
                 </span>
               )}
               {canEdit ? (
-                <form action={action} method="post" className="flex">
-                  <input type="hidden" name="edge" value={e.id} />
-                  <Button
-                    type="submit"
-                    variant="ghost"
-                    size="icon-xs"
-                    name="intent"
-                    value="unlink"
-                    aria-label="Unlink"
-                    className="text-muted-foreground/70 hover:text-foreground rounded-full"
-                  >
-                    <XIcon />
-                  </Button>
-                </form>
+                <Unlink
+                  action={action}
+                  edge={e.id}
+                  title={title}
+                  verb={verbText(e.verb)}
+                />
               ) : (
                 <span className="w-1" />
               )}
@@ -352,62 +296,10 @@ function Links({
         })}
         {canEdit && (
           <li>
-            <LinkForm record={record} />
+            <LinkForm id={record.id} type={record.type} />
           </li>
         )}
       </ul>
-      {children}
     </section>
-  );
-}
-
-// A new link from or to this record, under any verb.
-function LinkForm({ record }: { record: BrainRecord }) {
-  return (
-    <FormDialog
-      trigger={
-        <>
-          <PlusIcon />
-          Link
-        </>
-      }
-      title="Link to another record"
-      description="A link is a sentence: this record, a verb, another record."
-      variant="ghost"
-      className="text-muted-foreground h-8 rounded-full border border-dashed px-3"
-    >
-      <form
-        action={`${recordHref(record.id)}/link`}
-        method="post"
-        className="grid gap-3"
-      >
-        <div className="space-y-1">
-          <Label htmlFor="direction">Reads as</Label>
-          <Select name="direction" defaultValue="out">
-            <SelectTrigger id="direction" className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="out">
-                this {record.type} … the other
-              </SelectItem>
-              <SelectItem value="in">the other … this {record.type}</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="verb">Verb</Label>
-          <Input id="verb" name="verb" required />
-        </div>
-        <div className="space-y-1">
-          <Label htmlFor="other">The other record</Label>
-          <OtherRecord not={record.id} name="other" />
-        </div>
-        <HowSure id="link-confidence" name="confidence" />
-        <div>
-          <Button type="submit">Link</Button>
-        </div>
-      </form>
-    </FormDialog>
   );
 }

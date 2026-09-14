@@ -1,3 +1,4 @@
+import { answerTheBrain } from "./brain.mjs";
 import { renewLeases } from "./fly.mjs";
 import { checkout, devSecrets, freePort, startStack } from "./stack.mjs";
 
@@ -45,14 +46,23 @@ const renew = () =>
     (err) => console.error(`computers  lease: ${err.message}`),
   );
 let leases = null;
+// A machine cannot reach a laptop, so the brain is answered the other way
+// about: this checkout dials its machines and holds their doors open.
+let brains = null;
 if (stack.vendors.computers) {
   void renew();
   leases = setInterval(renew, 10 * 60_000);
+  brains = answerTheBrain({
+    checkout,
+    webPort: stack.webPort,
+    env: stack.env,
+  });
 }
 console.log(`checkout  ${checkout}`);
 
 const shutdown = () => {
   if (leases) clearInterval(leases);
+  if (brains) brains();
   return stack.stop().then(() => process.exit(0));
 };
 process.on("SIGINT", shutdown);

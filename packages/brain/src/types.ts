@@ -139,11 +139,15 @@ export type EdgeInput = {
   occurredAt?: Date | string | null;
 };
 
-// A condition on a declared field. `in` takes a list; `contains` is for lists.
+// A condition on a declared field. `in` takes a list of values; `contains`
+// looks for one value in a list field or a run of characters in a text one;
+// `unset` is a field with no value, and takes none.
 export type Filter = {
   property: string;
-  op: "eq" | "ne" | "lt" | "lte" | "gt" | "gte" | "in" | "contains";
-  value: unknown;
+  op: "eq" | "ne" | "lt" | "lte" | "gt" | "gte" | "in" | "contains" | "unset";
+  value?: unknown;
 };
 
-export type Sort = { property: string; direction?: "asc" | "desc" };
+// What to order by: a declared field, or, with no field named, when the
+// record happened.
+export type Sort = { property?: string; direction?: "asc" | "desc" };

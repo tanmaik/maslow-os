@@ -17,6 +17,6 @@ export async function POST() {
   }
   return new Response(null, {
     status: 303,
-    headers: { location: "/computer" },
+    headers: { location: "/settings?pane=computer" },
   });
 }

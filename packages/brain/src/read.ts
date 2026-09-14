@@ -31,7 +31,7 @@ export type ReadOptions = {
   // shared with them.
   scope?: "mine" | "shared" | "all";
   // Records of every type with this name the reader may see; owner narrows
-  // to one person's.
+  // to one person's records, with or without a type.
   type?: string;
   owner?: string;
   // A person record's id: only records linked to it by an edge.
@@ -44,8 +44,9 @@ export type ReadOptions = {
   // person's declaration, so filtering or ordering by one reads that
   // person's records: the owner's, or the reader's own.
   where?: Filter[];
-  // Order by a declared field instead of by time; needs a type. Records
-  // without the field are left out.
+  // Order by a declared field instead of by time, which needs a type and
+  // leaves out the records without the field; or, with no field named,
+  // which way round the order by time runs.
   orderBy?: Sort;
   includeDeleted?: boolean;
   limit?: number;
@@ -105,7 +106,10 @@ const keyFits = (type: string, key: string | null) =>
           ? key === "true" || key === "false"
           : true;
 
-const OPERATORS: Record<Exclude<Filter["op"], "in" | "contains">, string> = {
+const OPERATORS: Record<
+  Exclude<Filter["op"], "in" | "contains" | "unset">,
+  string
+> = {
   eq: "=",
   ne: "<>",
   lt: "<",
@@ -115,19 +119,16 @@ const OPERATORS: Record<Exclude<Filter["op"], "in" | "contains">, string> = {
 };
 const DIRECTIONS = { asc: "asc", desc: "desc" } as const;
 
-// Records, newest first by when they happened, filtered and searched. Every
-// record carries its source and ref, so a caller can cite it.
-export async function read(
-  q: Query,
-  opts: ReadOptions = {},
-  select: string = recordSelect,
-): Promise<Page> {
-  const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+// Which records a read is about, as conditions on the records table and the
+// parameters they stand on: whose, of what type, around which person, in
+// what window of time, matching what search, and meeting every filter on a
+// declared field. Shared by everything that reads records, so a list and a
+// tally of the same records are the same records.
+async function narrow(q: Query, opts: ReadOptions) {
   const scope = opts.scope ?? "all";
   if (!["mine", "shared", "all"].includes(scope)) {
     throw new Invalid(`"${String(scope)}" is not a scope`);
   }
-  if (opts.owner && !opts.type) throw new Invalid("an owner needs a type");
   const params: unknown[] = [
     opts.includeDeleted ?? false,
     opts.type ?? null,
@@ -158,7 +159,7 @@ export async function read(
       : scope === "shared"
         ? "person_id <> current_member()"
         : "true",
-    opts.where?.length || opts.orderBy
+    opts.where?.length || opts.orderBy?.property
       ? "person_id = coalesce($3, current_member())"
       : "true",
   ];
@@ -196,11 +197,22 @@ export async function read(
   };
   for (const f of opts.where ?? []) {
     const { p, key, expr } = await field(f.property);
-    if (f.op === "contains") {
-      if (p.datatype !== "list" || typeof f.value !== "string") {
-        throw new Invalid(`contains needs a list field and a string`);
+    if (f.op === "unset") {
+      where.push(`${expr} is null`);
+    } else if (f.op === "contains") {
+      // A list holds a value or it does not; text holds a run of
+      // characters, whatever case either was written in.
+      if (typeof f.value !== "string") {
+        throw new Invalid(`contains needs a string`);
+      } else if (p.datatype === "list") {
+        where.push(`(props -> ${key}) ? ${param(f.value)}::text`);
+      } else if (p.datatype === "text" || p.datatype === "enum") {
+        where.push(`strpos(lower(${expr}), lower(${param(f.value)})) > 0`);
+      } else {
+        throw new Invalid(
+          `${opts.type}.${p.name} is a ${p.datatype}, which holds nothing`,
+        );
       }
-      where.push(`(props -> ${key}) ? ${param(f.value)}::text`);
     } else if (f.op === "in") {
       if (!Array.isArray(f.value)) throw new Invalid(`in needs a list`);
       for (const v of f.value) fits(p, v);
@@ -214,24 +226,41 @@ export async function read(
       throw new Invalid(`"${String(f.op)}" is not a filter`);
     }
   }
+  return { where, params, param, field };
+}
+
+// Records, newest first by when they happened, filtered and searched. Every
+// record carries its source and ref, so a caller can cite it.
+export async function read(
+  q: Query,
+  opts: ReadOptions = {},
+  select: string = recordSelect,
+): Promise<Page> {
+  const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+  const { where, params, param, field } = await narrow(q, opts);
 
   let order = "coalesce(occurred_at, created_at)";
   let orderType = "timestamptz";
   let direction: "asc" | "desc" = "desc";
   if (opts.orderBy) {
-    const { p, expr } = await field(opts.orderBy.property);
-    if (p.datatype === "list") {
-      throw new Invalid(`${opts.type}.${p.name} is a list and has no order`);
-    }
-    const wanted = opts.orderBy.direction ?? "asc";
+    // A field runs up from the smallest unless asked otherwise; time runs
+    // back from the newest, which is what a list shows without being asked.
+    const wanted =
+      opts.orderBy.direction ?? (opts.orderBy.property ? "asc" : "desc");
     if (!(wanted in DIRECTIONS)) {
       throw new Invalid(`"${String(wanted)}" is not a direction`);
     }
-    order = expr;
-    orderType = sqlType[p.datatype];
     direction = DIRECTIONS[wanted];
+    if (opts.orderBy.property) {
+      const { p, expr } = await field(opts.orderBy.property);
+      if (p.datatype === "list") {
+        throw new Invalid(`${opts.type}.${p.name} is a list and has no order`);
+      }
+      order = expr;
+      orderType = sqlType[p.datatype];
+    }
   }
-  const orderName = `${scope}/${opts.type ?? ""}/${opts.owner ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
+  const orderName = `${opts.scope ?? "all"}/${opts.type ?? ""}/${opts.owner ?? ""}/${opts.orderBy?.property ?? ""}/${direction}`;
   if (opts.cursor) {
     const c = decode(opts.cursor, orderName);
     if (!keyFits(orderType, c.key)) throw new Invalid("that is not a cursor");
@@ -260,6 +289,25 @@ export async function read(
       ? encode({ key: last.sort_key, id: last.id, order: orderName })
       : null,
   };
+}
+
+// How many of the same records hold each value of one declared field: what
+// a board's columns are counted by. The records with no value at all are
+// counted under null.
+export async function tally(
+  q: Query,
+  property: string,
+  opts: ReadOptions = {},
+): Promise<Map<string | null, number>> {
+  const { where, params, field } = await narrow(q, opts);
+  const { expr } = await field(property);
+  const { rows } = await q.query<{ value: string | null; n: number }>(
+    `select (${expr})::text as value, count(*)::int as n from records r
+     where ${where.join("\n       and ")}
+     group by 1`,
+    params,
+  );
+  return new Map(rows.map((r) => [r.value, r.n]));
 }
 
 // How many live records of the person's own the brain holds.

@@ -2,8 +2,9 @@ import { asOrg } from "@maslow/db";
 import { fullName, membershipsOf } from "@maslow/db/auth";
 import { redirect } from "next/navigation";
 
-import { SignIn, notice, type Notice } from "@/components/sign-in";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
+import { LinkButton } from "@/components/base/buttons/link-button";
+import { Door, SignIn, notice, type Notice } from "@/components/sign-in";
 import { authorizationRequest } from "@/lib/oauth";
 import { principal } from "@/lib/session";
 
@@ -24,12 +25,14 @@ export default async function Page({
   if (!asked.ok) {
     if (asked.back) redirect(asked.back.toString());
     return (
-      <main className="space-y-4">
-        <h1 className="text-2xl font-semibold">Can&apos;t connect</h1>
-        <p className="text-muted-foreground">
-          This request is not one an app of ours would make: {asked.problem}.
-        </p>
-      </main>
+      <Door
+        title="Can't connect"
+        description={`This request is not one an app of ours would make: ${asked.problem}.`}
+      >
+        <LinkButton href="/" size="small" variant="secondary">
+          Go home
+        </LinkButton>
+      </Door>
     );
   }
   const p = await principal();
@@ -38,6 +41,7 @@ export default async function Page({
       <SignIn
         said={notice(given as Notice)}
         next={`/oauth/authorize?${params}`}
+        because={`Sign in to let ${asked.request.client.name} into your brain.`}
       />
     );
 
@@ -55,30 +59,46 @@ export default async function Page({
   const others = (await membershipsOf(p)).filter((m) => m.userId !== p.userId);
 
   return (
-    <main className="max-w-lg space-y-6">
-      <h1 className="text-2xl font-semibold">Connect {client.name}?</h1>
-      <p>
-        <span className="font-medium">{client.name}</span> wants to read and
-        write the brain as{" "}
-        <span className="font-medium">{me && fullName(me)}</span> in{" "}
-        <span className="font-medium">{orgName}</span>. It keeps that access
-        until you disconnect it in settings.
+    <Door
+      title={`Connect ${client.name}?`}
+      description={
+        <>
+          <span className="text-body-medium text-text-primary">
+            {client.name}
+          </span>{" "}
+          wants to read and write your brain as{" "}
+          <span className="text-body-medium text-text-primary">
+            {me && fullName(me)}
+          </span>{" "}
+          in{" "}
+          <span className="text-body-medium text-text-primary">{orgName}</span>.
+          It keeps that access until you disconnect it in Settings.
+        </>
+      }
+    >
+      {/* An app names itself, and anything can call itself anything; where
+          it sends the person back is the one thing it cannot invent. */}
+      <p className="text-caption-1-regular text-text-secondary">
+        It will send you back to{" "}
+        <code className="font-mono text-text-primary">
+          {new URL(asked.request.redirectUri).host}
+        </code>
       </p>
       <form action="/oauth/approve" method="post" className="flex gap-2">
         {[...params].map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
+        <Button type="submit" name="decision" value="deny" variant="secondary">
+          Deny
+        </Button>
         <Button type="submit" name="decision" value="allow">
           Allow
         </Button>
-        <Button type="submit" name="decision" value="deny" variant="outline">
-          Deny
-        </Button>
       </form>
       {others.length > 0 && (
-        <div className="space-y-2">
-          <p className="text-muted-foreground text-sm">
-            Or connect it to another of your orgs:
+        <div className="flex flex-col gap-2">
+          <p className="text-caption-1-semibold text-text-secondary">
+            Or connect it to another of your orgs
           </p>
           <div className="flex flex-wrap gap-2">
             {others.map((m) => (
@@ -89,7 +109,7 @@ export default async function Page({
                   name="next"
                   value={`/oauth/authorize?${params}`}
                 />
-                <Button type="submit" variant="secondary" size="sm">
+                <Button type="submit" variant="secondary" size="small">
                   {m.orgName}
                 </Button>
               </form>
@@ -97,6 +117,6 @@ export default async function Page({
           </div>
         </div>
       )}
-    </main>
+    </Door>
   );
 }

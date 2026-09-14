@@ -1,0 +1,15 @@
+# Which copy of a tool runs: the person's own, in their Linux, where they
+# have one that runs, and the image's where they do not. Claude Code lives
+# in their home so it can update itself the way Claude Code does; ours
+# under /opt/maslow is read-only and cannot, and is what a first boot runs
+# while theirs arrives. Sourced, never run; answers on standard output.
+theirs() {
+  local name=$1 ours=$2 mine
+  for mine in "$HOME/.local/bin/$name" "${NPM_CONFIG_PREFIX:-$HOME/.npm-global}/bin/$name"; do
+    [ -x "$mine" ] && {
+      echo "$mine"
+      return
+    }
+  done
+  echo "$ours"
+}

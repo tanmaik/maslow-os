@@ -702,6 +702,38 @@ export async function serve(http?: number): Promise<void> {
       }
       return;
     }
+    // How big the pane the person is watching in is, so the picture is
+    // drawn at their window's size and fills it edge to edge: {"width":
+    // n,"height":n}, held between what a page is worth drawing at and
+    // what is worth carrying. Answers with the size now in force.
+    if (path === "/size" && req.method === "POST") {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      let said: Record<string, unknown>;
+      try {
+        said = JSON.parse(body || "{}") as Record<string, unknown>;
+      } catch {
+        res
+          .writeHead(400, { "content-type": "text/plain" })
+          .end("That is not a size.");
+        return;
+      }
+      const held = (n: unknown, lo: number, hi: number, fallback: number) =>
+        typeof n === "number" && Number.isFinite(n)
+          ? // Even, since the video this becomes is encoded in pairs of
+            // pixels and an odd size is refused.
+            Math.round(Math.min(hi, Math.max(lo, n)) / 2) * 2
+          : fallback;
+      const now = browser.seen();
+      await browser.resize(
+        held(said.width, 640, 2560, now.width),
+        held(said.height, 400, 1600, now.height),
+      );
+      res
+        .writeHead(200, { "content-type": "application/json" })
+        .end(JSON.stringify(browser.seen()));
+      return;
+    }
     // The current tab as pictures, one whenever it changes, for a person
     // watching, with the name of the cursor the page wants under their
     // pointer when that changes: each behind its length and its kind,
@@ -745,8 +777,8 @@ export async function serve(http?: number): Promise<void> {
           // encoded again as video within a few milliseconds, so what it
           // costs to make and to carry is the whole of its price.
           quality: QUICK,
-          maxWidth: 1280,
-          maxHeight: 800,
+          maxWidth: browser.seen().width,
+          maxHeight: browser.seen().height,
           everyNthFrame: 1,
         })
         .catch(done);

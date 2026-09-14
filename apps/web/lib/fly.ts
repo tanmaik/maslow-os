@@ -1,5 +1,23 @@
 import { deployment } from "./deployment.ts";
 
+// What Fly refused, as a kind of its own, so a caller can tell the
+// vendor's answer from a fault of ours and go on without it.
+export class FlyRefused extends Error {
+  readonly status: number;
+  // Fly's own body, for the server's log alone: a rejected machine config
+  // comes back with parts of itself in it, and a config carries secrets.
+  readonly said: string;
+  // The method and path that was refused, which carries nothing.
+  readonly call: string;
+  constructor(status: number, said: string, call: string) {
+    super(`Fly ${call} answered ${status}: ${said}`);
+    this.name = "FlyRefused";
+    this.status = status;
+    this.said = said;
+    this.call = call;
+  }
+}
+
 // The Fly Machines API, the part of it a computer needs. No SDK.
 export type Machine = {
   id: string;
@@ -51,7 +69,26 @@ export type Stats = {
   free?: number | null;
   // Whose account Claude Code runs on there; absent from an older image.
   auth?: "managed" | "own" | "none";
-  ports: { port: number; name: string }[];
+  // The face a thing serving there wears, when it has one: its own
+  // favicon, which only the machine can reach to ask for.
+  ports: { port: number; name: string; face?: string }[];
+  // When the person was last at the computer — a key typed into a
+  // terminal, a request carried to a port of theirs — and what is running
+  // in their terminal now. Absent from a machine on an older image.
+  idleSince?: string;
+  running?: string[];
+};
+
+// A backup coming back into a folder of the home: where it is landing,
+// which step it is on, and what went wrong if anything.
+export type Restore = {
+  key: string;
+  name: string;
+  startedAt: string;
+  finishedAt: string | null;
+  step: "fetching" | "unpacking" | "done" | "failed";
+  bytes: number | null;
+  error: string | null;
 };
 
 // What came of a backup: the key it went to, when it started and ended,
@@ -159,9 +196,7 @@ async function call<T>(
   if (res.status === 404 && gone) return null as T;
   const text = await res.text();
   if (!res.ok)
-    throw new Error(
-      `Fly ${method} ${path} answered ${res.status}: ${text.slice(0, 300)}`,
-    );
+    throw new FlyRefused(res.status, text.slice(0, 300), `${method} ${path}`);
   // A tag or a stop answers with nothing.
   return (text ? JSON.parse(text) : null) as T;
 }
@@ -385,6 +420,46 @@ export const fly = {
     return true;
   },
 
+  // What came of the machine's last restore, asked of its door with a
+  // ticket it takes: null before any.
+  async lastRestore(
+    machineId: string,
+    ticket: string,
+  ): Promise<Restore | null> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/restore`, {
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+      },
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+    return (await res.json()) as Restore | null;
+  },
+
+  // Asks the machine's door to fetch a backup from an address signed for
+  // it and unpack it into a folder of its own in the home. The folder's
+  // name, or null when a restore is already running.
+  async askRestore(
+    machineId: string,
+    ticket: string,
+    ask: { url: string; key: string; into: string },
+  ): Promise<string | null> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/restore`, {
+      method: "POST",
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(ask),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (res.status === 409) return null;
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+    return ((await res.json()) as { name: string }).name;
+  },
+
   // Gives the machine's door the keys that open SSH, with a ticket it takes.
   async pushKeys(
     machineId: string,
@@ -516,12 +591,13 @@ export const fly = {
   },
 
   // Whether the machine's door answers at Fly's edge, with the browser
-  // server up behind it: what a ready computer is.
-  async answers(machineId: string): Promise<boolean> {
+  // server up behind it: what a ready computer is. Given fewer seconds by
+  // a page that cannot keep a person waiting on a door that may be dead.
+  async answers(machineId: string, ms = 8_000): Promise<boolean> {
     try {
       const res = await fetch(`https://${config().app}.fly.dev/maslow/health`, {
         headers: { "fly-force-instance-id": machineId },
-        signal: AbortSignal.timeout(8_000),
+        signal: AbortSignal.timeout(ms),
         redirect: "manual",
       });
       return res.status === 200;

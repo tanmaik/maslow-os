@@ -14,12 +14,13 @@ export async function POST(request: Request) {
     if (!(await move(p, region)))
       return new Response("Your computer is not ready.", { status: 409 });
   } catch (err) {
-    return new Response(`Could not move: ${(err as Error).message}`, {
+    console.error(`move ${p.personId}: ${(err as Error).message}`);
+    return new Response("The move could not be started. Try again.", {
       status: 409,
     });
   }
   return new Response(null, {
     status: 303,
-    headers: { location: "/computer" },
+    headers: { location: "/settings?pane=computer" },
   });
 }

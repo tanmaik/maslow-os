@@ -21,7 +21,9 @@ export async function settle(orgId: string): Promise<number> {
     async (q) =>
       (
         await q.query<Orphan>(
-          "select id, kind, ref from orphans order by created_at",
+          // A debt is paid once it is due: an object the browser is still
+          // putting itself is not owed until its address has expired.
+          "select id, kind, ref from orphans where due_at <= now() order by created_at",
         )
       ).rows,
   );

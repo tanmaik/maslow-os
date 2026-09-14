@@ -1,9 +1,12 @@
 "use client";
 
+import { RiCheckLine, RiFileCopyLine } from "@remixicon/react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { StatusDot } from "@/components/base/badges/status-dot";
+import { Button, ButtonLink } from "@/components/base/buttons/button";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { Divider } from "@/components/base/divider/divider";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -19,8 +22,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
+import { Row, Rows } from "@/app/settings/row";
 
 export type Port = { port: number; name: string; ran?: string };
 type Share = {
@@ -50,9 +52,9 @@ function reach(shares: Share[]): string | null {
 }
 
 // The ports listening inside the person's computer. Each is an address of
-// its own, opened here by its owner, and given away by right-clicking it.
-// A port nobody was given is theirs alone: the address is not there for
-// anybody else.
+// its own, opened here by its owner, and given away with Share, on the row
+// or on a right-click. A port nobody was given is theirs alone: the
+// address is not there for anybody else.
 export function Ports({
   ports,
   sharing,
@@ -68,32 +70,46 @@ export function Ports({
   const link = (port: number) =>
     sharing ? `/port/${sharing.machineId}/${port}` : null;
   return (
-    <div className="space-y-1">
-      <p className="text-sm font-medium">Open ports</p>
-      <ul className="text-sm">
+    <div className="flex flex-col gap-2">
+      <p className="px-3 text-body-2-medium text-text-secondary">Open ports</p>
+      <Rows>
         {ports.map((p) => {
           const said = reach(on(p.port));
           return (
             <ContextMenu key={p.port}>
-              <ContextMenuTrigger
-                render={
-                  <li className="hover:bg-accent -mx-2 flex min-w-0 items-baseline gap-2 rounded-md px-2 py-0.5" />
-                }
-              >
-                <a
-                  className="shrink-0 underline underline-offset-4"
-                  href={`/computer/open?port=${p.port}`}
-                  target="_blank"
-                  rel="noreferrer"
+              <ContextMenuTrigger render={<div />}>
+                <Row
+                  label={
+                    <span className="flex items-center gap-2.5">
+                      <StatusDot color="green" />
+                      <span className="tabular-nums">{p.port}</span>
+                    </span>
+                  }
+                  description={p.ran || p.name}
                 >
-                  {p.port}
-                </a>
-                <span className="text-muted-foreground min-w-0 flex-1 truncate">
-                  {p.ran || p.name}
-                </span>
-                {said && (
-                  <span className="text-muted-foreground shrink-0">{said}</span>
-                )}
+                  {said && (
+                    <span className="text-body-2-regular text-text-secondary">
+                      {said}
+                    </span>
+                  )}
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    disabled={!sharing}
+                    onClick={() => setSharingPort(p.port)}
+                  >
+                    Share
+                  </Button>
+                  <ButtonLink
+                    variant="secondary"
+                    size="xs"
+                    href={`/computer/open?port=${p.port}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open
+                  </ButtonLink>
+                </Row>
               </ContextMenuTrigger>
               <ContextMenuContent>
                 <ContextMenuItem
@@ -129,7 +145,7 @@ export function Ports({
             </ContextMenu>
           );
         })}
-      </ul>
+      </Rows>
       {sharing && (
         <Sheet
           port={sharingPort}
@@ -157,6 +173,7 @@ function Sheet({
   sharing: Sharing;
   onClose: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
   const everyone = on.some((s) => s.subject === "everyone");
   const has = (field: "groupId" | "memberId", id: string) =>
     on.some((s) => s[field] === id);
@@ -176,56 +193,70 @@ function Sheet({
               For everybody else the address is not there at all.
             </DialogDescription>
           </DialogHeader>
-          <p className="bg-muted text-muted-foreground truncate rounded-md px-2 py-1 font-mono text-xs">
-            {link}
-          </p>
-          <div className="max-h-72 space-y-3 overflow-y-auto py-2">
-            <Label className="flex items-center gap-2 font-normal">
-              <Checkbox name="everyone" defaultChecked={everyone} />
+          <div className="flex items-center gap-2">
+            <p className="min-w-0 flex-1 truncate rounded-2lg bg-background-tertiary-default px-3 py-2 font-mono text-caption-1-regular text-text-secondary">
+              {link}
+            </p>
+            <Button
+              variant="secondary"
+              size="small"
+              type="button"
+              leadingIcon={copied ? RiCheckLine : RiFileCopyLine}
+              onClick={() => {
+                void navigator.clipboard.writeText(link);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+            >
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <div className="flex max-h-72 flex-col gap-3 overflow-y-auto py-2">
+            <Checkbox size="sm" name="everyone" defaultSelected={everyone}>
               Everyone in the org
-            </Label>
+            </Checkbox>
             {sharing.groups.length > 0 && (
               <>
-                <Separator />
+                <Divider />
                 {sharing.groups.map((g) => (
-                  <Label
+                  <Checkbox
+                    size="sm"
                     key={g.id}
-                    className="flex items-center gap-2 font-normal"
+                    name="group"
+                    value={g.id}
+                    defaultSelected={has("groupId", g.id)}
                   >
-                    <Checkbox
-                      name="group"
-                      value={g.id}
-                      defaultChecked={has("groupId", g.id)}
-                    />
                     {g.name}
-                  </Label>
+                  </Checkbox>
                 ))}
               </>
             )}
             {sharing.members.length > 0 && (
               <>
-                <Separator />
+                <Divider />
                 {sharing.members.map((m) => (
-                  <Label
+                  <Checkbox
+                    size="sm"
                     key={m.id}
-                    className="flex items-center gap-2 font-normal"
+                    name="member"
+                    value={m.id}
+                    defaultSelected={has("memberId", m.id)}
                   >
-                    <Checkbox
-                      name="member"
-                      value={m.id}
-                      defaultChecked={has("memberId", m.id)}
-                    />
                     {m.name}
-                  </Label>
+                  </Checkbox>
                 ))}
               </>
             )}
           </div>
           <DialogFooter>
-            <DialogClose render={<Button variant="ghost" type="button" />}>
+            <DialogClose
+              render={<Button variant="secondary" size="small" type="button" />}
+            >
               Cancel
             </DialogClose>
-            <Button type="submit">Save</Button>
+            <Button type="submit" size="small">
+              Save
+            </Button>
           </DialogFooter>
         </form>
       </DialogContent>

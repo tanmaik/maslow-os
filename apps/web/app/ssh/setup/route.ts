@@ -1,7 +1,7 @@
 import { sshTarget } from "@/lib/computer";
 import { origin } from "@/lib/origin";
 
-// What the Computer page's one command runs on a Mac: a script that puts
+// What the one command under Computer in Settings runs on a Mac: a script that puts
 // the helper `ssh` goes through the door with on the path and a Host in
 // ~/.ssh/config, so `ssh <name>` opens the computer. Safe to run again:
 // a Host already there only has its address brought up to date, since a
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   );
   const script = to
     ? setup(origin(request), to.name, to.host)
-    : "echo 'This link has expired. Open the Computer page for a fresh one.' >&2\nexit 1\n";
+    : "echo 'This link has expired. Open Computer in Settings for a fresh one.' >&2\nexit 1\n";
   return new Response(script, {
     headers: {
       "content-type": "text/plain; charset=utf-8",

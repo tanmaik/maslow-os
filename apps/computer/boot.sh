@@ -115,6 +115,7 @@ ln -sf /opt/maslow/bin/claude "$OS/usr/local/bin/claude"
 ln -sf /opt/maslow/bin/claude-code-acp "$OS/usr/local/bin/claude-code-acp"
 ln -sf /opt/maslow/bin/auth "$OS/usr/local/bin/auth"
 ln -sf /opt/maslow/bin/open "$OS/usr/local/bin/xdg-open"
+ln -sf /opt/maslow/bin/xclip "$OS/usr/local/bin/xclip"
 rm -f "$OS/usr/local/bin/model" "$OS/etc/profile.d/maslow-model.sh"
 ln -sf /opt/maslow/bin/auth-env "$OS/etc/profile.d/maslow-auth.sh"
 # A choice made under the old name, model mine or ours, is kept under the
@@ -137,10 +138,34 @@ else
   rm -f "$OS/etc/profile.d/maslow-brain.sh"
 fi
 
-# Claude Code knows the browser and the brain: ours are seeded into the
-# person's files and kept current there, except where the person changed
-# one. Ten seconds at most, so nothing in the home can hold the boot.
+# Claude Code knows the browser and the brain, and starts in auto: ours
+# are seeded into the person's files and kept current there, except where
+# the person changed one. Ten seconds at most each, so nothing in the home
+# can hold the boot.
 timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" mcp || echo "mcp: could not be seeded; left alone"
+timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" settings || echo "settings: could not be seeded; left alone"
+# And it knows the skin Maslow wears: BoardUI's skill, ours in the image,
+# is a link among the person's skills, so it follows the image and what
+# Claude Code builds for them looks like Maslow. Made as the person, so a
+# link they left among their files reaches only what they already reach.
+chroot --userspec=1000:1000 "$OS" /bin/sh -c '
+  mkdir -p /home/me/.claude/skills && [ -d /home/me/.claude/skills ] || exit 0
+  [ -L /home/me/.claude/skills/boardui ] || [ ! -e /home/me/.claude/skills/boardui ] || exit 0
+  ln -sfn /opt/maslow/skills/boardui /home/me/.claude/skills/boardui
+' || echo "skill: could not be linked; left alone"
+
+# Claude Code lives in the person's Linux, where it updates itself the way
+# Claude Code does and `claude update` works. The image carries a copy too,
+# read-only under ours, which cannot update itself and is what the first
+# boot runs while this one arrives. Installed once, as the person, behind
+# the boot, so nothing waits on the network.
+chroot --userspec=1000:1000 --groups=1000 "$OS" \
+  /usr/bin/env -i HOME=/home/me PATH=/usr/local/bin:/usr/bin:/bin \
+  /bin/bash -lc '
+    [ -x "$HOME/.local/bin/claude" ] && exit 0
+    curl -fsSL https://claude.ai/install.sh | bash && exit 0
+    npm install -g @anthropic-ai/claude-code
+  ' >/dev/null 2>&1 &
 
 # The image carries no package lists; the person's Linux fetches its own
 # behind the boot, so the first install finds its package.
@@ -166,10 +191,10 @@ keep node /opt/maslow/door.mjs &
 # The browser, ours, outside the person's Linux but run as the person, so
 # it updates with the image and reaches only their home; Claude Code
 # inside finds it on 8082. Its profile, logins included, is on the disk.
-# It is a real, headed Chrome on a display nobody looks at, Xvfb, the
-# size of the view: a headless one announces itself, and sites that turn
-# bots away turn it away too.
-keep Xvfb :99 -screen 0 1280x800x24 -nolisten tcp &
+# It is a real, headed Chrome on a display nobody looks at, Xvfb, as big
+# as the largest pane it is ever drawn into: a headless one announces
+# itself, and sites that turn bots away turn it away too.
+keep Xvfb :99 -screen 0 2560x1600x24 -nolisten tcp &
 mkdir -p "$DISK/browser"
 chown 1000:1000 "$DISK/browser"
 keep chroot --userspec=1000:1000 --groups=1000 / \

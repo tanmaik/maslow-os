@@ -21,6 +21,7 @@ import { principal } from "@/lib/session";
 
 import { vocabulary } from "../../../catalog";
 import { recordHref } from "../../../format";
+import { refused } from "../../../refuse";
 import { confidenceFrom, fieldValue, instantFrom } from "../../../props";
 
 // The number of the last change to one record, which a page watching it
@@ -37,7 +38,7 @@ export async function GET(
   return NextResponse.json({ seen: last?.seq ?? 0 });
 }
 
-// Changes one record the way the form asked: deleted, restored, unmerged,
+// Changes one record the way the form asked: removed, restored, unmerged,
 // one of its links removed, or edited. An edit changes only what was
 // posted: a title, a body, a field, when it happened, how sure; a field
 // posted empty is taken away, and the door merges fields under a lock. A
@@ -59,7 +60,7 @@ export async function POST(
 
   try {
     const seen = await asPerson(p, async (db) => {
-      if (intent === "delete") return remove(db, id);
+      if (intent === "remove") return remove(db, id);
       if (intent === "restore") return restore(db, id);
       if (intent === "unmerge") return unmerge(db, id);
       if (intent === "unlink") {
@@ -107,16 +108,19 @@ export async function POST(
     });
     if (bare) return NextResponse.json({ seen: seen ?? 0 });
   } catch (err) {
-    if (err instanceof Invalid || err instanceof NotFound) {
-      return new Response(err.message, { status: 400 });
+    const known =
+      err instanceof Invalid ||
+      err instanceof NotFound ||
+      err instanceof Forbidden ||
+      err instanceof Conflict;
+    if (!known) throw err;
+    if (bare) {
+      return new Response(err.message, {
+        status:
+          err instanceof Forbidden ? 403 : err instanceof Conflict ? 409 : 400,
+      });
     }
-    if (err instanceof Forbidden) {
-      return new Response(err.message, { status: 403 });
-    }
-    if (err instanceof Conflict) {
-      return new Response(err.message, { status: 409 });
-    }
-    throw err;
+    return refused(request, recordHref(id), err.message);
   }
   return NextResponse.redirect(`${origin(request)}${recordHref(id)}`, 303);
 }

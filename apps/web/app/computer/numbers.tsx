@@ -1,21 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { RiCpuLine, RiHardDrive3Line, RiRamLine } from "@remixicon/react";
+import { useEffect, useState, type ComponentType } from "react";
 import { Area, AreaChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Card, CardContent } from "@/components/ui/card";
+import { Notification } from "@/components/base/notification/notification";
 import {
   ChartContainer,
   ChartTooltip,
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
+import { Row, Rows } from "@/app/settings/row";
+import { useCountUp } from "@/hooks/use-count-up";
 import { SIZES, specs, type SizeKey } from "@/lib/sizes";
+import { cx } from "@/utils/cx";
 
-import { Ports, type Sharing } from "./ports";
-
-type Stats = {
+export type Stats = {
   auth?: "managed" | "own" | "none";
   cpu: number;
   memory: { used: number; total: number };
@@ -25,7 +26,7 @@ type Stats = {
 };
 
 // One reading kept per ask, a minute's worth on screen.
-type Sample = { at: number; cpu: number; memory: number };
+export type Sample = { at: number; cpu: number; memory: number };
 const EVERY = 5000;
 const KEEP = 60_000 / EVERY;
 
@@ -36,25 +37,23 @@ const cpusOf = (s: (typeof SIZES)[SizeKey]) => specs(s).split(",")[0];
 // Both lines are the same ink: each sits alone on its own card, named by
 // its title, so colour has nothing to tell apart.
 const chart = {
-  cpu: { label: "CPU", color: "var(--chart-1)" },
-  memory: { label: "Memory", color: "var(--chart-1)" },
+  cpu: { label: "CPU", color: "var(--color-accent-500)" },
+  memory: { label: "Memory", color: "var(--color-accent-500)" },
 } satisfies ChartConfig;
 
-// The computer's live numbers: CPU and memory over the last minute, the
-// bytes used, and the ports listening inside, each named by what started it
-// and opening at an address of its own.
-// The cap on our key where this deployment mints one; null where it does
-// not, and who each port is already given to.
-export function Numbers({
-  capUsd,
-  sharing,
-  size,
-}: {
-  capUsd: number | null;
-  sharing: Sharing | null;
-  // The rung the computer is on, or null when it is on none.
-  size: SizeKey | null;
-}) {
+type IconComponent = ComponentType<{
+  className?: string;
+  "aria-hidden"?: boolean | "true" | "false";
+}>;
+
+// The computer's live numbers, asked for every few seconds: the last
+// minute of them on screen, and what the last ask said when it failed.
+// One ask feeds the cards, the ports and Claude Code alike.
+export function useStats(): {
+  now: Stats | null;
+  samples: Sample[];
+  failed: string | null;
+} {
   const [now, setNow] = useState<Stats | null>(null);
   const [samples, setSamples] = useState<Sample[]>([]);
   const [failed, setFailed] = useState<string | null>(null);
@@ -92,9 +91,26 @@ export function Numbers({
       stopped = true;
     };
   }, []);
+  return { now, samples, failed };
+}
+
+// What the computer is using: CPU and memory over the last minute, and the
+// bytes its disk holds.
+export function Numbers({
+  now,
+  samples,
+  failed,
+  size,
+}: {
+  now: Stats | null;
+  samples: Sample[];
+  failed: string | null;
+  // The rung the computer is on, or null when it is on none.
+  size: SizeKey | null;
+}) {
   if (!now)
     return (
-      <p className="text-muted-foreground text-sm">
+      <p className="px-3 text-body-2-regular text-text-secondary">
         {failed
           ? `Could not read the numbers: ${failed}. Trying again.`
           : "Reading the numbers…"}
@@ -107,67 +123,166 @@ export function Numbers({
     (minute.every((s) => s.cpu > 85) || minute.every((s) => s.memory > 90));
   const memoryPct = Math.round((now.memory.used / now.memory.total) * 100);
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4">
       {hot && (
-        <Alert>
-          <AlertTitle>Your computer is near its limit.</AlertTitle>
-          <AlertDescription>
-            It has been running near the top of its size for the last minute.
-          </AlertDescription>
-        </Alert>
+        <Notification
+          status="error"
+          dismissible={false}
+          title="Your computer is near its limit"
+          description="It has been running near the top of its size for the last minute."
+        />
       )}
-      <div className="grid max-w-xl gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Live
+          icon={RiCpuLine}
           title="CPU"
-          value={`${now.cpu}%`}
+          value={now.cpu}
+          unit="%"
           of={size ? `of ${cpusOf(SIZES[size])}` : "of its CPUs"}
           field="cpu"
           samples={samples}
         />
         <Live
+          icon={RiRamLine}
           title="Memory"
-          value={gb(now.memory.used)}
+          value={now.memory.used / 1e8}
+          scale={0.1}
+          unit=" GB"
           of={`of ${gb(now.memory.total)}, ${memoryPct}%`}
           field="memory"
           samples={samples}
         />
+        <Stat
+          icon={RiHardDrive3Line}
+          title="Disk"
+          value={now.used === null ? null : now.used / 1e8}
+          scale={0.1}
+          unit=" GB"
+          of={now.used === null ? "measuring what is used…" : "used"}
+        />
       </div>
-      <p className="text-sm">
-        {now.used === null ? (
-          <span className="text-muted-foreground">Measuring what is used…</span>
-        ) : (
-          <>
-            <span className="font-medium">{gb(now.used)}</span>
-            <span className="text-muted-foreground"> used</span>
-          </>
-        )}
-      </p>
-      <p className="text-muted-foreground text-sm">
-        {now.auth === "managed"
-          ? `Claude Code runs on a key of ours, capped at $${capUsd ?? "?"} a month. In its terminal, "auth own" switches it to credentials you provide.`
-          : now.auth === "own"
-            ? 'Claude Code runs on credentials you provided, by your choice. In its terminal, "auth managed" switches it back to our key.'
-            : now.auth === "none"
-              ? "Claude Code runs on credentials you provide: this computer holds no key of ours."
-              : "Whose credentials Claude Code runs on will show once the computer is on the newest image."}
-      </p>
-      <Ports ports={now.ports} sharing={sharing} />
     </div>
   );
 }
 
-// One measure: the number now, what it is of, and the last minute of it
-// drawn on a fixed scale from nothing to everything, so a flat line low
-// down means idle and one along the top means full.
-function Live({
+// Whose credentials Claude Code on the computer runs on, and how the person
+// switches. The cap is on our key where this deployment mints one.
+export function ClaudeCode({
+  auth,
+  capUsd,
+}: {
+  auth: Stats["auth"];
+  capUsd: number | null;
+}) {
+  return (
+    <Rows>
+      <Row
+        label="Claude Code"
+        description={
+          auth === "managed"
+            ? `Runs on a key of ours, capped at $${capUsd ?? "?"} a week. In its terminal, "auth own" switches it to credentials you provide.`
+            : auth === "own"
+              ? 'Runs on credentials you provided, by your choice. In its terminal, "auth managed" switches it back to our key.'
+              : auth === "none"
+                ? "Runs on credentials you provide: this computer holds no key of ours."
+                : "Whose credentials it runs on will show once the computer is on the newest image."
+        }
+      >
+        <span className="text-body-regular text-text-primary">
+          {auth === "managed"
+            ? "Our key"
+            : auth === "own"
+              ? "Your credentials"
+              : auth === "none"
+                ? "Yours"
+                : "—"}
+        </span>
+      </Row>
+    </Rows>
+  );
+}
+
+// A number that rolls to where it is going, as BoardUI's headline figures
+// do, drawn at the scale it is kept in.
+function Rolling({
+  value,
+  scale = 1,
+  unit,
+}: {
+  value: number;
+  scale?: number;
+  unit: string;
+}) {
+  const shown = useCountUp(Math.round(value));
+  const digits = scale < 1 ? 1 : 0;
+  return (
+    <>
+      {(shown * scale).toFixed(digits)}
+      <span className="text-headline-medium text-text-secondary">{unit}</span>
+    </>
+  );
+}
+
+// One measure on BoardUI's stat card: its mark on a tile, its name, the
+// number now, and what it is of.
+function Stat({
+  icon: Icon,
   title,
   value,
+  scale,
+  unit,
   of,
+  children,
+}: {
+  icon: IconComponent;
+  title: string;
+  value: number | null;
+  scale?: number;
+  unit: string;
+  of: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <section className="flex min-w-0 flex-col items-start justify-between gap-3 rounded-2xl bg-background-secondary-default p-4">
+      <span className="flex items-center rounded-md bg-stat-card-icon-background p-1.5 shadow-card">
+        <Icon
+          className="size-5 shrink-0 text-foreground-icon-primary"
+          aria-hidden
+        />
+      </span>
+      <div className="flex w-full flex-col gap-0.5">
+        <p className="w-full text-body-medium text-text-secondary">{title}</p>
+        <p className="text-title-1-medium whitespace-nowrap text-text-primary tabular-nums">
+          {value === null ? (
+            "—"
+          ) : (
+            <Rolling value={value} scale={scale} unit={unit} />
+          )}
+        </p>
+        <p className="truncate text-caption-1-regular text-text-secondary">
+          {of}
+        </p>
+      </div>
+      {/* The chart's place is kept whether or not there is one, so the
+          three cards' titles and numbers sit on the same lines. */}
+      {children ?? <div aria-hidden className="h-10 w-full" />}
+    </section>
+  );
+}
+
+// A measure with the last minute of it drawn underneath on a fixed scale
+// from nothing to everything, so a flat line low down means idle and one
+// along the top means full.
+function Live({
   field,
   samples,
+  ...stat
 }: {
+  icon: IconComponent;
   title: string;
-  value: string;
+  value: number;
+  scale?: number;
+  unit: string;
   of: string;
   field: "cpu" | "memory";
   samples: Sample[];
@@ -175,68 +290,53 @@ function Live({
   const at = (ms: number) =>
     new Date(ms).toLocaleTimeString(undefined, { timeStyle: "medium" });
   return (
-    <Card size="sm">
-      <CardContent className="space-y-2">
-        <div>
-          <p className="text-muted-foreground text-sm">{title}</p>
-          <p className="text-2xl font-semibold tabular-nums">{value}</p>
-          <p className="text-muted-foreground text-sm">{of}</p>
-        </div>
-        <ChartContainer config={chart} className="h-16 w-full">
-          <AreaChart
-            data={samples}
-            margin={{ top: 8, right: 0, bottom: 1, left: 0 }}
-          >
-            <XAxis
-              dataKey="at"
-              type="number"
-              domain={["dataMin", "dataMax"]}
-              hide
-            />
-            <YAxis domain={[0, 100]} hide />
-            <ReferenceLine
-              y={100}
-              stroke="var(--border)"
-              label={{
-                value: "100%",
-                position: "insideTopRight",
-                fontSize: 10,
-                fill: "var(--muted-foreground)",
-              }}
-            />
-            <ReferenceLine
-              y={50}
-              stroke="var(--border)"
-              strokeDasharray="2 3"
-            />
-            <ChartTooltip
-              cursor={{ stroke: "var(--border)" }}
-              content={
-                <ChartTooltipContent
-                  hideIndicator
-                  labelFormatter={(_, payload) =>
-                    at((payload[0]?.payload as Sample).at)
-                  }
-                  formatter={(v) => `${v}%`}
-                />
-              }
-            />
-            <Area
-              dataKey={field}
-              type="monotone"
-              stroke={`var(--color-${field})`}
-              strokeWidth={2}
-              fill={`var(--color-${field})`}
-              fillOpacity={0.12}
-              baseValue={0}
-              isAnimationActive={false}
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-          </AreaChart>
-        </ChartContainer>
-        <p className="text-muted-foreground text-xs">The last minute.</p>
-      </CardContent>
-    </Card>
+    <Stat {...stat}>
+      <ChartContainer
+        config={chart}
+        className={cx("h-10 w-full", samples.length < 2 && "opacity-0")}
+      >
+        <AreaChart
+          data={samples}
+          margin={{ top: 2, right: 0, bottom: 0, left: 0 }}
+        >
+          <XAxis
+            dataKey="at"
+            type="number"
+            domain={["dataMin", "dataMax"]}
+            hide
+          />
+          <YAxis domain={[0, 100]} hide />
+          <ReferenceLine
+            y={50}
+            stroke="var(--color-chart-cursor)"
+            strokeDasharray="2 3"
+          />
+          <ChartTooltip
+            cursor={{ stroke: "var(--color-chart-cursor)" }}
+            content={
+              <ChartTooltipContent
+                hideIndicator
+                labelFormatter={(_, payload) =>
+                  at((payload[0]?.payload as Sample).at)
+                }
+                formatter={(v) => `${v}%`}
+              />
+            }
+          />
+          <Area
+            dataKey={field}
+            type="monotone"
+            stroke={`var(--color-${field})`}
+            strokeWidth={2}
+            fill={`var(--color-${field})`}
+            fillOpacity={0.14}
+            baseValue={0}
+            isAnimationActive={false}
+            dot={false}
+            activeDot={{ r: 3 }}
+          />
+        </AreaChart>
+      </ChartContainer>
+    </Stat>
   );
 }

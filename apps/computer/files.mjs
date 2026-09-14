@@ -77,6 +77,27 @@ export function inside(rel) {
   return at;
 }
 
+// Where the person's Linux keeps their home, which is the door's home
+// bound in under another name.
+const THEIRS = "/home/me";
+
+// What a path named from inside the person's Linux is called in the home,
+// or null when it is not in their home at all: what a program on the
+// machine hands the door is `/home/me/…`, and Files speaks in names under
+// the home.
+export function within(abs) {
+  if (typeof abs !== "string" || abs.includes("\0")) return null;
+  const at = path.resolve(abs);
+  const under = (root) =>
+    at === root
+      ? ""
+      : at.startsWith(`${root}/`)
+        ? at.slice(root.length + 1)
+        : null;
+  const rel = under(THEIRS) ?? under(HOME);
+  return rel === null || inside(rel) === null ? null : rel;
+}
+
 const json = (res, status, body) => {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));

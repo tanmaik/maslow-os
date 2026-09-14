@@ -1,15 +1,16 @@
 // The door to a computer: the one thing on the machine the internet can
 // reach. It opens for a ticket signed with the computer's secret, which
-// only our sign-in can mint: the terminal and the view on sockets of their
-// own, the person's files and numbers, and any port of theirs at its own
-// address. Every machine shares the app's address, so a request for
+// only our sign-in can mint: the terminal, the view and the agent on
+// sockets of their own, the person's files and numbers, and any port of
+// theirs at its own address. Every machine shares the app's address, so a request for
 // another machine's name is passed to that machine's door over Fly's
 // private network, whatever its size.
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import path from "node:path";
 
 import ffmpeg from "@ffmpeg-installer/ffmpeg";
 import pty from "node-pty";
@@ -29,6 +30,14 @@ const BROWSER = 8082;
 const COOKIE = "door";
 if (!SECRET) throw new Error("DOOR_SECRET is not set");
 
+// Everything a request carried, as text.
+const bodyOf = (req) =>
+  new Promise((resolve) => {
+    let s = "";
+    req.on("data", (d) => (s += d));
+    req.on("end", () => resolve(s));
+  });
+
 // How much of the machine a ticket opens, or null when it is not a ticket
 // of ours or its time has passed. A ticket is its expiry, what it opens,
 // and a signature over both: `<seconds>.<port>.<hmac>` for one port of the
@@ -36,11 +45,11 @@ if (!SECRET) throw new Error("DOOR_SECRET is not set");
 // minted for its owner alone.
 function scopeOf(ticket) {
   const parts = (ticket ?? "").split(".");
-  const [exp, scope, sig] =
-    parts.length === 3 ? parts : [parts[0], "", parts[1]];
-  if (!/^\d+$/.test(exp ?? "") || !sig || Number(exp) < Date.now() / 1000)
-    return null;
-  const said = scope ? `${exp}.${scope}` : exp;
+  if (parts.length < 2 || parts.length > 3) return null;
+  const sig = parts.pop();
+  const said = parts.join(".");
+  const [exp, scope = ""] = parts;
+  if (!/^\d+$/.test(exp) || Number(exp) < Date.now() / 1000) return null;
   const want = createHmac("sha256", SECRET).update(said).digest("hex");
   if (
     want.length !== sig.length ||
@@ -63,6 +72,13 @@ function opens(ticket, to) {
   if (scope === null) return false;
   return scope === "" || (to.theirs === true && String(to.port) === scope);
 }
+
+// When the person was last at this computer: a key typed into a terminal
+// or over SSH, or a request the door carried to a port of theirs. The
+// door's own start counts, so a machine that has just booted is never
+// called idle.
+let lastSeen = Date.now();
+const seen = () => (lastSeen = Date.now());
 
 const cookieOf = (req) =>
   (req.headers.cookie ?? "")
@@ -117,6 +133,58 @@ const tabsOf = () =>
     probe.on("timeout", () => probe.destroy());
   });
 
+// How big the browser draws a page: the size of the pane the person is
+// watching it in, so the picture fills their window and nothing is let in
+// around it. The image's own until somebody says otherwise, and the same
+// for every viewer, since there is one browser.
+let pane = { w: 1280, h: 800 };
+
+// Every socket watching the browser, so a change of size reaches each.
+const views = new Set();
+
+// The browser told how big to draw, and every viewer given the size it
+// settled on and a stream that begins at it. One at a time: two panes
+// sized at once would otherwise race for the browser and the encoders.
+let sizing = Promise.resolve();
+const resize = (w, h) => {
+  sizing = sizing.then(
+    async () => {
+      const said = await sizeTold({ width: w, height: h });
+      if (!said || (said.width === pane.w && said.height === pane.h)) return;
+      pane = { w: said.width, h: said.height };
+      for (const v of views) v.resized();
+    },
+    () => {},
+  );
+  return sizing;
+};
+
+// A size to the browser server, answered with the size it took.
+const sizeTold = (size) =>
+  new Promise((resolve) => {
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port: BROWSER,
+        path: "/size",
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        timeout: 10000,
+      },
+      (res) => {
+        let s = "";
+        res.on("data", (d) => (s += d));
+        res.on("end", () => resolve(res.statusCode === 200 ? parse(s) : null));
+      },
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
+    req.end(JSON.stringify(size));
+  });
+
 // A word to the browser server about its tabs, in the words the socket
 // carries, answered once it is done.
 const tabsTold = (text) =>
@@ -139,6 +207,77 @@ const tabsTold = (text) =>
     req.on("timeout", () => req.destroy());
     req.end(text);
   });
+
+// The brain, where this deployment has no address a machine can reach:
+// the app dials in and holds one socket open, and what Claude Code asks
+// for on this machine goes down it and comes back. Nothing streams, so an
+// ask is a line out and a line back, paired by number.
+const ANSWER_IN = 30_000;
+let brain = null;
+let asks = 0;
+const waiting = new Map();
+
+function brainLine(ws) {
+  brain?.close();
+  brain = ws;
+  ws.text = (text) => {
+    const said = parse(text);
+    const answer = said && waiting.get(said.id);
+    if (!answer) return;
+    waiting.delete(said.id);
+    answer(said);
+  };
+  ws.closed = () => {
+    if (brain !== ws) return;
+    brain = null;
+    for (const answer of waiting.values()) answer(null);
+    waiting.clear();
+  };
+}
+
+// What the brain is asked, carried whole: the token that says who is
+// asking, and what the caller wants back.
+const CARRIED = ["authorization", "content-type", "accept", "maslow-answer"];
+
+async function askTheBrain(req, res) {
+  if (req.method !== "POST") return say(res, 405, "The brain answers a POST.");
+  if (!brain) return say(res, 503, "No brain is listening for this computer.");
+  const body = await bodyOf(req);
+  // The brain may have gone while the body was read.
+  const line = brain;
+  if (!line) return say(res, 503, "No brain is listening for this computer.");
+  const headers = {};
+  for (const name of CARRIED)
+    if (req.headers[name]) headers[name] = req.headers[name];
+  const id = ++asks;
+  const answer = await new Promise((resolve) => {
+    const gave = (said) => {
+      clearTimeout(clock);
+      resolve(said);
+    };
+    const clock = setTimeout(() => {
+      waiting.delete(id);
+      resolve(null);
+    }, ANSWER_IN);
+    waiting.set(id, gave);
+    try {
+      line.sendText(JSON.stringify({ id, headers, body }));
+    } catch {
+      waiting.delete(id);
+      gave(null);
+    }
+  });
+  if (!answer) return say(res, 504, "The brain did not answer.");
+  res.writeHead(answer.status, { "content-type": "application/json" });
+  res.end(answer.body ?? "");
+}
+
+// Whether an ask came from the machine itself, which nothing outside it
+// reaches.
+const fromTheMachine = (req) =>
+  /^(?:::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(
+    req.socket.remoteAddress ?? "",
+  );
 
 const say = (res, status, text) => {
   res.writeHead(status, { "content-type": "text/plain" });
@@ -182,6 +321,67 @@ function outward(answer, req) {
   };
 }
 
+// The person's files, found by name: a walk of the home watched by a cap
+// on how much it looks at and how long it takes, so a search never runs
+// away on a full disk. Never descends into a dotfolder or node_modules.
+// Answers the best eight, a whole name first.
+const FIND_HOME = process.env.HOME_DIR ?? "/data/home";
+const FIND_CAP = 20_000;
+const FIND_MS = 300;
+
+function findFiles(q) {
+  const needle = q.toLowerCase();
+  const deadline = Date.now() + FIND_MS;
+  const hits = [];
+  let seen = 0;
+  const walk = (abs, rel) => {
+    if (seen >= FIND_CAP || Date.now() > deadline) return;
+    let entries;
+    try {
+      entries = fs.readdirSync(abs, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const d of entries) {
+      if (seen >= FIND_CAP || Date.now() > deadline) return;
+      seen++;
+      const at = rel ? `${rel}/${d.name}` : d.name;
+      if (d.isDirectory()) {
+        if (d.name.startsWith(".") || d.name === "node_modules") continue;
+        walk(`${abs}/${d.name}`, at);
+      } else if (d.name.toLowerCase().includes(needle)) {
+        hits.push(at);
+      }
+    }
+  };
+  walk(FIND_HOME, "");
+  hits.sort((a, b) => {
+    const named = (p) => p.split("/").at(-1).toLowerCase();
+    const rank = (n) => (n === needle ? 0 : n.startsWith(needle) ? 1 : 2);
+    return rank(named(a)) - rank(named(b)) || a.length - b.length;
+  });
+  return hits.slice(0, 8);
+}
+
+// Where the person's location is kept: a line the browser reads and the
+// door writes, readable with `tail`, never through our server or our
+// database. Rotated once it grows past what a location log is worth
+// keeping.
+const LOCATION_LOG = ".maslow/location.log";
+const LOCATION_CAP = 5 * 1024 * 1024;
+
+function appendLocation(line) {
+  const at = files.inside(LOCATION_LOG);
+  if (!at) return;
+  const dir = path.dirname(at);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.chownSync(dir, 1000, 1000);
+  const s = fs.statSync(at, { throwIfNoEntry: false });
+  if (s && s.size > LOCATION_CAP) fs.renameSync(at, `${at}.1`);
+  fs.appendFileSync(at, `${line}\n`, { mode: 0o600 });
+  fs.chownSync(at, 1000, 1000);
+}
+
 const server = http.createServer(async (req, res) => {
   let url;
   try {
@@ -223,56 +423,151 @@ const server = http.createServer(async (req, res) => {
       return say(res, 401, "That ticket is not good here.");
     return files.serve(req, res, url);
   }
-  // An address a program on the machine wants opened, offered to the
-  // person on every terminal they have open, to open on their own device.
-  // Only the machine itself can ask: the request has to come from
-  // loopback, which nothing outside it reaches.
-  if (to.mine && url.pathname === "/maslow/open" && req.method === "POST") {
+  // The person's location, read once a minute by their own browser and
+  // sent straight here: a line appended to their own log, never through
+  // our server or our database. The same cross-origin dance as the files
+  // above, since this is the person's browser on our site asking their
+  // machine's door directly.
+  if (to.mine && url.pathname === "/maslow/location") {
+    const from = req.headers.origin;
+    if (from) {
+      res.setHeader("access-control-allow-origin", from);
+      res.setHeader("access-control-allow-methods", "POST, OPTIONS");
+      res.setHeader(
+        "access-control-allow-headers",
+        "x-maslow-ticket, content-type",
+      );
+      res.setHeader("access-control-max-age", "600");
+    }
+    if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      return res.end();
+    }
+    if (req.method !== "POST")
+      return say(res, 405, "A location is sent as a POST.");
+    if (!ours(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    const said = parse(await bodyOf(req));
+    const { latitude, longitude, accuracy, temperature, unit, condition } =
+      said ?? {};
     if (
-      !/^(?:::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(
-        req.socket.remoteAddress ?? "",
-      )
+      typeof latitude !== "number" ||
+      typeof longitude !== "number" ||
+      typeof accuracy !== "number"
     )
+      return say(
+        res,
+        400,
+        "A location names its latitude, longitude and accuracy.",
+      );
+    const weather =
+      typeof temperature === "number" && typeof condition === "string"
+        ? `${temperature}°${unit === "F" || unit === "C" ? unit : ""} ${condition}`
+        : "";
+    appendLocation(
+      [
+        new Date().toISOString(),
+        latitude,
+        longitude,
+        `${Math.round(accuracy)}m`,
+        weather,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    );
+    res.writeHead(204);
+    return res.end();
+  }
+  // The person's files by name, for the command bar: a ticket in the
+  // query, as a socket carries one, since this is a plain request rather
+  // than the upload's own kind.
+  if (to.mine && url.pathname === "/maslow/find" && req.method === "GET") {
+    const from = req.headers.origin;
+    if (from) res.setHeader("access-control-allow-origin", from);
+    if (!ours(url.searchParams.get("ticket")))
+      return say(res, 401, "That ticket is not good here.");
+    res.writeHead(200, { "content-type": "application/json" });
+    return res.end(JSON.stringify(findFiles(url.searchParams.get("q") ?? "")));
+  }
+  // The picture the person last pasted, for the clipboard we answer on
+  // their Linux's behalf. Only the machine itself may ask.
+  if (to.mine && url.pathname === "/maslow/picture" && req.method === "GET") {
+    if (!fromTheMachine(req))
       return say(res, 403, "Only the machine itself may ask.");
-    const body = await new Promise((resolve) => {
-      let s = "";
-      req.on("data", (d) => (s += d));
-      req.on("end", () => resolve(s));
+    const want = url.searchParams.get("want") ?? "image/png";
+    const png = picture();
+    if (!png) return say(res, 404, "");
+    if (want === "TARGETS") return say(res, 200, "TARGETS\nimage/png\n");
+    if (want !== "image/png") return say(res, 404, "");
+    res.writeHead(200, {
+      "content-type": "image/png",
+      "content-length": png.length,
     });
+    return res.end(png);
+  }
+  // Something a program on the machine wants opened, told to the person on
+  // every terminal they have open: a port of this machine's, which opens
+  // that port's window on their desk; a file or folder of theirs, which
+  // opens Files there; or any other web address, which is offered for them
+  // to open on their own device. Only the machine itself can ask: the
+  // request has to come from loopback, which nothing outside it reaches.
+  if (to.mine && url.pathname === "/maslow/open" && req.method === "POST") {
+    if (!fromTheMachine(req))
+      return say(res, 403, "Only the machine itself may ask.");
+    const ask = parse(await bodyOf(req));
+    const offer = (open) => {
+      for (const t of talkers) t.sendText(JSON.stringify({ open }));
+      return say(
+        res,
+        200,
+        talkers.size ? "offered" : "nobody is at a terminal",
+      );
+    };
+    const port = ask?.port;
+    if (Number.isInteger(port)) {
+      if (port < 1 || port > 65535 || OURS.has(port))
+        return say(res, 400, "That is not a port of yours.");
+      return offer({ port });
+    }
+    // A path of the person's own, as their home has it: what lies outside
+    // it is not theirs to open, and Files could not show it.
+    if (typeof ask?.path === "string") {
+      const rel = files.within(ask.path);
+      if (rel === null) return say(res, 400, "That is not in your home.");
+      return offer({ path: rel });
+    }
     let open;
     try {
-      open = new URL(JSON.parse(body)?.url);
+      open = new URL(ask?.url);
     } catch {
       return say(res, 400, "That is not an address.");
     }
     if (!/^https?:$/.test(open.protocol))
       return say(res, 400, "Only a web address can be opened.");
-    // A sign-in that answers to a port on this machine cannot be finished
-    // on the person's own device: the localhost their browser would come
-    // back to is theirs, not this one, and nothing is listening on it. It
-    // goes to the machine's own browser, the one place the answer lands,
-    // and the terminal says where to finish it. Anything else is still
-    // theirs to open, with their own logins.
-    const back = open.searchParams.get("redirect_uri") ?? "";
-    if (/^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?(?:\/|$)/.test(back)) {
-      const went = await onTheMachine(open.href);
-      if (went) {
-        for (const t of talkers)
-          t.sendText(JSON.stringify({ signIn: open.href }));
-        return say(res, 200, "opened on the machine's browser");
-      }
-      // With no browser of ours to answer, the person's own is better
-      // than nothing, and they are told what will happen there.
-    }
-    for (const t of talkers) t.sendText(JSON.stringify({ open: open.href }));
-    return say(res, 200, talkers.size ? "offered" : "nobody is at a terminal");
+    return offer(open.href);
+  }
+  // The brain, for what runs on this machine: the person's own agent asks
+  // here, and the token it carries says whose brain answers.
+  if (to.mine && url.pathname === "/maslow/brain") {
+    if (!fromTheMachine(req))
+      return say(res, 403, "Only the machine itself may ask.");
+    return askTheBrain(req, res);
   }
   // The numbers, for our server alone: it signs its ask with the secret.
+  // With them, when the person was last here and what is running in their
+  // terminal, which is what an update waiting on an idle computer needs.
   if (to.mine && url.pathname === "/maslow/stats") {
     if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
+    const [numbers, programs] = await Promise.all([stats(), running()]);
     res.writeHead(200, { "content-type": "application/json" });
-    return res.end(JSON.stringify(await stats()));
+    return res.end(
+      JSON.stringify({
+        ...numbers,
+        idleSince: new Date(lastSeen).toISOString(),
+        running: programs,
+      }),
+    );
   }
   // Backups, for our server alone: it asks with an address to upload to,
   // and reads what came of the last one.
@@ -284,11 +579,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify(backup.last()));
     }
     if (req.method === "POST") {
-      const body = await new Promise((resolve) => {
-        let s = "";
-        req.on("data", (d) => (s += d));
-        req.on("end", () => resolve(s));
-      });
+      const body = await bodyOf(req);
       let ask;
       try {
         ask = JSON.parse(body);
@@ -302,16 +593,32 @@ const server = http.createServer(async (req, res) => {
         : say(res, 409, "a backup is already running");
     }
   }
+  // A backup coming back, for our server alone: it asks with an address to
+  // fetch the archive from, and reads how far the unpacking has got. The
+  // archive lands in a folder of its own in the home, never over it.
+  if (to.mine && url.pathname === "/maslow/restore") {
+    if (!ours(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    if (req.method === "GET") {
+      res.writeHead(200, { "content-type": "application/json" });
+      return res.end(JSON.stringify(backup.restored()));
+    }
+    if (req.method === "POST") {
+      const ask = parse(await bodyOf(req));
+      if (typeof ask?.url !== "string" || typeof ask?.key !== "string")
+        return say(res, 400, "An ask names the address and the key.");
+      const name = backup.restore(ask);
+      if (!name) return say(res, 409, "a restore is already running");
+      res.writeHead(202, { "content-type": "application/json" });
+      return res.end(JSON.stringify({ name }));
+    }
+  }
   // The keys that open SSH, for our server alone: written beside the
   // server's own, outside the person's Linux.
   if (to.mine && url.pathname === "/maslow/keys" && req.method === "PUT") {
     if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
-    const text = await new Promise((resolve) => {
-      let s = "";
-      req.on("data", (d) => (s += d));
-      req.on("end", () => resolve(s));
-    });
+    const text = await bodyOf(req);
     fs.mkdirSync("/data/keys", { recursive: true });
     fs.writeFileSync("/data/keys/me", text, { mode: 0o644 });
     return say(res, 200, "keys written");
@@ -355,10 +662,12 @@ const server = http.createServer(async (req, res) => {
     // Thrown away rather than set, and arriving in the middle of a hop that
     // began at our server, which a browser counts as another site: a cookie
     // that says Lax would be dropped here and the ticket would live on. It
-    // carries nothing, so saying None gives nothing away.
+    // carries nothing, so saying None gives nothing away. A partitioned
+    // cookie is a different cookie to the browser, so both are thrown away.
+    const gone = `; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`;
     res.writeHead(303, {
       location: onward,
-      "set-cookie": `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`,
+      "set-cookie": [`${COOKIE}=${gone}; Partitioned`, `${COOKIE}=${gone}`],
     });
     return res.end();
   }
@@ -381,7 +690,7 @@ const server = http.createServer(async (req, res) => {
       );
       res.writeHead(303, {
         location: /^\/(?!\/)[^\\\s]*$/.test(onto) ? onto : "/",
-        "set-cookie": `${COOKIE}=${ticket}; Path=/; Max-Age=${left}; HttpOnly; Secure; SameSite=Lax`,
+        "set-cookie": `${COOKIE}=${ticket}; Path=/; Max-Age=${left}; HttpOnly; Secure; SameSite=None; Partitioned`,
       });
       return res.end();
     }
@@ -391,6 +700,9 @@ const server = http.createServer(async (req, res) => {
   // The machine itself has no page: its terminal, its view and its files
   // each have a road of their own above.
   if (to.mine) return say(res, 200, "ok");
+  // A request on a port of theirs is the person at work here, whoever
+  // sent it.
+  if (to.theirs) seen();
   const onward = http.request(
     {
       host: to.host,
@@ -452,7 +764,12 @@ server.on("upgrade", (req, socket, head) => {
       if (ws) ssh(ws);
       return;
     }
-    const own = { "/maslow/talk": talk, "/maslow/view": view }[url.pathname];
+    const own = {
+      "/maslow/talk": talk,
+      "/maslow/view": view,
+      "/maslow/agent": agent,
+      "/maslow/brain": brainLine,
+    }[url.pathname];
     if (!own) {
       socket.end("HTTP/1.1 404 Not Found\r\n\r\n");
       return;
@@ -465,10 +782,23 @@ server.on("upgrade", (req, socket, head) => {
     if (ws) own(ws, url);
     return;
   }
+  // A socket to a port of theirs is opened by the page on that port and by
+  // nothing else. The cookie is partitioned to the frame it was set in, so
+  // another site's page cannot carry it; the origin is checked as well, so
+  // that partitioning is not the only lock. A client that sends no origin
+  // is not a browser and is held to the cookie alone.
+  if (to.theirs) {
+    const from = req.headers.origin;
+    if (from && from !== `https://${req.headers.host}`) {
+      socket.end("HTTP/1.1 403 Forbidden\r\n\r\n");
+      return;
+    }
+  }
   if (to.theirs && !opens(cookieOf(req), to)) {
     socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
     return;
   }
+  if (to.theirs) seen();
   const onward = net.connect(to.port, to.host, () => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
     for (const [k, v] of Object.entries(forwarded(req)))
@@ -488,7 +818,10 @@ function ssh(ws) {
   server.on("data", (data) => ws.sendBytes(data));
   server.on("end", () => ws.close());
   server.on("error", () => ws.close());
-  ws.bytes = (data) => server.write(data);
+  ws.bytes = (data) => {
+    seen();
+    server.write(data);
+  };
   ws.closed = () => server.destroy();
 }
 
@@ -502,8 +835,91 @@ function ssh(ws) {
 // Every terminal open right now, for an address to be offered on.
 const talkers = new Set();
 
+// Into the person's own Linux, as them, with nothing of ours in the
+// environment but a home and a path.
+const AS_THEM = [
+  "--userspec=1000:1000",
+  "--groups=1000",
+  OS,
+  "/usr/bin/env",
+  "-i",
+  "HOME=/home/me",
+  "PATH=/usr/local/bin:/usr/bin:/bin",
+];
+
+// A tmux command run as the person, in their Linux, answering its output.
+const tmux = (...args) =>
+  new Promise((resolve) => {
+    execFile(
+      "/usr/sbin/chroot",
+      [...AS_THEM, "tmux", ...args],
+      { timeout: 5000 },
+      (err, out) => resolve(err ? null : out),
+    );
+  });
+
+// Every terminal window on the desk is a tmux session of its own, grouped
+// with main, and numbered so the door can ask after it.
+let talked = 0;
+
+// A shell at rest is not a program running; what is named before a restart
+// is what would be cut off.
+const AT_REST = new Set(["bash", "-bash", "sh", "zsh", "tmux", "login"]);
+
+// What is running in the person's terminal, by name, once each: what a
+// restart would stop, for the page to say before it asks.
+async function running() {
+  const out = await tmux("list-panes", "-a", "-F", "#{pane_current_command}");
+  if (out === null) return [];
+  return [
+    ...new Set(
+      out
+        .trim()
+        .split("\n")
+        .map((s) => s.trim())
+        .filter((name) => name && !AT_REST.has(name)),
+    ),
+  ];
+}
+
+// The biggest picture worth carrying: past this, a screenshot is not what
+// was meant.
+const BIGGEST = 24 * 1024 * 1024;
+
+// The picture the person last pasted, held for whatever is running in
+// their terminal to ask for. It cannot be put on a clipboard of the
+// machine's: what runs in the terminal is inside the person's own Linux,
+// which has no display and none of our tools, so the clipboard it reaches
+// for is one we answer ourselves, through `xclip` on their path.
+let pasted = null;
+let pastedAt = 0;
+
+// Long enough for the paste it was meant for, and not a copy of what
+// somebody put on their clipboard sitting here for the machine's life.
+const HELD_FOR = 5 * 60 * 1000;
+
+// A PNG begins with these eight bytes and nothing else does; what is
+// handed on is answered for as a PNG, so anything else is not taken.
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+function holdPicture(base64) {
+  const png = Buffer.from(base64, "base64");
+  // A picture refused leaves nothing behind: the paste that follows must
+  // not fetch the one before it.
+  const ok = png.length <= BIGGEST && png.subarray(0, 8).equals(PNG);
+  pasted = ok ? png : null;
+  pastedAt = Date.now();
+}
+
+// The picture, while it is still the one that was just pasted.
+function picture() {
+  if (pasted && Date.now() - pastedAt > HELD_FOR) pasted = null;
+  return pasted;
+}
+
 function talk(ws, url) {
   talkers.add(ws);
+  const session = `talk-${++talked}`;
   const size = (name, fallback) => {
     const n = Number(url.searchParams.get(name));
     return Number.isInteger(n) && n > 0 && n <= 1000 ? n : fallback;
@@ -511,21 +927,19 @@ function talk(ws, url) {
   const term = pty.spawn(
     "/usr/sbin/chroot",
     [
-      "--userspec=1000:1000",
-      "--groups=1000",
-      OS,
-      "/usr/bin/env",
-      "-i",
-      "HOME=/home/me",
+      ...AS_THEM,
       `USER=${PERSON}`,
       `LOGNAME=${PERSON}`,
       "SHELL=/bin/bash",
       "LANG=C.UTF-8",
       "TERM=xterm-256color",
-      "PATH=/usr/local/bin:/usr/bin:/bin",
+      // A terminal window just opened on the desk asks for a shell of its
+      // own; one coming back finds the session as it was.
+      `FRESH=${url.searchParams.get("fresh") === "1" ? 1 : 0}`,
+      `TALK=${session}`,
       "/bin/bash",
       "-lc",
-      "exec /opt/maslow/terminal.sh page",
+      "exec /opt/maslow/terminal.sh",
     ],
     {
       name: "xterm-256color",
@@ -537,22 +951,113 @@ function talk(ws, url) {
     },
   );
   term.onData((data) => ws.sendBytes(data));
-  term.onExit(() => {
-    talkers.delete(ws);
-    ws.close();
-  });
-  ws.bytes = (data) => term.write(data);
+  term.onExit(() => ws.close());
+  // The session's windows, in order, and which this terminal is looking
+  // at: asked every second and said whenever they change, so the page
+  // lists them and marks the one in view.
+  let windows = null;
+  const list = async () => {
+    const out = await tmux(
+      "list-windows",
+      "-t",
+      session,
+      "-F",
+      "#{window_index} #{window_active} #{window_name}",
+    );
+    if (out === null) return;
+    const now = JSON.stringify({
+      windows: out
+        .trim()
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => {
+          // The number, whether it is in view, and then the name, which
+          // may hold spaces of its own.
+          const m = /^(\d+) ([01]) (.*)$/.exec(line);
+          return m && { index: Number(m[1]), on: m[2] === "1", name: m[3] };
+        })
+        .filter(Boolean),
+    });
+    if (now === windows) return;
+    windows = now;
+    ws.sendText(now);
+  };
+  const listing = setInterval(() => void list(), 1000);
+  ws.bytes = (data) => {
+    seen();
+    term.write(data);
+  };
   ws.text = (text) => {
-    const r = parse(text)?.resize;
+    const said = parse(text);
+    // The window this terminal should look at, by number, or a new one.
+    if (Number.isInteger(said?.select))
+      void tmux("select-window", "-t", `${session}:${said.select}`).then(list);
+    if (said?.window === "new")
+      void tmux("new-window", "-t", session, "-c", "/home/me").then(list);
+    // A name the person gave a shell. tmux stops naming that one itself
+    // from here on, so their word stands until they change it.
+    const named = said?.rename;
+    if (Number.isInteger(named?.index) && typeof named?.name === "string") {
+      const name = named.name
+        .replace(/[\n\r]/g, " ")
+        .trim()
+        .slice(0, 40);
+      if (name)
+        void tmux(
+          "rename-window",
+          "-t",
+          `${session}:${named.index}`,
+          name,
+        ).then(list);
+    }
+    // A window closed from the list, never the last: the last going
+    // would take every terminal with it.
+    if (Number.isInteger(said?.close))
+      void tmux("display", "-p", "-t", session, "#{session_windows}").then(
+        (n) =>
+          Number(n) > 1 &&
+          tmux("kill-window", "-t", `${session}:${said.close}`).then(list),
+      );
+    const r = said?.resize;
     if (Number.isInteger(r?.cols) && Number.isInteger(r?.rows))
       term.resize(
         Math.min(Math.max(r.cols, 1), 1000),
         Math.min(Math.max(r.rows, 1), 1000),
       );
+    // A picture the person copied on their own device, put on the
+    // machine's clipboard where what runs in the terminal can take it:
+    // Claude Code asks the clipboard for a picture, and there is no other
+    // way to hand it one from a browser a thousand miles away.
+    if (typeof said?.picture === "string") holdPicture(said.picture);
   };
   ws.closed = () => {
+    clearInterval(listing);
     talkers.delete(ws);
-    term.kill();
+    // The window this terminal was looking at goes with it when nobody
+    // ever ran anything there: one pane, a bare prompt, nothing scrolled
+    // past, no other terminal on it. Anything more stays for the next tab.
+    void tmux(
+      "display",
+      "-p",
+      "-t",
+      session,
+      "#{window_active_sessions} #{window_panes} #{history_size} #{cursor_y} #{pane_current_command} #{session_windows}",
+    )
+      .then((out) => {
+        const [looking, panes, past, line, command, count] = (out ?? "")
+          .trim()
+          .split(" ");
+        if (
+          looking === "1" &&
+          panes === "1" &&
+          past === "0" &&
+          line === "0" &&
+          command === "bash" &&
+          Number(count) > 1
+        )
+          return tmux("kill-window", "-t", session);
+      })
+      .finally(() => term.kill());
   };
 }
 
@@ -566,16 +1071,34 @@ function view(ws) {
   let video = null;
   let watcher = null;
   let hands = null;
+  // The size the picture arrives at, said as the socket opens and again
+  // whenever it changes, so the viewer's decoder and its canvas are the
+  // size of what is coming. A stream begins again at the new size, so the
+  // first frame after a change is a whole one.
+  const me = {
+    resized() {
+      if (video) {
+        video.stop();
+        video = stream(ws, send);
+      }
+      send({ size: pane });
+    },
+  };
+  views.add(me);
+  send({ size: pane });
   // The tabs, and whether there is one to show, said whenever they change:
   // asked every second, and at once after the person changed them.
   let were = null;
+  let wasOpen = false;
   const ask = async () => {
     const now = await tabsOf();
     if (now === null || now === were) return;
-    const open = JSON.parse(now).current !== null;
-    if (open !== (were !== null && JSON.parse(were).current !== null))
-      send({ browser: open ? "open" : "closed" });
     were = now;
+    const open = JSON.parse(now).current !== null;
+    if (open !== wasOpen) {
+      wasOpen = open;
+      send({ browser: open ? "open" : "closed" });
+    }
     ws.sendText(now);
   };
   const asking = setInterval(ask, 1000);
@@ -614,6 +1137,9 @@ function view(ws) {
     else if ("view" in said) {
       video?.stop();
       video = said.view === true ? stream(ws, send) : null;
+    } else if ("size" in said) {
+      const { w, h } = said.size ?? {};
+      if (typeof w === "number" && typeof h === "number") await resize(w, h);
     } else if (said.act?.kind === "move") {
       if (typeof said.act.x === "number" && typeof said.act.y === "number")
         move(said.act.x, said.act.y);
@@ -633,6 +1159,7 @@ function view(ws) {
     }
   };
   ws.closed = () => {
+    views.delete(me);
     clearInterval(asking);
     video?.stop();
     watcher?.close();
@@ -705,34 +1232,6 @@ function watch(rel, changed) {
       watcher.close();
     },
   };
-}
-
-// Sends the machine's browser to an address, on its newest tab, which
-// opens it if it was closed. True when it went.
-function onTheMachine(href) {
-  return new Promise((done) => {
-    const body = JSON.stringify({ kind: "navigate", url: href });
-    const ask = http.request(
-      {
-        host: "127.0.0.1",
-        port: BROWSER,
-        path: "/act",
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "content-length": Buffer.byteLength(body),
-        },
-      },
-      (res) => {
-        res.resume();
-        res.on("end", () =>
-          done(res.statusCode !== undefined && res.statusCode < 400),
-        );
-      },
-    );
-    ask.on("error", () => done(false));
-    ask.end(body);
-  });
 }
 
 // The browser as video for one viewer: the browser server's pictures of its
@@ -840,9 +1339,11 @@ function stream(ws, send) {
 // take frames as fast as they come holds the encoder, which then takes
 // fewer pictures. The encoder is told to look at one picture and start,
 // rather than gather seconds of them first, as it would for a file. The
-// browser's 1280x800 passes through unchanged; a picture of another size
-// is fitted into it, since the viewer decodes one size.
+// browser draws at the size of the pane being watched, so its pictures
+// pass through unchanged; one of another size, from the moment a size
+// changed, is fitted into it, since a viewer decodes one size at a time.
 function encode(ws) {
+  const { w, h } = pane;
   const ff = spawn(
     ffmpeg.path,
     [
@@ -852,7 +1353,7 @@ function encode(ws) {
       ...["-pix_fmt", "yuv420p", "-profile:v", "baseline", "-level", "3.1"],
       ...["-x264-params", "keyint=120:scenecut=0:repeat-headers=1"],
       "-vf",
-      "scale=1280:800:force_original_aspect_ratio=decrease,pad=1280:800:(ow-iw)/2:(oh-ih)/2",
+      `scale=${w}:${h}:force_original_aspect_ratio=decrease,pad=${w}:${h}:(ow-iw)/2:(oh-ih)/2`,
       ...["-vsync", "0", "-flush_packets", "1", "-f", "flv", "-"],
     ],
     { stdio: ["pipe", "pipe", "inherit"] },
@@ -910,6 +1411,525 @@ function frame(nals) {
     i += 4 + n;
   }
   return Buffer.concat([Buffer.from([key ? 1 : 0]), ...parts]);
+}
+
+// The agent: Claude Code on this machine as an editor talks to it, over
+// the Agent Client Protocol. One process for the machine, started as the
+// person in their home on the auth the terminal's `claude` runs on, and
+// started again when it ends. The door holds the conversation, not the
+// tab: the sockets carry the protocol's lines both ways, one JSON message
+// to a frame, what the agent said while nobody watched is kept and
+// replayed to the next socket, and the session id is written to the disk
+// so a door that comes back after a new image loads the same conversation.
+
+// Where the agent works: the person's home, as any shell of theirs opens.
+const HOME = "/home/me";
+
+// Which conversation this computer is in, outside the person's Linux so a
+// reset of theirs never takes it.
+const SESSION = "/data/.agent-session";
+
+// The most of what the agent said that is kept for the next socket.
+const KEPT = 2000;
+
+// Every socket watching the conversation.
+const watchers = new Set();
+
+// The process and everything the door knows about it, or none while no
+// socket has ever asked for one.
+let acp = null;
+
+// The conversation this computer was last in, as the disk has it.
+function sessionWas() {
+  try {
+    const id = fs.readFileSync(SESSION, "utf8").trim();
+    return /^[0-9a-fA-F-]{36}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+const sessionIs = (id) => {
+  try {
+    fs.writeFileSync(SESSION, id);
+  } catch {
+    // A disk that will not take it costs the next door its history and
+    // nothing else.
+  }
+};
+
+// The whole picture of the conversation: what the process is doing, which
+// conversation it is in, and whether a prompt is running. `clear` says the
+// transcript a socket holds is no longer this one's, so the page begins
+// again on what follows.
+// Whether this machine holds a key of Maslow's, which is what a session of
+// ours runs on: the boot writes it into the person's Linux, or does not.
+const managed = () => fs.existsSync(`${OS}/etc/profile.d/maslow-model-key.sh`);
+
+const agentHello = (clear) => ({
+  maslow: {
+    clear,
+    managed: managed(),
+    state: acp?.state ?? "off",
+    why: acp?.why ?? null,
+    session: acp?.session ?? null,
+    running: acp?.running ?? false,
+  },
+});
+
+const toWatchers = (said) => {
+  const line = JSON.stringify(said);
+  for (const ws of watchers) ws.sendText(line);
+};
+
+const toAgent = (room, said) => {
+  try {
+    room.proc.stdin.write(`${JSON.stringify(said)}\n`);
+  } catch {
+    // A process that has gone is answered for by its exit.
+  }
+};
+
+// Something the door asks the agent for itself, answered when the agent
+// answers or when the process ends under it.
+function agentAsk(room, method, params) {
+  return new Promise((answer, fail) => {
+    const id = ++room.asked;
+    room.waiting.set(id, (said) =>
+      said && !said.error
+        ? answer(said.result)
+        : fail(
+            new Error(said?.error?.message ?? "The agent stopped answering."),
+          ),
+    );
+    toAgent(room, { jsonrpc: "2.0", id, method, params });
+  });
+}
+
+// Whether a prompt is running, told to every socket so each shows the way
+// to stop it, whichever of them sent it.
+function agentRunning(room, on) {
+  if (room.running === on) return;
+  room.running = on;
+  if (acp === room) toWatchers({ maslow: { running: on } });
+}
+
+// The terminals the agent runs its commands in. The protocol lets the
+// client own them: the agent asks for one, the door starts it as the
+// person in their home on the auth their `claude` runs on, and what it
+// writes goes to every socket as it arrives, so a command's output is
+// live in the Agent window instead of a wall of text at the end. The
+// browser never runs anything; it is shown what this one did.
+const MOST_OUTPUT = 1 << 20;
+const terminals = new Map();
+let ranTerminals = 0;
+
+// One word for a shell, with nothing in it the shell will read as its own.
+const quoted = (s) => `'${String(s).replaceAll("'", `'\\''`)}'`;
+
+// What a terminal has written and how it ended, as the protocol says it.
+const terminalSaid = (t) => ({
+  output: t.output,
+  truncated: t.truncated,
+  exitStatus: t.exit,
+});
+
+// Every socket told what a terminal has written now, at most ten times a
+// second, so a command writing fast costs one frame a beat rather than
+// one a line.
+function terminalSays(t) {
+  if (t.saying) return;
+  t.saying = setTimeout(() => {
+    t.saying = null;
+    toWatchers({ maslow: { terminal: { id: t.id, ...terminalSaid(t) } } });
+  }, 100);
+}
+
+// A terminal started as the person, in the folder the agent named or
+// their home, through a login shell so the key Claude Code runs on and
+// their own path are there as in any terminal of theirs.
+function terminalStart(params) {
+  const id = `t${++ranTerminals}`;
+  const cwd =
+    typeof params?.cwd === "string" && params.cwd.startsWith("/")
+      ? params.cwd
+      : HOME;
+  // What was asked for, as a shell reads it: the command is a line, since
+  // an agent hands its whole command over as one, and each argument after
+  // it is one word however it is spelled.
+  const line = [
+    params?.command ?? "",
+    ...(params?.args ?? []).map(quoted),
+  ].join(" ");
+  // The environment the agent named, as either shape the protocol uses.
+  // Not MASLOW_AUTH: a session of ours runs on credentials of ours and
+  // never spends what the person provided, and `env -i` takes the last
+  // assignment, so an agent naming it would win.
+  const named = (
+    Array.isArray(params?.env)
+      ? params.env.map((e) => `${e?.name}=${e?.value ?? ""}`)
+      : Object.entries(params?.env ?? {}).map(([k, v]) => `${k}=${v}`)
+  ).filter((e) => !e.startsWith("MASLOW_AUTH="));
+  const proc = spawn(
+    "/usr/sbin/chroot",
+    [
+      ...AS_THEM,
+      `USER=${PERSON}`,
+      `LOGNAME=${PERSON}`,
+      "SHELL=/bin/bash",
+      "LANG=C.UTF-8",
+      "MASLOW_AUTH=managed",
+      ...named.filter((e) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(e)),
+      "/bin/bash",
+      "-lc",
+      `cd ${quoted(cwd)} && ${line}`,
+    ],
+    // A group of its own, so what the command starts — a pipeline, a
+    // child left in the background — stops with it.
+    { cwd: "/", stdio: ["ignore", "pipe", "pipe"], detached: true },
+  );
+  const most =
+    Number.isInteger(params?.outputByteLimit) && params.outputByteLimit > 0
+      ? Math.min(params.outputByteLimit, MOST_OUTPUT)
+      : MOST_OUTPUT;
+  const t = {
+    id,
+    proc,
+    output: "",
+    truncated: false,
+    exit: null,
+    saying: null,
+    waiting: [],
+  };
+  // The end of what was written is what matters, so a long run keeps its
+  // last words rather than its first.
+  const wrote = (chunk) => {
+    t.output += chunk;
+    if (t.output.length > most) {
+      t.output = t.output.slice(-most);
+      t.truncated = true;
+    }
+    terminalSays(t);
+  };
+  proc.stdout.on("data", (d) => wrote(d.toString()));
+  proc.stderr.on("data", (d) => wrote(d.toString()));
+  proc.on("error", (err) => wrote(`${err.message}\n`));
+  proc.on("exit", (code, signal) => {
+    t.exit = { exitCode: code ?? null, signal: signal ?? null };
+    clearTimeout(t.saying);
+    t.saying = null;
+    toWatchers({ maslow: { terminal: { id, ...terminalSaid(t) } } });
+    for (const done of t.waiting) done();
+    t.waiting = [];
+  });
+  terminals.set(id, t);
+  return id;
+}
+
+// The terminal an ask names, or nothing when it has been let go.
+const terminalOf = (params) => terminals.get(params?.terminalId);
+
+function terminalEnd(t, forget) {
+  // The whole group, not only the shell: a pipeline's members and anything
+  // it left behind go with it.
+  if (!t.exit) {
+    try {
+      process.kill(-t.proc.pid, "SIGKILL");
+    } catch {
+      t.proc.kill("SIGKILL");
+    }
+  }
+  clearTimeout(t.saying);
+  t.saying = null;
+  if (forget) terminals.delete(t.id);
+}
+
+// What the door answers the agent about a terminal of its own.
+async function terminalAsk(room, said) {
+  const reply = (result, error) =>
+    toAgent(room, {
+      jsonrpc: "2.0",
+      id: said.id,
+      ...(error ? { error } : { result }),
+    });
+  const p = said.params;
+  if (said.method === "terminal/create")
+    return reply({ terminalId: terminalStart(p) });
+  const t = terminalOf(p);
+  if (!t) return reply(null, { code: -32602, message: "No such terminal." });
+  if (said.method === "terminal/output") return reply(terminalSaid(t));
+  if (said.method === "terminal/kill") {
+    terminalEnd(t, false);
+    return reply(null);
+  }
+  if (said.method === "terminal/release") {
+    terminalEnd(t, true);
+    return reply(null);
+  }
+  if (said.method === "terminal/wait_for_exit") {
+    if (!t.exit) await new Promise((done) => t.waiting.push(done));
+    return reply({ exitStatus: t.exit });
+  }
+  reply(null, { code: -32601, message: `${said.method} is not here.` });
+}
+
+// A line the agent said: an answer to something asked, or something it is
+// telling the client, which every socket hears and the next socket is
+// replayed. A question it asks stays in the record until somebody answers;
+// an ask about a terminal is the door's own to answer, and never the
+// browser's.
+function fromAgent(room, said) {
+  if (acp !== room) return;
+  if (said.method === undefined && said.id !== undefined) {
+    const answer = room.waiting.get(said.id);
+    if (!answer) return;
+    room.waiting.delete(said.id);
+    return answer(said);
+  }
+  if (typeof said.method === "string" && said.method.startsWith("terminal/"))
+    return void terminalAsk(room, said);
+  room.ring.push(said);
+  if (room.ring.length > KEPT) room.ring.shift();
+  toWatchers(said);
+}
+
+function agentStart() {
+  const proc = spawn(
+    "/usr/sbin/chroot",
+    [
+      ...AS_THEM,
+      `USER=${PERSON}`,
+      `LOGNAME=${PERSON}`,
+      "SHELL=/bin/bash",
+      "LANG=C.UTF-8",
+      // A session of ours, on the key Maslow gave the machine, never on
+      // what the person provided for their own.
+      "MASLOW_AUTH=managed",
+      "/bin/bash",
+      "-lc",
+      `cd ${HOME} && exec /opt/maslow/bin/claude-code-acp`,
+    ],
+    { cwd: "/", stdio: ["pipe", "pipe", "inherit"] },
+  );
+  const room = {
+    proc,
+    state: "starting",
+    why: null,
+    // What the agent answered `initialize` with, which every socket is
+    // given: the process takes one client, and the door is it.
+    init: null,
+    session: null,
+    running: false,
+    ring: [],
+    asked: 0,
+    waiting: new Map(),
+  };
+  acp = room;
+  toWatchers(agentHello(true));
+  let rest = "";
+  proc.stdout.on("data", (d) => {
+    rest += d;
+    for (;;) {
+      const at = rest.indexOf("\n");
+      if (at < 0) return;
+      const line = rest.slice(0, at);
+      rest = rest.slice(at + 1);
+      const said = parse(line);
+      if (said) fromAgent(room, said);
+    }
+  });
+  proc.stdin.on("error", () => {});
+  proc.on("error", () => {});
+  proc.on("exit", () => {
+    if (acp !== room) return;
+    acp = null;
+    for (const answer of room.waiting.values()) answer(null);
+    room.waiting.clear();
+    // The terminals were the agent's; nothing of it is left running when
+    // it goes.
+    for (const t of terminals.values()) terminalEnd(t, true);
+    toWatchers(agentHello(false));
+    // Started again for whoever is still watching, so a prompt a moment
+    // later has somewhere to go and the conversation comes back with it.
+    setTimeout(() => {
+      if (!acp && watchers.size) agentStart();
+    }, 1000);
+  });
+  room.started = (async () => {
+    try {
+      room.init = await agentAsk(room, "initialize", {
+        protocolVersion: 1,
+        // Claude Code reads and writes this machine's files as itself,
+        // not as the tab: we give it no hands through us. The terminal is
+        // the one thing the door owns, so a command it runs streams out
+        // live under the tool call that ran it.
+        clientCapabilities: {
+          fs: { readTextFile: false, writeTextFile: false },
+          terminal: true,
+        },
+      });
+      const was = sessionWas();
+      // Loading replays the conversation as the agent's own lines, so what
+      // the person said and what it answered are there before they look.
+      const back =
+        was &&
+        (await agentAsk(room, "session/load", {
+          sessionId: was,
+          cwd: HOME,
+          mcpServers: [],
+        }).catch(() => null));
+      if (back) room.session = { id: was, ...back };
+      else {
+        const made = await agentAsk(room, "session/new", {
+          cwd: HOME,
+          mcpServers: [],
+        });
+        room.session = { ...made, id: made.sessionId };
+        sessionIs(made.sessionId);
+      }
+      room.state = "ready";
+    } catch (err) {
+      room.state = "failed";
+      room.why = err?.message ?? "The agent did not start.";
+    }
+    if (acp === room) toWatchers(agentHello(false));
+  })();
+  return room;
+}
+
+// The conversation this computer is in, replaced: a new one, an earlier
+// one of the agent's own opened again, or this one forked so the work goes
+// two ways from here. Every socket is told to begin again before the
+// change, since loading replays the conversation as the agent's own lines;
+// one that cannot be opened is a new one rather than nothing.
+async function agentTurn(room, method, params) {
+  room.ring.length = 0;
+  toWatchers(agentHello(true));
+  const now = await agentAsk(room, method, params).catch(() => null);
+  if (acp !== room) return;
+  if (!now) {
+    if (method !== "session/new")
+      await agentTurn(room, "session/new", { cwd: HOME, mcpServers: [] });
+    return;
+  }
+  const id = now.sessionId ?? params.sessionId;
+  room.session = { ...now, id };
+  sessionIs(id);
+  toWatchers({ maslow: { session: room.session } });
+}
+
+function agent(ws) {
+  watchers.add(ws);
+  // Started for the first socket to arrive and shared by every one after;
+  // what this socket is given to catch up on is what it holds now.
+  const first = acp ?? agentStart();
+  ws.sendText(JSON.stringify(agentHello(true)));
+  for (const said of first.ring) ws.sendText(JSON.stringify(said));
+  // And what the commands in the record wrote, so a tab arriving mid-run
+  // sees the output under the tool call rather than an empty terminal.
+  for (const t of terminals.values())
+    ws.sendText(
+      JSON.stringify({
+        maslow: { terminal: { id: t.id, ...terminalSaid(t) } },
+      }),
+    );
+  ws.text = (text) => {
+    const said = parse(text);
+    // Whichever process is running now is the one this word goes to, so a
+    // socket held open across a restart talks to the agent that replaced
+    // the one it arrived on.
+    const room = acp;
+    if (!said || !room) return;
+    // A word to the door itself rather than to the agent: which
+    // conversation this computer is in is the door's to change, since one
+    // process holds it for every socket.
+    if (said.maslow) {
+      const w = said.maslow;
+      if (w.fresh === true)
+        return void agentTurn(room, "session/new", {
+          cwd: HOME,
+          mcpServers: [],
+        });
+      if (typeof w.open === "string")
+        return void agentTurn(room, "session/load", {
+          sessionId: w.open,
+          cwd: HOME,
+          mcpServers: [],
+        });
+      return;
+    }
+    if (typeof said.method === "string") {
+      // Every socket is answered `initialize` from what the agent said to
+      // the door, since the process is initialized once and shared.
+      if (said.method === "initialize")
+        return void room.started.then(() =>
+          ws.sendText(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: said.id,
+              ...(room.init
+                ? { result: room.init }
+                : {
+                    error: {
+                      code: -32603,
+                      message: room.why ?? "The agent did not start.",
+                    },
+                  }),
+            }),
+          ),
+        );
+      if (said.id === undefined) return toAgent(room, said);
+      // Asked under a number of the door's own, so two tabs asking at once
+      // never take each other's answer.
+      const id = ++room.asked;
+      if (said.method === "session/prompt") {
+        agentRunning(room, true);
+        // What the person said goes into the record in their own words:
+        // the agent does not say it back, and without it a socket that
+        // arrives later would see only the agent's half.
+        const words = (said.params?.prompt ?? [])
+          .filter((c) => c?.type === "text")
+          .map((c) => c.text)
+          .join("");
+        if (words)
+          fromAgent(room, {
+            jsonrpc: "2.0",
+            method: "session/update",
+            params: {
+              sessionId: said.params?.sessionId,
+              update: {
+                sessionUpdate: "user_message_chunk",
+                content: { type: "text", text: words },
+              },
+            },
+          });
+      }
+      room.waiting.set(id, (answer) => {
+        if (said.method === "session/prompt") agentRunning(room, false);
+        ws.sendText(
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: said.id,
+            ...(answer?.error
+              ? { error: answer.error }
+              : { result: answer?.result ?? null }),
+          }),
+        );
+      });
+      return toAgent(room, { ...said, id });
+    }
+    // An answer to a question the agent asked, back under the agent's own
+    // number; answered, it leaves the record, so the next socket to arrive
+    // is not asked it again.
+    if (said.id === undefined) return;
+    const at = room.ring.findIndex(
+      (m) => m.id === said.id && m.method !== undefined,
+    );
+    if (at < 0) return;
+    room.ring.splice(at, 1);
+    toAgent(room, said);
+  };
+  ws.closed = () => watchers.delete(ws);
 }
 
 // A WebSocket the door answers itself: the handshake, then every frame from
@@ -1001,22 +2021,12 @@ function websocket(req, socket, head) {
 // A server-to-client frame: never masked.
 function frameOf(first, payload) {
   const n = payload.length;
-  const header =
-    n < 126
-      ? Buffer.from([first, n])
-      : n < 65536
-        ? Buffer.concat([
-            Buffer.from([first, 126]),
-            Buffer.from([n >> 8, n & 0xff]),
-          ])
-        : Buffer.concat([
-            Buffer.from([first, 127]),
-            (() => {
-              const b = Buffer.alloc(8);
-              b.writeBigUInt64BE(BigInt(n));
-              return b;
-            })(),
-          ]);
+  if (n < 126) return Buffer.concat([Buffer.from([first, n]), payload]);
+  const header = Buffer.alloc(n < 65536 ? 4 : 10);
+  header[0] = first;
+  header[1] = n < 65536 ? 126 : 127;
+  if (n < 65536) header.writeUInt16BE(n, 2);
+  else header.writeBigUInt64BE(BigInt(n), 2);
   return Buffer.concat([header, payload]);
 }
 

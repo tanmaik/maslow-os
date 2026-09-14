@@ -1,4 +1,4 @@
-import type { BrainType, Datatype, Property } from "@maslow/brain";
+import type { BrainType, Datatype } from "@maslow/brain";
 import { format } from "date-fns";
 
 // How the brain's values read on screen.
@@ -15,8 +15,27 @@ function day(s: string) {
 export const percent = (c: number | null) =>
   c === null ? "" : `${Math.round(c * 100)}%`;
 
+// One height for every control in a form of the brain's: the 36 a text
+// field and a button already are, so a picker beside them is not 2px
+// taller than the rest of the row.
+export const FIELD = "h-9 py-0";
+
+// The first line of a body with words in it, as much as a row can hold. A
+// body is markdown, and a row shows what it says rather than how it is
+// marked: no hashes, no bullets, no fences.
+export function opening(body: string): string {
+  for (const raw of body.split("\n")) {
+    const said = raw
+      .replace(/^\s*(?:#{1,6}|>|[-*+]|\d+[.)])\s+/, "")
+      .replace(/[*_`~]/g, "")
+      .trim();
+    if (/[a-z0-9]/i.test(said)) return said.slice(0, 200);
+  }
+  return "";
+}
+
 // A declared field's value as text. A missing value is an empty cell.
-export function cell(v: unknown, p?: Property): string {
+export function cell(v: unknown, p?: { datatype: Datatype }): string {
   if (v === undefined || v === null) return "";
   if (Array.isArray(v)) return v.map(String).join(", ");
   if (typeof v === "boolean") return v ? "yes" : "no";

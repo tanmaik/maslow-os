@@ -1,46 +1,126 @@
 @import "tailwindcss";
-@import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "../styles/theme.css";
+@import "../styles/typography.css";
+@import "../styles/boardui.css";
 
 /* Both looks. The dark one applies under .dark, set on the root before paint. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* BoardUI's skin, warmed. Its neutral ramp is Tailwind's grey; ours carries
+   a little of the same warmth in every step so the greys agree with the
+   accent rather than sit beside it. Its accent ramp is blue; ours is spun
+   from the hue and chroma the person picked under Look in Settings, so
+   every button, ring, switch and selection follows the pick. */
+@theme {
+  /* One knob for the whole rhythm: every padding, gap, margin and
+     spacing-unit size tightens by a tenth in proportion. What must keep
+     a physical measure regardless — the dock's icon and pitch, a
+     window's lights and bar height, tap targets on a phone, a terminal
+     cell — is pinned in px or rem where it lives, not here. */
+  --spacing: 0.225rem;
+  /* The motion of the product: four curves and four clocks, and nothing
+     between them. Everything arriving or settling decelerates hard and
+     never overshoots; something already on screen moving from A to B
+     starts steep and lands soft; only what is leaving eases in. */
+  --ease-out-quart: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-soft: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-in-quad: cubic-bezier(0.55, 0, 0.9, 0.35);
+  --ease-plain: ease;
+  --transition-duration-instant: 100ms;
+  --transition-duration-fast: 150ms;
+  --transition-duration-base: 220ms;
+  --transition-duration-slow: 300ms;
+  /* What an unqualified transition gets, so a forgotten class lands on
+     ours and not on Tailwind's. */
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: ease;
+  --color-neutral-50: oklch(0.985 0.004 78);
+  --color-neutral-100: oklch(0.966 0.006 76);
+  --color-neutral-200: oklch(0.928 0.008 74);
+  --color-neutral-300: oklch(0.872 0.01 72);
+  --color-neutral-400: oklch(0.712 0.014 68);
+  --color-neutral-500: oklch(0.562 0.016 64);
+  --color-neutral-600: oklch(0.452 0.012 62);
+  --color-neutral-700: oklch(0.372 0.008 60);
+  --color-neutral-800: oklch(0.272 0.006 58);
+  --color-neutral-900: oklch(0.212 0.005 58);
+  --color-neutral-925: oklch(0.182 0.005 58);
+  --color-neutral-950: oklch(0.148 0.004 58);
+  /* The eleven steps of the accent, at the lightness and the chroma
+     BoardUI tuned its own ramp to, spun onto the hue the person picked:
+     colour rises slowly through the tints, so a ghost button's ground and
+     a selected pill stay near-white, peaks at 600 where a word must carry,
+     and falls away into the shades. The step is a literal oklch here, in
+     `@theme`, so Tailwind emits every `accent-*` utility; only the hue and
+     how much of it come from the pick at runtime. */
+  --color-accent-50: oklch(
+    0.97 calc(var(--accent-chroma) * 0.065) var(--accent-hue)
+  );
+  --color-accent-100: oklch(
+    0.932 calc(var(--accent-chroma) * 0.15) var(--accent-hue)
+  );
+  --color-accent-200: oklch(
+    0.882 calc(var(--accent-chroma) * 0.276) var(--accent-hue)
+  );
+  --color-accent-300: oklch(
+    0.809 calc(var(--accent-chroma) * 0.49) var(--accent-hue)
+  );
+  --color-accent-400: oklch(
+    0.707 calc(var(--accent-chroma) * 0.77) var(--accent-hue)
+  );
+  --color-accent-500: oklch(0.623 var(--accent-chroma) var(--accent-hue));
+  --color-accent-600: oklch(
+    0.546 calc(var(--accent-chroma) * 1.145) var(--accent-hue)
+  );
+  --color-accent-700: oklch(
+    0.488 calc(var(--accent-chroma) * 1.135) var(--accent-hue)
+  );
+  --color-accent-800: oklch(
+    0.424 calc(var(--accent-chroma) * 0.93) var(--accent-hue)
+  );
+  --color-accent-900: oklch(
+    0.379 calc(var(--accent-chroma) * 0.68) var(--accent-hue)
+  );
+  --color-accent-950: oklch(
+    0.282 calc(var(--accent-chroma) * 0.425) var(--accent-hue)
+  );
+}
+
 @theme inline {
-  /* One face and one size. Inter, from npm, in the bundle; hierarchy is
-     carried by weight alone, so every step of the scale is the same step. */
-  --font-sans:
-    "Inter Variable", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* The device's own face, whatever it is; nothing is named or shipped.
+     Body sits at 14; a label in a bar drops to 12 and a title climbs, so a
+     page says where to start before it is read. */
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-serif: var(--font-sans);
   --font-heading: var(--font-sans);
-  --text-xs: 14px;
-  --text-xs--line-height: 20px;
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
   --text-sm: 14px;
   --text-sm--line-height: 20px;
   --text-base: 14px;
   --text-base--line-height: 20px;
-  --text-lg: 14px;
-  --text-lg--line-height: 20px;
-  --text-xl: 14px;
-  --text-xl--line-height: 20px;
-  --text-2xl: 14px;
-  --text-2xl--line-height: 20px;
-  --text-3xl: 14px;
-  --text-3xl--line-height: 20px;
-  --text-4xl: 14px;
-  --text-4xl--line-height: 20px;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
+  --text-lg: 16px;
+  --text-lg--line-height: 24px;
+  --text-xl: 18px;
+  --text-xl--line-height: 26px;
+  --text-2xl: 22px;
+  --text-2xl--line-height: 28px;
+  --text-3xl: 28px;
+  --text-3xl--line-height: 34px;
+  --text-4xl: 34px;
+  --text-4xl--line-height: 40px;
+  /* shadcn's names, each pointing at the BoardUI token it means, so a
+     shadcn part and a BoardUI part on the same page are one skin. */
+  --color-sidebar-ring: var(--ring);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-accent-foreground: var(--foreground);
+  --color-sidebar-accent: var(--accent);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar: var(--card);
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
@@ -60,23 +140,9 @@
   --color-foreground: var(--foreground);
   --color-background: var(--background);
   --color-canvas: var(--canvas);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
   --shadow-float: var(--float);
-  /* No shadows anywhere: each is a shadow of nothing rather than none, so a
-     ring, which is a box-shadow of its own, still draws beside it. */
-  --shadow-2xs: 0 0 #0000;
-  --shadow-xs: 0 0 #0000;
-  --shadow-sm: 0 0 #0000;
-  --shadow-md: 0 0 #0000;
-  --shadow-lg: 0 0 #0000;
-  --shadow-xl: 0 0 #0000;
-  --shadow-2xl: 0 0 #0000;
+  --color-dock-dot: var(--dock-dot);
+  --color-dock-line: var(--dock-line);
 }
 
 /* The label of a tool the agent is running: a highlight sweeps across it. */
@@ -108,131 +174,253 @@
   }
 }
 
-/* Black and white. Light is the root; dark is a class set before paint. */
+/* Warm, and one colour in it: an orange unless the person picks another,
+   spent on the few things a person is meant to look at. Every shadcn name
+   is a BoardUI token; only the desk, the glass and the dock are ours. Light
+   is the root; dark is a class set before paint. */
 :root {
   color-scheme: light;
-  --canvas: oklch(1 0 0); /* the page and a card are one surface */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.14 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.14 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.14 0 0);
-  --primary: oklch(0.14 0 0);
-  --primary-foreground: oklch(1 0 0);
-  --secondary: oklch(0.94 0 0);
-  --secondary-foreground: oklch(0.14 0 0);
-  --muted: oklch(0.94 0 0);
-  --muted-foreground: oklch(0.52 0 0);
-  --accent: oklch(0.955 0 0);
-  --accent-foreground: oklch(0.14 0 0);
-  --destructive: oklch(0.45 0 0);
-  --border: oklch(0 0 0 / 11%);
-  --input: oklch(0 0 0 / 11%);
-  --ring: oklch(0.14 0 0 / 35%);
-  --chart-1: oklch(0.2 0 0);
-  --chart-2: oklch(0.38 0 0);
-  --chart-3: oklch(0.55 0 0);
-  --chart-4: oklch(0.7 0 0);
-  --chart-5: oklch(0.84 0 0);
-  --radius: 0.875rem;
-  --float: none;
-  --dot: transparent;
-  --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.14 0 0);
-  --sidebar-primary: oklch(0.14 0 0);
-  --sidebar-primary-foreground: oklch(1 0 0);
-  --sidebar-accent: oklch(0.955 0 0);
-  --sidebar-accent-foreground: oklch(0.14 0 0);
-  --sidebar-border: oklch(0 0 0 / 11%);
-  --sidebar-ring: oklch(0.14 0 0 / 35%);
+  --accent-hue: 42;
+  --accent-chroma: 0.163;
+  /* Words that carry meaning read at 4.5:1 over their ground: one step
+     darker than BoardUI's own for the supporting and the faint. */
+  --color-text-secondary: var(--color-neutral-600);
+  --color-text-tertiary: var(--color-neutral-500);
+  --color-text-placeholder: var(--color-neutral-500);
+  --color-foreground-icon-secondary: var(--color-neutral-600);
+  --color-foreground-icon-tertiary: var(--color-neutral-500);
+  --canvas: oklch(0.972 0.006 75); /* the desk the windows sit on */
+  --background: var(--color-background-full);
+  --foreground: var(--color-text-primary);
+  --card: var(--color-background-primary-default);
+  --card-foreground: var(--color-text-primary);
+  --popover: var(--color-background-primary-default);
+  --popover-foreground: var(--color-text-primary);
+  --primary: var(--color-accent-500);
+  --primary-foreground: var(--color-text-white);
+  --secondary: var(--color-background-secondary-default);
+  --secondary-foreground: var(--color-text-primary);
+  --muted: var(--color-background-secondary-default);
+  --muted-foreground: var(--color-text-secondary);
+  --accent: var(--color-background-primary-hover);
+  --accent-foreground: var(--color-text-primary);
+  --destructive: var(--color-red-500);
+  --border: var(--color-border-button-default);
+  --input: var(--color-border-button-default);
+  --ring: var(--color-border-focus-ring);
+  --cast: oklch(0.28 0.045 55 / 16%);
+  --float: 0 1px 2px -1px var(--cast), 0 14px 34px -18px var(--cast);
+  /* The glass: a breath of the accent, clear enough to see through. */
+  --glass: color-mix(in srgb, var(--primary) 6%, rgba(250, 251, 253, 0.26));
+  --glass-rim: rgba(0, 0, 0, 0.22);
+  --glass-cast: 0 8px 30px rgba(0, 0, 0, 0.22);
+  --glass-shine: rgba(255, 255, 255, 0.4);
+  --dock-dot: rgba(0, 0, 0, 0.6);
+  --dock-line: rgba(0, 0, 0, 0.2);
 }
 
 .dark {
   color-scheme: dark;
-  --canvas: oklch(0.16 0 0);
-  --background: oklch(0.19 0 0);
-  --foreground: oklch(0.97 0 0);
-  --card: oklch(0.19 0 0);
-  --card-foreground: oklch(0.97 0 0);
-  --popover: oklch(0.19 0 0);
-  --popover-foreground: oklch(0.97 0 0);
-  --primary: oklch(0.97 0 0);
-  --primary-foreground: oklch(0.16 0 0);
-  --secondary: oklch(0.27 0 0);
-  --secondary-foreground: oklch(0.97 0 0);
-  --muted: oklch(0.27 0 0);
-  --muted-foreground: oklch(0.64 0 0);
-  --accent: oklch(0.25 0 0);
-  --accent-foreground: oklch(0.97 0 0);
-  --destructive: oklch(0.75 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 10%);
-  --ring: oklch(0.97 0 0 / 35%);
-  --chart-1: oklch(0.9 0 0);
-  --chart-2: oklch(0.74 0 0);
-  --chart-3: oklch(0.58 0 0);
-  --chart-4: oklch(0.44 0 0);
-  --chart-5: oklch(0.32 0 0);
-  --radius: 0.875rem;
-  --float: none;
-  --dot: transparent;
-  --sidebar: oklch(0.19 0 0);
-  --sidebar-foreground: oklch(0.97 0 0);
-  --sidebar-primary: oklch(0.97 0 0);
-  --sidebar-primary-foreground: oklch(0.16 0 0);
-  --sidebar-accent: oklch(0.25 0 0);
-  --sidebar-accent-foreground: oklch(0.97 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.97 0 0 / 35%);
+  --color-text-secondary: var(--color-neutral-300);
+  --color-text-tertiary: var(--color-neutral-400);
+  --color-text-placeholder: var(--color-neutral-400);
+  --color-foreground-icon-secondary: var(--color-neutral-300);
+  --color-foreground-icon-tertiary: var(--color-neutral-400);
+  --canvas: oklch(0.15 0.008 58);
+  --primary: var(--color-accent-400);
+  --primary-foreground: oklch(0.19 0.02 var(--accent-hue));
+  --destructive: var(--color-red-400);
+  --cast: oklch(0.05 0.02 50 / 55%);
+  --float: 0 1px 2px -1px var(--cast), 0 16px 38px -18px var(--cast);
+  --glass: color-mix(in srgb, var(--primary) 7%, rgba(26, 27, 31, 0.32));
+  --glass-rim: rgba(0, 0, 0, 0.45);
+  --glass-cast: 0 8px 30px rgba(0, 0, 0, 0.55);
+  --glass-shine: rgba(255, 255, 255, 0.12);
+  --dock-dot: rgba(255, 255, 255, 0.6);
+  --dock-line: rgba(255, 255, 255, 0.2);
+}
+
+/* Tailwind expands a shadow utility at build time; under .dark it reads the
+   dark elevation again, so a card's shadow is the dark one without a
+   dark: on every card. */
+.dark .shadow-xs {
+  --tw-shadow: var(--shadow-xs);
+}
+.dark .shadow-sm {
+  --tw-shadow: var(--shadow-sm);
+}
+.dark .shadow-md {
+  --tw-shadow: var(--shadow-md);
+}
+.dark .shadow-lg {
+  --tw-shadow: var(--shadow-lg);
+}
+.dark .shadow-xl {
+  --tw-shadow: var(--shadow-xl);
+}
+.dark .shadow-card {
+  --tw-shadow: var(--shadow-card);
+}
+.dark .shadow-dropdown {
+  --tw-shadow: var(--shadow-dropdown);
+}
+.dark .shadow-sidebar {
+  --tw-shadow: var(--shadow-sidebar);
+}
+
+/* A page crosses to the next the way BoardUI's parts arrive: the one
+   leaving fades fast, the one arriving condenses in from a little
+   smaller and a little blurred. Every link in a window is a page of its
+   own, so this is what a click feels like there. */
+@view-transition {
+  navigation: auto;
+}
+/* The page that was stays whole under the one arriving, so nothing behind
+   either shows through the change. */
+@keyframes page-out {
+  to {
+    opacity: 1;
+  }
+}
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: scale(0.985);
+    filter: blur(2px);
+  }
+}
+::view-transition-old(root) {
+  animation: 120ms ease-in both page-out;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: 220ms cubic-bezier(0.22, 1, 0.36, 1) both page-in;
+  mix-blend-mode: normal;
+}
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+/* The look changes from the point the person clicked, as one soft circle;
+   the crossfade would fight it. Colour transitions hold still while the
+   next look is captured, so the circle holds the finished palette and
+   not a frame still fading. */
+.theme-transitioning::view-transition-old(root),
+.theme-transitioning::view-transition-new(root) {
+  animation: none;
+}
+.theme-transitioning::view-transition-old(root) {
+  z-index: 1;
+}
+.theme-transitioning::view-transition-new(root) {
+  z-index: 2;
+}
+.theme-transitioning,
+.theme-transitioning * {
+  transition: none !important;
+}
+
+/* A running agent's line shimmers. */
+@keyframes ai-chat-text-shimmer {
+  from {
+    background-position: 200% center;
+  }
+  to {
+    background-position: -100% center;
+  }
+}
+.agent-progress-loading-text {
+  color: transparent;
+  background-image: linear-gradient(
+    100deg,
+    var(--color-text-secondary) 16%,
+    var(--color-text-secondary) 38%,
+    var(--color-text-primary) 50%,
+    var(--color-text-secondary) 62%,
+    var(--color-text-secondary) 84%
+  );
+  background-position: 200% center;
+  background-size: 300% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  animation: ai-chat-text-shimmer 3.4s linear infinite;
+  will-change: background-position;
+}
+@media (prefers-reduced-motion: reduce) {
+  .agent-progress-loading-text {
+    color: var(--color-text-secondary);
+    background-image: none;
+    animation: none;
+  }
+}
+details summary::-webkit-details-marker {
+  display: none;
 }
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border-button-default outline-ring/50;
   }
   body {
     @apply bg-canvas text-foreground;
   }
   html {
-    @apply font-sans;
+    @apply font-sans antialiased;
+    font-variant-ligatures: contextual;
+    font-kerning: normal;
   }
-  /* The one type spec: 14 on 20, tracked in very slightly. On body and not
-     the root, where a smaller size would resize every rem in the product. */
+  /* A phone holds still. Dragging past the end of a page does not drag the
+     page itself, a touch does not flash a grey box over what it touched,
+     and what is held is held rather than selected. */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+  body {
+    -webkit-tap-highlight-color: transparent;
+  }
+  /* The body's size: 14 on 20, tracked in very slightly. On body and not the
+     root, where a smaller size would resize every rem in the product. */
   body {
     font-size: 14px;
     line-height: 20px;
     letter-spacing: -0.0064em;
   }
-  /* Nothing sets its own size; the few that ask for one in the markup are
-     answered by the scale above. Weight and colour carry the hierarchy. */
-  :is(h1, h2, h3, h4, h5, h6) {
-    font-size: 14px;
-    line-height: 20px;
-  }
-  [data-slot="button"] {
-    @apply rounded-full;
-  }
 }
 
-/* A page framed as a window in the room is only its own content, set in
-   from the window's edge by one even margin: the dock, the developer's
-   tools and the room's own spacing belong to the room around it; a title
-   that only repeats the window's is not shown; a card that is the whole
-   window, and the brain's rail of views, need no frame of their own; and
-   the brain's rail is not shown at all in a window that is one record or
-   the types, nor is the room it would take. */
+/* A page framed as a window in the room is the window's own content,
+   flush to its frame: the room's spacing, the dock and the developer's
+   tools belong to the room around it; a title that only repeats the
+   window's is not shown; a sheet that is the whole page and the brain's
+   rail lose the card edges they wear on a page of their own and lie on
+   the window's glass; and the brain's rail is not shown at all in a
+   window that is one record or the types, nor is the room it would take. */
 html[data-framed],
 html[data-framed] body {
   height: 100%;
   min-height: 0;
+  background: transparent;
 }
 html[data-framed] body {
   padding: 0 !important;
 }
 html[data-framed] main {
   box-sizing: border-box;
-  padding: 0.75rem;
+  padding: 0;
+  height: 100%;
+  min-height: 100%;
+  overflow-y: auto;
+  /* Paper to the frame's edge whatever the page holds, however short:
+     the window's glass is never seen through its content. A page with
+     a rail of its own beside the content keeps the rail on the glass. */
+  background: var(--color-background-full);
+}
+html[data-framed] main:has(> .brain-layout),
+html[data-framed] main:has(> * > nav[aria-label="Shells"]),
+html[data-framed] main:has(> nav[aria-label="Shells"]) {
+  background: transparent;
 }
 html[data-framed] .app-dev-toolbar {
   display: none !important;
@@ -248,20 +436,497 @@ html[data-framed] .page-title {
   white-space: nowrap;
   border-width: 0;
 }
-html[data-framed] main > [data-slot="card"],
+html[data-framed] .page-sheet,
+html[data-framed] main > [data-slot="card"] {
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  background: var(--color-background-full);
+  min-height: 100%;
+}
+html[data-framed] .page-sheet > .sticky {
+  border-radius: 0;
+  background: var(--color-background-full);
+}
+html[data-framed] .brain-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+}
+@media (min-width: 768px) {
+  html[data-framed] .brain-layout {
+    display: grid;
+    grid-template-columns: 16.25rem minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr);
+  }
+}
 html[data-framed] .brain-nav {
-  box-shadow: none !important;
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-separator-border);
+  box-shadow: none;
+  background: color-mix(
+    in srgb,
+    var(--color-background-secondary-default) 55%,
+    transparent
+  );
+  min-height: 0;
+  overflow: auto;
+}
+@media (min-width: 768px) {
+  html[data-framed] .brain-nav {
+    border-bottom: 0;
+    border-right: 1px solid var(--color-separator-border);
+  }
+}
+html[data-framed] .brain-layout > main {
+  margin-top: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 html[data-framed] .brain-nav[data-away] {
   display: none;
 }
+/* A brain page whose content is a card on a ground, rather than the ground
+   itself, keeps its gutter inside a window as it has one on a page. */
+html[data-framed] .brain-inset {
+  padding: 12px;
+}
+/* With no rail beside it the page is the window: the scroll is the
+   layout's, and the page fills it rather than ending part-way down. */
 html[data-framed] .brain-layout:has(.brain-nav[data-away]) {
   display: block;
-  height: 100%;
+  overflow-y: auto;
 }
 html[data-framed] .brain-layout:has(.brain-nav[data-away]) > main {
-  height: 100%;
-  margin-top: 0;
+  min-height: 100%;
+  overflow: visible;
+}
+html[data-framed] .prefs {
+  margin: 0;
+  min-height: 100%;
+}
+html[data-framed] .prefs-grid,
+html[data-framed] .prefs-pane {
+  flex: 1 0 auto;
+  background: var(--color-background-full);
+}
+
+/* The accent a person picked in Settings, set on the root before paint. */
+html[data-accent="red"] {
+  --accent-hue: 22;
+  --accent-chroma: 0.17;
+}
+html[data-accent="pink"] {
+  --accent-hue: 350;
+  --accent-chroma: 0.16;
+}
+html[data-accent="purple"] {
+  --accent-hue: 305;
+  --accent-chroma: 0.15;
+}
+html[data-accent="blue"] {
+  --accent-hue: 255;
+  --accent-chroma: 0.15;
+}
+html[data-accent="teal"] {
+  --accent-hue: 200;
+  --accent-chroma: 0.11;
+}
+html[data-accent="green"] {
+  --accent-hue: 150;
+  --accent-chroma: 0.13;
+}
+html[data-accent="graphite"] {
+  --accent-hue: 60;
+  --accent-chroma: 0.012;
+}
+
+/* The glass every surface of the chrome is made of: whatever is truly
+   behind it shows through, frosted and bent at the edges, under a rim of
+   light. Clear glass for the dock, which holds only icons; solid glass
+   for anything with words on it, which keeps most of its own colour. */
+.glass,
+.glass-solid,
+.glass-sheet,
+.glass-pane {
+  border: 0.5px solid var(--glass-rim);
+  /* What a surface casts is the surface's to say: a widget lies on the
+     desk and casts nothing, a window casts the shallow shadow and the one
+     in front wears a deeper one over it. */
+  box-shadow:
+    var(--pane-cast, var(--glass-cast)),
+    inset 0 1px 0 var(--glass-shine),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+.glass {
+  background: var(--glass);
+  /* Enough blur to frost: at 3px the wallpaper read straight through and
+     the shelf was a slab of its own colour. */
+  -webkit-backdrop-filter: url(#glass-bend) blur(18px) saturate(170%);
+  backdrop-filter: url(#glass-bend) blur(18px) saturate(170%);
+}
+.glass-solid {
+  background: color-mix(in srgb, var(--popover) 78%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(185%) url(#glass-bend);
+  backdrop-filter: blur(22px) saturate(185%) url(#glass-bend);
+}
+/* A sheet: the same glass as a menu, without the bend, which is drawn on
+   the CPU over everything behind it and costs by the pixel. Dialogs,
+   alert dialogs and sheets are too big to bend and keep their frames. */
+.glass-sheet {
+  background: color-mix(in srgb, var(--popover) 78%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(185%);
+  backdrop-filter: blur(22px) saturate(185%);
+}
+/* A window's frame: the same solid glass without the bend, since the
+   bend is drawn on the CPU over the whole backdrop and a window is most
+   of the screen; frost alone the GPU does for nothing. */
+.glass-pane {
+  background: color-mix(in srgb, var(--popover) 78%, transparent);
+  -webkit-backdrop-filter: blur(22px) saturate(185%);
+  backdrop-filter: blur(22px) saturate(185%);
+}
+
+/* The dock's shelf: clear glass, lifted a little off the edge. */
+.mac-dock-surface {
+  border-radius: 16px;
+}
+
+/* The menu bar: clear, the wallpaper showing through, the words plain. */
+.mac-top-menubar {
+  height: calc(25px + env(safe-area-inset-top));
+  background: transparent;
+  user-select: none;
+  -webkit-user-select: none;
+  font-weight: 500;
+}
+
+/* Settings, as ryOS lays out its control panels: a toolbar, a grid of
+   panes in bands, a search that dims all but what matches, and one pane
+   at a time with its rows. The bones are ryOS's; every part is BoardUI's. */
+.prefs {
+  --prefs-line: var(--color-separator-border);
+  /* One width for everything a person reads: the grid's marks and a
+     pane's wells centre on it, however wide the window is. */
+  --prefs-width: 720px;
+  --prefs-inset: 16px;
+  --prefs-scrim: color-mix(in srgb, var(--color-neutral-950) 34%, transparent);
+  /* The surface owns the whole body box, so no ground of the page's shows
+     above, beside or below it. */
+  margin: -1.5rem -1.5rem -7rem;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-background-full);
+  color: var(--color-text-primary);
+}
+.dark .prefs {
+  --prefs-scrim: color-mix(in srgb, var(--color-neutral-950) 62%, transparent);
+}
+/* The toolbar is a solid band, not a window's glass: the pane scrolls
+   under it, so it needs a ground of its own. */
+.prefs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px var(--prefs-inset);
+  background: var(--color-background-full);
+  border-bottom: 1px solid var(--prefs-line);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+.prefs-toolbar-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+/* The controls keep their width; only the pane's name gives way, and it
+   truncates. */
+.prefs-toolbar-nav > div {
+  flex-shrink: 0;
+}
+.prefs-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* 240 where there is room, and never under 120, so a phone's toolbar
+     still holds Back, Forward and Show All whole. */
+  flex: 0 1 240px;
+  min-width: 120px;
+}
+.prefs-search-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  z-index: 50;
+  min-width: 200px;
+  max-width: 280px;
+  max-height: calc(36px * 5.5 + 20px);
+  transform-origin: top right;
+  animation: prefs-menu-in var(--transition-duration-fast) var(--ease-out-quart);
+}
+@keyframes prefs-menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+    filter: blur(2px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0);
+  }
+}
+
+.prefs-grid {
+  position: relative;
+  padding: 0 var(--prefs-inset) var(--prefs-inset);
+  flex: 1;
+}
+/* A band spans the window; what is written on it centres with everything
+   else, so a wide window has no dead half. */
+.prefs-section {
+  position: relative;
+  margin: 0 calc(-1 * var(--prefs-inset));
+  padding: 12px var(--prefs-inset);
+}
+.prefs-section > * {
+  max-width: var(--prefs-width);
+  margin-inline: auto;
+}
+.prefs-section:not(:first-of-type) {
+  border-top: 1px solid var(--prefs-line);
+}
+.prefs-section:nth-of-type(even) {
+  background: var(--color-background-secondary-default);
+}
+.prefs-section-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 84px);
+  gap: 8px;
+  justify-items: center;
+  align-items: start;
+}
+.prefs-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: 84px;
+  padding: 8px 0;
+  border-radius: var(--radius-2lg);
+  text-align: center;
+  outline: none;
+  transition: background-color var(--transition-duration-fast) var(--ease-plain);
+}
+@media (hover: hover) and (pointer: fine) {
+  .prefs-item:hover {
+    background: var(--color-background-primary-hover);
+  }
+  .prefs-section:nth-of-type(even) .prefs-item:hover {
+    background: var(--color-background-secondary-hover);
+  }
+}
+.prefs-item:focus-visible {
+  outline: 2px solid var(--color-border-focus-ring);
+  outline-offset: 2px;
+}
+/* The mark sits on a disc, as BoardUI's settings rail draws its marks: a
+   secondary disc on the plain band, a primary one on the tinted band. */
+.prefs-item-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-2lg);
+  background: var(--color-background-secondary-default);
+  color: var(--color-foreground-icon-primary);
+  z-index: 1;
+  transition:
+    background-color var(--transition-duration-fast) var(--ease-plain),
+    filter var(--transition-duration-fast) var(--ease-plain);
+}
+.prefs-section:nth-of-type(even) .prefs-item-mark {
+  background: var(--color-stat-card-icon-background);
+  box-shadow: var(--shadow-card);
+}
+.prefs-item:active .prefs-item-mark {
+  filter: brightness(0.92);
+}
+.prefs-item-label {
+  min-height: 2.4em;
+  z-index: 1;
+}
+
+/* A search dims the grid; the panes that match punch through, the one
+   under the hand brightest. */
+.prefs-grid[data-searching]::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: var(--prefs-scrim);
+  pointer-events: none;
+  animation: prefs-scrim-in var(--transition-duration-fast)
+    var(--ease-out-quart);
+}
+.prefs-grid[data-searching] .prefs-item[data-hit] {
+  position: relative;
+  z-index: 2;
+}
+.prefs-item[data-hit] .prefs-item-mark::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 56px;
+  height: 56px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  /* The accent is what a person is meant to look at, so a match glows in
+     it, and the one under the hand glows brighter. */
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-accent-500) 42%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent-500) 42%, transparent) 64%,
+    transparent 86%
+  );
+  z-index: -1;
+  animation: prefs-spot-in var(--transition-duration-base) var(--ease-out-quart);
+}
+.prefs-item[data-lit] .prefs-item-mark::before {
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--color-accent-500) 78%, transparent) 0%,
+    color-mix(in srgb, var(--color-accent-500) 78%, transparent) 64%,
+    transparent 86%
+  );
+}
+@keyframes prefs-spot-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+@keyframes prefs-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .prefs-search-menu,
+  .prefs-grid[data-searching]::before,
+  .prefs-item[data-hit] .prefs-item-mark::before {
+    animation: none;
+  }
+}
+
+/* A pane: its wells, one below another, centred however wide the window
+   is. */
+.prefs-pane {
+  padding: 20px 20px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  flex: 1;
+}
+.prefs-pane > * {
+  width: 100%;
+  max-width: var(--prefs-width);
+  margin-inline: auto;
+}
+
+/* Under reduced motion the travel goes and the meaning stays: a menu or a
+   dialog still fades, but does not scale or blur; nothing pulses. */
+@media (prefers-reduced-motion: reduce) {
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="context-menu-content"],
+  [data-slot="menubar-content"],
+  [data-slot="popover-content"],
+  [data-slot="select-content"],
+  [data-slot="tooltip-content"] {
+    transition-property: opacity;
+  }
+  [data-slot="dialog-content"][data-starting-style],
+  [data-slot="dialog-content"][data-ending-style],
+  [data-slot="alert-dialog-content"][data-starting-style],
+  [data-slot="alert-dialog-content"][data-ending-style],
+  [data-slot="dropdown-menu-content"][data-starting-style],
+  [data-slot="dropdown-menu-content"][data-ending-style],
+  [data-slot="context-menu-content"][data-starting-style],
+  [data-slot="context-menu-content"][data-ending-style],
+  [data-slot="menubar-content"][data-starting-style],
+  [data-slot="menubar-content"][data-ending-style],
+  [data-slot="popover-content"][data-starting-style],
+  [data-slot="popover-content"][data-ending-style],
+  [data-slot="select-content"][data-starting-style],
+  [data-slot="select-content"][data-ending-style],
+  [data-slot="tooltip-content"][data-starting-style],
+  [data-slot="tooltip-content"][data-ending-style] {
+    scale: 1;
+    filter: none;
+  }
+  .animate-pulse {
+    animation: none;
+    opacity: 0.7;
+  }
+}
+
+/* A phone: the picker under Settings reads as a list, one pane wide, not
+   a grid of icons there is no room to lay out. */
+@media (max-width: 639.98px) {
+  /* Every menu — a window's, the desk's, the dock's, a row's — is a sheet
+     up from the bottom edge, where a thumb is, rather than a card beside
+     what was pressed. The positioner places itself in the page, so the
+     one thing that has to win here is where it sits. */
+  [data-phone-sheet] {
+    position: fixed !important;
+    inset: auto 0 0 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    transform: none !important;
+    translate: none !important;
+  }
+  [data-phone-sheet] > * {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  .prefs-section-grid {
+    grid-template-columns: 1fr;
+    justify-items: stretch;
+  }
+  .prefs-item {
+    width: 100%;
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+    min-height: 44px;
+  }
+  .prefs-item-label {
+    display: flex;
+    align-items: center;
+    min-height: 0;
+  }
 }
 
 /* Another person's caret in a record's body, with their name on it. The

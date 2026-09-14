@@ -18,6 +18,10 @@ export type Card = {
   y: number;
   w: number;
   h: number;
+  // Put away in the dock, keeping the place it will come back to.
+  stowed?: boolean;
+  // On the desk itself, behind every window and with no bar: a widget.
+  pinned?: boolean;
 };
 
 // A desk: the windows on it, in the order they stack. A desk is the size
@@ -60,12 +64,4 @@ export async function saveDesktop(
     [id, layout === null ? null : JSON.stringify(layout)],
   );
   return rows[0] ?? null;
-}
-
-// Takes a desk away. Whether there was one.
-export async function removeDesktop(q: Query, id: string): Promise<boolean> {
-  const { rowCount } = await q.query("delete from desktops where id = $1", [
-    id,
-  ]);
-  return (rowCount ?? 0) > 0;
 }

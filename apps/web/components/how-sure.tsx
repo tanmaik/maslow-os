@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 
-import { Label } from "@/components/ui/label";
-import { Slider } from "@/components/ui/slider";
+import { Slider } from "@/components/base/slider/slider";
 
-// A percentage picked on a slider, read out beside it, posted as one input.
-// Given no value, it posts nothing until it is moved.
+// A percentage picked on a slider, read out above its thumb, posted as one
+// input. Given no value, it posts nothing until it is moved.
 export function HowSure({
   id,
   name,
@@ -18,32 +17,24 @@ export function HowSure({
 }) {
   const [value, setValue] = useState(defaultValue ?? 100);
   const [touched, setTouched] = useState(false);
-  const labelId = `${id}-label`;
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <Label id={labelId} htmlFor={id}>
-          How sure
-        </Label>
-        <span className="text-muted-foreground text-sm tabular-nums">
-          {value}%
-        </span>
-      </div>
+    <div id={id}>
       <input
         type="hidden"
         name={name}
         value={touched || defaultValue !== null ? value : ""}
       />
       <Slider
-        id={id}
-        aria-labelledby={labelId}
-        min={0}
-        max={100}
+        label="How sure"
+        thumbLabel="How sure"
+        minValue={0}
+        maxValue={100}
         step={5}
-        value={[value]}
-        onValueChange={(v) => {
+        value={value}
+        formatValue={(v) => `${v}%`}
+        onChange={(v) => {
           setTouched(true);
-          setValue(Array.isArray(v) ? (v[0] ?? 0) : v);
+          setValue(v);
         }}
       />
     </div>

@@ -20,6 +20,6 @@ export async function POST(request: Request) {
     return new Response("Your computer is not ready.", { status: 409 });
   return new Response(null, {
     status: 303,
-    headers: { location: "/computer" },
+    headers: { location: "/settings?pane=computer" },
   });
 }

@@ -1,18 +1,17 @@
 import { orgs } from "@maslow/db/seed";
 import type { ReactNode } from "react";
 
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { LockScreen, type Made } from "@/components/lock-screen";
 import { deployment } from "@/lib/deployment";
 import { pendingFlow } from "@/lib/session";
 
 // What the last leg of a sign-in left to say, by the query it redirected
-// with.
+// with. `orgs` is not a notice: it says the person who just signed in has
+// more than one org to land in.
 export type Notice = {
   email?: "slow" | "rejected";
   code?: "wrong" | "locked";
+  orgs?: string;
 };
 
 const NOTICES = {
@@ -30,137 +29,86 @@ export function notice(n: Notice): string | null {
   return null;
 }
 
-// A way in. Given somewhere to go next, the sign-in comes back there when it
-// is done; otherwise it lands home.
+// The seeded people, as the development way in lists them. A person can be
+// a member of two orgs, and on a card that shows only a name and an address
+// they read as the same row twice; theirs says which org it is for.
+function made(): Made[] {
+  const seen = new Map<string, number>();
+  for (const org of orgs)
+    for (const u of org.users) seen.set(u.email, (seen.get(u.email) ?? 0) + 1);
+  return orgs.map((org) => ({
+    org: org.name,
+    people: org.users.map((u) => ({
+      id: u.id,
+      name: `${u.firstName} ${u.lastName}`,
+      email:
+        (seen.get(u.email) ?? 0) > 1 ? `${u.email} · ${org.name}` : u.email,
+    })),
+  }));
+}
+
+// A way in: the lock screen, on whichever leg the sign-in is on. Given
+// somewhere to go next, it comes back there when it is done; otherwise it
+// lands home. `because` says what asked for it, for a person who arrived
+// here from somewhere they did not choose.
 export async function SignIn({
   said,
   next,
+  because,
 }: {
   said: string | null;
   next?: string;
+  because?: ReactNode;
 }) {
-  const { identity } = deployment;
-  const onward = next && <input type="hidden" name="next" value={next} />;
+  const emails = deployment.identity.kind === "workos";
+  const flow = emails ? await pendingFlow() : null;
+  return (
+    <LockScreen
+      step={flow ? "code" : "who"}
+      email={flow?.email}
+      said={said}
+      locked={said === NOTICES["code=locked"]}
+      next={next}
+      because={because}
+      emails={emails}
+      noMail={deployment.mail.kind === "none"}
+      made={deployment.seededSignIn ? made() : undefined}
+    />
+  );
+}
 
-  if (identity.kind === "workos") {
-    const flow = await pendingFlow();
-    const email = flow?.email ?? null;
-    return (
-      <Door>
-        {email ? (
-          <>
-            {deployment.mail.kind === "none" ? (
-              <p className="text-muted-foreground border-l-2 pl-3 text-sm">
-                No mail is configured: the code for {email} is in the server's
-                terminal.
-              </p>
-            ) : (
-              <p>
-                Enter the six-digit code sent to{" "}
-                <span className="font-medium">{email}</span>.
-              </p>
-            )}
-            <form action="/auth/code" method="post" className="flex gap-2">
-              <Input
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                pattern="[0-9]{6}"
-                required
-                autoFocus
-                placeholder="000000"
-                className="max-w-32"
-              />
-              <Button type="submit">Continue</Button>
-            </form>
-            {said && <p className="text-destructive text-sm">{said}</p>}
-            <form action="/auth/restart" method="post">
-              {onward}
-              <Button variant="link" size="sm" type="submit" className="px-0">
-                Use a different email
-              </Button>
-            </form>
-          </>
-        ) : (
-          <>
-            <p className="text-muted-foreground">
-              We&apos;ll email you a six-digit code. No password, no account to
-              make.
+// Every step of the way in that is not the lock screen, as one card in the
+// middle of the page: a title, a line under it, and what to do. The app
+// asking in and the request that cannot be answered are both this shape and
+// this width.
+export function Door({
+  title,
+  description,
+  because,
+  children,
+}: {
+  title: ReactNode;
+  description: ReactNode;
+  because?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    // The page's own content box, less the gutters the layout keeps: the
+    // card sits in the middle of it and the page never scrolls. A card
+    // taller than that scrolls within the page, top first.
+    <main className="h-[calc(100dvh-8.5rem)] overflow-y-auto">
+      <div className="flex min-h-full items-center justify-center px-4 py-6">
+        <div className="flex w-full max-w-md flex-col gap-4 rounded-3xl border border-border-button-default bg-background-primary-default p-6 shadow-card">
+          <div className="flex flex-col gap-1.5">
+            <h1 className="text-title-2-medium text-text-primary">{title}</h1>
+            <p className="text-body-regular text-text-secondary">
+              {because ? <>{because} </> : null}
+              {description}
             </p>
-            {said && <p className="text-destructive text-sm">{said}</p>}
-            <form action="/auth/email" method="post" className="flex gap-2">
-              {onward}
-              <Input
-                name="email"
-                type="email"
-                required
-                autoFocus
-                placeholder="you@example.com"
-              />
-              <Button type="submit">Continue</Button>
-            </form>
-          </>
-        )}
-        <Seeded next={next} />
-      </Door>
-    );
-  }
-
-  return (
-    <Door>
-      <p className="text-muted-foreground">
-        No identity provider is configured. Sign in as one of the seeded people.
-      </p>
-      {said && <p className="text-destructive text-sm">{said}</p>}
-      <Seeded next={next} />
-    </Door>
-  );
-}
-
-// The way in without an email, outside production: pick one of the seeded
-// people. Impossible in production, where the route behind it is not there
-// at all, and marked here so nobody mistakes it for the real door.
-function Seeded({ next }: { next?: string }) {
-  if (!deployment.seededSignIn) return null;
-  return (
-    <div className="space-y-3">
-      <Alert>
-        <AlertTitle>Not the real sign-in</AlertTitle>
-        <AlertDescription>
-          These people are made up, and this way in does not exist in
-          production.
-        </AlertDescription>
-      </Alert>
-      {orgs.map((org) => (
-        <div key={org.id} className="space-y-1">
-          <p className="text-muted-foreground text-sm">{org.name}</p>
-          <div className="flex flex-wrap gap-2">
-            {org.users.map((u) => (
-              <form key={u.id} action="/auth/dev" method="post">
-                <input type="hidden" name="user" value={u.id} />
-                {next && <input type="hidden" name="next" value={next} />}
-                <Button variant="outline" size="sm" type="submit">
-                  {u.firstName} {u.lastName}
-                </Button>
-              </form>
-            ))}
           </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// The sign-in, as one card in the middle of the page.
-function Door({ children }: { children: ReactNode }) {
-  return (
-    <main className="mx-auto max-w-md pt-[12dvh]">
-      <Card className="shadow-float ring-0">
-        <CardContent className="space-y-4 px-6 py-2">
-          <h1 className="font-semibold">Sign in</h1>
           {children}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </main>
   );
 }

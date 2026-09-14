@@ -1,0 +1,18 @@
+# How Claude Code starts on this computer, whichever door it comes
+# through: on the auth `auth` chose, read at every start so a switch takes
+# at once, told which in MASLOW_AUTH, and from the person's own copy where
+# they have one. Sourced, never run; never returns.
+start() {
+  local name=$1
+  shift
+  . /opt/maslow/bin/auth-env
+  # A session of ours has nothing to run on where the machine holds no key
+  # of ours, and never runs on what the person provided instead.
+  if [ "${MASLOW_AUTH:-}" = managed ] && [ -z "${MASLOW_MODEL_KEY:-}" ]; then
+    echo "This computer holds no key of Maslow's, so a session of Maslow's cannot run here." >&2
+    exit 78
+  fi
+  export MASLOW_AUTH="$maslow_auth"
+  . /opt/maslow/bin/theirs
+  exec "$(theirs "$name" "/opt/maslow/node_modules/.bin/$name")" "$@"
+}

@@ -1,11 +1,11 @@
 // Seeds ours into a file of the person's and keeps it current: an entry
 // the person has not touched follows the image, one they changed or
-// removed is theirs. One seed: the MCP servers Claude Code knows, the
-// browser and the brain. Two halves: as root, the record of every set of
-// defaults the image ever gave, kept beside the disk's root out of their
-// Linux, and whether each was written; as the person, the file itself, so
-// nothing they put in their home can reach past it. Nothing here stops
-// the boot.
+// removed is theirs. Two seeds: the MCP servers Claude Code knows, the
+// browser and the brain; and how it asks before it acts, which starts in
+// auto. Two halves: as root, the record of every set of defaults the
+// image ever gave, kept beside the disk's root out of their Linux, and
+// whether each was written; as the person, the file itself, so nothing
+// they put in their home can reach past it. Nothing here stops the boot.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -17,6 +17,12 @@ const SEEDS = {
     memo: "/data/.mcp-seeded.json",
     at: "mcpServers",
   },
+  settings: {
+    file: ".claude/settings.json",
+    ours: "/opt/maslow/etc/settings.json",
+    memo: "/data/.settings-seeded.json",
+    at: "permissions",
+  },
 };
 
 const [, self, home, name, role] = process.argv;
@@ -24,6 +30,13 @@ const seed = SEEDS[name];
 const file = path.join(home, seed.file);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 const object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
+
+// What a default names but only the machine knows, filled in before it is
+// given: what is written is what is used, since nothing reads it later.
+const filled = (v) =>
+  typeof v === "string"
+    ? v.replace(/\$\{(\w+)\}/g, (whole, name) => process.env[name] ?? whole)
+    : v;
 
 if (role === "as-me") theirs();
 else give();
@@ -33,7 +46,9 @@ else give();
 // says it was written only once it was, so a key never written is not
 // taken for one the person removed.
 function give() {
-  const ours = JSON.parse(fs.readFileSync(seed.ours, "utf8"));
+  const ours = JSON.parse(fs.readFileSync(seed.ours, "utf8"), (_, v) =>
+    filled(v),
+  );
   // The brain is reached only where our server gave the machine its
   // address; a laptop's app is out of a machine's reach.
   if (name === "mcp" && !process.env.BRAIN_URL) delete ours.brain;

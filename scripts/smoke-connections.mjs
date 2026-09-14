@@ -13,7 +13,8 @@ export async function smokeConnections(stack, signIn) {
     );
     ok &&= pass;
   };
-  const settings = async (cookie, query = "") =>
+  // The connected-apps pane of settings, unless another query is asked.
+  const settings = async (cookie, query = "?pane=apps") =>
     (
       await fetch(`${stack.url}/settings${query}`, { headers: { cookie } })
     ).text();

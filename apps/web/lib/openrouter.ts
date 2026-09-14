@@ -5,6 +5,18 @@ import { deployment } from "./deployment.ts";
 // machine. No SDK.
 export type MintedKey = { key: string; hash: string };
 
+// What a key has spent, in dollars, and the ceiling it spends against.
+export type Spend = {
+  usage: number;
+  week: number;
+  limit: number | null;
+  // How often the ceiling resets: "weekly", "monthly", or null for none.
+  every: string | null;
+};
+
+// A day's spend on one model, through one key.
+export type Called = { day: string; model: string; usd: number };
+
 function config() {
   const m = deployment.models;
   if (m.kind !== "openrouter") throw new Error("Model keys are off here.");
@@ -16,7 +28,7 @@ async function call<T>(
   path: string,
   body?: unknown,
 ): Promise<T> {
-  const res = await fetch(`https://openrouter.ai/api/v1/keys${path}`, {
+  const res = await fetch(`https://openrouter.ai/api/v1${path}`, {
     method,
     headers: {
       authorization: `Bearer ${config().provisioningKey}`,
@@ -35,20 +47,56 @@ async function call<T>(
 
 export const openrouter = {
   // A key named for the environment and the person, capped in dollars a
-  // month. The key itself is answered once, here; after that only its hash.
+  // week. The key itself is answered once, here; after that only its hash.
   async mint(name: string, capUsd: number): Promise<MintedKey> {
-    const r = await call<{ key: string; data: { hash: string } }>("POST", "", {
-      name,
-      limit: capUsd,
-      limit_reset: "monthly",
-    });
+    const r = await call<{ key: string; data: { hash: string } }>(
+      "POST",
+      "/keys",
+      { name, limit: capUsd, limit_reset: "weekly" },
+    );
     return { key: r.key, hash: r.data.hash };
   },
 
-  // What the key has spent, in dollars, since it was made.
-  async spent(hash: string): Promise<number> {
-    const r = await call<{ data: { usage: number } }>("GET", `/${hash}`);
-    return r.data.usage;
+  // What the key has spent, in dollars, since it was made and since the
+  // week turned, with the ceiling it carries. OpenRouter's weekly window
+  // turns on Monday at 00:00 UTC.
+  async spent(hash: string): Promise<Spend> {
+    const r = await call<{
+      data: {
+        usage: number;
+        usage_weekly: number;
+        limit: number | null;
+        limit_reset: string | null;
+      };
+    }>("GET", `/keys/${hash}`);
+    return {
+      usage: r.data.usage,
+      week: r.data.usage_weekly,
+      limit: r.data.limit,
+      every: r.data.limit_reset,
+    };
+  },
+
+  // The key's ceiling, in dollars a week, set again.
+  async cap(hash: string, capUsd: number): Promise<void> {
+    await call("PATCH", `/keys/${hash}`, {
+      limit: capUsd,
+      limit_reset: "weekly",
+    });
+  },
+
+  // What one key spent on each model on each day: OpenRouter's own
+  // activity, for the key asked for, over the last thirty days. It runs a
+  // day behind, so today's calls appear tomorrow.
+  async activity(hash: string): Promise<Called[]> {
+    const r = await call<{
+      data: { date: string; model: string; usage: number }[];
+    }>("GET", `/activity?api_key_hash=${hash}`);
+    return r.data.map((a) => ({
+      day: a.date.slice(0, 10),
+      model: a.model,
+      usd: a.usage,
+    }));
   },
 
   // Every key of the account, by name and hash: the vendor's own list,
@@ -59,7 +107,7 @@ export const openrouter = {
     for (let offset = 0; ; offset += 100) {
       const r = await call<{
         data: { name: string; hash: string; created_at: string }[];
-      }>("GET", `?include_disabled=false&offset=${offset}`);
+      }>("GET", `/keys?include_disabled=false&offset=${offset}`);
       for (const k of r.data)
         keys.push({
           name: k.name,
@@ -72,7 +120,7 @@ export const openrouter = {
 
   // Gone for good; one already gone is fine.
   async remove(hash: string): Promise<void> {
-    await call("DELETE", `/${hash}`).catch((err: Error) => {
+    await call("DELETE", `/keys/${hash}`).catch((err: Error) => {
       if (!/ answered 404:/.test(err.message)) throw err;
     });
   },

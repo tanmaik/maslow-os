@@ -2,57 +2,64 @@
 
 import type { Property } from "@maslow/brain";
 import {
-  CalendarClockIcon,
-  CalendarIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  GaugeIcon,
-  HashIcon,
-  ListIcon,
-  TagIcon,
-  TextIcon,
-  ToggleLeftIcon,
-  type LucideIcon,
-} from "lucide-react";
+  RiArrowDownSLine,
+  RiArrowUpSLine,
+  RiCalendarLine,
+  RiCalendarScheduleLine,
+  RiHashtag,
+  RiListCheck,
+  RiPriceTag3Line,
+  RiSpeedUpLine,
+  RiText,
+  RiToggleLine,
+} from "@remixicon/react";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, type ComponentType } from "react";
 
+import { SettingsCard } from "@/components/application/settings/settings-rows";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
+import { Select, SelectItem } from "@/components/base/select/select";
+import { Slider } from "@/components/base/slider/slider";
 import { DateField } from "@/components/date-field";
 import { LocalTime } from "@/components/local-time";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Slider } from "@/components/ui/slider";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { cx } from "@/utils/cx";
 
-import { cell, percent } from "../../format";
+import { cell, FIELD, percent } from "../../format";
 import { save } from "./save";
+
+type Mark = ComponentType<{
+  className?: string;
+  "aria-hidden"?: boolean | "true" | "false";
+}>;
 
 // The mark on a line, by what the field holds, so a glance says what kind
 // of thing the value is before it is read.
-const MARKS: Record<string, LucideIcon> = {
-  text: TextIcon,
-  number: HashIcon,
-  boolean: ToggleLeftIcon,
-  date: CalendarIcon,
-  datetime: CalendarClockIcon,
-  enum: TagIcon,
-  list: ListIcon,
+const MARKS: Record<string, Mark> = {
+  text: RiText,
+  number: RiHashtag,
+  boolean: RiToggleLine,
+  date: RiCalendarLine,
+  datetime: RiCalendarScheduleLine,
+  enum: RiPriceTag3Line,
+  list: RiListCheck,
 };
 
-// How many filled lines show before the rest fold, so the words are never
+// The word for a choice left empty.
+const NONE = "none";
+
+// What an unfilled line says. A field with no value is empty; how sure a
+// record is was never said, which a hand-written record legitimately is.
+const UNSAID: Record<string, string> = { "how sure": "not said" };
+
+// How many filled rows show before the rest fold, so the words are never
 // far below the title.
 const SHOWN = 5;
 
-// What a record holds beside its words, as a grid of lines: each field,
-// how sure, when it happened. The first few filled lines show; the rest,
-// and every empty one, wait behind one line that says how many more there
-// are. A line is clicked into to change it and kept as it is left.
+// What a record holds beside its words, as rows of a card: each field, how
+// sure, when it happened. The first few filled rows show; the rest, and
+// every empty one, wait behind one row that says how many more there are.
+// A row is clicked into to change it and kept as it is left.
 export function Properties({
   id,
   fields,
@@ -146,23 +153,31 @@ export function Properties({
   const undeclared = Object.keys(values).filter(
     (k) => !fields.some((f) => f.name === k),
   );
+  // A declared value as it reads. An instant is written in UTC and read
+  // in the reader's own zone, so the browser is what says the hour.
+  const shownOf = (v: unknown, f: Property) =>
+    f.datatype === "datetime" && v !== undefined && v !== null && v !== "" ? (
+      <LocalTime at={String(v)} fallback="" />
+    ) : (
+      cell(v, f)
+    );
 
-  // Every line the record could show, in the order it shows them.
-  const lines: {
+  // Every row the record could show, in the order it shows them.
+  const rows: {
     key: string;
     shown: React.ReactNode;
-    line: React.ReactNode;
+    row: React.ReactNode;
   }[] = [];
   for (const f of fields) {
-    const shown = cell(valueOf(`p.${f.name}`, values[f.name], f), f);
-    lines.push({
+    const shown = shownOf(valueOf(`p.${f.name}`, values[f.name], f), f);
+    rows.push({
       key: f.name,
       shown,
-      line: (
+      row: (
         <Line
           key={f.id}
           label={f.name}
-          mark={MARKS[f.datatype] ?? TextIcon}
+          mark={MARKS[f.datatype] ?? RiText}
           shown={shown}
           editing={editing === f.name}
           onOpen={canEdit ? () => open(f.name) : undefined}
@@ -181,24 +196,24 @@ export function Properties({
   }
   for (const k of undeclared) {
     const shown = cell(values[k]);
-    lines.push({
+    rows.push({
       key: k,
       shown,
-      line: (
-        <Line key={k} label={k} mark={TextIcon} shown={shown} editing={false} />
+      row: (
+        <Line key={k} label={k} mark={RiText} shown={shown} editing={false} />
       ),
     });
   }
   if (confidence !== null || canEdit) {
-    const shown = percent(sureShown);
-    lines.push({
+    const shown = sureShown === null ? "" : <Meter value={sureShown} />;
+    rows.push({
       key: "how sure",
       shown,
-      line: (
+      row: (
         <Line
           key="how sure"
           label="how sure"
-          mark={GaugeIcon}
+          mark={RiSpeedUpLine}
           shown={shown}
           editing={editing === "how sure"}
           onOpen={canEdit ? () => open("how sure") : undefined}
@@ -210,14 +225,14 @@ export function Properties({
     });
   }
   const whenNode = whenShown ? <LocalTime at={whenShown} /> : "";
-  lines.push({
+  rows.push({
     key: "when",
     shown: whenNode,
-    line: (
+    row: (
       <Line
         key="when"
         label="when"
-        mark={CalendarClockIcon}
+        mark={RiCalendarScheduleLine}
         shown={whenNode}
         editing={editing === "when"}
         onOpen={canEdit ? () => open("when") : undefined}
@@ -234,52 +249,66 @@ export function Properties({
     ),
   });
 
-  // A reader who cannot fill an empty line is not shown one.
-  const held = canEdit ? lines : lines.filter((l) => l.shown);
+  // A reader who cannot fill an empty row is not shown one.
+  const held = canEdit ? rows : rows.filter((r) => r.shown);
   if (!held.length) return null;
 
-  // The first few filled lines, and the one being changed, stay in view;
+  // The first few filled rows, and the one being changed, stay in view;
   // the rest fold behind how many they are.
   let filled = 0;
-  const stays = held.map((l) => {
-    if (editing === l.key) return true;
-    if (!l.shown) return false;
+  const stays = held.map((r) => {
+    if (editing === r.key) return true;
+    if (!r.shown) return false;
     filled += 1;
     return filled <= SHOWN;
   });
-  const more = stays.filter((s) => !s).length;
+  const more = stays.filter((x) => !x).length;
 
   return (
-    <dl className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] border-b pb-2 text-sm">
-      {held.map((l, i) => (unfolded || stays[i]) && l.line)}
+    <SettingsCard>
+      <dl className="contents">
+        {held.map((r, i) => (unfolded || stays[i]) && r.row)}
+      </dl>
       {more > 0 && (
-        <div className="col-span-2">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setUnfolded((u) => !u)}
-            className="text-muted-foreground h-7 justify-start px-2 font-normal"
-          >
-            {unfolded ? (
-              <>
-                <ChevronUpIcon /> Show less
-              </>
-            ) : (
-              <>
-                <ChevronDownIcon /> {more} {filled ? "more" : "fields"}
-              </>
-            )}
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="small"
+          leadingIcon={unfolded ? RiArrowUpSLine : RiArrowDownSLine}
+          onClick={() => setUnfolded((u) => !u)}
+          className="my-1 mr-2.5 self-start"
+        >
+          {unfolded ? "Show less" : `${more} ${filled ? "more" : "fields"}`}
+        </Button>
       )}
-      {trouble && <p className="text-destructive col-span-2">{trouble}</p>}
-    </dl>
+      {trouble && (
+        <p className="py-2 pr-2.5 text-body-regular text-text-error-primary">
+          {trouble}
+        </p>
+      )}
+    </SettingsCard>
   );
 }
 
-// One line: a quiet label and the value, or the control for it while it is
-// being changed, with a way to leave it as it was.
+// How sure, as a meter: a track, and as much of it as the record is sure,
+// read out beside it.
+function Meter({ value }: { value: number }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      {/* A number a person is reading, not a thing that moves. */}
+      <span className="flex h-1.5 w-24 overflow-hidden rounded-full bg-chart-track">
+        <span
+          className="h-full rounded-full bg-accent-500"
+          style={{ width: `${Math.round(value * 100)}%` }}
+        />
+      </span>
+      <span className="tabular-nums">{percent(value)}</span>
+    </span>
+  );
+}
+
+// One row: a quiet label with its mark, and the value at the right, or the
+// control for it while it is being changed, with a way to leave it as it
+// was.
 function Line({
   label,
   mark: Mark,
@@ -290,7 +319,7 @@ function Line({
   children,
 }: {
   label: string;
-  mark: LucideIcon;
+  mark: Mark;
   shown: React.ReactNode;
   editing: boolean;
   onOpen?: () => void;
@@ -298,42 +327,47 @@ function Line({
   children?: React.ReactNode;
 }) {
   return (
-    <div
-      className={`col-span-2 grid grid-cols-subgrid items-baseline rounded-lg py-0.5 ${
-        editing ? "" : "hover:bg-muted/40"
-      }`}
-    >
-      <dt className="text-muted-foreground flex min-w-0 items-center gap-2 px-2 leading-7">
-        <Mark className="size-3.5 shrink-0" />
+    <div className="flex min-h-[52px] w-full items-center justify-between gap-4 border-b border-separator-border py-2.5 pr-2.5 last:border-b-0">
+      <dt className="flex min-w-0 shrink-0 items-center gap-2 text-body-regular text-text-primary">
+        <Mark
+          className="size-5 shrink-0 text-foreground-icon-secondary"
+          aria-hidden
+        />
         <span className="truncate">{label}</span>
       </dt>
-      <dd className="min-w-0 leading-7">
+      <dd className="flex min-w-0 flex-1 justify-end">
         {editing ? (
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center justify-end gap-2">
             {children}
             <Button
               type="button"
-              variant="ghost"
-              size="sm"
+              variant="secondary"
+              size="xs"
               onClick={onClose}
-              className="text-muted-foreground"
             >
               Done
             </Button>
           </div>
         ) : onOpen ? (
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="sm"
             onClick={onOpen}
-            className="h-auto w-full justify-start px-2 py-0 font-normal whitespace-normal hover:bg-transparent"
+            className={cx(
+              "min-w-0 max-w-full cursor-pointer truncate rounded-lg px-2 py-1 text-right text-body-regular outline-none",
+              "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring",
+              shown ? "text-text-primary" : "text-text-tertiary",
+            )}
           >
-            {shown || <span className="text-muted-foreground">Empty</span>}
-          </Button>
+            {shown || UNSAID[label] || "Empty"}
+          </button>
         ) : (
-          <span className="block px-2">
-            {shown || <span className="text-muted-foreground">Empty</span>}
+          <span
+            className={cx(
+              "truncate px-2 py-1 text-right text-body-regular",
+              shown ? "text-text-primary" : "text-text-tertiary",
+            )}
+          >
+            {shown || UNSAID[label] || "Empty"}
           </span>
         )}
       </dd>
@@ -341,7 +375,7 @@ function Line({
   );
 }
 
-// How sure, from nothing to certain, read out beside the slider.
+// How sure, from nothing to certain, read out above the thumb.
 function Sure({
   value,
   onPick,
@@ -351,21 +385,20 @@ function Sure({
 }) {
   const [now, setNow] = useState(Math.round((value ?? 1) * 100));
   return (
-    <div className="flex min-w-0 flex-1 items-center gap-3">
+    <div className="w-44">
       <Slider
         aria-label="How sure"
-        className="max-w-44"
-        min={0}
-        max={100}
+        thumbLabel="How sure"
+        minValue={0}
+        maxValue={100}
         step={5}
-        value={[now]}
-        onValueChange={(v) => {
-          const n = Array.isArray(v) ? (v[0] ?? 0) : v;
-          setNow(n);
-          onPick(String(n));
+        value={now}
+        formatValue={(v) => `${v}%`}
+        onChange={(v) => {
+          setNow(v);
+          onPick(String(v));
         }}
       />
-      <span className="text-muted-foreground tabular-nums">{now}%</span>
     </div>
   );
 }
@@ -398,28 +431,23 @@ function FieldControl({
     const current = value === undefined || value === null ? "" : String(value);
     return (
       <Select
-        defaultValue={current}
+        size="sm"
+        aria-label={f.name}
+        defaultSelectedKey={current || NONE}
         defaultOpen
-        onValueChange={(v) => {
-          const next = String(v ?? "");
+        onSelectionChange={(k) => {
+          const next = k === NONE ? "" : String(k ?? "");
           if (next === current) onClose();
           else onChange(next);
         }}
-        onOpenChange={(open) => {
-          if (!open) onClose();
-        }}
+        triggerClassName={`min-w-40 ${FIELD}`}
       >
-        <SelectTrigger className="w-full" aria-label={f.name}>
-          <SelectValue placeholder="—" />
-        </SelectTrigger>
-        <SelectContent>
-          {!f.required && <SelectItem value="">—</SelectItem>}
-          {choices.map(([v, label]) => (
-            <SelectItem key={v} value={v}>
-              {label}
-            </SelectItem>
-          ))}
-        </SelectContent>
+        {!f.required && <SelectItem id={NONE}>—</SelectItem>}
+        {choices.map(([v, label]) => (
+          <SelectItem key={v} id={v}>
+            {label}
+          </SelectItem>
+        ))}
       </Select>
     );
   }
@@ -437,15 +465,17 @@ function FieldControl({
   return (
     <Input
       aria-label={f.name}
+      size="small"
       autoFocus
       type={f.datatype === "number" ? "number" : "text"}
-      step={f.datatype === "number" ? "any" : undefined}
+      inputMode={f.datatype === "number" ? "decimal" : undefined}
       defaultValue={text}
       placeholder={f.datatype === "list" ? "one, two, three" : undefined}
-      onBlur={(e) => onChange(e.target.value.trim())}
+      onBlur={(e) => onChange((e.target as HTMLInputElement).value.trim())}
       onKeyDown={(e) => {
-        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
       }}
+      className="min-w-40 flex-1"
     />
   );
 }

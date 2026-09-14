@@ -2,11 +2,11 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-// A run of records under a heading, and how one is drawn: a quiet line the
-// list sticks under its bar, where the list is wide enough for the bar to
-// be one row.
+// A run of records under a heading, and how one is drawn: a table's header
+// row, which the list sticks under its bar where the list is wide enough
+// for the bar to be one row.
 export const BAND =
-  "text-muted-foreground bg-card/85 z-10 flex items-center gap-4 border-t px-3.5 py-1.5 text-xs backdrop-blur-sm @[48rem]:sticky @[48rem]:top-15";
+  "z-10 flex items-center gap-4 border-y border-separator-border bg-background-secondary-default px-3 py-2 text-body-2-medium text-text-tertiary @[48rem]:sticky @[48rem]:top-15";
 
 // Records cut into the days they happened, named in the reader's own zone.
 // The server has no zone, so it names them in UTC and the browser cuts them

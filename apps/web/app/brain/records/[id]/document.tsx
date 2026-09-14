@@ -3,11 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
-import { Avatar, AvatarFallback, AvatarGroup } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Badge } from "@/components/base/badges/badge";
+import { Button } from "@/components/base/buttons/button";
+import { Textarea } from "@/components/base/textarea/textarea";
 
 import { Body } from "./body";
 import { useLive } from "./live";
@@ -51,8 +50,9 @@ export function Document({
   me: { id: string; name: string };
   // Whether this deployment has a relay to join the body to.
   liveable: boolean;
-  // What the record holds beside its words, which reads between the title
-  // and the body as it does on a page of notes.
+  // What the record holds beside its words, which reads under them: a
+  // record is a document, and a document's first paragraph follows its
+  // title.
   fields?: ReactNode;
 }) {
   const router = useRouter();
@@ -230,13 +230,15 @@ export function Document({
   };
 
   return (
-    <div className="flex flex-1 flex-col gap-2.5">
+    <div className="flex flex-1 flex-col gap-3">
       {canEdit ? (
         <Textarea
+          size="small"
           aria-label="Title"
           rows={1}
+          autoResize
           value={heading}
-          onChange={(e) => show(e.target.value.replace(/\n/g, " "))}
+          onChange={(v) => show(v.replace(/\n/g, " "))}
           onBlur={() => {
             show(heading.trim());
             void keep("title", heading.trim(), titleBase.current);
@@ -244,33 +246,31 @@ export function Document({
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              e.currentTarget.blur();
+              (e.target as HTMLTextAreaElement).blur();
             }
           }}
           placeholder="Untitled"
-          className="min-h-0 field-sizing-content resize-none rounded-none border-0 bg-transparent px-0 py-0 text-[26px] leading-[32px] font-semibold tracking-[-0.015em] shadow-none focus-visible:ring-0 md:text-[26px] dark:bg-transparent"
+          fieldClassName="rounded-none bg-transparent p-0 ring-0 [&_textarea]:px-0 [&_textarea]:text-title-1-semibold [&_textarea]:text-text-primary"
         />
       ) : (
-        <h1 className="text-[26px] leading-[32px] font-semibold tracking-[-0.015em]">
+        <h1 className="text-title-1-semibold text-text-primary">
           {title || "(untitled)"}
         </h1>
       )}
-      {fields}
       {(["title", "body"] as const).map(
         (field) =>
           clash[field] !== undefined && (
-            <Alert
+            <div
               key={field}
-              className="flex flex-wrap items-center gap-2 py-2 pr-2"
+              className="flex flex-wrap items-center gap-2 rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2"
             >
-              <AlertDescription className="text-foreground flex-1">
+              <p className="flex-1 text-body-regular text-text-primary">
                 The {field} changed while you were writing. This is the newer
                 version.
-              </AlertDescription>
-              <AlertAction className="static flex gap-1">
+              </p>
+              <div className="flex gap-1">
                 <Button
-                  type="button"
-                  size="sm"
+                  size="small"
                   variant="secondary"
                   disabled={saving[field]}
                   onClick={() => keepMine(field)}
@@ -278,30 +278,31 @@ export function Document({
                   Keep mine
                 </Button>
                 <Button
-                  type="button"
-                  size="sm"
+                  size="small"
                   variant="ghost"
                   disabled={saving[field]}
                   onClick={() => takeTheirs(field)}
                 >
                   Take this
                 </Button>
-              </AlertAction>
-            </Alert>
+              </div>
+            </div>
           ),
       )}
       {(others.length > 0 || (liveable && status === "off")) && (
-        <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-caption-1-regular text-text-secondary">
           {others.length > 0 && (
-            <AvatarGroup>
+            <span className="flex -space-x-1.5">
               {others.map((o) => (
-                <Avatar key={o.id} className="size-6 text-[10px]">
-                  <AvatarFallback style={{ background: o.color }}>
-                    {initials(o.name)}
-                  </AvatarFallback>
-                </Avatar>
+                <Avatar
+                  key={o.id}
+                  size="sm"
+                  initials={initials(o.name)}
+                  style={{ background: o.color }}
+                  className="ring-2 ring-background-primary-default"
+                />
               ))}
-            </AvatarGroup>
+            </span>
           )}
           {others.length > 0 && (
             <span>
@@ -309,7 +310,7 @@ export function Document({
               {others.length === 1 ? "is" : "are"} here
             </span>
           )}
-          {status === "off" && <Badge variant="outline">Not live</Badge>}
+          {status === "off" && <Badge>Not live</Badge>}
         </div>
       )}
       <Body
@@ -322,7 +323,10 @@ export function Document({
         me={me}
         onKeep={(t, base) => keep("body", t, base)}
       />
-      {trouble && <p className="text-destructive text-sm">{trouble}</p>}
+      {fields}
+      {trouble && (
+        <p className="text-body-regular text-text-error-primary">{trouble}</p>
+      )}
     </div>
   );
 }

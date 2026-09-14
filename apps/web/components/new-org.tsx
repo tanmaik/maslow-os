@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 
 // An org of the person's own, beside the ones they already belong to. It
 // asks for a name, and lands them in it.
@@ -38,7 +37,8 @@ export function NewOrgDialog({
         <form
           action="/auth/new-org"
           method="post"
-          className="space-y-4"
+          target="_top"
+          className="flex flex-col gap-4"
           onSubmit={(e) => {
             // A name of spaces is no name: said here, beside the field,
             // rather than on the page the form would land on.
@@ -59,27 +59,29 @@ export function NewOrgDialog({
               in, and can switch between them from here.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-1.5">
-            <Label htmlFor="new-org-name">Name</Label>
-            <Input
-              id="new-org-name"
-              name="name"
-              required
-              maxLength={80}
-              placeholder="Blue Whale Bakery"
-              onChange={() => setWrong(false)}
-            />
-            {wrong && (
-              <p className="text-destructive text-sm">
-                The org needs a name of up to 80 characters.
-              </p>
-            )}
-          </div>
+          <Input
+            size="small"
+            label="Name"
+            name="name"
+            isRequired
+            maxLength={80}
+            placeholder="Blue Whale Bakery"
+            isInvalid={wrong}
+            hint={
+              wrong ? "The org needs a name of up to 80 characters." : undefined
+            }
+            onChange={() => setWrong(false)}
+          />
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => show(false)}>
+            <Button
+              type="button"
+              variant="secondary"
+              size="small"
+              onClick={() => show(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={making}>
+            <Button type="submit" size="small" disabled={making}>
               {making ? "Making it…" : "Make it"}
             </Button>
           </DialogFooter>

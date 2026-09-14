@@ -2,6 +2,7 @@ import * as brain from "@maslow/brain";
 import { asPerson, Gone, type Query } from "@maslow/db";
 import { fullName, type Session } from "@maslow/db/auth";
 import { computerOf } from "@maslow/db/computers";
+import * as notices from "@maslow/db/notices";
 import { spend, spentSince } from "@maslow/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -186,6 +187,7 @@ const REFUSALS = [
   brain.Forbidden,
   Gone,
   Refused,
+  notices.Unanswerable,
 ];
 
 // What a tool answered, compact, and no more than a screenful; the agent
@@ -208,6 +210,20 @@ const action = (a: Action) =>
   ].join("\n");
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+// What a level lets someone do, said as the person reads it on the notice
+// an ask to share leaves them.
+const MAY = { view: "see", edit: "change", owner: "own" } as const;
+
+// What an ask to share names, in the words of the thing itself.
+const asked = (a: { records?: string[]; types?: string[]; ports?: number[] }) =>
+  [
+    a.records?.length ? plural(a.records.length, "record") : null,
+    ...(a.types ?? []).map((t) => `every record of type ${t}`),
+    ...(a.ports ?? []).map((p) => `port ${p} on your computer`),
+  ]
+    .filter(Boolean)
+    .join(", ");
 
 // How many steps of a plan, and how many pitfalls, an agent is told.
 const MOST_ADVICE = 4;
@@ -535,9 +551,88 @@ export function brainServer(
           );
       }
       const ask = await brain.askToShare(q, a);
+      // An ask to share waits with everything else that waits on the
+      // person: one notice, answered where they see it.
+      const notice = await notices.leaveNotice(q, {
+        kind: "ask",
+        title: "Your agent asks to share",
+        body: `Let ${a.to.join(", ")} ${MAY[a.level]} ${asked(a)}.\n\n${a.reason}`,
+        records: a.records ?? [],
+        options: ["Accept", "Decline"],
+        request: ask.id,
+      });
       return {
-        text: `asked ${ask.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,
-        data: ask,
+        text: `asked ${ask.id} as notice ${notice.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,
+        data: { ...ask, notice: notice.id },
+      };
+    }),
+  );
+
+  server.registerTool(
+    "notify",
+    {
+      description:
+        "Leaves the person a note in their notification bar, behind the clock on the menu bar: a title, a body in markdown, and the records it is about, which they open from it. A note asks nothing and nothing waits on it; when you need an answer, use ask.",
+      inputSchema: {
+        title: z.string().min(1).max(200),
+        body: z.string().max(4000).optional().describe("markdown"),
+        records: ids.optional().describe("what the note is about"),
+      },
+    },
+    door(async (q, a) => {
+      const n = await notices.leaveNotice(q, { kind: "note", ...a });
+      return { text: `noted ${n.id}: ${n.title}`, data: n };
+    }),
+  );
+
+  server.registerTool(
+    "ask",
+    {
+      description:
+        "Asks the person a question in their notification bar and answers with the notice's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notices tool reads it back.",
+      inputSchema: {
+        title: z.string().min(1).max(200).describe("the question itself"),
+        body: z.string().max(4000).optional().describe("markdown"),
+        options: z
+          .array(z.string().min(1).max(40))
+          .max(6)
+          .optional()
+          .describe("what they may pick; free text when there are none"),
+        records: ids.optional().describe("what the question is about"),
+      },
+    },
+    door(async (q, a) => {
+      const n = await notices.leaveNotice(q, { kind: "ask", ...a });
+      return {
+        text: `asked ${n.id}: ${n.title}; read the answer with notices ids=[${n.id}]`,
+        data: n,
+      };
+    }),
+  );
+
+  server.registerTool(
+    "notices",
+    {
+      description:
+        "The notes and asks left for this person, newest first, each marked read or unread and carrying its answer where one was given. ids reads particular ones; unanswered narrows it to the asks still waiting on them.",
+      inputSchema: {
+        ids: ids.optional().describe("particular notices, as ask answered"),
+        unanswered: z.boolean().optional(),
+        limit: z.number().int().min(1).max(100).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    door(async (q, a) => {
+      const all = a.ids
+        ? (
+            await Promise.all(a.ids.map((id) => notices.noticeOf(q, id)))
+          ).filter((n): n is NonNullable<typeof n> => n !== null)
+        : await notices.noticesOf(q, a);
+      return {
+        text:
+          all.map(lines.notice).join("\n") ||
+          (a.unanswered ? "nothing waiting" : "no notices"),
+        data: { notices: all },
       };
     }),
   );

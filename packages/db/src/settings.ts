@@ -114,12 +114,37 @@ export async function renameOrg(p: Principal, name: string): Promise<void> {
 }
 
 // A picture replaced or orphaned is owed its deletion from the bucket, in
-// the transaction that forgot its key.
-const owePicture = (q: Query, orgId: string, key: string) =>
+// the transaction that forgot its key; one an address was signed for is
+// owed from that moment, and the debt is forgiven by whatever comes to
+// show it, or comes due once that address expires, which is the seconds
+// this is given.
+export const owePicture = (
+  q: Query,
+  orgId: string,
+  key: string,
+  inSeconds = 0,
+) =>
   q.query(
-    "insert into orphans (org_id, kind, ref) values ($1, 'picture', $2)",
-    [orgId, key],
+    `insert into orphans (org_id, kind, ref, due_at)
+       values ($1, 'picture', $2, now() + make_interval(secs => $3))`,
+    [orgId, key, inSeconds],
   );
+
+// Whether an address for this object was signed for this member: the
+// debt written when it was signed names them, and nothing else does. A
+// key is unguessable, but it travels in page HTML and in history, so the
+// key alone is never taken as proof of whose picture landed on it.
+export async function pictureOwed(q: Query, key: string): Promise<boolean> {
+  return (
+    (
+      await q.query(
+        `select 1 from orphans
+           where kind = 'picture' and ref = $1 and user_id = current_member()`,
+        [key],
+      )
+    ).rowCount === 1
+  );
+}
 
 // Whether a picture owed its deletion is still shown by anyone, in any
 // org: a key may be held by more than one row, and goes when the last

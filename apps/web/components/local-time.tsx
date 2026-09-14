@@ -9,18 +9,25 @@ import { useEffect, useState } from "react";
 export function LocalTime({
   at,
   fallback = "",
+  clockOnly = false,
 }: {
   at: Date | string | null;
   fallback?: string;
+  // Under a heading that already names the day, only the time is news.
+  clockOnly?: boolean;
 }) {
   const date = at ? new Date(at) : null;
+  const shape = clockOnly ? "HH:mm" : "d MMM yyyy, HH:mm";
   const utc = date
-    ? date.toISOString().slice(0, 16).replace("T", " ")
+    ? date
+        .toISOString()
+        .slice(clockOnly ? 11 : 0, 16)
+        .replace("T", " ")
     : fallback;
   const [text, setText] = useState(utc);
   useEffect(() => {
-    if (date) setText(format(date, "d MMM yyyy, HH:mm"));
-  }, [date?.getTime()]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (date) setText(format(date, shape));
+  }, [date?.getTime(), shape]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!date) return <>{fallback}</>;
   return (
     <time dateTime={date.toISOString()} suppressHydrationWarning>

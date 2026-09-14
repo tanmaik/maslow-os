@@ -33,6 +33,25 @@ export class Browser {
   notice: string | null = null;
   // The fresh profile made in that case, gone when the browser quits.
   private fresh: string | null = null;
+  // How big a page is here: the size of the pane the person is watching
+  // it in, so the picture fills their window with nothing let in around
+  // it. Their own until somebody watches; the same for every watcher.
+  private size = { width: 1280, height: 800 };
+
+  // The size every page is drawn at now.
+  seen(): { width: number; height: number } {
+    return this.size;
+  }
+
+  // Draws every page, and every page after, at this size.
+  async resize(width: number, height: number): Promise<void> {
+    if (width === this.size.width && height === this.size.height) return;
+    this.size = { width, height };
+    for (const page of this.tabs.values()) {
+      if (page.isClosed()) continue;
+      await page.setViewportSize(this.size).catch(() => {});
+    }
+  }
 
   // Opens the profile, headless unless BROWSER_HEADED is set. A profile
   // another browser holds open cannot be shared, so a second process gets
@@ -54,7 +73,7 @@ export class Browser {
     await mkdir(dir, { recursive: true });
     const options = {
       headless: !process.env.BROWSER_HEADED,
-      viewport: { width: 1280, height: 800 },
+      viewport: this.size,
     };
     let context: BrowserContext;
     try {
@@ -79,6 +98,9 @@ export class Browser {
 
   private track(page: Page) {
     if ([...this.tabs.values()].includes(page)) return;
+    // A tab opened after the pane was measured is drawn at the pane's
+    // size, as the ones before it are.
+    void page.setViewportSize(this.size).catch(() => {});
     const id = this.nextTab++;
     this.tabs.set(id, page);
     const lines: ConsoleLine[] = [];

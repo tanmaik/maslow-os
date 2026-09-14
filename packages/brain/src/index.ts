@@ -23,7 +23,9 @@ export {
   opened,
   read,
   stubs,
+  tally,
   type Graph,
+  type ReadOptions,
 } from "./read.ts";
 export { recall, remember, stale } from "./recall.ts";
 export { revert } from "./revert.ts";

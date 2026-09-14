@@ -101,30 +101,37 @@ export async function s3(
 // An address that lets whoever holds it make one request on our behalf
 // for so many seconds: a machine uploads its backup to one, with no key
 // of ours ever on the machine. The signature is in the query, as SigV4
-// presigning has it.
+// presigning has it. Given a size, that size is signed too, so the address
+// takes exactly those bytes and no more: a limit the store enforces.
 export function presign(
   cfg: S3,
   method: "PUT" | "GET",
   key: string,
   seconds: number,
+  bytes?: number,
 ): string {
   const url = objectUrl(cfg, key);
   const { date, day } = stamp();
   const scope = `${day}/${cfg.region}/s3/aws4_request`;
+  const headers: Record<string, string> =
+    bytes === undefined
+      ? { host: url.host }
+      : { "content-length": String(bytes), host: url.host };
+  const signed = Object.keys(headers).sort();
   const query = {
     "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
     "X-Amz-Credential": `${cfg.accessKey}/${scope}`,
     "X-Amz-Date": date,
     "X-Amz-Expires": String(seconds),
-    "X-Amz-SignedHeaders": "host",
+    "X-Amz-SignedHeaders": signed.join(";"),
   };
   const canonical = [
     method,
     url.pathname,
     canonicalQuery(query),
-    `host:${url.host}`,
+    ...signed.map((h) => `${h}:${headers[h]}`),
     "",
-    "host",
+    signed.join(";"),
     "UNSIGNED-PAYLOAD",
   ].join("\n");
   const toSign = ["AWS4-HMAC-SHA256", date, scope, sha256(canonical)].join(

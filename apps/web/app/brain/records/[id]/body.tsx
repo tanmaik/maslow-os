@@ -5,38 +5,80 @@ import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import type { EditorView } from "@tiptap/pm/view";
-import { useEffect, useRef, useState } from "react";
+import {
+  RiCodeBlock,
+  RiDoubleQuotesL,
+  RiH1,
+  RiH2,
+  RiListOrdered,
+  RiListUnordered,
+  RiSeparator,
+} from "@remixicon/react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 
 import { Markdown } from "@/components/markdown";
-import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
+import {
+  MENU_ITEM,
+  MENU_ITEM_ACTIVE,
+  MENU_ITEM_INTERACTIVE,
+  MENU_POPOVER_SURFACE,
+} from "@/components/base/dropdown/menu-styles";
+import { Textarea } from "@/components/base/textarea/textarea";
+import { cx } from "@/utils/cx";
 
 import type * as Y from "yjs";
 
 import { colorOf, type Live } from "./live";
 
+type Mark = ComponentType<{
+  className?: string;
+  "aria-hidden"?: boolean | "true" | "false";
+}>;
+
 // What the slash menu offers, in the order it offers them: what it is
-// called, and what it does to the block the caret is in.
-const INSERTS: { name: string; run: (e: Editor) => void }[] = [
+// called, its mark, and what it does to the block the caret is in.
+const INSERTS: { name: string; mark: Mark; run: (e: Editor) => void }[] = [
   {
     name: "Heading",
+    mark: RiH1,
     run: (e) => e.chain().focus().setNode("heading", { level: 1 }).run(),
   },
   {
     name: "Subheading",
+    mark: RiH2,
     run: (e) => e.chain().focus().setNode("heading", { level: 2 }).run(),
   },
   {
     name: "Bulleted list",
+    mark: RiListUnordered,
     run: (e) => e.chain().focus().toggleBulletList().run(),
   },
   {
     name: "Numbered list",
+    mark: RiListOrdered,
     run: (e) => e.chain().focus().toggleOrderedList().run(),
   },
-  { name: "Quote", run: (e) => e.chain().focus().toggleBlockquote().run() },
-  { name: "Divider", run: (e) => e.chain().focus().setHorizontalRule().run() },
-  { name: "Code", run: (e) => e.chain().focus().toggleCodeBlock().run() },
+  {
+    name: "Quote",
+    mark: RiDoubleQuotesL,
+    run: (e) => e.chain().focus().toggleBlockquote().run(),
+  },
+  {
+    name: "Divider",
+    mark: RiSeparator,
+    run: (e) => e.chain().focus().setHorizontalRule().run(),
+  },
+  {
+    name: "Code",
+    mark: RiCodeBlock,
+    run: (e) => e.chain().focus().toggleCodeBlock().run(),
+  },
 ];
 
 // The editor's own markdown.
@@ -52,9 +94,9 @@ function holds(e: Editor, body: string): boolean {
   return spelled(markdownOf(e)) === spelled(body);
 }
 
-// How tall the slash menu stands, which is what says whether it fits
-// under the line it was opened on.
-const MENU = 268;
+// A line that is asking the menu for something: a slash, and as much of a
+// word as has been typed after it.
+const ASKING = /^\/(\w*)$/;
 
 // A body with one line ending, no blank lines before it and nothing after
 // it, to compare letter for letter: a space at the start of a line is a
@@ -127,7 +169,17 @@ export function Body({
   // An empty body says what to do with it rather than sitting blank.
   const [blank, setBlank] = useState(!body.trim());
   const [text, setText] = useState(body);
-  const [slash, setSlash] = useState<{ at: number; top: number } | null>(null);
+  // Where the caret was when the menu opened, what has been typed after the
+  // slash, and where on the line the menu hangs from.
+  const [slash, setSlash] = useState<{
+    at: number;
+    word: string;
+    top: number;
+    bottom: number;
+  } | null>(null);
+  // Where the menu hangs and how tall it may stand, both worked out from
+  // the room the window actually has.
+  const [hangs, setHangs] = useState({ top: 0, max: 0 });
   const [pick, setPick] = useState(0);
   const kept = useRef(body);
   // The change the text on screen rests on: moved when the page's body is
@@ -140,6 +192,7 @@ export function Body({
   const textNow = useRef(body);
   textNow.current = text;
   const box = useRef<HTMLDivElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
   // The relay's document the editor is bound to. It lags the page's by a
   // save: what was typed alone, before the page was in, is saved first,
   // so no draft goes with the editor it went into.
@@ -176,6 +229,7 @@ export function Body({
   // keys are read inside it, off what is on screen right now.
   const open = useRef(false);
   const chosen = useRef(0);
+  const choices = useRef(INSERTS);
   const take = useRef<(i: number) => void>(() => {});
   const ed = useRef<Editor | null>(null);
   // Whether the person is in the text a body falls back to, which the
@@ -184,7 +238,6 @@ export function Body({
   const typing = useRef(false);
   const edited = useRef(false);
   open.current = slash !== null;
-  chosen.current = pick;
 
   const editor = useEditor(
     {
@@ -246,18 +299,18 @@ export function Body({
         },
         handleKeyDown: (_view, event) => {
           if (!open.current) return false;
+          const many = choices.current.length;
           if (event.key === "Escape") setSlash(null);
-          else if (event.key === "ArrowDown")
-            setPick((p) => (p + 1) % INSERTS.length);
+          else if (event.key === "ArrowDown") setPick((p) => (p + 1) % many);
           else if (event.key === "ArrowUp")
-            setPick((p) => (p - 1 + INSERTS.length) % INSERTS.length);
+            setPick((p) => (p - 1 + many) % many);
           else if (event.key === "Enter") take.current(chosen.current);
           else return false;
           return true;
         },
         attributes: {
           class:
-            "min-h-7 focus:outline-none [&_h1]:mt-4 [&_h1]:text-lg [&_h1]:font-semibold [&_h2]:mt-3 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mt-3 [&_h3]:font-medium [&_p]:leading-relaxed [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_hr]:my-4 [&_hr]:border-t [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_pre]:rounded-[10px] [&_pre]:bg-muted [&_pre]:p-3 [&>*+*]:mt-2",
+            "min-h-7 text-body-regular text-text-primary focus:outline-none [&_h1]:mt-4 [&_h1]:text-title-3-semibold [&_h2]:mt-3 [&_h2]:text-headline-semibold [&_h3]:mt-3 [&_h3]:text-headline-medium [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-separator-border [&_blockquote]:pl-3 [&_blockquote]:text-text-secondary [&_hr]:my-4 [&_hr]:border-t [&_hr]:border-separator-border [&_code]:rounded-md [&_code]:bg-background-secondary-default [&_code]:px-1 [&_code]:font-mono [&_code]:text-body-2-regular [&_pre]:rounded-2lg [&_pre]:bg-background-secondary-default [&_pre]:p-3 [&>*+*]:mt-3",
           "aria-label": "Body",
         },
       },
@@ -265,26 +318,26 @@ export function Body({
         // Live, what changes is the shared document's, not a draft here.
         if (!joined) edited.current = true;
         setBlank(e.isEmpty);
-        // A slash on an empty line is a menu; anything else closes it.
+        // A slash on a line of its own is a menu, and what is typed after
+        // it narrows the menu; anything else closes it.
         const { $from } = e.state.selection;
-        const line = $from.parent.textContent;
-        if (line === "/") {
+        const asking = ASKING.exec($from.parent.textContent);
+        if (asking) {
           const at = e.view.coordsAtPos($from.pos);
-          const top = box.current?.getBoundingClientRect().top ?? 0;
-          // Under the line, or over it when the window has no room under.
-          const under = window.innerHeight - at.bottom > MENU;
           setSlash({
             at: $from.pos,
-            top: under
-              ? at.bottom - top + 4
-              : Math.max(4, at.top - top - MENU - 4),
+            word: asking[1]!,
+            top: at.top,
+            bottom: at.bottom,
           });
           setPick(0);
         } else setSlash(null);
       },
       onSelectionUpdate: ({ editor: e }) => {
         // The menu is the line's: a caret that leaves takes it with it.
-        if (e.state.selection.$from.parent.textContent !== "/") setSlash(null);
+        if (!ASKING.test(e.state.selection.$from.parent.textContent)) {
+          setSlash(null);
+        }
       },
       onBlur: ({ editor: e }) => {
         setSlash(null);
@@ -335,6 +388,25 @@ export function Body({
     },
     [canEdit, joined?.doc],
   );
+
+  // Under the line, or over it when the window has more room over. How tall
+  // the menu stands is measured, never assumed — it changes with what is
+  // typed after the slash — and it never stands taller than the room it has.
+  useLayoutEffect(() => {
+    if (!slash || !menu.current) return;
+    const tall = menu.current.scrollHeight;
+    const top = box.current?.getBoundingClientRect().top ?? 0;
+    const below = window.innerHeight - slash.bottom - 8;
+    const above = slash.top - 8;
+    const under = below >= tall || below >= above;
+    const room = Math.max(120, under ? below : above);
+    setHangs({
+      top: under
+        ? slash.bottom - top + 4
+        : slash.top - top - Math.min(tall, room) - 4,
+      max: room,
+    });
+  }, [slash]);
 
   // Takes the page's body as what is shown, resting on the page's change.
   // Asked for outright, it replaces the text whatever it says; otherwise
@@ -517,12 +589,15 @@ export function Body({
   if (!whole && !joined)
     return (
       <Textarea
+        size="small"
         aria-label="Body"
-        readOnly={joining || handing}
+        rows={4}
+        autoResize
+        isReadOnly={joining || handing}
         value={text}
-        onChange={(e) => {
+        onChange={(v) => {
           edited.current = true;
-          setText(e.target.value);
+          setText(v);
         }}
         onFocus={() => {
           typing.current = true;
@@ -553,18 +628,28 @@ export function Body({
             if (saving.current === save) saving.current = null;
           });
         }}
-        className="min-h-24 flex-1 field-sizing-content resize-none border-0 bg-transparent px-0 leading-relaxed shadow-none focus-visible:ring-0 md:text-sm dark:bg-transparent"
+        fieldClassName="rounded-none bg-transparent p-0 ring-0 [&_textarea]:px-0"
       />
     );
 
+  // What the menu offers, narrowed by what has been typed after the slash.
+  const shown = slash
+    ? INSERTS.filter((i) =>
+        i.name.toLowerCase().includes(slash.word.toLowerCase()),
+      )
+    : INSERTS;
+  choices.current = shown;
+  const at = Math.min(pick, Math.max(0, shown.length - 1));
+  chosen.current = at;
   const choose = (i: number) => {
-    if (!editor || !slash) return;
+    const insert = shown[i];
+    if (!editor || !slash || !insert) return;
     editor
       .chain()
       .focus()
-      .deleteRange({ from: slash.at - 1, to: slash.at })
+      .deleteRange({ from: slash.at - 1 - slash.word.length, to: slash.at })
       .run();
-    INSERTS[i]!.run(editor);
+    insert.run(editor);
     setSlash(null);
   };
   take.current = choose;
@@ -583,37 +668,48 @@ export function Body({
       }}
     >
       {blank && (
-        <p className="text-muted-foreground pointer-events-none absolute inset-x-0 top-0 leading-relaxed">
+        <p className="pointer-events-none absolute inset-x-0 top-0 text-body-regular text-text-tertiary">
           Write something, or press / for what a line can be
         </p>
       )}
       <EditorContent editor={editor} />
-      {slash && (
+      {slash && shown.length > 0 && (
         <div
+          ref={menu}
           role="listbox"
           aria-label="Insert"
-          style={{ top: slash.top }}
-          className="bg-popover absolute left-0 z-30 flex w-60 flex-col gap-0.5 rounded-xl border p-1.5 shadow-float"
+          style={{ top: hangs.top, maxHeight: hangs.max || undefined }}
+          className={cx(
+            MENU_POPOVER_SURFACE,
+            "absolute left-0 z-30 flex w-60 flex-col gap-1 p-2",
+          )}
         >
-          <span className="text-muted-foreground px-2 pt-1 pb-0.5 text-xs">
+          <span className="px-2 py-1 text-caption-1-semibold text-text-secondary">
             Insert
           </span>
-          {INSERTS.map((i, n) => (
-            <Button
+          {shown.map((i, n) => (
+            <button
               key={i.name}
-              variant={n === pick ? "secondary" : "ghost"}
-              size="sm"
+              type="button"
               role="option"
-              aria-selected={n === pick}
+              aria-selected={n === at}
               onMouseDown={(e) => {
                 e.preventDefault();
                 choose(n);
               }}
               onMouseEnter={() => setPick(n)}
-              className="h-8 justify-start rounded-lg px-2 font-normal"
+              className={cx(
+                MENU_ITEM,
+                "min-h-10 text-body-medium",
+                n === at ? MENU_ITEM_ACTIVE : MENU_ITEM_INTERACTIVE,
+              )}
             >
+              <i.mark
+                className="size-5 shrink-0 text-foreground-icon-secondary"
+                aria-hidden
+              />
               {i.name}
-            </Button>
+            </button>
           ))}
         </div>
       )}

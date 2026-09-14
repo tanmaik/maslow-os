@@ -3,18 +3,29 @@ import fs from "node:fs/promises";
 import path from "node:path";
 
 import { deployment } from "./deployment.ts";
-import { remove, s3 } from "./s3.ts";
+import { presign, remove, s3 } from "./s3.ts";
 
 // Where uploaded images live. One contract; production uses an S3-compatible
 // store, development uses a directory.
 export type Storage = {
   put(bytes: Uint8Array, ext: string): Promise<string>;
+  // Where the browser puts one object itself, for a picture too big to
+  // pass through a function: the key it will land on, and an address good
+  // for exactly those bytes and a few minutes. Null where the store signs
+  // nothing and the bytes must come through us.
+  putUrl(ext: string, bytes: number): { key: string; url: string } | null;
   // Already gone is fine.
   delete(key: string): Promise<void>;
   url(key: string): string;
 };
 
+// How long an address the browser puts to is good for.
+export const PUT_FOR = 300;
+
 const MAX_BYTES = 2 * 1024 * 1024;
+
+// A size in whole megabytes, for what a person is told.
+const mb = (bytes: number) => `${Math.round(bytes / (1024 * 1024))} MB`;
 
 // Thrown for anything the person can fix by choosing a different file, or
 // that this deployment cannot do at all. Every other failure is a real error.
@@ -41,20 +52,32 @@ function sniff(bytes: Uint8Array): "png" | "jpg" | "webp" | null {
   return null;
 }
 
-// Reads a small raster image out of a form, or throws Rejected saying why.
+type Picture = { bytes: Uint8Array; ext: "png" | "jpg" | "webp" };
+
+// The raster image these bytes are, or Rejected saying why they are not
+// one. A picture the browser shrinks is held to two megabytes; a
+// wallpaper, kept at the resolution it was made at, says its own limit.
+export function pictureOrThrow(bytes: Uint8Array, limit = MAX_BYTES): Picture {
+  if (bytes.length > limit)
+    throw new Rejected(`Images are limited to ${mb(limit)}.`);
+  const ext = sniff(bytes);
+  if (!ext) throw new Rejected("PNG, JPEG or WebP only.");
+  return { bytes, ext };
+}
+
+// The same, read out of a form.
 export async function imageOrThrow(
   file: FormDataEntryValue | null,
-): Promise<{ bytes: Uint8Array; ext: "png" | "jpg" | "webp" }> {
+  limit = MAX_BYTES,
+): Promise<Picture> {
   if (deployment.storage.kind === "none") {
     throw new Rejected("Images need object storage, which is not set up yet.");
   }
   if (!(file instanceof File) || file.size === 0)
     throw new Rejected("Choose an image file.");
-  if (file.size > MAX_BYTES) throw new Rejected("Images are limited to 2 MB.");
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  const ext = sniff(bytes);
-  if (!ext) throw new Rejected("PNG, JPEG or WebP only.");
-  return { bytes, ext };
+  if (file.size > limit)
+    throw new Rejected(`Images are limited to ${mb(limit)}.`);
+  return pictureOrThrow(new Uint8Array(await file.arrayBuffer()), limit);
 }
 
 // A key of its own for every object put, so deleting one never takes
@@ -69,6 +92,8 @@ const local = (dir: string): Storage => ({
     await fs.writeFile(path.join(dir, k), bytes);
     return k;
   },
+  // A directory signs nothing, so a picture kept here comes through us.
+  putUrl: () => null,
   delete: (k) => fs.rm(path.join(dir, k), { force: true }),
   url: (k) => `/uploads/${k}`,
 });
@@ -77,6 +102,7 @@ const none: Storage = {
   put: async () => {
     throw new Rejected("Images need object storage, which is not set up yet.");
   },
+  putUrl: () => null,
   delete: async () => {},
   url: (k) => `/uploads/${k}`,
 };
@@ -100,6 +126,10 @@ const bucket = (
         `storage put → ${r.status}: ${(await r.text()).slice(0, 200)}`,
       );
     return k;
+  },
+  putUrl: (ext, bytes) => {
+    const k = key(ext);
+    return { key: k, url: presign(cfg, "PUT", cfg.prefix + k, PUT_FOR, bytes) };
   },
   delete: (k) => remove(cfg, cfg.prefix + k),
   url: (k) => `/uploads/${k}`,
@@ -145,7 +175,7 @@ export async function bounded(
     total += value.length;
     if (total > limit) {
       await reader.cancel();
-      throw new Rejected("Images are limited to 2 MB.");
+      throw new Rejected(`That is larger than ${mb(limit)}.`);
     }
     chunks.push(value);
   }

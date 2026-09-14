@@ -1,7 +1,75 @@
 #!/bin/bash
-# Opens an address on the person's own device: the door offers it on their
+# Opens something on the person's desk, or on their own device. A port of
+# this machine's opens that port's window in Maslow; a file or folder of
+# theirs opens Files there; any other web address is offered on their
 # terminal, and a click there opens it in their own browser, with their own
 # logins. The machine's browser is the agent's, not a place to sign in.
-exec curl -s -o /dev/null -X POST 127.0.0.1:8080/maslow/open \
-  -H 'content-type: application/json' \
-  --data-binary "$(jq -cn --arg url "$1" '{url:$url}')"
+set -euo pipefail
+
+help() {
+  cat <<'USAGE'
+usage: open <what>
+
+  open :3000                   the window for port 3000 on your desk
+  open http://localhost:3000   the same
+  open ~/notes/meeting.md      Files, at that folder, with the file picked
+  open .                       Files, at this folder
+  open https://example.com     offered on your terminal, to open on your
+                               own device with your own logins
+
+Anything a program on this computer opens comes here: BROWSER and
+xdg-open both point at it.
+USAGE
+}
+
+case ${1:-} in
+  "" | -h | --help)
+    help
+    [ -n "${1:-}" ] || exit 64
+    exit 0
+    ;;
+esac
+
+what=$1
+say() {
+  curl -s -o /dev/null -X POST 127.0.0.1:8080/maslow/open \
+    -H 'content-type: application/json' --data-binary "$1"
+}
+
+# A port of this machine's, however it was named: a bare :3000, or an
+# address on the loopback this browser could never reach anyway.
+port=""
+case $what in
+  :[0-9]*) port=${what#:} ;;
+  http://localhost:* | http://127.0.0.1:* | http://0.0.0.0:* | \
+    https://localhost:* | https://127.0.0.1:* | https://0.0.0.0:*)
+    rest=${what#*://}
+    rest=${rest#*:}
+    port=${rest%%/*}
+    ;;
+  localhost:[0-9]* | 127.0.0.1:[0-9]*)
+    rest=${what#*:}
+    port=${rest%%/*}
+    ;;
+esac
+if [[ $port =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]; then
+  say "$(jq -cn --argjson port "$port" '{port:$port}')"
+  exit 0
+fi
+
+# A web address, which the person's own device opens.
+case $what in
+  http://* | https://*)
+    say "$(jq -cn --arg url "$what" '{url:$url}')"
+    exit 0
+    ;;
+esac
+
+# Anything else is a path of theirs, named as it is on this machine.
+if [ -e "$what" ]; then
+  say "$(jq -cn --arg path "$(readlink -f "$what")" '{path:$path}')"
+  exit 0
+fi
+
+echo "open: there is no file, port or web address called '$what'." >&2
+exit 66

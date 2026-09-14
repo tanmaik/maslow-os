@@ -4,6 +4,7 @@
 // from the kernel, outside the person's Linux, which shares its view.
 import { execFile } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import { readdir, readFile, readlink, statfs } from "node:fs/promises";
 
 const OS = "/data/os";
@@ -68,6 +69,86 @@ function measure() {
 measure();
 setInterval(measure, 60_000).unref();
 
+// The face a thing serving on a port wears, for the dock to draw: its own
+// favicon, as an address that carries the picture with it. Kept against the
+// process serving there, and asked for again where it did not answer, since
+// a server still starting up has no face to give yet. Nothing waits on it.
+const FACE_TYPES =
+  /^image\/(png|jpe?g|gif|webp|svg\+xml|x-icon|vnd\.microsoft\.icon)$/;
+const BIGGEST_FACE = 16 * 1024;
+const BIGGEST_PAGE = 64 * 1024;
+const ASK_AGAIN = 60_000;
+const faces = new Map();
+
+// One read of an address on the port, given this long and this much and
+// no more; what came, with its type, or nothing.
+function read(port, path, most, then) {
+  const req = http.get({ host: "127.0.0.1", port, path }, (res) => {
+    const type = (res.headers["content-type"] ?? "").split(";")[0].trim();
+    if (res.statusCode !== 200) {
+      req.destroy();
+      return then(null);
+    }
+    const bits = [];
+    let held = 0;
+    res.on("data", (d) => {
+      held += d.length;
+      if (held > most) return req.destroy();
+      bits.push(d);
+    });
+    res.on("end", () => then({ type, body: Buffer.concat(bits) }));
+  });
+  req.on("error", () => then(null));
+  // A port that answers slowly, or a byte at a time, is given this long
+  // and no longer.
+  setTimeout(() => req.destroy(), 2000).unref();
+}
+
+// Where a page says its icon is: the first link that calls itself an
+// icon, made whole against the port's root.
+function iconOf(html, port) {
+  for (const tag of html.match(/<link\b[^>]*>/gi) ?? []) {
+    if (!/\brel=["']?[^"'>]*\bicon\b/i.test(tag)) continue;
+    const href = /\bhref=["']?([^"'\s>]+)/i.exec(tag)?.[1];
+    if (!href) continue;
+    try {
+      const url = new URL(href, `http://127.0.0.1:${port}/`);
+      if (url.hostname === "127.0.0.1" || url.hostname === "localhost")
+        return url.pathname + url.search;
+    } catch {}
+  }
+  return null;
+}
+
+function ask(port, key) {
+  faces.set(key, { face: null, at: Date.now() });
+  const done = (face) => faces.set(key, { face, at: Date.now() });
+  const take = (got) => {
+    if (!got || !FACE_TYPES.test(got.type) || !got.body.length) return false;
+    done(`data:${got.type};base64,${got.body.toString("base64")}`);
+    return true;
+  };
+  read(port, "/favicon.ico", BIGGEST_FACE, (got) => {
+    if (take(got)) return;
+    // The page itself may say where its face is.
+    read(port, "/", BIGGEST_PAGE, (page) => {
+      if (!page || !/^text\/html$/.test(page.type)) return;
+      const path = iconOf(page.body.toString("utf8"), port);
+      if (path && path !== "/favicon.ico")
+        read(port, path, BIGGEST_FACE, (icon) => void take(icon));
+    });
+  });
+}
+
+// The face known for the process serving there, asked for when it is new
+// or when the last ask came back with nothing. Answers at once.
+function face(port, pid) {
+  const key = `${port}:${pid}`;
+  const had = faces.get(key);
+  if (!had || (!had.face && Date.now() - had.at > ASK_AGAIN)) ask(port, key);
+  return faces.get(key)?.face ?? undefined;
+}
+
 // Listening TCP ports, with the name of what listens: socket inode to pid
 // through every process's open files, pid to its name. Every read waits
 // its turn rather than holding the door, and the walk stops once every
@@ -121,10 +202,15 @@ async function ports() {
       // are both `node` and only the command tells them apart. The
       // arguments arrive separated by nothing, as the kernel keeps them.
       const ran = cmd.replace(/\0+$/, "").split("\0").join(" ").slice(0, 120);
-      out.push({ port, name: name.trim(), ran });
+      out.push({ port, pid, name: name.trim(), ran });
     }
   }
-  return out.sort((a, b) => a.port - b.port);
+  // What is no longer serving keeps no face here.
+  const here = new Set(out.map((o) => `${o.port}:${o.pid}`));
+  for (const key of faces.keys()) if (!here.has(key)) faces.delete(key);
+  return out
+    .map(({ pid, ...o }) => ({ ...o, face: face(o.port, pid) }))
+    .sort((a, b) => a.port - b.port);
 }
 
 // Whose credentials Claude Code runs on here: managed while the machine

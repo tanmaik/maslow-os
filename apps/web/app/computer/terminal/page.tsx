@@ -3,7 +3,8 @@ import { computerOf } from "@maslow/db/computers";
 import { redirect } from "next/navigation";
 
 import { Terminal } from "@/app/computer/terminal/terminal";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { ComputerWaiting } from "@/components/computer-waiting";
+import { stateNow } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
 
@@ -15,27 +16,28 @@ export default async function TerminalPage() {
   if (!p) redirect("/");
   const off = deployment.computers.kind === "none";
   const c = off ? null : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
-  const ready = c?.readyAt !== null && c?.readyAt !== undefined;
+  // Ready is the door answering, not a date on the row.
+  const ready = (await stateNow(c)).progress === "ready";
   return (
-    // The whole screen less the page's own margins, and the whole window
-    // when framed in the room, where it has none.
-    <main className="flex h-[calc(100dvh-8.5rem)] min-h-0 flex-col gap-4 [html[data-framed]_&]:h-dvh">
-      <h1 className="page-title text-2xl font-semibold">Terminal</h1>
+    // The screen less the page's own 24 of gutter, top and bottom, and the
+    // whole window when framed in the room, where it has none. The negative
+    // margin gives back the 112 the layout keeps under every page for
+    // chrome this one does not have; it goes when that padding does.
+    <main className="flex h-[calc(100dvh-3rem)] -mb-22 min-h-0 flex-col gap-4 [html[data-framed]_&]:mb-0 [html[data-framed]_&]:h-dvh">
+      <h1 className="page-title text-title-2-medium text-text-primary">
+        Terminal
+      </h1>
       {off ? (
-        <Alert>
-          <AlertTitle>Computers are off here</AlertTitle>
-          <AlertDescription>
-            This deployment has no Fly token, so there is no terminal to show.
-          </AlertDescription>
-        </Alert>
+        <ComputerWaiting
+          title="Computers are off here"
+          description="This deployment has no Fly token, so there is no terminal to show."
+        />
       ) : !ready ? (
-        <Alert>
-          <AlertTitle>Your computer is not ready yet</AlertTitle>
-          <AlertDescription>
-            Its terminal appears here once it is. The Computer page shows it
-            coming up.
-          </AlertDescription>
-        </Alert>
+        <ComputerWaiting
+          polls
+          title="Your computer is not ready yet"
+          description="Its terminal appears here once it is."
+        />
       ) : (
         <Terminal />
       )}

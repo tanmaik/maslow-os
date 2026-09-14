@@ -26,13 +26,27 @@ export type Computer = {
   modelKey: string | null;
   modelKeyHash: string | null;
   modelSpentUsd: number;
+  // What this person may spend on models in a week, in dollars; null for a
+  // key minted before the column, which the deployment's default covers.
+  modelCapUsd: number | null;
   // The owner's session the machine holds to reach the brain, if any.
   sessionId: string | null;
   // Whether its member is current; a past member's machine is stopped.
   current: boolean;
   // The move under way, if any.
   move: Move | null;
+  // The update waiting, if any: the image it goes to, when it became
+  // ready, when the person asked for it, and whether it is a security
+  // image, which does not wait on them for long.
+  updateImage: string | null;
+  updateReadyAt: Date | null;
+  updateWhen: UpdateWhen | null;
+  updateSecurity: boolean;
 };
+
+// When a computer takes an update: at once, at three in the morning where
+// it is, or the next time nobody is using it.
+export type UpdateWhen = "now" | "tonight" | "idle";
 
 // A move of a computer to another region, as far as it has got: the
 // region, when it was asked for, the snapshot of the old disk, the disk
@@ -56,8 +70,11 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.volume_id as "volumeId", c.machine_id as "machineId", c.ready_at as "readyAt",
   c.backed_up_at as "backedUpAt", c.authorized_keys as "authorizedKeys",
   c.model_key as "modelKey", c.model_key_hash as "modelKeyHash",
-  c.model_spent_usd::float as "modelSpentUsd",
-  c.session_id as "sessionId", c.move, (u.removed_at is null) as current`;
+  c.model_spent_usd::float as "modelSpentUsd", c.model_cap_usd::float as "modelCapUsd",
+  c.session_id as "sessionId", c.move,
+  c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
+  c.update_when as "updateWhen", c.update_security as "updateSecurity",
+  (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
 // membership, however many sign-ins race for it.
@@ -85,16 +102,19 @@ export async function claimComputer(
   );
 }
 
-// The model key the computer runs on, once minted.
+// The model key the computer runs on, once minted, with the weekly cap it
+// was minted against.
 export async function setModelKey(
   q: Query,
   id: string,
   key: string,
   hash: string,
+  capUsd: number,
 ) {
   await q.query(
-    "update computers set model_key = $2, model_key_hash = $3 where id = $1",
-    [id, key, hash],
+    `update computers set model_key = $2, model_key_hash = $3, model_cap_usd = $4
+     where id = $1`,
+    [id, key, hash, capUsd],
   );
 }
 
@@ -265,6 +285,42 @@ export async function openComputerSession(
   return sessionId;
 }
 
+// An update waiting on the person, or nothing once the machine is on the
+// image of the day. A fresh image asks again, so a choice made about the
+// last one never carries an unseen change onto their machine; clearing
+// one keeps the hour the person picked unless that hour is what took it.
+export async function setUpdate(
+  q: Query,
+  id: string,
+  update: { image: string; security: boolean } | null,
+  when: UpdateWhen | null = null,
+) {
+  await q.query(
+    `update computers set update_image = $2, update_security = $3,
+       update_ready_at = case when $2::text is null then null else now() end,
+       update_when = $4
+     where id = $1`,
+    [
+      id,
+      update?.image ?? null,
+      update?.security ?? false,
+      update ? null : when,
+    ],
+  );
+}
+
+// When the person asked for the update waiting on them.
+export async function setUpdateWhen(
+  q: Query,
+  id: string,
+  when: UpdateWhen | null,
+) {
+  await q.query("update computers set update_when = $2 where id = $1", [
+    id,
+    when,
+  ]);
+}
+
 // How far the move has got, or null once it is over.
 export async function setMove(q: Query, id: string, move: Move | null) {
   await q.query("update computers set move = $2 where id = $1", [
@@ -298,7 +354,7 @@ export async function note(
   entry: {
     orgId: string;
     userId: string | null;
-    resource: "machine" | "disk" | "snapshot" | "backup" | "key";
+    resource: "machine" | "disk" | "snapshot" | "backup" | "key" | "update";
     event:
       | "made"
       | "started"
@@ -307,7 +363,13 @@ export async function note(
       | "resized"
       | "grown"
       | "spent"
-      | "destroyed";
+      | "ready"
+      | "scheduled"
+      | "restored"
+      | "refused"
+      // Destroyed is what we took; gone is what the vendor no longer has.
+      | "destroyed"
+      | "gone";
     ref: string | null;
     detail?: Record<string, unknown>;
     why: string;
@@ -326,6 +388,25 @@ export async function note(
       entry.why,
     ],
   );
+}
+
+// What the person's model key spent on each day, in dollars, from the
+// ledger's own copies: the sweep writes the delta it read with the hour it
+// read it, so the days are a sum of those deltas.
+export async function spentByDay(
+  q: Query,
+  userId: string,
+  since: Date,
+): Promise<{ day: string; usd: number }[]> {
+  const r = await q.query<{ day: string; usd: number }>(
+    `select to_char(at at time zone 'UTC', 'YYYY-MM-DD') as day,
+            sum((detail->>'usd')::numeric)::float as usd
+       from ledger
+      where user_id = $1 and resource = 'key' and event = 'spent' and at >= $2
+      group by 1 order by 1`,
+    [userId, since],
+  );
+  return r.rows;
 }
 
 // A port on a computer and a member who may reach it.

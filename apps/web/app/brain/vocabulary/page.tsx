@@ -2,14 +2,9 @@ import { typeSharesOf, type BrainType } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
 import { groupsIn } from "@maslow/db/groups";
 import { redirect } from "next/navigation";
+import type { ReactNode } from "react";
 
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Chip } from "@/components/base/badges/chip";
 import { principal } from "@/lib/session";
 
 import { vocabulary } from "../catalog";
@@ -17,34 +12,37 @@ import { HOLDS, sharedGroups } from "../format";
 import { Sharing } from "../sharing";
 import { TypeMark } from "../type-icon";
 
-// The types of thing this brain holds, each with what it records and who may
-// see it; then the types colleagues have shared in. The agent shapes them; a
-// person decides who sees them.
+// The types of thing this brain holds, one line each: its name and how
+// many records it has, the fields it declares beyond the title, body and
+// when every record carries, and who may see it; then the types colleagues
+// have shared in. The agent shapes them; a person decides who sees them.
 export default async function Page() {
   const p = await principal();
   if (!p) redirect("/");
-  const { types, people } = await vocabulary(p);
+  const { types, held, people } = await vocabulary(p);
   const mine = types.filter((t) => t.own);
   const { shares, groups } = await asPerson(p, async (db) => ({
     shares: await typeSharesOf(db),
     groups: await groupsIn(db),
   }));
   const members = [...people].map(([id, name]) => ({ id, name }));
+  const count = (t: BrainType) => held.get(`${t.ownerId}:${t.name}`) ?? 0;
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h1 className="page-title font-serif text-[26px] leading-[30px] tracking-[-0.01em]">
+    <div className="brain-inset flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <h1 className="page-title text-title-1-medium text-text-primary">
           Types and fields
         </h1>
-        <p className="text-muted-foreground text-sm">
-          The kinds of thing this brain holds. Yours until you share one; a
-          colleague who has a type shares every record of it with you.
+        <p className="text-body-regular text-text-secondary">
+          The kinds of thing this brain holds. Every record has a title, a body
+          and a when; a type adds the fields listed beside it. Yours until you
+          share one.
         </p>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+      <Sheet>
         {mine.map((t) => (
-          <TypeCard key={t.id} type={t}>
+          <Line key={t.id} type={t} count={count(t)}>
             <Sharing
               on={{ type: t.id }}
               owner
@@ -52,98 +50,85 @@ export default async function Page() {
               shares={shares.get(t.id) ?? []}
               groups={groups}
               members={members}
-              compact
+              pill
             />
-          </TypeCard>
+          </Line>
         ))}
-      </div>
+      </Sheet>
       {sharedGroups(types, people).map((g) => (
-        <section key={g.ownerId} className="space-y-3">
-          <h2 className="text-muted-foreground text-sm">
+        <div key={g.ownerId} className="flex flex-col gap-2">
+          <p className="px-1 text-caption-1-medium text-text-secondary">
             {g.owner}&apos;s, shared with you
-          </h2>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          </p>
+          <Sheet>
             {g.types.map((t) => (
-              <TypeCard key={t.id} type={t} owner={t.ownerId} />
+              <Line key={t.id} type={t} count={count(t)} owner={t.ownerId} />
             ))}
-          </div>
-        </section>
+          </Sheet>
+        </div>
       ))}
     </div>
   );
 }
 
-// The fields every record has before its type declares any.
-const BUILT_IN: [string, string, boolean][] = [
-  ["title", "text", true],
-  ["body", "text", false],
-  ["when", HOLDS.datetime, false],
-];
-
-// One line of a type's form: the field's name, starred when a record must
-// fill it, and in a word what it holds; a choice names its options on hover.
-function Field({
-  name,
-  holds,
-  required,
-  options,
-}: {
-  name: string;
-  holds: string;
-  required: boolean;
-  options?: string[] | null;
-}) {
+// One sheet of lines, a hairline between each. A card on a page, not the
+// page itself: a window keeps its chrome.
+function Sheet({ children }: { children: ReactNode }) {
   return (
-    <li className="flex justify-between gap-3">
-      <span>
-        {name}
-        {required && <span className="text-muted-foreground">*</span>}
-      </span>
-      <span
-        className="text-muted-foreground text-right"
-        title={options?.join(", ")}
-      >
-        {holds}
-      </span>
-    </li>
+    <div className="divide-y divide-separator-border rounded-3xl border border-border-button-default bg-background-primary-default">
+      {children}
+    </div>
   );
 }
 
-// One type: its name, its form line by line, and, in a corner, who may see
-// it.
-function TypeCard({
+// One type on a line: its mark and how full it is, then its own fields,
+// then who may see it.
+function Line({
   type: t,
+  count,
   owner,
   children,
 }: {
   type: BrainType;
+  count: number;
   owner?: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }) {
   return (
-    <Card className="gap-3 rounded-[14px] py-4">
-      <CardHeader className="px-4">
-        <CardTitle className="text-base">
-          <TypeMark type={t.name} owner={owner} />
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-4 text-sm">
-        <ul className="space-y-0.5">
-          {BUILT_IN.map(([name, holds, required]) => (
-            <Field key={name} name={name} holds={holds} required={required} />
-          ))}
-          {t.properties.map((f) => (
-            <Field
-              key={f.id}
-              name={f.name}
-              holds={HOLDS[f.datatype]}
-              required={f.required}
-              options={f.options}
-            />
-          ))}
-        </ul>
-      </CardContent>
-      {children && <CardFooter className="mt-auto px-4">{children}</CardFooter>}
-    </Card>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+      <span className="flex w-44 shrink-0 items-baseline gap-2">
+        <TypeMark
+          type={t.name}
+          owner={owner}
+          className="text-body-medium text-text-primary"
+        />
+        <span className="text-caption-1-regular text-text-secondary tabular-nums">
+          {count}
+        </span>
+      </span>
+      <span className="flex min-w-48 flex-1 flex-wrap items-center gap-1.5">
+        {t.properties.length === 0 ? (
+          <span className="text-caption-1-regular text-text-secondary">
+            No fields of its own
+          </span>
+        ) : (
+          t.properties.map((f) => (
+            <Chip
+              key={f.name}
+              variant="caption"
+              color="soft"
+              title={f.options?.length ? f.options.join(", ") : undefined}
+            >
+              {f.name}
+              <span className="ml-1 text-text-secondary">
+                {HOLDS[f.datatype]}
+                {f.required && ", required"}
+              </span>
+            </Chip>
+          ))
+        )}
+      </span>
+      {children && <span className="ml-auto shrink-0">{children}</span>}
+    </div>
   );
 }

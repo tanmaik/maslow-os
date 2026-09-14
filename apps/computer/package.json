@@ -2,7 +2,7 @@
   "name": "@maslow/computer",
   "private": true,
   "dependencies": {
-    "@anthropic-ai/claude-code": "2.1.263",
+    "@anthropic-ai/claude-code": "latest",
     "@ffmpeg-installer/ffmpeg": "1.1.0",
     "@zed-industries/claude-code-acp": "0.16.2",
     "node-pty": "1.1.0",

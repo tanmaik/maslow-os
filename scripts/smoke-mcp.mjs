@@ -864,7 +864,7 @@ export async function smokeMcp(stack, signIn) {
   });
   check(
     "share asks, and shares nothing until the person accepts",
-    /^asked \S+: 1 item to 1 party at view; the person decides$/.test(
+    /^asked \S+ as notice \S+: 1 item to 1 party at view; the person decides$/.test(
       asked.lines[0] ?? "",
     ) && notYet.text === "no records",
     `${asked.lines[0]} / ${notYet.text}`,
@@ -889,7 +889,7 @@ export async function smokeMcp(stack, signIn) {
   const sessionId = grant.access_token.split(".")[1];
   check(
     "settings lists the agent",
-    (await page(`${base}/settings`, wile)).includes(sessionId),
+    (await page(`${base}/settings?pane=agents`, wile)).includes(sessionId),
     "listed by its session",
   );
   const disconnected = await fetch(`${base}/settings/agents`, {

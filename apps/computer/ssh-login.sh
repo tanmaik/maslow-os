@@ -8,7 +8,7 @@ USER=$(id -un)
 LOGNAME=$USER
 LANG=${LANG:-C.UTF-8}
 case ${SSH_ORIGINAL_COMMAND-} in
-  "") exec /opt/maslow/terminal.sh ssh ;;
+  "") exec /opt/maslow/terminal.sh ;;
   internal-sftp) exec /usr/lib/openssh/sftp-server ;;
   *) exec bash -c "$SSH_ORIGINAL_COMMAND" ;;
 esac

@@ -13,10 +13,10 @@ export async function POST(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
   const email = (await request.formData()).get("email");
-  if (typeof email !== "string" || !email.includes("@") || email.length > 254)
-    return new Response("An email address is required.", { status: 400 });
-  const address = email.trim().toLowerCase();
   const home = origin(request);
+  if (typeof email !== "string" || !email.includes("@") || email.length > 254)
+    return NextResponse.redirect(`${home}/settings?invite=address`, 303);
+  const address = email.trim().toLowerCase();
 
   // Asked before the invitation exists, so nothing is made that cannot be
   // told about.

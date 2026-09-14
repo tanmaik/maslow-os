@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { cn } from "@/lib/utils";
+import { cx } from "@/utils/cx";
 
 import { typeColor, typeHref } from "./format";
 
@@ -14,7 +14,7 @@ export function TypeIcon({
 }) {
   return (
     <span
-      className={cn("size-2 shrink-0 rounded-[2px]", className)}
+      className={cx("size-2 shrink-0 rounded-[2px]", className)}
       style={{ background: typeColor(type) }}
       aria-hidden
     />
@@ -34,17 +34,19 @@ export function TypeMark({
   link?: boolean;
   className?: string;
 }) {
+  // The name truncates, not the row: an ellipsis belongs on the text node,
+  // and a flex container never draws one.
   const inner = (
     <>
       <TypeIcon type={type} />
-      {type}
+      <span className="truncate">{type}</span>
     </>
   );
-  const classes = cn("inline-flex items-center gap-2", className);
+  const classes = cx("inline-flex min-w-0 items-center gap-2", className);
   return link ? (
     <Link
       href={typeHref(type, owner)}
-      className={cn(classes, "hover:underline")}
+      className={cx(classes, "hover:underline")}
     >
       {inner}
     </Link>

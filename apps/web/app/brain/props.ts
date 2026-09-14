@@ -1,14 +1,30 @@
 import {
   Invalid,
   type Datatype,
-  type Property,
   type PropertyDefinition,
+  type Subject,
 } from "@maslow/brain";
+import { isUuid } from "@maslow/db";
 import { isValid, parseISO } from "date-fns";
+
+// Whom a share names, as a form carries it: "everyone", "group:<id>" or
+// "member:<id>".
+export function subjectFrom(value: string): Subject | null {
+  if (value === "everyone") return { who: "everyone" };
+  const [who, id] = value.split(":");
+  if ((who === "group" || who === "member") && id && isUuid(id)) {
+    return { who, id };
+  }
+  return null;
+}
+
+// A field as this file needs to read it: what it is called and what it
+// holds. A type's declared field and a field being declared both fit.
+type Field = { name: string; datatype: Datatype };
 
 // A form field's text as the value its declared field says, or undefined
 // when empty so the write door can see a required field is missing.
-export function fieldValue(p: Property, raw: string): unknown {
+export function fieldValue(p: Field, raw: string): unknown {
   const s = raw.trim();
   if (s === "") return undefined;
   switch (p.datatype) {
@@ -35,7 +51,7 @@ export function fieldValue(p: Property, raw: string): unknown {
 // p.<field>.
 export function propsFrom(
   form: FormData,
-  properties: Property[],
+  properties: Field[],
 ): Record<string, unknown> {
   const props: Record<string, unknown> = {};
   for (const p of properties) {

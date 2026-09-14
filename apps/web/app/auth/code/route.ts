@@ -1,4 +1,4 @@
-import { signIn } from "@maslow/db/auth";
+import { membershipsByEmail, signIn } from "@maslow/db/auth";
 import { allow, clear } from "@maslow/db/throttle";
 
 import { deployment } from "@/lib/deployment";
@@ -34,7 +34,11 @@ export async function POST(request: Request) {
   try {
     const identity = await redeemCode(flow.email, code.trim());
     await clear(key);
-    return signedIn(await signIn(identity), to, request);
+    const p = await signIn(identity);
+    // A person in more than one org says which one they are here as; the
+    // session opens in the newest until they do.
+    const several = (await membershipsByEmail(flow.email)).length > 1;
+    return signedIn(p, several ? noticed(to, "orgs=1") : to, request);
   } catch (err) {
     if (err instanceof WorkOSError && /one_time_code/.test(err.code))
       return Response.redirect(noticed(to, "code=wrong"), 303);

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { cn } from "@/lib/utils";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { cx } from "@/utils/cx";
 
 const SIDE = 512;
 
@@ -109,17 +109,18 @@ export function ImageInput({
         }}
       />
       <Avatar
-        className={cn(
-          "size-16 peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50",
+        size="lg"
+        src={preview ?? src ?? undefined}
+        initials={fallback}
+        alt=""
+        className={cx(
+          "size-16 text-title-3-semibold peer-focus-visible:ring-2 peer-focus-visible:ring-border-focus-ring peer-focus-visible:ring-offset-2",
           className,
         )}
-      >
-        {(preview ?? src) && <AvatarImage src={preview ?? src!} alt="" />}
-        <AvatarFallback className={className}>{fallback}</AvatarFallback>
-      </Avatar>
+      />
       <span
-        className={cn(
-          "bg-background/80 absolute inset-0 flex items-center justify-center rounded-full text-xs font-medium opacity-0 transition-opacity group-hover:opacity-100 peer-focus-visible:opacity-100",
+        className={cx(
+          "absolute inset-0 flex items-center justify-center rounded-full bg-background-primary-default/80 text-caption-1-semibold text-text-primary opacity-0 transition-opacity duration-fast ease-plain group-hover:opacity-100 peer-focus-visible:opacity-100",
           className,
         )}
       >

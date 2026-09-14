@@ -52,7 +52,18 @@ export function OtherRecord({ not, name }: { not: string; name: string }) {
 
   return (
     <>
-      <input type="hidden" name={name} value={chosen?.id ?? ""} />
+      {/* A link with no other end is not a link: the browser asks for one
+          before the form is ever posted. */}
+      <input
+        type="text"
+        name={name}
+        value={chosen?.id ?? ""}
+        onChange={() => {}}
+        required
+        tabIndex={-1}
+        aria-hidden
+        className="sr-only"
+      />
       <Combobox
         items={found}
         filter={null}

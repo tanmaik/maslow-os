@@ -1,6 +1,6 @@
 "use client";
 
-import { Input } from "@/components/ui/input";
+import { InputBase } from "@/components/base/input/input";
 
 // The name of one connected account, saved when the person presses Enter or
 // leaves the field for anything but a button, whose own submit then stands
@@ -22,7 +22,8 @@ export function AccountName({
     >
       <input type="hidden" name="intent" value="rename" />
       <input type="hidden" name="account" value={account} />
-      <Input
+      <InputBase
+        size="small"
         name="name"
         defaultValue={name ?? ""}
         placeholder="Name this account, e.g. work"
@@ -30,7 +31,10 @@ export function AccountName({
         maxLength={40}
         autoFocus={focus}
         autoComplete="off"
-        className="h-7 max-w-64 text-[0.8rem]"
+        fieldClassName="max-w-[202px]"
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.target as HTMLElement).blur();
+        }}
         onBlur={(e) => {
           const to = e.relatedTarget;
           if (to instanceof Element && to.closest("button")) return;
