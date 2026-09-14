@@ -77,6 +77,24 @@ export type Stats = {
   // in their terminal now. Absent from a machine on an older image.
   idleSince?: string;
   running?: string[];
+  // The agent's own runs there. Absent from a machine on an older image.
+  heartbeat?: Heartbeat;
+};
+
+// The heartbeat as a machine reports it: how often the agent runs on its
+// own, in minutes, zero for off; when the run going now started, if one
+// is; and what came of the last, with the end of what it printed when it
+// did not finish.
+export type Heartbeat = {
+  every: number;
+  running: string | null;
+  last: {
+    at: string;
+    why: string;
+    took: number;
+    ok: boolean;
+    said: string;
+  } | null;
 };
 
 // A backup coming back into a folder of the home: where it is landing,
@@ -477,6 +495,54 @@ export const fly = {
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
+  },
+  // How often the agent runs on its own on the machine, in minutes; zero
+  // is off.
+  async pushHeartbeat(
+    machineId: string,
+    ticket: string,
+    every: number,
+  ): Promise<void> {
+    const res = await fetch(
+      `https://${config().app}.fly.dev/maslow/heartbeat`,
+      {
+        method: "PUT",
+        headers: {
+          "fly-force-instance-id": machineId,
+          "x-maslow-ticket": ticket,
+          "content-type": "text/plain",
+        },
+        body: String(every),
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!res.ok)
+      throw new Error(`heartbeat: ${res.status} ${await res.text()}`);
+  },
+
+  // A run of the agent now, told why; the door's own words when it will
+  // not. One that is nobody's ask, a wake, is refused where the cadence is
+  // off.
+  async runHeartbeat(
+    machineId: string,
+    ticket: string,
+    why: string,
+    wake = false,
+  ): Promise<void> {
+    const res = await fetch(
+      `https://${config().app}.fly.dev/maslow/heartbeat${wake ? "?wake" : ""}`,
+      {
+        method: "POST",
+        headers: {
+          "fly-force-instance-id": machineId,
+          "x-maslow-ticket": ticket,
+          "content-type": "text/plain",
+        },
+        body: why,
+        signal: AbortSignal.timeout(8_000),
+      },
+    );
+    if (!res.ok) throw new Error(await res.text());
   },
 
   // Asks the machine's door to start the person's Linux over at the next

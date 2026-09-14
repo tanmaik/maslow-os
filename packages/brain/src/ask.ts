@@ -188,14 +188,14 @@ async function stillHere(q: Query, subjects: Subject[]): Promise<Subject[]> {
 // Accepts an ask: everything it still names, to everyone it still names, at
 // its level, in the caller's name; then the ask is gone. A port named is
 // given through the hand passed in, since the computer is not the brain's.
-// Returns how many shares it made.
+// Answers with the records and types it shared, and with whom.
 export async function acceptRequest(
   q: Query,
   id: string,
   givePort?: GivePort,
-): Promise<number> {
+): Promise<{ shared: Target[]; subjects: Subject[] }> {
   const ask = await take(q, id);
-  let made = 0;
+  const shared: Target[] = [];
   const subjects = await stillHere(q, ask.subjects);
   for (const item of await stillThere(q, ask.items)) {
     for (const subject of subjects) {
@@ -203,10 +203,10 @@ export async function acceptRequest(
         if (!givePort) throw new Invalid("nothing here gives a port away");
         await givePort(item.port, subject);
       } else await share(q, item, subject, ask.level);
-      made += 1;
     }
+    if (!("port" in item)) shared.push(item);
   }
-  return made;
+  return { shared, subjects };
 }
 
 // Declines an ask: nothing is shared and the ask is gone.

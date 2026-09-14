@@ -13,17 +13,11 @@ import {
 } from "@/components/ui/chart";
 import { Row, Rows } from "@/app/settings/row";
 import { useCountUp } from "@/hooks/use-count-up";
+import type { Stats } from "@/lib/fly";
 import { SIZES, specs, type SizeKey } from "@/lib/sizes";
 import { cx } from "@/utils/cx";
 
-export type Stats = {
-  auth?: "managed" | "own" | "none";
-  cpu: number;
-  memory: { used: number; total: number };
-  used: number | null;
-  disk: number | null;
-  ports: { port: number; name: string; ran?: string }[];
-};
+export type { Stats };
 
 // One reading kept per ask, a minute's worth on screen.
 export type Sample = { at: number; cpu: number; memory: number };

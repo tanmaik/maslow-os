@@ -1,4 +1,4 @@
-// Where a computer can be: sixteen places in North America, dense enough
+// Where a computer can be: fifteen places in North America, dense enough
 // that almost anyone in the United States, Canada or Mexico is within a
 // thousand kilometres of one. The nearest to the person is guessed once,
 // at the sign-in that claims their computer, said on the Computer page
@@ -8,7 +8,6 @@ type Place = readonly [number, number];
 
 export const REGIONS = {
   iad: { name: "Ashburn", at: [38.9, -77.04] },
-  atl: { name: "Atlanta", at: [33.75, -84.39] },
   bos: { name: "Boston", at: [42.36, -71.06] },
   ord: { name: "Chicago", at: [41.88, -87.63] },
   dfw: { name: "Dallas", at: [32.78, -96.8] },
@@ -30,7 +29,7 @@ export type Region = keyof typeof REGIONS;
 export const isRegion = (v: unknown): v is Region =>
   typeof v === "string" && v in REGIONS;
 
-// A region's name in words; a code from before the sixteen stays a code.
+// A region's name in words; a code from before the fifteen stays a code.
 export const regionName = (code: string) =>
   isRegion(code) ? REGIONS[code].name : code;
 
@@ -59,8 +58,8 @@ function nearest(from: Place): Region {
 // Where a request came from: the address it arrived from, the city Vercel
 // puts that address in, and the region nearest to it. Off Vercel the
 // server and the person are the same laptop, so the nearest region is the
-// Fly edge that answers it, when that edge is one of the sixteen; a place
-// none of the sixteen is near is Ashburn.
+// Fly edge that answers it, when that edge is one of the fifteen; a place
+// none of the fifteen is near is Ashburn.
 export async function whereFrom(h: Headers): Promise<{
   ip: string;
   city: string | null;

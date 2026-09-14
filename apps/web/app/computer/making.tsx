@@ -8,6 +8,7 @@ import {
 } from "@remixicon/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { Heartbeat } from "@/app/computer/heartbeat";
 import { ClaudeCode, Numbers, useStats } from "@/app/computer/numbers";
 import { Ports, type Sharing } from "@/app/computer/ports";
 import { Where, type From } from "@/app/computer/region";
@@ -119,7 +120,11 @@ function Updating({
   const [failed, setFailed] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const serving = now?.ports ?? [];
-  const running = now?.running ?? [];
+  // The heartbeat's run is not in a terminal, and stops with the rest.
+  const running = [
+    ...(now?.running ?? []),
+    ...(now?.heartbeat?.running ? ["your agent's heartbeat"] : []),
+  ];
   const say = async (to: "now" | "tonight" | "idle") => {
     setFailed(null);
     setWhen(to);
@@ -341,6 +346,7 @@ function Ready({
   keys,
   said,
   model,
+  heartbeat,
   sharing,
   door,
   where,
@@ -356,6 +362,7 @@ function Ready({
   keys: string;
   said: Told;
   model: { kind: "ours"; capUsd: number } | { kind: "mine" };
+  heartbeat: number;
   sharing: Sharing | null;
   door: string | null;
   where: From;
@@ -420,6 +427,7 @@ function Ready({
         auth={now?.auth}
         capUsd={model.kind === "ours" ? model.capUsd : null}
       />
+      <Heartbeat every={heartbeat} now={now?.heartbeat ?? null} />
       <Rows>
         <Row
           label="Start your Linux over"
@@ -471,6 +479,7 @@ export function Making({
   keys,
   said,
   model,
+  heartbeat,
   sharing,
   door,
   where,
@@ -494,6 +503,9 @@ export function Making({
   said: Told;
   // Whose account Claude Code on the computer runs on.
   model: { kind: "ours"; capUsd: number } | { kind: "mine" };
+  // How often the person's agent runs on its own there, in minutes; zero
+  // is off.
+  heartbeat: number;
   sharing: Sharing | null;
   // The computer's own address, once it has one.
   door: string | null;
@@ -551,6 +563,7 @@ export function Making({
         keys={keys}
         said={said}
         model={model}
+        heartbeat={heartbeat}
         sharing={sharing}
         door={door}
         where={where}

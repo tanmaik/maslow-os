@@ -101,6 +101,7 @@ export async function ComputerPane({
           said={said}
           update={updateOn(c)}
           model={modelOf()}
+          heartbeat={c?.heartbeatEvery ?? 0}
           sharing={shares}
         />
       )}

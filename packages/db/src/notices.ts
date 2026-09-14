@@ -138,15 +138,18 @@ export async function answerNotice(
 }
 
 // Marks the notice that carried an ask to share with the answer the
-// person gave it elsewhere, so one ask never waits in two places.
+// person gave it elsewhere, so one ask never waits in two places, and
+// answers with that notice's id, or null where none carried it.
 export async function answerRequestNotice(
   q: Query,
   request: string,
   answer: string,
-): Promise<void> {
-  await q.query(
+): Promise<string | null> {
+  const { rows } = await q.query<{ id: string }>(
     `update notices set answer = $2, read_at = coalesce(read_at, now())
-     where request_id = $1 and answer is null`,
+     where request_id = $1 and answer is null
+     returning id`,
     [request, answer],
   );
+  return rows[0]?.id ?? null;
 }

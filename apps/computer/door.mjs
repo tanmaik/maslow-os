@@ -17,6 +17,7 @@ import pty from "node-pty";
 
 import { backup } from "./backup.mjs";
 import * as files from "./files.mjs";
+import { heartbeat } from "./heartbeat.mjs";
 import { stats } from "./stats.mjs";
 
 const SECRET = process.env.DOOR_SECRET;
@@ -566,6 +567,7 @@ const server = http.createServer(async (req, res) => {
         ...numbers,
         idleSince: new Date(lastSeen).toISOString(),
         running: programs,
+        heartbeat: heartbeat.state(),
       }),
     );
   }
@@ -622,6 +624,30 @@ const server = http.createServer(async (req, res) => {
     fs.mkdirSync("/data/keys", { recursive: true });
     fs.writeFileSync("/data/keys/me", text, { mode: 0o644 });
     return say(res, 200, "keys written");
+  }
+  // The heartbeat, for our server alone: how often the agent runs on its
+  // own, in minutes, and a run now, saying why.
+  if (to.mine && url.pathname === "/maslow/heartbeat") {
+    if (!ours(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    if (req.method === "PUT") {
+      const every = Number(await bodyOf(req));
+      if (!Number.isInteger(every) || every < 0)
+        return say(res, 400, "How often is a number of minutes.");
+      heartbeat.set(every);
+      return say(res, 200, "heartbeat set");
+    }
+    if (req.method === "POST") {
+      const why = (await bodyOf(req)).trim();
+      if (why.length > 4000 || /[^\w\s(),.:;"'-]/.test(why))
+        return say(res, 400, "A reason is plain words, and not a speech.");
+      const wake = url.searchParams.has("wake");
+      if (wake && heartbeat.state().every === 0)
+        return say(res, 409, "the heartbeat is off");
+      return heartbeat.run(why || "the person pressed Run now")
+        ? say(res, 202, "running")
+        : say(res, 202, "after the run going now");
+    }
   }
   // Reset, for our server alone: the next boot starts the person's Linux
   // over and keeps their home. The mark is on the disk, outside their
@@ -2031,3 +2057,25 @@ function frameOf(first, payload) {
 }
 
 server.listen(8080, "::", () => console.log("the door is open on 8080"));
+
+// The heartbeat's runs are the person's, in their Linux, on a session of
+// ours, like the agent the desk opens.
+heartbeat.start((args) =>
+  spawn(
+    "/usr/sbin/chroot",
+    [
+      ...AS_THEM,
+      `USER=${PERSON}`,
+      `LOGNAME=${PERSON}`,
+      "SHELL=/bin/bash",
+      "LANG=C.UTF-8",
+      "MASLOW_AUTH=managed",
+      "/bin/bash",
+      "-lc",
+      `cd ${HOME} && exec "$0" "$@"`,
+      ...args,
+    ],
+    // A group of its own, so a run past its time is stopped whole.
+    { cwd: "/", stdio: ["ignore", "pipe", "pipe"], detached: true },
+  ),
+);

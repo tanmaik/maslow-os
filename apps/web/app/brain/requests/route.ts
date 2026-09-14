@@ -1,8 +1,9 @@
 import { Forbidden, Invalid, isId, NotFound } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
+import { wakeAnswered, wakeShared } from "@/lib/computer";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
@@ -25,7 +26,13 @@ export async function POST(request: Request) {
     return refused(request, "/brain", "An ask is accepted or declined.");
   }
   try {
-    await asPerson(p, (db) => answerShareAsk(db, p.userId, id, intent));
+    const made = await asPerson(p, (db) =>
+      answerShareAsk(db, p.userId, id, intent),
+    );
+    after(() => wakeShared(p, made.shared, made.subjects));
+    // The agent that asked hears the answer either way, by the notice
+    // that carried the ask.
+    if (made.notice) after(() => wakeAnswered(p, made.notice!));
   } catch (err) {
     if (
       err instanceof Invalid ||

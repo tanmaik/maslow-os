@@ -1683,12 +1683,13 @@ export async function smokeBrain(stack) {
         beforeAnswer === 0 &&
         declined === 0 &&
         stillHidden === 0 &&
-        made === 1 &&
+        made.shared.length === 1 &&
+        made.subjects.length === 1 &&
         nowSeen === 1 &&
-        stale.made === 1 &&
-        stale.toNobody === 0 &&
+        stale.made.shared.length === 1 &&
+        stale.toNobody.subjects.length === 0 &&
         stale.left === 0,
-      `removed since shares ${stale.made}, deleted group ${stale.toNobody}; asked ${asked.waiting.length}, unknown ${asked.nobody}, everyone at edit ${asked.tooMuch}, colleague asks ${askedByOther}, seen ${beforeAnswer}/${stillHidden}/${nowSeen}`,
+      `removed since shares ${stale.made.shared.length}, deleted group ${stale.toNobody.subjects.length}; asked ${asked.waiting.length}, unknown ${asked.nobody}, everyone at edit ${asked.tooMuch}, colleague asks ${askedByOther}, seen ${beforeAnswer}/${stillHidden}/${nowSeen}`,
     );
     await as(marge)((q) =>
       brain.unshare(
@@ -1724,7 +1725,8 @@ export async function smokeBrain(stack) {
     check(
       "a port is asked for at view, and accepting gives it",
       portAsk.atEdit === "Invalid" &&
-        portAsk.made === 1 &&
+        portAsk.made.shared.length === 0 &&
+        portAsk.made.subjects.length === 1 &&
         portAsk.given.join() === `3000 to member ${otto.userId}` &&
         portAsk.left === 0,
       `at edit ${portAsk.atEdit}; gave ${portAsk.given.join(", ") || "nothing"}; ${portAsk.left} left`,

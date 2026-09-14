@@ -353,7 +353,7 @@ machine.
 Sizes are a ladder of CPU and memory, shown without a price, and a
 restart of a few seconds; nothing changes a computer's size but the
 person; the disk grows
-before it fills and never shows a cap. Where it is is one of sixteen
+before it fills and never shows a cap. Where it is is one of fifteen
 North American regions, guessed at sign-in from where the request came
 and said on the page by name beside the one honest number, the round
 trip the person's own browser measures to it; over forty milliseconds
@@ -461,6 +461,20 @@ person's from the image, so what Claude Code builds for them looks like
 Maslow. The
 brain's MCP is the brain and the connectors, and nothing of the machine:
 no hand that runs a command or reads or writes a file goes into it.
+The heartbeat is that same Claude Code running on its own: on a cadence
+the person sets on the Computer pane, off until they set one, and at
+their Run now, the door starts it as them on a session of ours, with a
+brief that says what is on the machine, why this run started and
+nothing of what to do with it, a budget and a time no run goes past, one
+run at a time. A share wakes the agent of whoever it reached: once it
+has landed, each of their computers with a cadence set is asked for a
+run now, told who shared what, and an ask the person answers wakes
+their own the same way, told which ask; a reason that arrives mid-run
+waits for the run after. How often,
+whether one is going and what came of the last are the machine's to
+say, kept on its disk outside their Linux so a restart keeps the clock,
+and the sweep tells every machine its cadence each hour. The settled
+design is `docs/decisions/2026-09-14-the-heartbeat.md`.
 
 ## Interface
 

@@ -9,9 +9,10 @@ import {
   noticesOf,
   Unanswerable,
 } from "@maslow/db/notices";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
+import { wakeAnswered, wakeShared } from "@/lib/computer";
 import { principal } from "@/lib/session";
 
 // What the panel behind the clock reads and answers through: the person's
@@ -64,13 +65,17 @@ export async function POST(request: Request) {
         if (notice.request) {
           if (said.answer !== "Accept" && said.answer !== "Decline")
             throw new Unanswerable("answer with Accept or Decline");
-          await answerShareAsk(
+          const made = await answerShareAsk(
             q,
             p.userId,
             notice.request,
             said.answer === "Accept" ? "accept" : "decline",
           );
+          after(() => wakeShared(p, made.shared, made.subjects));
         } else await answerNotice(q, said.id, said.answer);
+        // The agent that asked hears the answer once it has landed.
+        const id = said.id;
+        after(() => wakeAnswered(p, id));
       }
     });
   } catch (err) {

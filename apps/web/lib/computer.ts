@@ -1,5 +1,7 @@
+import type { Subject, Target } from "@maslow/brain";
 import { asMeter, asOrg, asPerson, type Query } from "@maslow/db";
 import type { Principal } from "@maslow/db/auth";
+import { groupsIn } from "@maslow/db/groups";
 import {
   allComputers,
   claimComputer,
@@ -24,6 +26,8 @@ import {
   setReady,
   setSize,
   setUpdate,
+  setHeartbeatEvery,
+  setRegion,
   setUpdateWhen,
   setVolume,
   shares,
@@ -50,7 +54,7 @@ import {
   type Stats,
 } from "./fly.ts";
 import { openrouter } from "./openrouter.ts";
-import { regionName, type Region } from "./region.ts";
+import { isRegion, regionName, type Region } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
 import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 
@@ -58,7 +62,7 @@ import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-6";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-10";
 
 // An image whose label ends in -security does not wait on the person for
 // a week: it takes the idle rule from the day it is ready.
@@ -207,6 +211,12 @@ export async function advance(p: Principal, region: string): Promise<State> {
         : stateOf(c);
     let failed = null;
     try {
+      // A row claimed in a region that is no longer one of ours, with
+      // nothing made there yet, is made where this ask came from instead.
+      if (!c.volumeId && !c.machineId && !isRegion(c.region)) {
+        await setRegion(q, c.id, region);
+        c.region = region;
+      }
       if (c.move) failed = await moveOn(q, c, "the page asked");
       else if (c.readyAt) await revive(q, c, "the door did not answer");
       else await step(q, c, "sign-in");
@@ -1014,11 +1024,15 @@ async function reconcileOrg(
           return;
         }
         await backUp(q, c);
-        // The keys again every hour, so a machine remade or reset has them.
+        // The keys again every hour, so a machine remade or reset has them,
+        // and the heartbeat's clock with them.
         if (c.authorizedKeys)
           await fly
             .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
             .catch(() => {});
+        await fly
+          .pushHeartbeat(c.machineId!, ticket(c, 60), c.heartbeatEvery)
+          .catch(() => {});
         await spend(q, c, m);
       }
     });
@@ -1673,6 +1687,129 @@ export async function pushKeys(p: Principal): Promise<void> {
   const c = await ready(p);
   if (!c) return;
   await fly.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
+}
+
+// How often the person's agent runs on its own on their computer, in
+// minutes, zero for off: written down, and given to the machine at once
+// when it is ready, under the computer's lock so two changes reach it in
+// the order they were written. Answers whether the machine was told: one
+// on an image from before the heartbeat hears once it takes the update
+// waiting for it; one that could not be reached hears from the sweep
+// within the hour.
+export async function setHeartbeat(
+  p: Principal,
+  every: number,
+): Promise<"told" | "behind" | "later"> {
+  return asOrg(p.orgId, async (q) => {
+    const known = await computerOf(q, p.userId);
+    if (!known) return "later";
+    // Held until the machine has heard, since a change written and not
+    // yet delivered is what the next one must wait behind; the row is
+    // read again under it, since a move or an update may have held it.
+    await q.query("select pg_advisory_xact_lock(hashtext($1))", [
+      `computer:${known.id}`,
+    ]);
+    const c = (await computerOf(q, p.userId)) ?? known;
+    await setHeartbeatEvery(q, c.id, every);
+    if (!c.readyAt || !c.machineId) return "later";
+    if (c.updateImage === IMAGE) return "behind";
+    try {
+      await fly.pushHeartbeat(c.machineId, ticket(c, 60), every);
+      return "told";
+    } catch (err) {
+      console.error(`heartbeat ${p.personId}: ${(err as Error).message}`);
+      return "later";
+    }
+  });
+}
+
+// A run of the agent on the person's computer now; false when it is not
+// ready, and the door's own words when it will not.
+export async function runHeartbeat(p: Principal): Promise<boolean> {
+  const c = await ready(p);
+  if (!c) return false;
+  await fly.runHeartbeat(
+    c.machineId!,
+    ticket(c, 60),
+    "the person pressed Run now",
+  );
+  return true;
+}
+
+// Wakes the person's own agent once they have answered an ask of it: their
+// computer, with a cadence set, is asked for a run now, told which ask.
+export async function wakeAnswered(
+  p: Principal,
+  notice: string,
+): Promise<void> {
+  if (deployment.computers.kind === "none") return;
+  const c = await ready(p);
+  if (!c || c.heartbeatEvery === 0) return;
+  const why = /^[a-z0-9]{10}$/.test(notice)
+    ? `the person answered ask ${notice}`
+    : "the person answered an ask";
+  await fly
+    .runHeartbeat(c.machineId!, ticket(c, 60), why, true)
+    .catch((err: Error) => console.error(`wake ${c.id}: ${err.message}`));
+}
+
+// Wakes the agent of everyone a share reached: each of their computers
+// with a cadence set is asked for a run now, told who shared what with
+// the person. The sharer's own is not; a computer that cannot be reached
+// is left to its clock.
+export async function wakeShared(
+  p: Principal,
+  on: Target[],
+  subjects: Subject[],
+): Promise<void> {
+  if (deployment.computers.kind === "none" || on.length === 0) return;
+  // Named by id alone, never by a title or a name: what a colleague
+  // wrote is read through the brain's tools as data, and nothing of it is
+  // put in the run's own words.
+  // Past a page of them the reason counts rather than names, since the
+  // door takes a sentence and the brain's log names every one.
+  const records = on.flatMap((t) => ("record" in t ? [t.record] : []));
+  const types = on.flatMap((t) => ("type" in t ? [t.type] : []));
+  const named = (kind: string, ids: string[]) =>
+    ids.length > 50
+      ? `${ids.length} ${kind}s, which the brain's log names`
+      : `${ids.length === 1 ? kind : `${kind}s`} ${ids.join(", ")}`;
+  const what = [
+    records.length > 0 && named("record", records),
+    types.length > 0 && named("type", types),
+  ]
+    .filter(Boolean)
+    .join(" and ");
+  const why = `a colleague (member ${p.userId}) shared ${what} with the person`;
+  const asked = await asPerson(p, async (q) => {
+    const groups = await groupsIn(q);
+    const reached = new Set<string>();
+    for (const s of subjects) {
+      if (s.who === "member") reached.add(s.id);
+      else
+        for (const m of groups.find((g) =>
+          s.who === "everyone" ? g.everyone : g.id === s.id,
+        )?.members ?? [])
+          reached.add(m.id);
+    }
+    reached.delete(p.userId);
+    const computers = await Promise.all(
+      [...reached].map((id) => computerOf(q, id)),
+    );
+    return computers
+      .filter(
+        (c): c is Computer =>
+          c !== null && c.heartbeatEvery > 0 && !!c.readyAt && !!c.machineId,
+      )
+      .map((c) => c);
+  });
+  await Promise.all(
+    asked.map((c) =>
+      fly
+        .runHeartbeat(c.machineId!, ticket(c, 60), why, true)
+        .catch((err: Error) => console.error(`wake ${c.id}: ${err.message}`)),
+    ),
+  );
 }
 
 // Whose account Claude Code on the computer runs on: ours, with the weekly

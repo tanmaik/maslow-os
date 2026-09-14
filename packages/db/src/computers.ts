@@ -42,6 +42,9 @@ export type Computer = {
   updateReadyAt: Date | null;
   updateWhen: UpdateWhen | null;
   updateSecurity: boolean;
+  // How often the person's agent runs on its own on the machine, in
+  // minutes; zero is off.
+  heartbeatEvery: number;
 };
 
 // When a computer takes an update: at once, at three in the morning where
@@ -74,6 +77,7 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.session_id as "sessionId", c.move,
   c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
   c.update_when as "updateWhen", c.update_security as "updateSecurity",
+  c.heartbeat_every as "heartbeatEvery",
   (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
@@ -321,6 +325,14 @@ export async function setUpdateWhen(
   ]);
 }
 
+// How often the person's agent runs on its own, in minutes; zero is off.
+export async function setHeartbeatEvery(q: Query, id: string, every: number) {
+  await q.query("update computers set heartbeat_every = $2 where id = $1", [
+    id,
+    every,
+  ]);
+}
+
 // How far the move has got, or null once it is over.
 export async function setMove(q: Query, id: string, move: Move | null) {
   await q.query("update computers set move = $2 where id = $1", [
@@ -339,6 +351,11 @@ export async function setPlace(
     "update computers set region = $2, volume_id = $3, machine_id = $4 where id = $1",
     [id, at.region, at.volumeId, at.machineId],
   );
+}
+
+// Where a computer is to be made, while nothing of it exists yet.
+export async function setRegion(q: Query, id: string, region: string) {
+  await q.query("update computers set region = $2 where id = $1", [id, region]);
 }
 
 export async function setReady(q: Query, id: string, ready: boolean) {
