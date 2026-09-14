@@ -19,5 +19,10 @@
     "packages/*": {
       "includeEntryExports": true,
     },
+    // The relay as a process, started by the dev stack.
+    "packages/sync": {
+      "entry": ["src/main.ts"],
+      "includeEntryExports": true,
+    },
   },
 }

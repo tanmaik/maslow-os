@@ -1,0 +1,25 @@
+{
+  "name": "@maslow/document",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./extensions": "./src/extensions.ts",
+    "./headless": "./src/headless.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tiptap/core": "^3.31.3",
+    "@tiptap/extension-collaboration": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
+    "happy-dom": "^20.14.5",
+    "tiptap-markdown": "^0.9.0",
+    "yjs": "^13.6.32"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

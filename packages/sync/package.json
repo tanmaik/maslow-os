@@ -1,0 +1,23 @@
+{
+  "name": "@maslow/sync",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./ticket": "./src/ticket.ts",
+    "./client": "./src/client.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hocuspocus/provider": "^4.7.0",
+    "@hocuspocus/server": "^4.7.0",
+    "@maslow/document": "workspace:*",
+    "yjs": "^13.6.32"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3"
+  }
+}

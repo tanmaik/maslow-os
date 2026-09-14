@@ -22,6 +22,7 @@ import { allow } from "../packages/db/src/throttle.ts";
 import { share } from "../packages/brain/src/index.ts";
 import { smokeBrain } from "./smoke-brain.mjs";
 import { smokeConnections } from "./smoke-connections.mjs";
+import { smokeSync } from "./smoke-sync.mjs";
 import { smokeDb } from "./smoke-db.mjs";
 import { smokeMcp } from "./smoke-mcp.mjs";
 import { freePort, root, startStack } from "./stack.mjs";
@@ -63,6 +64,8 @@ const stack = await startStack({
     ...noCredentials,
     UPLOADS_DIR: path.join(scratch, "uploads"),
     CRON_SECRET: "smoke",
+    // The relay asks after people every second here, not every minute.
+    SYNC_RECHECK_MS: "1000",
   },
 });
 
@@ -1327,6 +1330,7 @@ try {
   failed = !(await smokeDb(stack)) || failed;
   failed = !(await smokeBrain(stack)) || failed;
   failed = !(await smokeMcp(stack, signIn)) || failed;
+  failed = !(await smokeSync(stack, signIn)) || failed;
 } catch (err) {
   console.error(err);
   failed = true;

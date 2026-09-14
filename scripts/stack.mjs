@@ -1,7 +1,7 @@
 // The whole local stack: this checkout's Postgres, migrated and seeded, and
 // Next on a free port with the app role's URL.
 import { spawn } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import fs from "node:fs";
 import net from "node:net";
 import path from "node:path";
@@ -80,6 +80,7 @@ function vendorsOf(env) {
     computers: has("FLY_API_TOKEN", "FLY_COMPUTERS_APP") ? "Fly" : null,
     connections: has("COMPOSIO_API_KEY") ? "Composio" : null,
     embeddings: has("VOYAGE_API_KEY") ? "Voyage" : null,
+    sync: has("SYNC_URL", "SYNC_SECRET") ? "relay" : null,
   };
 }
 
@@ -111,6 +112,31 @@ export async function startStack({
     throw err;
   }
 
+  // The relay for live editing runs beside the app, on a port of its own
+  // and a secret the two share for the life of this stack.
+  const syncPort = await freePort();
+  const syncSecret =
+    process.env.SYNC_SECRET ?? randomBytes(24).toString("base64url");
+  const sync = spawn(
+    process.execPath,
+    [path.join(root, "packages", "sync", "src", "main.ts")],
+    {
+      stdio: stdio === "ignore" ? ["ignore", "ignore", "pipe"] : stdio,
+      env: {
+        ...process.env,
+        ...extraEnv,
+        SYNC_PORT: String(syncPort),
+        SYNC_SECRET: syncSecret,
+      },
+    },
+  );
+  const live = {
+    SYNC_URL: `ws://127.0.0.1:${syncPort}`,
+    SYNC_SECRET: syncSecret,
+    // Where the relay calls this app back.
+    APP_URL: `http://127.0.0.1:${webPort}`,
+  };
+
   const web = spawn(
     path.join(root, "apps", "web", "node_modules", ".bin", "next"),
     ["dev", "-p", String(webPort)],
@@ -120,6 +146,7 @@ export async function startStack({
       env: {
         ...process.env,
         ...values,
+        ...live,
         DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
         // The machines this checkout makes carry its name, so its own
         // dev server renews their lease and no other's.
@@ -133,6 +160,8 @@ export async function startStack({
   // Recent stderr, for startup errors.
   let stderr = "";
   web.stderr?.on("data", (d) => (stderr = (stderr + d).slice(-2000)));
+  let syncStderr = "";
+  sync.stderr?.on("data", (d) => (syncStderr = (syncStderr + d).slice(-2000)));
 
   const url = `http://127.0.0.1:${webPort}`;
   return {
@@ -141,9 +170,15 @@ export async function startStack({
     url,
     applied,
     secrets: values && Object.keys(values).length,
-    vendors: vendorsOf({ ...process.env, ...values, ...extraEnv }),
+    vendors: vendorsOf({ ...process.env, ...values, ...live, ...extraEnv }),
     // What the web process was given, for the dev script's own calls.
-    env: { ...process.env, ...values, ...extraEnv },
+    env: { ...process.env, ...values, ...live, ...extraEnv },
+    // What the relay said on stderr lately, and whether it is still up.
+    sync: {
+      url: live.SYNC_URL,
+      said: () => syncStderr,
+      up: () => !exited(sync),
+    },
     web,
     // Resolves once Next answers; fails at once if Next has died.
     ready: async (ms = 60_000) => {
@@ -159,10 +194,12 @@ export async function startStack({
       throw new Error(`${url} did not answer within ${ms}ms:\n${stderr}`);
     },
     stop: async () => {
-      if (!exited(web)) {
+      // The relay first, so its last saves find the app still up.
+      for (const child of [sync, web]) {
+        if (exited(child)) continue;
         await new Promise((resolve) => {
-          web.once("exit", resolve);
-          web.kill("SIGTERM");
+          child.once("exit", resolve);
+          child.kill("SIGTERM");
         });
       }
       await cluster.stop();

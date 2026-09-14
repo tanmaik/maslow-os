@@ -165,7 +165,17 @@ last change of the record it saw, and one that fell behind is refused,
 never written over what landed since: the page shows the newer version
 and the person keeps theirs or takes it. The page watches the log and
 refreshes as the record changes elsewhere, so an agent's rewrite is on
-screen within seconds.
+screen within seconds. While anyone has a record open, its body is one
+live document in a relay of ours, `packages/sync`, that every editor of
+it is joined to over a socket on a ticket the app signs: keystrokes
+merge as they happen, and the relay saves through the app's own door,
+after a second of quiet and before a different person's typing lands,
+so every save is one person's and in their name. The relay holds no
+table and runs the page's own editor headless, so what it saves is what
+the page would; markdown stays the one truth, and the live document is
+forgotten when the last person leaves. A rewrite from elsewhere replaces
+the live text within seconds; a viewer's socket is read-only, and a
+share that ends puts its person out within the minute.
 
 Types are the person's own vocabulary, open to them and their agent. A type
 is a name and the fields it declares, nothing more: no description, since

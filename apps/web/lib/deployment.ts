@@ -207,6 +207,25 @@ function models(): Models {
 if (production && !process.env.CRON_SECRET)
   throw new Error("Production needs CRON_SECRET for the hourly sweep.");
 
+// The relay that holds a record's live document while people are in it,
+// reached by the browser over a socket on a ticket this app signs with the
+// secret the two share. The ticket names where the relay calls this
+// deployment back: its own address, never one a request claimed. Without
+// a relay nothing is live and the page saves as it does alone; production
+// runs without one until the relay is hosted.
+type Sync =
+  | { kind: "relay"; url: string; secret: string; origin: string }
+  | { kind: "none" };
+function sync(): Sync {
+  const { SYNC_URL: url, SYNC_SECRET: secret } = process.env;
+  const site = production
+    ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+    : (process.env.VERCEL_BRANCH_URL ?? process.env.APP_URL);
+  if (!url || !secret || !site) return { kind: "none" };
+  const origin = site.startsWith("http") ? site : `https://${site}`;
+  return { kind: "relay", url, secret, origin };
+}
+
 export const deployment = {
   production,
   // Which of the three environments this is, for the developer's pill.
@@ -223,6 +242,7 @@ export const deployment = {
   models: models(),
   connections: connections(),
   embeddings: embeddings(),
+  sync: sync(),
   https,
   identity: identityProvider(),
   mail: mail(),

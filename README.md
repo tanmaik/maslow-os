@@ -57,6 +57,12 @@ tagged local, preview or production. One PostHog project serves all three,
 and its filter counts only production. Without the key nothing is reported
 and the pill says so.
 
+A record's body is live while people are in it: the relay in `packages/sync`
+holds the document and saves through the app, on `SYNC_URL` and the
+`SYNC_SECRET` the two share. `pnpm dev` starts one beside the app; without
+one, nothing is live and the page saves as it does alone, production
+included until the relay is hosted.
+
 Production refuses to start without WorkOS, mail, storage, analytics, or the
 sweep's `CRON_SECRET`.
 
