@@ -1,5 +1,5 @@
 import { defineType, type TypeDefinition } from "./catalog.ts";
-import { Invalid, Forbidden, NotFound } from "./errors.ts";
+import { Conflict, Invalid, Forbidden, NotFound } from "./errors.ts";
 import { check, holdType, plain, propertiesOf } from "./properties.ts";
 import {
   recordColumns,
@@ -249,7 +249,22 @@ export type Patch = {
   // Null takes the time away; absent leaves it.
   occurredAt?: Date | string | null;
   confidence?: number | null;
+  // The last change of the record the caller saw. A change since then to
+  // anything this patch sets is a conflict, never overwritten.
+  seen?: number;
 };
+
+// The columns a patch sets, by the names the log records them under.
+function touched(patch: Patch): string[] {
+  const cols: string[] = [];
+  if (patch.type !== undefined) cols.push("type");
+  if (patch.title !== undefined) cols.push("title");
+  if (patch.body !== undefined) cols.push("body");
+  if (patch.props || patch.fields) cols.push("props");
+  if (patch.occurredAt !== undefined) cols.push("occurred_at");
+  if (patch.confidence !== undefined) cols.push("confidence");
+  return cols;
+}
 
 // Changes a record. What it will hold must fit the type's form. The type
 // is held first and then the row, the order every door takes, and the row
@@ -283,6 +298,21 @@ export async function edit(
       await q.query<Row>(`${ROW} and type = $2 for update`, [id, peek.type])
     ).rows[0];
     if (current) break;
+  }
+  if (patch.seen !== undefined) {
+    const since = await q.query<{ seq: string }>(
+      `select seq from events
+       where subject = 'record' and subject_id = $1 and seq > $2
+         and exists (select 1 from unnest($3::text[]) c
+           where before ->> c is distinct from after ->> c)
+       order by seq desc limit 1`,
+      [id, patch.seen, touched(patch)],
+    );
+    if (since.rows[0]) {
+      throw new Conflict(
+        `record ${id} changed since #${patch.seen}, at #${since.rows[0].seq}`,
+      );
+    }
   }
   let props = patch.props;
   if (patch.fields) {

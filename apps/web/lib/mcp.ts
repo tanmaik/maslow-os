@@ -148,7 +148,16 @@ const ids = z.array(id).min(1).max(50);
 const change = record
   .omit({ source: true, sourceRef: true })
   .partial()
-  .extend({ id });
+  .extend({
+    id,
+    seen: z
+      .number()
+      .int()
+      .optional()
+      .describe(
+        "the last change of this record you saw, from history; refused if what you set changed since",
+      ),
+  });
 const rename = z.object({ name: z.string(), newName: z.string() });
 const fieldChange = property.partial().extend({
   type: z.string(),
@@ -423,7 +432,7 @@ export function brainServer(
     "edit",
     {
       description:
-        "Changes records. New props replace the old and must fit the type's fields. occurredAt null takes the time away; confidence null takes it away. Answers with each record as it is now.",
+        "Changes records. New props replace the old and must fit the type's fields. occurredAt null takes the time away; confidence null takes it away. A change naming the last change it saw is refused rather than overwriting what changed since. Answers with each record as it is now.",
       inputSchema: { changes: z.array(change).min(1).max(50) },
     },
     door(async (q, a) => {

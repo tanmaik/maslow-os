@@ -89,7 +89,8 @@ export function Properties({
     setChosen((c) => ({ ...c, [field]: value }));
     saves.current[field] = (saves.current[field] ?? Promise.resolve()).then(
       async () => {
-        const said = await save(id, { [field]: value });
+        const landed = await save(id, { [field]: value });
+        const said = typeof landed === "number" ? null : landed.said;
         setTrouble(said);
         if (!said) {
           kept.current[field] = value;

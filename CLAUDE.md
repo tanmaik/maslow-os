@@ -160,7 +160,12 @@ whose they are where they are not the reader's. A record is a document: its
 body takes its shape as it is typed, a slash offers what a line can become,
 and markdown is what is stored, so an agent writes and a person writes the
 same text. The editor is Tiptap, which is not a component and has no shadcn
-equivalent, as CodeMirror is not for the Files editor.
+equivalent, as CodeMirror is not for the Files editor. A save names the
+last change of the record it saw, and one that fell behind is refused,
+never written over what landed since: the page shows the newer version
+and the person keeps theirs or takes it. The page watches the log and
+refreshes as the record changes elsewhere, so an agent's rewrite is on
+screen within seconds.
 
 Types are the person's own vocabulary, open to them and their agent. A type
 is a name and the fields it declares, nothing more: no description, since

@@ -1,7 +1,9 @@
 import {
+  Conflict,
   edit,
   Forbidden,
   get,
+  history,
   Invalid,
   isId,
   NotFound,
@@ -21,11 +23,28 @@ import { vocabulary } from "../../../catalog";
 import { recordHref } from "../../../format";
 import { confidenceFrom, fieldValue, instantFrom } from "../../../props";
 
+// The number of the last change to one record, which a page watching it
+// compares against the one it has.
+export async function GET(
+  _: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const p = await principal();
+  if (!p) return new Response(null, { status: 401 });
+  const { id } = await params;
+  if (!isId(id)) return new Response(null, { status: 404 });
+  const [last] = await asPerson(p, (db) => history(db, { of: id, limit: 1 }));
+  return NextResponse.json({ seen: last?.seq ?? 0 });
+}
+
 // Changes one record the way the form asked: deleted, restored, unmerged,
 // one of its links removed, or edited. An edit changes only what was
 // posted: a title, a body, a field, when it happened, how sure; a field
-// posted empty is taken away, and the door merges fields under a lock. A browser posting a form is sent back to the
-// record; a page saving as it goes asks for JSON and gets a bare answer.
+// posted empty is taken away, and the door merges fields under a lock. A
+// post that names the last change it saw is refused when what it sets
+// changed since. A browser posting a form is sent back to the record; a
+// page saving as it goes asks for JSON and gets the record's last change
+// back, which is what its next save names.
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -39,7 +58,7 @@ export async function POST(
   const bare = request.headers.get("accept")?.includes("application/json");
 
   try {
-    await asPerson(p, async (db) => {
+    const seen = await asPerson(p, async (db) => {
       if (intent === "delete") return remove(db, id);
       if (intent === "restore") return restore(db, id);
       if (intent === "unmerge") return unmerge(db, id);
@@ -76,8 +95,17 @@ export async function POST(
       if (form.has("confidence")) {
         patch.confidence = confidenceFrom(form.get("confidence"));
       }
-      if (Object.keys(patch).length) await edit(db, id, patch);
+      if (!Object.keys(patch).length) return;
+      if (form.has("seen")) {
+        const seen = Number(form.get("seen"));
+        if (!Number.isInteger(seen) || seen < 0)
+          throw new Invalid("seen is a change number.");
+        patch.seen = seen;
+      }
+      await edit(db, id, patch);
+      return (await history(db, { of: id, limit: 1 }))[0]?.seq ?? 0;
     });
+    if (bare) return NextResponse.json({ seen: seen ?? 0 });
   } catch (err) {
     if (err instanceof Invalid || err instanceof NotFound) {
       return new Response(err.message, { status: 400 });
@@ -85,8 +113,10 @@ export async function POST(
     if (err instanceof Forbidden) {
       return new Response(err.message, { status: 403 });
     }
+    if (err instanceof Conflict) {
+      return new Response(err.message, { status: 409 });
+    }
     throw err;
   }
-  if (bare) return new Response(null, { status: 204 });
   return NextResponse.redirect(`${origin(request)}${recordHref(id)}`, 303);
 }

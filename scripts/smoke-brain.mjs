@@ -337,6 +337,34 @@ export async function smokeBrain(stack) {
       `hidden ${written.hidden.deletedAt !== null}, back ${written.back.deletedAt === null}`,
     );
 
+    // A save that names the last change it saw is refused when what it
+    // sets changed since, and lands when something else did.
+    const behind = await me(acme)(async (q) => {
+      const id = written.after.id;
+      const [was] = await brain.history(q, { of: id, limit: 1 });
+      await brain.edit(q, id, { body: "Moved on." });
+      const title = await attempt(() =>
+        brain.edit(q, id, { title: "Still mine", seen: was.seq }),
+      );
+      const body = await attempt(() =>
+        brain.edit(q, id, { body: "Over the top", seen: was.seq }),
+      );
+      const [now] = await brain.history(q, { of: id, limit: 1 });
+      const fresh = await attempt(() =>
+        brain.edit(q, id, { body: "Caught up.", seen: now.seq }),
+      );
+      const [after] = await brain.get(q, [id]);
+      return { title, body, fresh, kept: after.body };
+    });
+    check(
+      "a save that fell behind is refused",
+      behind.title === "allowed" &&
+        behind.body === "Conflict" &&
+        behind.fresh === "allowed" &&
+        behind.kept === "Caught up.",
+      `title ${behind.title}, body ${behind.body}, caught up ${behind.fresh}, body ${JSON.stringify(behind.kept)}`,
+    );
+
     // The vocabulary is open.
     const lift = await me(acme)(async (q) => {
       let refused = null;

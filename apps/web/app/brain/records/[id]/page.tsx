@@ -3,6 +3,7 @@ import {
   edgesOf,
   get,
   graph,
+  history,
   stubs,
   isId,
   sharesOf,
@@ -66,6 +67,7 @@ export default async function Page({
   const [{ types, people }, found] = await Promise.all([
     vocabulary(p),
     asPerson(p, async (db) => {
+      const [last] = await history(db, { of: id, limit: 1 });
       const [record] = await get(db, [id]);
       if (!record) return null;
       // The live record at the end of the chain of merges, if this is not it.
@@ -89,6 +91,7 @@ export default async function Page({
       );
       return {
         record,
+        seen: last?.seq ?? 0,
         aliases,
         edges,
         others: new Map(others.map((r) => [r.id, r])),
@@ -105,6 +108,7 @@ export default async function Page({
   if (!found) notFound();
   const {
     record: r,
+    seen,
     aliases,
     edges,
     others,
@@ -180,6 +184,7 @@ export default async function Page({
             id={r.id}
             title={r.title}
             body={r.body}
+            seen={seen}
             canEdit={canEdit}
             fields={
               <Properties

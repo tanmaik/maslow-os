@@ -91,6 +91,8 @@ What every pull request is checked for.
   brain as the importer, holding nobody else's slice.
 - A write that could arrive twice is idempotent: files on their key, brain
   records on source and ref, migrations on their checksum.
+- A save of a record's title or body names the change it rests on, and one
+  that fell behind is refused, never written over what landed since.
 
 ### It fails well
 

@@ -97,12 +97,22 @@ function survives(e: Editor, md: string): boolean {
 // same text.
 export function Body({
   body,
+  seen,
+  put,
   canEdit,
   onKeep,
 }: {
   body: string;
+  // The change the page's body rests on.
+  seen: number;
+  // A body the person chose, put in the text whether or not they are in
+  // it, resting on the change it names; a new count is a new choice.
+  put: { n: number; body: string; seen: number } | null;
   canEdit: boolean;
-  onKeep: (text: string) => Promise<boolean>;
+  // Saves the text, naming the change it rests on; answers with the
+  // record's last change once it landed, "behind" when the record changed
+  // since, or null.
+  onKeep: (text: string, base: number) => Promise<number | "behind" | null>;
 }) {
   // A body the editor cannot hold whole — a table, an image, anything its
   // schema has no node for — is written as text instead, since saving what
@@ -114,6 +124,15 @@ export function Body({
   const [slash, setSlash] = useState<{ at: number; top: number } | null>(null);
   const [pick, setPick] = useState(0);
   const kept = useRef(body);
+  // The change the text on screen rests on: moved when the page's body is
+  // taken, and when a save of this text lands.
+  const base = useRef(seen);
+  // The page's body and change as they are now, for a handler made earlier.
+  const latest = useRef({ body, seen });
+  latest.current = { body, seen };
+  // The text the fallback box holds now, for the same reason.
+  const textNow = useRef(body);
+  textNow.current = text;
   const box = useRef<HTMLDivElement>(null);
   // The editor answers the keyboard before this page sees it, so the menu's
   // keys are read inside it, off what is on screen right now.
@@ -203,8 +222,21 @@ export function Body({
         if (!edited.current) return;
         edited.current = false;
         const said = markdownOf(e).replace(/\r\n/g, "\n").trim();
-        void onKeep(said).then((saved) => {
-          if (saved) kept.current = said;
+        void onKeep(said, base.current).then((landed) => {
+          if (typeof landed === "number") {
+            kept.current = said;
+            base.current = landed;
+          }
+          // A save that fell behind gives way to what the page has, which
+          // may have arrived while the person was still in the text — unless
+          // they are back in it, or have written on since, when leaving it
+          // again settles it.
+          else if (
+            landed === "behind" &&
+            !e.isFocused &&
+            spelled(markdownOf(e)) === spelled(said)
+          )
+            adopt(e, latest.current, true);
           // A save that did not land leaves the body changed, so leaving
           // it again tries once more.
           else edited.current = true;
@@ -214,20 +246,39 @@ export function Body({
     [canEdit],
   );
 
-  // A body rewritten elsewhere — by the agent, or in another window —
-  // replaces what is shown, unless the person is in the middle of it.
-  useEffect(() => {
-    if (!editor || editor.isFocused || typing.current || body === kept.current)
-      return;
-    kept.current = body;
-    setText(body);
-    editor.commands.setContent(body, { emitUpdate: false });
+  // Takes the page's body as what is shown, resting on the page's change.
+  // Asked for outright, it replaces the text whatever it says; otherwise
+  // a body the page already had is left alone.
+  const adopt = (
+    e: Editor,
+    page: { body: string; seen: number },
+    outright = false,
+  ) => {
+    base.current = page.seen;
+    if (!outright && page.body === kept.current) return;
+    kept.current = page.body;
+    setText(page.body);
+    e.commands.setContent(page.body, { emitUpdate: false });
     edited.current = false;
-    setBlank(editor.isEmpty);
+    setBlank(e.isEmpty);
     // What arrived may be something the editor cannot hold, so it is asked
     // again of every body, not only the first.
-    setWhole(holds(editor, body));
-  }, [body, editor]);
+    setWhole(holds(e, page.body));
+  };
+
+  // A body rewritten elsewhere — by the agent, or in another window —
+  // replaces what is shown, unless the person is in the middle of it. The
+  // text on screen then rests on the page's change, the same text or not.
+  // A page older than what the text already rests on is not followed: the
+  // refresh a landed save asked for is still on its way.
+  useEffect(() => {
+    if (!editor || editor.isFocused || typing.current) return;
+    if (seen < base.current) return;
+    adopt(editor, { body, seen });
+  }, [body, seen, editor]);
+  useEffect(() => {
+    if (put && editor) adopt(editor, put, true);
+  }, [put, editor]);
 
   if (!canEdit) return <Markdown>{body}</Markdown>;
   if (!whole)
@@ -247,8 +298,17 @@ export function Body({
           if (!edited.current) return;
           edited.current = false;
           const said = text.trim();
-          void onKeep(said).then((saved) => {
-            if (saved) kept.current = said;
+          void onKeep(said, base.current).then((landed) => {
+            if (typeof landed === "number") {
+              kept.current = said;
+              base.current = landed;
+            } else if (
+              landed === "behind" &&
+              ed.current &&
+              !typing.current &&
+              textNow.current.trim() === said
+            )
+              adopt(ed.current, latest.current, true);
             else edited.current = true;
           });
         }}

@@ -358,6 +358,39 @@ try {
     noted.status === 303,
     `answered ${noted.status}`,
   );
+  // The page saves with the last change it saw, and one that fell behind
+  // is refused.
+  const ovens =
+    (
+      await (
+        await fetch(`${stack.url}/brain/search?q=Ovens`, {
+          headers: { cookie: pim },
+        })
+      ).json()
+    ).records[0]?.id ?? "";
+  const changeUrl = `${stack.url}/brain/records/${ovens}/change`;
+  const ovensSeen = async () =>
+    (await (await fetch(changeUrl, { headers: { cookie: pim } })).json()).seen;
+  const seenAtFirst = await ovensSeen();
+  const posted = (body, seen) =>
+    fetch(changeUrl, {
+      method: "POST",
+      headers: { cookie: pim, accept: "application/json" },
+      body: new URLSearchParams({ body, seen: String(seen) }),
+    });
+  const inTime = await posted("Preheat by ten.", seenAtFirst);
+  const landedAt = inTime.ok ? (await inTime.json()).seen : 0;
+  const seenAfter = await ovensSeen();
+  const behind = await posted("Preheat by four.", seenAtFirst);
+  check(
+    "a save that fell behind is refused",
+    seenAtFirst > 0 &&
+      inTime.status === 200 &&
+      landedAt === seenAfter &&
+      seenAfter > seenAtFirst &&
+      behind.status === 409,
+    `saw #${seenAtFirst}, saved ${inTime.status} at #${landedAt}, then #${seenAfter}, behind ${behind.status}`,
+  );
   const pimId = "20000000-0000-4000-8000-000000000003";
   const remove = (cookie = margeOwner) =>
     settings(
