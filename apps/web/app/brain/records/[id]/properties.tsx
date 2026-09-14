@@ -4,6 +4,8 @@ import type { Property } from "@maslow/brain";
 import {
   CalendarClockIcon,
   CalendarIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
   GaugeIcon,
   HashIcon,
   ListIcon,
@@ -43,9 +45,14 @@ const MARKS: Record<string, LucideIcon> = {
   list: ListIcon,
 };
 
+// How many filled lines show before the rest fold, so the words are never
+// far below the title.
+const SHOWN = 5;
+
 // What a record holds beside its words, as a grid of lines: each field,
-// how sure, when it happened. A line is clicked into to change it and kept
-// as it is left.
+// how sure, when it happened. The first few filled lines show; the rest,
+// and every empty one, wait behind one line that says how many more there
+// are. A line is clicked into to change it and kept as it is left.
 export function Properties({
   id,
   fields,
@@ -63,6 +70,7 @@ export function Properties({
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<string | null>(null);
+  const [unfolded, setUnfolded] = useState(false);
   // A day and a time are chosen in steps; what is chosen so far waits for
   // Done.
   const [pending, setPending] = useState<string | null>(null);
@@ -138,14 +146,23 @@ export function Properties({
     (k) => !fields.some((f) => f.name === k),
   );
 
-  return (
-    <dl className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] border-b pb-2 text-sm">
-      {fields.map((f) => (
+  // Every line the record could show, in the order it shows them.
+  const lines: {
+    key: string;
+    shown: React.ReactNode;
+    line: React.ReactNode;
+  }[] = [];
+  for (const f of fields) {
+    const shown = cell(valueOf(`p.${f.name}`, values[f.name], f), f);
+    lines.push({
+      key: f.name,
+      shown,
+      line: (
         <Line
           key={f.id}
           label={f.name}
           mark={MARKS[f.datatype] ?? TextIcon}
-          shown={cell(valueOf(`p.${f.name}`, values[f.name], f), f)}
+          shown={shown}
           editing={editing === f.name}
           onOpen={canEdit ? () => open(f.name) : undefined}
           onClose={() => done(`p.${f.name}`)}
@@ -158,32 +175,49 @@ export function Properties({
             onClose={() => setEditing(null)}
           />
         </Line>
-      ))}
-      {undeclared.map((k) => (
+      ),
+    });
+  }
+  for (const k of undeclared) {
+    const shown = cell(values[k]);
+    lines.push({
+      key: k,
+      shown,
+      line: (
+        <Line key={k} label={k} mark={TextIcon} shown={shown} editing={false} />
+      ),
+    });
+  }
+  if (confidence !== null || canEdit) {
+    const shown = percent(sureShown);
+    lines.push({
+      key: "how sure",
+      shown,
+      line: (
         <Line
-          key={k}
-          label={k}
-          mark={TextIcon}
-          shown={cell(values[k])}
-          editing={false}
-        />
-      ))}
-      {(confidence !== null || canEdit) && (
-        <Line
+          key="how sure"
           label="how sure"
           mark={GaugeIcon}
-          shown={percent(sureShown)}
+          shown={shown}
           editing={editing === "how sure"}
           onOpen={canEdit ? () => open("how sure") : undefined}
           onClose={() => done("confidence")}
         >
           <Sure value={sureShown} onPick={setPending} />
         </Line>
-      )}
+      ),
+    });
+  }
+  const whenNode = whenShown ? <LocalTime at={whenShown} /> : "";
+  lines.push({
+    key: "when",
+    shown: whenNode,
+    line: (
       <Line
+        key="when"
         label="when"
         mark={CalendarClockIcon}
-        shown={whenShown ? <LocalTime at={whenShown} /> : ""}
+        shown={whenNode}
         editing={editing === "when"}
         onOpen={canEdit ? () => open("when") : undefined}
         onClose={() => done("occurred_at")}
@@ -196,6 +230,48 @@ export function Properties({
           onChange={setPending}
         />
       </Line>
+    ),
+  });
+
+  // A reader who cannot fill an empty line is not shown one.
+  const held = canEdit ? lines : lines.filter((l) => l.shown);
+  if (!held.length) return null;
+
+  // The first few filled lines, and the one being changed, stay in view;
+  // the rest fold behind how many they are.
+  let filled = 0;
+  const stays = held.map((l) => {
+    if (editing === l.key) return true;
+    if (!l.shown) return false;
+    filled += 1;
+    return filled <= SHOWN;
+  });
+  const more = stays.filter((s) => !s).length;
+
+  return (
+    <dl className="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] border-b pb-2 text-sm">
+      {held.map((l, i) => (unfolded || stays[i]) && l.line)}
+      {more > 0 && (
+        <div className="col-span-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setUnfolded((u) => !u)}
+            className="text-muted-foreground h-7 justify-start px-2 font-normal"
+          >
+            {unfolded ? (
+              <>
+                <ChevronUpIcon /> Show less
+              </>
+            ) : (
+              <>
+                <ChevronDownIcon /> {more} {filled ? "more" : "fields"}
+              </>
+            )}
+          </Button>
+        </div>
+      )}
       {trouble && <p className="text-destructive col-span-2">{trouble}</p>}
     </dl>
   );
