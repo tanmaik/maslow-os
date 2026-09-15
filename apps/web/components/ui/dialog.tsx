@@ -62,7 +62,7 @@ function DialogContent({
       <DialogPrimitive.Popup
         data-slot="dialog-content"
         className={cn(
-          "glass-sheet fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-clip rounded-3xl bg-background-full px-5 pt-4 pb-5 text-body-regular text-text-primary shadow-xs outline-none sm:max-w-sm transform-gpu transition-[opacity,scale,filter] duration-slow ease-in-out-soft data-starting-style:opacity-0 data-starting-style:scale-[0.85] data-starting-style:blur-[4px] data-ending-style:duration-base data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-[0.85] data-ending-style:blur-[4px]",
+          "glass-sheet fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] grid-cols-[minmax(0,1fr)] -translate-x-1/2 -translate-y-1/2 gap-4 overflow-clip rounded-3xl bg-background-full px-5 pt-4 pb-5 text-body-regular text-text-primary shadow-xs outline-none sm:max-w-sm transform-gpu transition-[opacity,scale,filter] duration-slow ease-in-out-soft data-starting-style:opacity-0 data-starting-style:scale-[0.85] data-starting-style:blur-[4px] data-ending-style:duration-base data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-[0.85] data-ending-style:blur-[4px]",
           plain && PLAIN_POPUP,
           className,
         )}
