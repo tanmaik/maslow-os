@@ -522,15 +522,19 @@ export const fly = {
 
   // A run of the agent now, told why; the door's own words when it will
   // not. One that is nobody's ask, a wake, is refused where the cadence is
-  // off.
+  // off. One with a key is run once however often it is asked for.
   async runHeartbeat(
     machineId: string,
     ticket: string,
     why: string,
     wake = false,
+    key?: string,
   ): Promise<void> {
+    const ask = new URLSearchParams();
+    if (wake) ask.set("wake", "");
+    if (key) ask.set("key", key);
     const res = await fetch(
-      `https://${config().app}.fly.dev/maslow/heartbeat${wake ? "?wake" : ""}`,
+      `https://${config().app}.fly.dev/maslow/heartbeat${ask.size ? `?${ask}` : ""}`,
       {
         method: "POST",
         headers: {
@@ -635,9 +639,10 @@ export const fly = {
       ticket: string,
       at: string,
       body: string,
+      append = false,
     ): Promise<number> {
       const res = await fetch(
-        `https://${config().app}.fly.dev/maslow/files/write?path=${encodeURIComponent(at)}`,
+        `https://${config().app}.fly.dev/maslow/files/write?path=${encodeURIComponent(at)}${append ? "&append=1" : ""}`,
         {
           method: "PUT",
           headers: {

@@ -1,6 +1,7 @@
 import { asMeter, asOrg, type Query } from "@maslow/db";
 import { picturesIn, type Resource, type Unit } from "@maslow/db/usage";
 
+import { deliverArrivals } from "./arrival.ts";
 import { reconcile } from "./computer.ts";
 import { reconcile as reconcileRelay } from "./relay.ts";
 import { settle } from "./orphans.ts";
@@ -178,6 +179,9 @@ async function sweep(now = new Date()): Promise<number> {
   await reconcileRelay().catch((err: Error) =>
     console.error(`sweep relay: ${err.message}`),
   );
+  // A computer the sweep made ready while nobody was at the desk is
+  // given what its person said on arriving.
+  for (const orgId of orgs) await deliverArrivals(orgId);
   return appended;
 }
 

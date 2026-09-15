@@ -329,8 +329,14 @@ async function preview(res, at) {
 // Makes the folder a file goes in, as the person.
 async function folderFor(at) {
   const dir = path.dirname(at);
+  // Every folder made on the way is the person's, not root's.
+  const made = [];
+  for (let d = dir; d !== HOME && d.startsWith(HOME); d = path.dirname(d)) {
+    if (fs.existsSync(d)) break;
+    made.push(d);
+  }
   await fsp.mkdir(dir, { recursive: true });
-  await fsp.chown(dir, OWNER, OWNER).catch(() => {});
+  for (const d of made) await fsp.chown(d, OWNER, OWNER).catch(() => {});
 }
 
 // A file made fresh beside its final place, exclusively and never through
@@ -349,16 +355,46 @@ async function fresh(tmp, mode) {
 // Writes a whole file: to a file beside it first, then into place, so a
 // write cut short leaves the old file whole. A file that was there keeps
 // its mode, so an editable script stays executable.
-async function write(req, res, at) {
+async function write(req, res, at, append = false) {
   try {
     await folderFor(at);
     const was = await fsp.lstat(at).catch(() => null);
     const mode = was?.isFile() ? was.mode & 0o7777 : 0o644;
-    const tmp = `${at}.writing`;
-    const fd = await fresh(tmp, mode);
-    await pipeline(req, fd.createWriteStream());
-    await fsp.chown(tmp, OWNER, OWNER).catch(() => {});
-    await fsp.rename(tmp, at);
+    // Added to the end, the file keeps whatever anyone wrote to it
+    // meanwhile; written whole, it is made beside and moved into place.
+    if (append) {
+      // The whole of it first, then one write at the end of the file
+      // itself, never through a link, so nothing lands half-written and
+      // nothing lands outside the home.
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const body = Buffer.concat(chunks);
+      const fd = await fsp.open(
+        at,
+        fs.constants.O_WRONLY |
+          fs.constants.O_APPEND |
+          fs.constants.O_CREAT |
+          fs.constants.O_NOFOLLOW,
+        mode,
+      );
+      try {
+        // Every byte, however the disk doles them out.
+        for (let done = 0; done < body.length;) {
+          const { bytesWritten } = await fd.write(body, done);
+          if (bytesWritten === 0) throw new Error("the disk took nothing");
+          done += bytesWritten;
+        }
+      } finally {
+        await fd.close();
+      }
+      await fsp.chown(at, OWNER, OWNER).catch(() => {});
+    } else {
+      const tmp = `${at}.writing`;
+      const fd = await fresh(tmp, mode);
+      await pipeline(req, fd.createWriteStream());
+      await fsp.chown(tmp, OWNER, OWNER).catch(() => {});
+      await fsp.rename(tmp, at);
+    }
     json(res, 200, { size: (await fsp.stat(at)).size });
   } catch (err) {
     say(res, 500, `Could not write: ${err.code ?? err.message}`);
@@ -453,7 +489,8 @@ export async function serve(req, res, url) {
   if (what === "" && req.method === "GET") return list(res, at);
   if (what === "/read" && req.method === "GET") return read(req, res, at);
   if (what === "/preview" && req.method === "GET") return preview(res, at);
-  if (what === "/write" && req.method === "PUT") return write(req, res, at);
+  if (what === "/write" && req.method === "PUT")
+    return write(req, res, at, url.searchParams.get("append") === "1");
   if (what === "/upload" && req.method === "GET") return have(res, at, url);
   if (what === "/upload" && req.method === "PUT")
     return upload(req, res, at, url);

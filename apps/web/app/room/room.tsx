@@ -32,6 +32,8 @@ import {
   pathOf,
   type Bounds,
 } from "@/app/room/blocks";
+import { Arrival } from "@/app/room/arrival";
+import type { State } from "@/lib/computer";
 import { CommandBar } from "@/app/room/command";
 import {
   Dock,
@@ -210,6 +212,8 @@ export function Room({
   you,
   computers,
   wallpaper,
+  arrival,
+  owed,
 }: {
   desktop: Desktop;
   ports: Port[];
@@ -218,7 +222,49 @@ export function Room({
   you: (Me & Pick<Known, "picture">) | undefined;
   // Whether this deployment makes computers at all.
   computers: boolean;
+  // Whether the card that meets a person on their first desk is still
+  // to be answered.
+  arrival: boolean;
+  // Whether their computer is still owed what they said on that card.
+  owed: boolean;
 }) {
+  const [arriving, setArriving] = useState(arrival);
+  // While the card is up, and until the computer has what the person said
+  // on it, the computer is asked after every few seconds: that is what
+  // makes it, and what gives it the answer the moment it is ready. An
+  // answer to an ask made before the card was answered says nothing
+  // about what that answer owes, so asks are counted against answers.
+  const [settling, setSettling] = useState(arrival || owed);
+  const answered = useRef(0);
+  const [making, setMaking] = useState<State | null>(null);
+  // What went wrong giving the computer the person's answer, if anything
+  // did; the asking goes on regardless.
+  const [trouble, setTrouble] = useState<string | null>(null);
+  useEffect(() => {
+    if (!settling || !computers) return;
+    let stopped = false;
+    const ask = async () => {
+      const before = answered.current;
+      const res = await fetch("/computer/state", { method: "POST" }).catch(
+        () => null,
+      );
+      if (stopped) return;
+      if (!res?.ok) return setTrouble("Maslow did not answer just now.");
+      const s = (await res.json().catch(() => null)) as
+        (State & { owed: boolean; trouble: string | null }) | null;
+      if (!s || stopped) return;
+      setMaking(s);
+      setTrouble(s.trouble ?? s.failed);
+      if (s.progress === "ready" && !s.owed && before === answered.current)
+        setSettling(false);
+    };
+    const beat = setInterval(() => void ask(), 4000);
+    void ask();
+    return () => {
+      stopped = true;
+      clearInterval(beat);
+    };
+  }, [settling, computers]);
   const [screen, setScreenState] = useState<Screen>(desktop.layout ?? EMPTY);
   // The wallpaper the desk wears.
   const [paper, setPaper] = useState<string | null>(wallpaper);
@@ -1011,6 +1057,26 @@ export function Room({
         onSnap={(place) => top && shape(top.id, PLACES[place]!, true)}
         onSettings={settings}
       />
+      {trouble && (
+        <div className="fixed top-12 right-4 z-50 max-w-sm">
+          <Notification
+            status="error"
+            title="Your computer is not ready yet"
+            description={`${trouble} Trying again.`}
+            dismissible={false}
+          />
+        </div>
+      )}
+      {arriving && (
+        <Arrival
+          computer={computers ? (making?.progress ?? null) : "off"}
+          onDone={() => {
+            answered.current += 1;
+            setArriving(false);
+            setSettling(true);
+          }}
+        />
+      )}
       <CommandBar
         open={bar.open}
         initial={bar.initial}

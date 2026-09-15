@@ -639,12 +639,21 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === "POST") {
       const why = (await bodyOf(req)).trim();
-      if (why.length > 4000 || /[^\w\s(),.:;"'-]/.test(why))
-        return say(res, 400, "A reason is plain words, and not a speech.");
+      if (why.length > 4000 || /[\p{Cc}\p{Zl}\p{Zp}]/u.test(why))
+        return say(
+          res,
+          400,
+          "A reason is one line of words, and not a speech.",
+        );
       const wake = url.searchParams.has("wake");
       if (wake && heartbeat.state().every === 0)
         return say(res, 409, "the heartbeat is off");
-      return heartbeat.run(why || "the person pressed Run now")
+      // A key names an ask that is answered once, however often it is
+      // asked.
+      const key = url.searchParams.get("key");
+      if (key !== null && !/^[\w:-]{1,80}$/.test(key))
+        return say(res, 400, "A key is a short name.");
+      return heartbeat.run(why || "the person pressed Run now", key)
         ? say(res, 202, "running")
         : say(res, 202, "after the run going now");
     }

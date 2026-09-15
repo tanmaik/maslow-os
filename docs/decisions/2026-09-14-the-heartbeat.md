@@ -24,8 +24,12 @@ holds their brain and their apps.
   a session of ours (`MASLOW_AUTH=managed`) so it never spends what they
   provided. It knows what any session of theirs knows: the brain and the
   browser as MCP servers, the notice tool, their files and tools. It ends
-  when the agent stops, or at a dollar or twenty minutes, whichever comes
-  first. Nothing waits on its answer and nothing reads what it prints;
+  when the agent stops, or at an hour; twenty minutes was the first
+  ceiling, and a first run that reads a mailbox went past it every time. What it spends is capped by
+  the weekly cap on the person's key and nothing else: a per-run dollar
+  budget was tried and dropped on 2026-09-15, since Claude Code cannot
+  price the models our key pays for and its guess tripped the budget in
+  minutes. Nothing waits on its answer and nothing reads what it prints;
   what it did is in the brain's log and on the disk, like any session.
 - **A share wakes it.** A run has a reason, and the brief says it: the
   clock came round, the person pressed Run now, or someone shared

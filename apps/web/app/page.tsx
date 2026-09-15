@@ -1,3 +1,5 @@
+import { asPerson } from "@maslow/db";
+import { arrivalOf } from "@maslow/db/arrival";
 import { orgOf } from "@maslow/db/settings";
 import { after } from "next/server";
 
@@ -24,8 +26,18 @@ export default async function Page({
   if (!p) return <SignIn said={said} />;
   // A look at the site is what runs the hourly sweep outside production.
   after(() => sweepIfDue());
-  const [{ desktops, ports, wallpaper }, { org, members }, memberships] =
-    await Promise.all([roomOf(p), orgOf(p), membershipsByEmail(p.email)]);
+  const [
+    { desktops, ports, wallpaper },
+    { org, members },
+    memberships,
+    { arrived, owed },
+  ] = await Promise.all([
+    roomOf(p),
+    orgOf(p),
+    membershipsByEmail(p.email),
+    asPerson(p, arrivalOf),
+  ]);
+
   const me = members.find((m) => m.id === p.userId);
   const you = me && {
     name: me.name,
@@ -44,6 +56,8 @@ export default async function Page({
         ports={ports}
         wallpaper={wallpaper}
         computers={deployment.computers.kind !== "none"}
+        arrival={!arrived}
+        owed={owed}
         you={
           you && {
             ...you,

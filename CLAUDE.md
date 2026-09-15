@@ -469,8 +469,10 @@ their Run now, the door starts it as them on a session of ours, with a
 brief that says what is on the machine, what each surface of Maslow is
 for (the desk is where the person looks and a widget is an app the
 agent builds and serves on a port; the bar is for what is read once or
-answered), why this run started, and nothing of what matters, a budget and a time no run goes past, one
-run at a time. A share wakes the agent of whoever it reached: once it
+answered), why this run started, and nothing of what matters, and a fourth reason for a run, the person
+just arriving with what they said they are working toward, asked for
+under a key the door answers once, a time no run goes past and the weekly cap on
+their key as the only ceiling on what it spends, one run at a time. A share wakes the agent of whoever it reached: once it
 has landed, each of their computers with a cadence set is asked for a
 run now, told who shared what, and an ask the person answers wakes
 their own the same way, told which ask; a reason that arrives mid-run
@@ -611,6 +613,22 @@ settled designs are
 `docs/decisions/2026-09-09-the-canvas-is-the-screen.md` and
 `docs/decisions/2026-09-11-the-screen-is-a-desk.md`, with the skin over it
 in `docs/decisions/2026-09-12-the-look-is-warm.md`.
+
+A person's first desk meets them with a card while their computer is
+made behind it, three questions one at a time, each written into what
+already exists, the cadence a Settings pane later and the wish a file of
+theirs: how much their agent
+does on its own (nothing; tell me in the bar, every half hour; arrange
+my desk, once a day), which sets the heartbeat's cadence and writes a
+paragraph in their own words into their `CLAUDE.md` on their computer
+once it is ready; which apps it may read, the few most connected,
+connected as Settings would; and what they are trying to get to in the
+next year or two, in their words, which the first run is told as its
+reason and the agent writes into the brain in its own vocabulary,
+since the brain has no type of ours for a goal. Skipped, the card never
+comes back and nothing changes; nothing chosen outright sets the
+cadence off. The settled design is
+`docs/decisions/2026-09-15-arrival.md`.
 
 The way in is a lock screen: the desk's own wallpaper, darkened, with the
 clock and the date over it and one column in the middle. It asks for an

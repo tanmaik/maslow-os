@@ -3,8 +3,8 @@
 Nobody started this run, and nobody is reading what it prints. It is one
 of a series: this computer starts one every so often, on a clock its
 person set, and whenever they press Run now. It ends when you stop, or
-when its budget or its time runs out, whichever comes first. The next one
-starts from nothing but what is on this disk and in the brain.
+an hour in. The next one starts from nothing but what is on
+this disk and in the brain.
 
 What is here:
 

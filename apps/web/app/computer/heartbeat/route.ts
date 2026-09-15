@@ -1,3 +1,6 @@
+import { asPerson } from "@maslow/db";
+import { cadenceByHand } from "@maslow/db/arrival";
+
 import { runHeartbeat, setHeartbeat } from "@/lib/computer";
 import { EVERY } from "@/lib/heartbeat";
 import { principal } from "@/lib/session";
@@ -14,6 +17,10 @@ export async function PUT(request: Request) {
       status: 400,
     });
   try {
+    // Set by hand, it outranks an answer to the first desk's card still
+    // waiting for the computer: said first, so a delivery landing between
+    // the two writes cannot write over what is set next.
+    await asPerson(p, cadenceByHand);
     const told = await setHeartbeat(p, every);
     if (told === "behind")
       return new Response(

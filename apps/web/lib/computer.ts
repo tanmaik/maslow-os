@@ -62,7 +62,7 @@ import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-13";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-19";
 
 // An image whose label ends in -security does not wait on the person for
 // a week: it takes the idle rule from the day it is ready.
@@ -71,7 +71,8 @@ const SECURITY = /-security$/.test(IMAGE);
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
 // answers; moving while it is on its way to another region.
-type Progress = "off" | "disk" | "machine" | "starting" | "moving" | "ready";
+export type Progress =
+  "off" | "disk" | "machine" | "starting" | "moving" | "ready";
 
 // Where a move stands: the old machine stopping, its disk being copied,
 // the copy being restored in the new region, the machine there starting
@@ -1243,7 +1244,7 @@ function ticket(c: Computer, seconds: number, port?: number): string {
 }
 
 // The member's ready computer, or null.
-async function ready(p: Principal): Promise<Computer | null> {
+export async function ready(p: Principal): Promise<Computer | null> {
   if (deployment.computers.kind === "none") return null;
   const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   return c?.readyAt && c.machineId ? c : null;
@@ -1367,7 +1368,9 @@ export async function files(p: Principal): Promise<{
   list(at: string): Promise<Entry[]>;
   read(at: string, range?: string): Promise<Response>;
   preview(at: string): Promise<Response>;
-  write(at: string, body: string): Promise<number>;
+  // Written whole, or added to the end, which keeps what anyone wrote
+  // to it meanwhile.
+  write(at: string, body: string, append?: boolean): Promise<number>;
 } | null> {
   const c = await ready(p);
   if (!c) return null;
@@ -1377,7 +1380,7 @@ export async function files(p: Principal): Promise<{
     list: (at) => fly.files.list(m, t(), at),
     read: (at, range) => fly.files.read(m, t(), at, range),
     preview: (at) => fly.files.preview(m, t(), at),
-    write: (at, body) => fly.files.write(m, t(), at, body),
+    write: (at, body, append) => fly.files.write(m, t(), at, body, append),
   };
 }
 
@@ -1700,16 +1703,8 @@ export async function setHeartbeat(
   p: Principal,
   every: number,
 ): Promise<"told" | "behind" | "later"> {
-  return asOrg(p.orgId, async (q) => {
-    const known = await computerOf(q, p.userId);
-    if (!known) return "later";
-    // Held until the machine has heard, since a change written and not
-    // yet delivered is what the next one must wait behind; the row is
-    // read again under it, since a move or an update may have held it.
-    await q.query("select pg_advisory_xact_lock(hashtext($1))", [
-      `computer:${known.id}`,
-    ]);
-    const c = (await computerOf(q, p.userId)) ?? known;
+  return holdingComputer(p, async (q, c) => {
+    if (!c) return "later";
     await setHeartbeatEvery(q, c.id, every);
     if (!c.readyAt || !c.machineId) return "later";
     if (c.updateImage === IMAGE) return "behind";
@@ -1723,34 +1718,73 @@ export async function setHeartbeat(
   });
 }
 
+// Runs fn with the person's computer held for the rest of the
+// transaction, the row read again under the hold since a move or an
+// update may have had it; null where they have none.
+function holdingComputer<T>(
+  p: Principal,
+  fn: (q: Query, c: Computer | null) => Promise<T>,
+): Promise<T> {
+  return asOrg(p.orgId, async (q) => {
+    const known = await computerOf(q, p.userId);
+    if (!known) return fn(q, null);
+    await q.query("select pg_advisory_xact_lock(hashtext($1))", [
+      `computer:${known.id}`,
+    ]);
+    return fn(q, (await computerOf(q, p.userId)) ?? known);
+  });
+}
+
 // A run of the agent on the person's computer now; false when it is not
 // ready, and the door's own words when it will not.
-export async function runHeartbeat(p: Principal): Promise<boolean> {
+export async function runHeartbeat(
+  p: Principal,
+  why = "the person pressed Run now",
+  key?: string,
+): Promise<boolean> {
   const c = await ready(p);
   if (!c) return false;
-  await fly.runHeartbeat(
-    c.machineId!,
-    ticket(c, 60),
-    "the person pressed Run now",
-  );
+  await fly.runHeartbeat(c.machineId!, ticket(c, 60), why, false, key);
   return true;
 }
 
 // Wakes the person's own agent once they have answered an ask of it: their
 // computer, with a cadence set, is asked for a run now, told which ask.
-export async function wakeAnswered(
-  p: Principal,
-  notice: string,
-): Promise<void> {
+export const wakeAnswered = (p: Principal, notice: string) =>
+  wake(
+    p,
+    /^[a-z0-9]{10}$/.test(notice)
+      ? `the person answered ask ${notice}`
+      : "the person answered an ask",
+  ).catch((err: Error) => console.error(`wake ${p.userId}: ${err.message}`));
+
+// Whether the person's ready computer runs the image of the day, as Fly
+// reports the machine, not as the sweep last wrote it down.
+export async function onImage(c: Computer): Promise<boolean> {
+  const m = await fly.machine(c.machineId!);
+  return m?.config?.image?.split("@")[0] === IMAGE;
+}
+
+// Tells the person's ready computer the cadence its row holds, read and
+// pushed under the computer's lock, so a change made in Settings the
+// same moment is never written over by an older value. Throws where the
+// machine could not be told.
+export async function tellCadence(p: Principal): Promise<void> {
+  await holdingComputer(p, async (_, c) => {
+    if (!c?.readyAt || !c.machineId)
+      throw new Error("the computer stopped answering");
+    await fly.pushHeartbeat(c.machineId, ticket(c, 60), c.heartbeatEvery);
+  });
+}
+
+// Wakes the person's own agent, told why: their computer, with a cadence
+// set, is asked for a run now. Nothing when it is not ready or the
+// cadence is off.
+async function wake(p: Principal, why: string): Promise<void> {
   if (deployment.computers.kind === "none") return;
   const c = await ready(p);
   if (!c || c.heartbeatEvery === 0) return;
-  const why = /^[a-z0-9]{10}$/.test(notice)
-    ? `the person answered ask ${notice}`
-    : "the person answered an ask";
-  await fly
-    .runHeartbeat(c.machineId!, ticket(c, 60), why, true)
-    .catch((err: Error) => console.error(`wake ${c.id}: ${err.message}`));
+  await fly.runHeartbeat(c.machineId!, ticket(c, 60), why, true);
 }
 
 // Wakes the agent of everyone a share reached: each of their computers
