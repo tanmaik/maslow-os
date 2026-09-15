@@ -11,6 +11,7 @@ import { connections } from "./connections";
 import { embed, model, RateLimited } from "./embeddings";
 import * as lines from "./lines";
 import { CEILINGS, PRICES } from "./prices";
+import { deskOf, place, unplace } from "./room";
 import { named, Refused, tools, type Action } from "./tools";
 
 // Who and what an agent is connected to, read once when it connects.
@@ -565,6 +566,81 @@ export function brainServer(
         text: `asked ${ask.id} as notice ${notice.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,
         data: { ...ask, notice: notice.id },
       };
+    }),
+  );
+
+  server.registerTool(
+    "desk",
+    {
+      description:
+        "What lies on the person's desk: each widget's id, what it shows, and where it sits, as shares of the desk's width and height from the top left corner; and the ports colleagues have opened to the person, which could lie there too. The windows the person has open are theirs and are not listed.",
+      inputSchema: {},
+      annotations: { readOnlyHint: true },
+    },
+    door(async (q) => {
+      const { widgets, shared } = await deskOf(q);
+      return {
+        text: [
+          ...widgets.map(lines.widget),
+          ...(widgets.length === 0 ? ["nothing is on the desk"] : []),
+          ...shared.map(
+            (s) => `shared: port ${s.port} on ${s.machineId}, ${s.owner}'s`,
+          ),
+        ].join("\n"),
+        data: { widgets, shared },
+      };
+    }),
+  );
+
+  server.registerTool(
+    "place",
+    {
+      description:
+        "Puts a widget on the person's desk, or moves one already there by its id, which keeps what it shows unless told otherwise. A widget is an app served on a port: of the person's own computer, or of a colleague's computer that was opened to them, named by its machine. Where it lies and how big it is are shares of the desk, 0 to 1, from the top left; left out, it goes where the next widget goes, at the size a window of it opens at. A widget lies under the person's windows, on every device they open the desk on, and they may move, resize, put away or remove it like their own. Answers with the widget.",
+      inputSchema: {
+        port: z.number().int().min(1).max(65535).optional(),
+        machine: z
+          .string()
+          .regex(/^[a-z0-9]{6,20}$/)
+          .optional()
+          .describe("a colleague's computer, for a port they opened"),
+        title: z.string().min(1).max(120).optional(),
+        id: z
+          .string()
+          .regex(/^[a-z0-9]{4,16}$/)
+          .optional()
+          .describe("a widget already on the desk, to move"),
+        x: z.number().min(0).max(1).optional(),
+        y: z.number().min(0).max(1).optional(),
+        w: z.number().min(0).max(1).optional(),
+        h: z.number().min(0).max(1).optional(),
+      },
+    },
+    door(async (q, a) => {
+      const shown =
+        a.port !== undefined
+          ? { port: a.port, machine: a.machine, title: a.title }
+          : null;
+      if (!shown && !a.id) throw new brain.Invalid("a widget shows a port");
+      const at = Object.fromEntries(
+        (["x", "y", "w", "h"] as const)
+          .filter((k) => a[k] !== undefined)
+          .map((k) => [k, a[k]]),
+      );
+      const widget = await place(q, s.userId, shown, at, a.id);
+      return { text: lines.widget(widget), data: { widget } };
+    }),
+  );
+
+  server.registerTool(
+    "unplace",
+    {
+      description: "Takes a widget off the person's desk, by its id.",
+      inputSchema: { id: z.string().regex(/^[a-z0-9]{4,16}$/) },
+    },
+    door(async (q, a) => {
+      await unplace(q, a.id);
+      return `took ${a.id} off the desk`;
     }),
   );
 

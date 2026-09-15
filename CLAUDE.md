@@ -353,8 +353,10 @@ machine.
 Sizes are a ladder of CPU and memory, shown without a price, and a
 restart of a few seconds; nothing changes a computer's size but the
 person; the disk grows
-before it fills and never shows a cap. Where it is is one of fifteen
-North American regions, guessed at sign-in from where the request came
+before it fills and never shows a cap. Where it is is one of the
+North American regions Fly still makes disks in, seven today, since Fly
+retires regions now and then and a retired one refuses a new disk;
+it is guessed at sign-in from where the request came
 and said on the page by name beside the one honest number, the round
 trip the person's own browser measures to it; over forty milliseconds
 the page says so and names the region nearest them. A move is a button
@@ -464,8 +466,10 @@ no hand that runs a command or reads or writes a file goes into it.
 The heartbeat is that same Claude Code running on its own: on a cadence
 the person sets on the Computer pane, off until they set one, and at
 their Run now, the door starts it as them on a session of ours, with a
-brief that says what is on the machine, why this run started and
-nothing of what to do with it, a budget and a time no run goes past, one
+brief that says what is on the machine, what each surface of Maslow is
+for (the desk is where the person looks and a widget is an app the
+agent builds and serves on a port; the bar is for what is read once or
+answered), why this run started, and nothing of what matters, a budget and a time no run goes past, one
 run at a time. A share wakes the agent of whoever it reached: once it
 has landed, each of their computers with a cadence set is asked for a
 run now, told who shared what, and an ask the person answers wakes
@@ -532,7 +536,21 @@ under the menu bar and up to the dock, edge to edge. A port can be put
 on the desk itself, from its icon's menu: a widget, with no bar, under
 every window, moved by the grip along its top and resized by its
 edges, kept where it was left, and made a window again or taken off
-from the grip's menu. There is one desk
+from the grip's menu. The desk is the ground under the windows, and the agent arranges it:
+`desk`, `place` and `unplace` on the brain's MCP put a widget down at a
+place and size, move one, or take one off, and say what lies there and
+which ports colleagues opened to the person; a widget is an app served
+on a port, of the person's own computer, which the agent builds and runs
+there, or of a colleague's opened to them, and nothing else, since a
+record's page on a desk is a document and not a widget. The windows the
+person has open are theirs and the agent never sees or touches them. A
+widget the agent placed is an ordinary one, dragged, resized, put away
+or made a window like any other. The desk is kept on the server with a count of how many times it
+was kept: a save from the page names the count it saw and one that fell
+behind is refused and takes the newer desk in, its own changes kept over
+it, and the page's five-second ask after ports says when the desk was
+kept elsewhere, so what the agent placed is on screen within seconds on
+every device. There is one desk
 for now. The keys reach all of it. Command-K opens the command bar,
 one field over the desk that finds an app, a window, a port, a pane of
 Settings, a record or a file in the person's home by its words and goes

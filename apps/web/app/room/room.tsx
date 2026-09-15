@@ -107,6 +107,9 @@ type Page = { key: string; cards: Card[] };
 // nothing new leaves the dock alone.
 const same = (a: Port[], b: Port[]) => JSON.stringify(a) === JSON.stringify(b);
 
+// How many cards a desk holds at most, as the server keeps it.
+const MOST = 32;
+
 // How far past an edge still counts as meaning that edge.
 const OVER = 0.08;
 
@@ -252,10 +255,30 @@ export function Room({
         // A session that has ended will not begin again by asking.
         if (res?.status === 401) return void (stopped = true);
         if (stopped || !res?.ok) return;
-        const now = (await res.json().catch(() => null)) as Port[] | null;
+        const now = (await res.json().catch(() => null)) as {
+          // Null while the computer is not answering.
+          ports: Port[] | null;
+          rev: number;
+        } | null;
         if (now && !stopped) {
-          setLive((was) => (same(was, now) ? was : now));
-          setLooks((n) => n + 1);
+          if (now.ports) {
+            const ports = now.ports;
+            setLive((was) => (same(was, ports) ? was : ports));
+            setLooks((n) => n + 1);
+          }
+          // The desk kept elsewhere since this page saw it, a widget the
+          // agent placed most often, is taken in.
+          // Not while a save of this page's own is out: its answer says
+          // where the desk stands, and the next ask is seconds away.
+          if (now.rev > rev.current && saving.current === 0) {
+            const desk = await fetch("/room/desktop").catch(() => null);
+            const got = desk?.ok
+              ? ((await desk.json().catch(() => null)) as Desktop | null)
+              : null;
+            // Asked again once the desk is here: a save may have gone
+            // out while it was on its way.
+            if (got && !stopped && saving.current === 0) take(got);
+          }
         }
       } finally {
         asking = false;
@@ -451,23 +474,142 @@ export function Room({
       behavior: still ? "auto" : "smooth",
     });
 
-  const persist = async (layout: Screen) => {
-    await fetch("/room/desktop", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: desktop.id, layout }),
+  // How many times the desk has been kept, as this page last saw it. A
+  // save names it; one that fell behind is refused, and the desk as it now
+  // is comes back to be taken in, this page's own changes kept over it.
+  const rev = useRef(desktop.rev);
+  // The desk as this page last knew it kept, which its own changes since
+  // are measured against when a desk kept elsewhere is taken in.
+  const known = useRef<Screen>(desktop.layout ?? EMPTY);
+  // Saves go one after another, each carrying the desk as it is when its
+  // turn comes, so a later change is never written over by an earlier
+  // save's answer.
+  const saves = useRef(Promise.resolve());
+  // How many saves are out, since a desk taken in while one is would
+  // mistake what it saved for a change still to make.
+  const saving = useRef(0);
+  const persist = () => {
+    saving.current += 1;
+    saves.current = saves.current.then(async () => {
+      const layout = latest.current;
+      const res = await fetch("/room/desktop", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: desktop.id, layout, rev: rev.current }),
+      }).catch(() => null);
+      if (!res || (!res.ok && res.status !== 409)) return;
+      const got = (await res.json().catch(() => null)) as Desktop | null;
+      if (!got) return;
+      if (res.ok) {
+        if (got.rev > rev.current) {
+          rev.current = got.rev;
+          known.current = layout;
+        }
+        for (const c of layout.cards) unsaved.current.delete(c.id);
+      } else take(got, true);
     });
+    void saves.current.finally(() => (saving.current -= 1));
   };
   // The desk as it is this moment, for a change made from a pointer
   // handler that closed over an earlier render; kept once, sent once.
   const latest = useRef(screen);
   latest.current = screen;
+  // The cards a pointer is moving or resizing this moment, whose place on
+  // this page is truer than any kept elsewhere.
+  const gripped = useRef(new Set<string>());
+  // The cards this page has changed or opened whose save has not landed.
+  const unsaved = useRef(new Set<string>());
+  // The desk as it was kept elsewhere, taken in: what it holds is what
+  // stays, except what this page changed since it last knew the desk
+  // kept, which is kept over it: a card added, a card taken away, a card
+  // moved, a card under the pointer, and the order this page's windows
+  // stack in. What the desk was kept as stays the measure until a save of
+  // this page's own lands. A save refused for falling behind takes the
+  // desk in and keeps it again.
+  const take = (got: Desktop, again = false) => {
+    // A desk older than the one this page already has is a late answer;
+    // a save refused on it is still owed, against the desk as it is now.
+    if (got.rev < rev.current) {
+      if (again) persist();
+      return;
+    }
+    rev.current = got.rev;
+    const theirs = got.layout?.cards ?? [];
+    const mine = latest.current.cards;
+    const base = known.current.cards;
+    // The same card however its fields are ordered, since the database
+    // keeps them in an order of its own.
+    const canon = (c: Card) =>
+      JSON.stringify(Object.fromEntries(Object.entries(c).sort()));
+    const same = (a: Card, b: Card) => canon(a) === canon(b);
+    const keep = (id: string): Card | null => {
+      const t = theirs.find((c) => c.id === id);
+      const m = mine.find((c) => c.id === id);
+      const b = base.find((c) => c.id === id);
+      // Changed here since: this page's version. Taken away here: gone.
+      // Taken away elsewhere while its panel has a question to ask
+      // before it goes: it stays until the question is answered, and
+      // goes then.
+      if (m && !t && b && asking.current.has(id) && !unsaved.current.has(id))
+        void close(id);
+      // Made to show something else elsewhere while its panel has a
+      // question to ask: it keeps showing what it does until the answer,
+      // and shows the new thing then, if the answer allows.
+      const ask = asking.current.get(id);
+      if (m && t && b && t.href !== m.href && ask && !unsaved.current.has(id)) {
+        unsaved.current.add(id);
+        void ask().then((allowed) => {
+          if (!allowed) return;
+          asking.current.delete(id);
+          unsaved.current.delete(id);
+          setScreen((l) => ({
+            cards: l.cards.map((c) => (c.id === id ? t : c)),
+          }));
+        });
+        return m;
+      }
+      if (
+        m &&
+        (gripped.current.has(id) ||
+          (b ? !same(m, b) : unsaved.current.has(id)) ||
+          (!t && asking.current.has(id)))
+      ) {
+        // Kept over the desk as kept, it is a change still to save, and
+        // stays one through every desk taken in until it lands.
+        unsaved.current.add(id);
+        return m;
+      }
+      if (!m && b) return null;
+      return t ?? null;
+    };
+    // This page's cards in this page's order, then what arrived from
+    // elsewhere; what this page took away since is not back because the
+    // desk kept elsewhere still had it. Every widget lies under every
+    // window, each group in its own order. A desk is only so big: past
+    // its most, what arrived last is left off, since a desk the server
+    // would refuse could never be kept again.
+    const ours = new Set(mine.map((c) => c.id));
+    const gone = new Set(base.map((c) => c.id));
+    const stayed = mine
+      .map((c) => keep(c.id))
+      .filter((c): c is Card => c !== null);
+    const arrived = theirs
+      .filter((c) => !ours.has(c.id) && !gone.has(c.id))
+      .slice(0, Math.max(0, MOST - stayed.length));
+    const met = [...stayed, ...arrived];
+    const cards = [
+      ...met.filter((c) => c.pinned),
+      ...met.filter((c) => !c.pinned),
+    ];
+    known.current = got.layout ?? EMPTY;
+    setScreen(() => ({ cards }), again);
+  };
   const setScreen = (to: (layout: Screen) => Screen | null, save = true) => {
     const layout = to(latest.current);
     if (!layout) return;
     latest.current = layout;
     setScreenState(layout);
-    if (save) void persist(layout);
+    if (save) persist();
   };
 
   // A block landing on the desk: a new window at the block's own size,
@@ -482,6 +624,7 @@ export function Room({
     const open = (cards: Card[]): Card => {
       const id = fresh();
       born.current.add(id);
+      unsaved.current.add(id);
       const same = cards.filter(
         (c) => pathOf(c.href) === pathOf(item.href),
       ).length;
@@ -538,13 +681,16 @@ export function Room({
 
   // A window changed by hand: moved or resized, live while the pointer is
   // down and kept when it lifts.
-  const shape = (key: string, to: Partial<Card>, save: boolean) =>
+  const shape = (key: string, to: Partial<Card>, save: boolean) => {
+    if (save) gripped.current.delete(key);
+    else gripped.current.add(key);
     setScreen(
       (l) => ({
         cards: l.cards.map((c) => (c.id === key ? clamp({ ...c, ...to }) : c)),
       }),
       save,
     );
+  };
 
   // A window touched comes to the front.
   // A widget stays under the windows however it is touched.

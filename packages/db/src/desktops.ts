@@ -28,9 +28,16 @@ export type Card = {
 // of the display, drawn on the canvas, and never scrolls.
 export type Screen = { cards: Card[] };
 
-export type Desktop = { id: string; position: number; layout: Screen | null };
+// A desk, with how many times it has been kept: a save names the count it
+// rests on, and one resting on an older count is refused.
+export type Desktop = {
+  id: string;
+  position: number;
+  layout: Screen | null;
+  rev: number;
+};
 
-const COLUMNS = "id, position, layout";
+const COLUMNS = "id, position, layout, rev";
 
 // The person's desks in order, as they left them.
 export async function desktopsOf(q: Query): Promise<Desktop[]> {
@@ -53,15 +60,28 @@ export async function addDesktop(
   return rows[0]!;
 }
 
-// The desk as it now is. Null when it is not theirs.
+// The desk as it now is. Null when it is not theirs, or when it names a
+// count the desk has moved past.
 export async function saveDesktop(
   q: Query,
   id: string,
   layout: Screen | null,
+  rev?: number,
 ): Promise<Desktop | null> {
   const { rows } = await q.query<Desktop>(
-    `update desktops set layout = $2::jsonb where id = $1 returning ${COLUMNS}`,
-    [id, layout === null ? null : JSON.stringify(layout)],
+    `update desktops set layout = $2::jsonb, rev = rev + 1
+     where id = $1 and ($3::int is null or rev = $3)
+     returning ${COLUMNS}`,
+    [id, layout === null ? null : JSON.stringify(layout), rev ?? null],
+  );
+  return rows[0] ?? null;
+}
+
+// The person's first desk, held against anyone else changing it for the
+// rest of the transaction.
+export async function holdDesktop(q: Query): Promise<Desktop | null> {
+  const { rows } = await q.query<Desktop>(
+    `select ${COLUMNS} from desktops order by position limit 1 for update`,
   );
   return rows[0] ?? null;
 }

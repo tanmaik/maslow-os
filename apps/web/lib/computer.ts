@@ -62,7 +62,7 @@ import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-10";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-13";
 
 // An image whose label ends in -security does not wait on the person for
 // a week: it takes the idle rule from the day it is ready.

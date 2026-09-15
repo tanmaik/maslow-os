@@ -869,6 +869,46 @@ export async function smokeMcp(stack, signIn) {
     ) && notYet.text === "no records",
     `${asked.lines[0]} / ${notYet.text}`,
   );
+  // The desk is the agent's to arrange, and a widget is an app on a port
+  // of the person's computer: put down, listed, moved by its id alone,
+  // and taken off. A colleague's desk is their own.
+  const noDesk = await call(grant.access_token, "desk", {});
+  const noShown = await call(grant.access_token, "place", { x: 0.5 });
+  const putDown = await call(grant.access_token, "place", {
+    port: 3000,
+    title: "Launch board",
+    x: 0.1,
+    y: 0.05,
+    w: 0.3,
+    h: 0.3,
+  });
+  const widgetId = putDown.lines[0]?.split(" ")[0] ?? "";
+  const onDesk = await call(grant.access_token, "desk", {});
+  const shifted = await call(grant.access_token, "place", {
+    id: widgetId,
+    x: 0.5,
+  });
+  const theirDesk = await call(colleagueGrant.access_token, "desk", {});
+  const takenOff = await call(grant.access_token, "unplace", { id: widgetId });
+  const cleared = await call(grant.access_token, "desk", {});
+  const noWidget = await call(grant.access_token, "unplace", { id: widgetId });
+  check(
+    "the agent places a widget on the desk, moves it, and takes it off",
+    noDesk.text === "nothing is on the desk" &&
+      noShown.refused &&
+      noShown.text === "a widget shows a port" &&
+      /^[a-z0-9]{4,16} "Launch board" \/port\/\S+\/3000 at 0\.10,0\.05 size 0\.30×0\.30$/.test(
+        putDown.lines[0] ?? "",
+      ) &&
+      onDesk.text === putDown.text &&
+      shifted.lines[0]?.startsWith(`${widgetId} "Launch board"`) &&
+      shifted.lines[0]?.includes("at 0.50,0.05") &&
+      theirDesk.text === "nothing is on the desk" &&
+      takenOff.text === `took ${widgetId} off the desk` &&
+      cleared.text === "nothing is on the desk" &&
+      noWidget.refused,
+    `${putDown.lines[0]} / ${shifted.lines[0]} / ${takenOff.text} / ${cleared.text} / ${noWidget.text}`,
+  );
   const notTheirs = await call(colleagueGrant.access_token, "redefine", {
     types: [{ name: "lift", newName: "lifts" }],
   });

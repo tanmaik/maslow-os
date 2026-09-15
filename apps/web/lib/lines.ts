@@ -222,6 +222,21 @@ export function event(e: Event, me: string): string {
 // One notice on a line: id, kind, when it was left, its title, whether the
 // person has seen it, then what an ask offers, what was answered, and the
 // records it points at. Below it the body it carries.
+// A widget on the desk: id "title" href at x,y size w×h, shares of the
+// desk to two places.
+export function widget(w: {
+  id: string;
+  title: string;
+  href: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}): string {
+  const at = (n: number) => n.toFixed(2);
+  return `${w.id} ${quoted(flat(w.title))} ${w.href} at ${at(w.x)},${at(w.y)} size ${at(w.w)}×${at(w.h)}`;
+}
+
 export function notice(n: Notice): string {
   const parts = [
     n.id,
