@@ -7,7 +7,6 @@ import {
   claimArrival,
   holdsArrival,
   membersOf,
-  MOST,
   releaseArrival,
   settleCadence,
   type Mode,
@@ -17,6 +16,7 @@ import type { Principal } from "@maslow/db/auth";
 import {
   files,
   onImage,
+  plain,
   ready,
   runHeartbeat,
   tellCadence,
@@ -36,15 +36,6 @@ const SAID: Record<Mode, string | null> = {
 
 // What marks the section arriving wrote, a comment markdown does not show.
 const MARK = "<!-- maslow: written when you arrived -->";
-
-// The person's words as the door takes them: whole, on one line, no
-// longer than the card allows.
-const plain = (s: string) =>
-  s
-    .replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MOST);
 
 // A promise, or a refusal once the moment is up.
 const within = <T>(ms: number, p: Promise<T>): Promise<T> =>

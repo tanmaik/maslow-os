@@ -1,5 +1,6 @@
 import type { Subject, Target } from "@maslow/brain";
 import { asMeter, asOrg, asPerson, type Query } from "@maslow/db";
+import { MOST } from "@maslow/db/arrival";
 import type { Principal } from "@maslow/db/auth";
 import { groupsIn } from "@maslow/db/groups";
 import {
@@ -62,7 +63,7 @@ import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-19";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-20";
 
 // An image whose label ends in -security does not wait on the person for
 // a week: it takes the idle rule from the day it is ready.
@@ -1748,14 +1749,23 @@ export async function runHeartbeat(
   return true;
 }
 
+// A person's words as the door takes them: whole, on one line, no
+// longer than the card allows.
+export const plain = (s: string) =>
+  s
+    .replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MOST);
+
 // Wakes the person's own agent once they have answered an ask of it: their
-// computer, with a cadence set, is asked for a run now, told which ask.
-export const wakeAnswered = (p: Principal, notice: string) =>
+// computer, with a cadence set, is asked for a run now, told which ask and
+// what they said, so the answer is in the run's hands whatever becomes of
+// the notice.
+export const wakeAnswered = (p: Principal, notice: string, answer: string) =>
   wake(
     p,
-    /^[a-z0-9]{10}$/.test(notice)
-      ? `the person answered ask ${notice}`
-      : "the person answered an ask",
+    `the person answered ${/^[a-z0-9]{10}$/.test(notice) ? `ask ${notice}` : "an ask"}: ${plain(answer)}`,
   ).catch((err: Error) => console.error(`wake ${p.userId}: ${err.message}`));
 
 // Whether the person's ready computer runs the image of the day, as Fly

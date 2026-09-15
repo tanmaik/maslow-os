@@ -75,7 +75,8 @@ export async function POST(request: Request) {
         } else await answerNotice(q, said.id, said.answer);
         // The agent that asked hears the answer once it has landed.
         const id = said.id;
-        after(() => wakeAnswered(p, id));
+        const answer = said.answer;
+        after(() => wakeAnswered(p, id, answer));
       }
     });
   } catch (err) {

@@ -32,7 +32,14 @@ export async function POST(request: Request) {
     after(() => wakeShared(p, made.shared, made.subjects));
     // The agent that asked hears the answer either way, by the notice
     // that carried the ask.
-    if (made.notice) after(() => wakeAnswered(p, made.notice!));
+    if (made.notice)
+      after(() =>
+        wakeAnswered(
+          p,
+          made.notice!,
+          intent === "accept" ? "Accept" : "Decline",
+        ),
+      );
   } catch (err) {
     if (
       err instanceof Invalid ||

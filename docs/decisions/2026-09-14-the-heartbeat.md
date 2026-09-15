@@ -29,7 +29,11 @@ holds their brain and their apps.
   the weekly cap on the person's key and nothing else: a per-run dollar
   budget was tried and dropped on 2026-09-15, since Claude Code cannot
   price the models our key pays for and its guess tripped the budget in
-  minutes. Nothing waits on its answer and nothing reads what it prints;
+  minutes. It thinks a few thousand tokens at most before each step,
+  and the brief says its model takes no images, since a run read on
+  2026-09-15 spent five of its fourteen minutes in three long thoughts
+  and three more taking screenshots its model could not see. Nothing
+  waits on its answer and nothing reads what it prints;
   what it did is in the brain's log and on the disk, like any session.
 - **A share wakes it.** A run has a reason, and the brief says it: the
   clock came round, the person pressed Run now, or someone shared
@@ -42,8 +46,9 @@ holds their brain and their apps.
   The sharer's own is not woken; a computer whose cadence is Off is not
   woken either, since Off means the agent does nothing on its own. An
   ask the person answers wakes their own agent the same way, told which
-  ask, so what it asked for is acted on when they answer and not at the
-  next tick of the clock. A reason that arrives while a run is going
+  ask and what they answered, since the notice may be cleared before the
+  run reads it, so what it asked for is acted on when they answer and not
+  at the next tick of the clock. A reason that arrives while a run is going
   waits for the run after it.
 - **The brief is mechanisms.** `/opt/maslow/etc/heartbeat.md` says what
   is here — that nobody started the run, what the brain's tools are, how

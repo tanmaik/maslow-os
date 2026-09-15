@@ -24,4 +24,6 @@ What is here:
   which can point at records, `notice ask "title" ["body"] --options a,b`
   a question they answer there, and the brain's `notices` tool reads the
   answer once they have given one.
+- The model this run is on takes text only: a screenshot is refused,
+  and a page is read by its text and its console.
 - `~/.maslow/heartbeat/` is yours alone, and is still there next run.

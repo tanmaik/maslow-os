@@ -475,7 +475,7 @@ under a key the door answers once, a time no run goes past and the weekly cap on
 their key as the only ceiling on what it spends, one run at a time. A share wakes the agent of whoever it reached: once it
 has landed, each of their computers with a cadence set is asked for a
 run now, told who shared what, and an ask the person answers wakes
-their own the same way, told which ask; a reason that arrives mid-run
+their own the same way, told which ask and what they answered; a reason that arrives mid-run
 waits for the run after. How often,
 whether one is going and what came of the last are the machine's to
 say, kept on its disk outside their Linux so a restart keeps the clock,

@@ -2068,7 +2068,8 @@ function frameOf(first, payload) {
 server.listen(8080, "::", () => console.log("the door is open on 8080"));
 
 // The heartbeat's runs are the person's, in their Linux, on a session of
-// ours, like the agent the desk opens.
+// ours, like the agent the desk opens, thinking a few thousand tokens at
+// most before each step, since nobody is waiting on a long one.
 heartbeat.start((args) =>
   spawn(
     "/usr/sbin/chroot",
@@ -2079,6 +2080,7 @@ heartbeat.start((args) =>
       "SHELL=/bin/bash",
       "LANG=C.UTF-8",
       "MASLOW_AUTH=managed",
+      "MAX_THINKING_TOKENS=4000",
       "/bin/bash",
       "-lc",
       `cd ${HOME} && exec "$0" "$@"`,
