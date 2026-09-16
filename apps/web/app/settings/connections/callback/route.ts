@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { landing } from "@/app/settings/connections/landing";
 import { connections } from "@/lib/connections";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
@@ -22,7 +23,9 @@ export async function GET(request: Request) {
       })
     : "gone";
   return NextResponse.redirect(
-    `${home}/settings?connection=${outcome}${outcome === "connected" ? `&account=${encodeURIComponent(id)}` : ""}`,
+    outcome === "connected"
+      ? landing(home, outcome, id)
+      : landing(home, outcome),
     303,
   );
 }

@@ -61,7 +61,9 @@ export async function smokeConnections(stack, signIn) {
     "an app connects",
     begun.status === 303 &&
       signInUrl.includes("/settings/connections/verify?session_uri=") &&
-      landed.endsWith(`/settings?connection=connected&account=${mine}`) &&
+      landed.endsWith(
+        `/?maslow=settings&connection=connected&account=${mine}`,
+      ) &&
       holds(after, "pigeon"),
     `began ${begun.status}, landed ${landed.split("?")[1] ?? landed}`,
   );

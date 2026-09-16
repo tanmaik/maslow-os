@@ -98,7 +98,7 @@ export function AppSearch({ mostUsed }: { mostUsed: App[] | null }) {
                 </span>
               }
             >
-              <form action="/settings/connections" method="post">
+              <form action="/settings/connections" method="post" target="_top">
                 <input type="hidden" name="intent" value="connect" />
                 <input type="hidden" name="app" value={a.slug} />
                 <Button size="small" variant="secondary" type="submit">

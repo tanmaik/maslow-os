@@ -160,7 +160,8 @@ export const composio = {
   },
 
   // Completes a sign-in Composio is holding until we vouch for who did it:
-  // the account's id when the sign-in was this user's, null when it was not.
+  // the account's id when the sign-in was this user's, null when it was
+  // not, or when Composio no longer holds it.
   async complete(sessionUri: string, userId: string): Promise<string | null> {
     const c = config();
     const res = await fetch(
@@ -172,7 +173,7 @@ export const composio = {
         signal: AbortSignal.timeout(30_000),
       },
     );
-    if (res.status === 400) return null;
+    if (res.status === 400 || res.status === 404) return null;
     if (!res.ok)
       throw new Error(
         `Composio POST /connected_accounts/complete_auth answered ${res.status}: ${(await res.text()).slice(0, 300)}`,

@@ -60,6 +60,7 @@ export function Phone({
   onGuard,
   born,
   afresh,
+  wanted: asked,
 }: {
   cards: Card[];
   ports: Port[];
@@ -77,6 +78,8 @@ export function Phone({
   born: Set<string>;
   // A count per port window of the times its port came back, each a reload.
   afresh: Record<string, number>;
+  // The path of a window the desk was asked to open as it was drawn.
+  wanted: string | null;
 }) {
   const still = useReducedMotion();
   const windows = cards.filter((c) => !c.pinned);
@@ -85,9 +88,11 @@ export function Phone({
   // that order.
   const front = windows.filter((c) => !c.stowed).at(-1) ?? null;
   const [view, setView] = useState<"home" | "app" | "recents">("home");
-  // A tap on an icon opens or raises a window; the app is shown the
-  // moment the front window is that app's.
-  const [wanted, setWanted] = useState<string | null>(null);
+  // A tap on an icon opens or raises a window, and the desk may have been
+  // asked for one as it was drawn; the app is shown the moment the front
+  // window is that app's.
+  const [wanted, setWanted] = useState<string | null>(asked);
+  useEffect(() => setWanted(asked), [asked]);
   useEffect(() => {
     if (!wanted || !front) return;
     if (pathOf(front.href) === wanted) {

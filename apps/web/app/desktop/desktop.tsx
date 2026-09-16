@@ -688,19 +688,15 @@ export function Desktop({
     if (last) raise(last);
     else pick(b);
   };
-  // Settings, on a pane if one is asked for, at one of its sections if a
-  // section is: the Settings window already open, brought forward and
-  // turned to that pane, or a first one.
-  const settings = (pane?: string, section?: string) => {
-    const href = pane
-      ? `/settings?pane=${pane}${section ? `#${section}` : ""}`
-      : "/settings";
+  // Settings at an address of its own: the Settings window already open,
+  // brought forward and turned to it, or a first one.
+  const settingsAt = (href: string) => {
     const had = windows
       .filter((w) => pathOf(w.card.href) === "/settings")
       .at(-1);
     if (had) {
       raise(had);
-      if (pane) shape(had.card.id, { href }, true);
+      if (href !== "/settings") shape(had.card.id, { href }, true);
       return;
     }
     pick({
@@ -710,6 +706,28 @@ export function Desktop({
       box: boxOf({ kind: "settings", href: "/settings" }),
     });
   };
+  // Settings, on a pane if one is asked for, at one of its sections if a
+  // section is.
+  const settings = (pane?: string, section?: string) =>
+    settingsAt(
+      pane
+        ? `/settings?pane=${pane}${section ? `#${section}` : ""}`
+        : "/settings",
+    );
+  // A tab that left the desk to sign in to an app comes back to it with
+  // the Settings window open on what came of it, and the address plain
+  // again, so a reload does not open it twice.
+  const [wanted, setWanted] = useState<string | null>(null);
+  useEffect(() => {
+    const asked = new URLSearchParams(location.search);
+    if (asked.get("maslow") !== "settings") return;
+    asked.delete("maslow");
+    settingsAt(`/settings?${asked}`);
+    setWanted("/settings");
+    history.replaceState(null, "", location.pathname);
+    // Once, on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   // A record, in the Brain window already open turned to it, or a first
   // one: one Brain at a time, as Settings is one Settings at a time.
   const brain = (href: string, title: string) => {
@@ -1015,6 +1033,7 @@ export function Desktop({
           onGuard={guard}
           born={born.current}
           afresh={afresh}
+          wanted={wanted}
         />
       )}
       {wide && (

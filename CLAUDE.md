@@ -269,7 +269,10 @@ one app, each with a name they gave it that Composio keeps; the agent's
 `run` names which account it acts in, and an app with several refuses until
 it does. Every app Composio reaches is one a person can connect; the
 product names none. The page asks Composio what is connected each time it is
-shown, and says so when Composio does not answer. In production a finished
+shown, and says so when Composio does not answer. Connecting takes the whole
+tab to the app's sign-in, since a sign-in page refuses to be shown in a
+frame, and the way back lands on the desk with the Settings window open on
+what came of it. In production a finished
 sign-in activates only once we have vouched for who did it. Access to a person's apps
 ends with their membership: a membership that ends or an org that is deleted
 owes its accounts to Composio in the same transaction. Composio's managed

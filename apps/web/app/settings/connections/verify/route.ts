@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { landing } from "@/app/settings/connections/landing";
 import { connections } from "@/lib/connections";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
@@ -17,17 +18,15 @@ export async function GET(request: Request) {
   if (!p) return NextResponse.redirect(home, 303);
   const session = new URL(request.url).searchParams.get("session_uri") ?? "";
   if (!SESSION.test(session))
-    return NextResponse.redirect(`${home}/settings?connection=gone`, 303);
+    return NextResponse.redirect(landing(home, "gone"), 303);
   try {
     const id = await connections.vouch(p, session);
     return NextResponse.redirect(
-      id
-        ? `${home}/settings?connection=connected&account=${encodeURIComponent(id)}`
-        : `${home}/settings?connection=failed`,
+      id ? landing(home, "connected", id) : landing(home, "failed"),
       303,
     );
   } catch (err) {
     console.error(`connections: ${(err as Error).message}`);
-    return NextResponse.redirect(`${home}/settings?connection=unanswered`, 303);
+    return NextResponse.redirect(landing(home, "unanswered"), 303);
   }
 }

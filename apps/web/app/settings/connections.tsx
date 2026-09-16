@@ -109,7 +109,11 @@ export function Connections({
                         </Row>
                       ))}
                       <Row label={`Another ${accounts[0]!.appName} account`}>
-                        <form action="/settings/connections" method="post">
+                        <form
+                          action="/settings/connections"
+                          method="post"
+                          target="_top"
+                        >
                           <input type="hidden" name="intent" value="connect" />
                           <input type="hidden" name="app" value={slug} />
                           <Button
