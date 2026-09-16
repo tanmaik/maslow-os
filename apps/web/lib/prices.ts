@@ -24,7 +24,7 @@ export const PRICES = {
 // million is a dollar at Voyage's price and ten times the largest brain
 // so far, so nothing short of a runaway reaches it.
 // Wallpapers are capped per person, in pictures and in bytes: forty is
-// more desk than anyone dresses, and half a gigabyte of them costs a
+// more desktop than anyone dresses, and half a gigabyte of them costs a
 // hundredth of a cent an hour at the bucket's price.
 export const CEILINGS = {
   vectors: 50_000_000,

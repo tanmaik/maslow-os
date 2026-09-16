@@ -96,7 +96,7 @@ export function AboutComputer({
   useEffect(() => {
     if (!open) return;
     let gone = false;
-    void fetch("/room/about")
+    void fetch("/desktop/about")
       .then((r) => (r.ok ? (r.json() as Promise<About>) : null))
       .then((a) => {
         if (!gone) setAbout(a);

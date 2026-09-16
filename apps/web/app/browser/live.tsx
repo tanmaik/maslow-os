@@ -10,7 +10,7 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { BarButton, InBar } from "@/app/room/panel";
+import { BarButton, InBar } from "@/app/desktop/panel";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { Divider } from "@/components/base/divider/divider";
@@ -652,7 +652,7 @@ export function LiveBrowser({ href }: { href?: string }) {
               <p className="text-body-medium text-text-secondary">
                 {state === "asking"
                   ? "Looking for your computer's browser…"
-                  : "Type an address above, or let Claude Code open one."}
+                  : "Type an address above, or let your agent open one."}
               </p>
             </motion.div>
           )}

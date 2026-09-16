@@ -1,12 +1,12 @@
 # 2026-09-12 — the look is warm
 
-The desk keeps its shape and changes its skin. Nothing about windows, the
+The desktop keeps its shape and changes its skin. Nothing about windows, the
 dock, what is stored or how a surface draws itself moves; only colour,
 corner, shadow and type size.
 
 ## Why
 
-[The screen is a desk](2026-09-11-the-screen-is-a-desk.md) took Gödel
+[The screen is a desktop](2026-09-11-the-screen-is-a-desktop.md) took Gödel
 Terminal as its reference and stripped the product to pure black and
 white: no colour at all, one 14px size for every word, square corners, no
 shadow. That is a good workspace for someone who already knows what they
@@ -15,18 +15,18 @@ canvas it replaced: "I want the UI to kind of feel like the old one did
 with the orange buttons and stuff ... a better vibe for people that maybe
 aren't as technical."
 
-Density and warmth are not opposites. The desk's layout is unchanged and
+Density and warmth are not opposites. The desktop's layout is unchanged and
 still dense; what changed is that it no longer reads as a terminal.
 
 ## What the look is
 
 - **One colour, warm orange.** It is the primary, and the product spends
   it on the few things a person is meant to look at: the main button on a
-  page, what waits on you, the window a drag will land in, the desk in
+  page, what waits on you, the window a drag will land in, the desktop in
   view. Everything else stays neutral.
 - **Pure neutrals.** (Since 2026-09-14; the greys were warmed at first and
   read as stone.) Every grey is grey with no hue in it, so paper is white
-  and the one colour is the only colour. The desk
+  and the one colour is the only colour. The desktop
   is a shade darker than the windows on it, and faintly dotted, so a
   window reads as something resting on a surface.
 - **Rounded and lifted.** A window, the dock and the dots have soft

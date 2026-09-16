@@ -13,6 +13,12 @@ const config: NextConfig = {
   // which Next would otherwise redirect away.
   skipTrailingSlashRedirect: true,
   rewrites: async () => [
+    // A desktop open through a deploy still saves its arrangement and asks
+    // after ports at the addresses its bundle was built with. Renamed on
+    // 2026-09-16; these go once every open desktop has reloaded.
+    { source: "/room/desktop", destination: "/desktop/layout" },
+    { source: "/room/:path*", destination: "/desktop/:path*" },
+    { source: "/notices", destination: "/notifications" },
     {
       source: "/ingest/static/:path*",
       destination: "https://us-assets.i.posthog.com/static/:path*",

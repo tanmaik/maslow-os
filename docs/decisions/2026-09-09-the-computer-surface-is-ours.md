@@ -438,7 +438,7 @@ place, and nothing inside it can tell the difference.
 
 We do not move anyone on our own. A trip is not a move, and a person who
 spends a week in another city should not have their computer copied
-because of it. What we do is notice: when someone's requests keep arriving
+because of it. What we do is notification: when someone's requests keep arriving
 from a region inside the budget while their machine sits outside it, the
 page says so and offers the button. Under forty milliseconds there is
 nothing to offer and we stay quiet.

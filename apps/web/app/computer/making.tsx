@@ -8,7 +8,6 @@ import {
 } from "@remixicon/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Heartbeat } from "@/app/computer/heartbeat";
 import { Numbers, useStats } from "@/app/computer/numbers";
 import { Where, type From } from "@/app/computer/region";
 import { Sizes } from "@/app/computer/sizes";
@@ -116,11 +115,7 @@ function Updating({
   const [failed, setFailed] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const serving = now?.ports ?? [];
-  // The heartbeat's run is not in a terminal, and stops with the rest.
-  const running = [
-    ...(now?.running ?? []),
-    ...(now?.heartbeat?.running ? ["your agent's heartbeat"] : []),
-  ];
+  const running = now?.running ?? [];
   const say = async (to: "now" | "tonight" | "idle") => {
     setFailed(null);
     setWhen(to);
@@ -339,7 +334,6 @@ function Ready({
   backedUp,
   update,
   onRestarting,
-  heartbeat,
   door,
   where,
   moveFailed,
@@ -350,9 +344,6 @@ function Ready({
   backedUp: string | null | "off";
   update: Update | null;
   onRestarting: () => void;
-  // How often the person's agent runs on its own there, in minutes; zero
-  // is off.
-  heartbeat: number;
   door: string | null;
   where: From;
   moveFailed: string | null;
@@ -377,7 +368,6 @@ function Ready({
       <Sizes current={size} />
       {door && region && <Where current={region} door={door} from={where} />}
       <Backups backedUp={backedUp} />
-      <Heartbeat every={heartbeat} now={now?.heartbeat ?? null} />
       <Rows>
         <Row
           label="Start your Linux over"
@@ -425,7 +415,6 @@ export function Making({
   size,
   backedUp,
   update,
-  heartbeat,
   door,
   where,
 }: {
@@ -442,9 +431,6 @@ export function Making({
   // The computer's name and the one command that sets a Mac up to reach it
   // over SSH.
   // Whose account Claude Code on the computer runs on.
-  // How often the person's agent runs on its own there, in minutes; zero
-  // is off.
-  heartbeat: number;
   // The computer's own address, once it has one.
   door: string | null;
   where: From;
@@ -497,7 +483,6 @@ export function Making({
           restarting.current = Date.now();
           setState((was) => ({ ...was, progress: "starting" }));
         }}
-        heartbeat={heartbeat}
         door={door}
         where={where}
         moveFailed={moveFailed}

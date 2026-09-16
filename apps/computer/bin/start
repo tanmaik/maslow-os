@@ -1,6 +1,6 @@
 # How Claude Code starts on this computer, whichever door it comes
-# through: on the rule auth-env reads at every start — ours, on the key
-# Maslow gave the machine, only when the session was started as ours;
+# through: on the rule auth-env reads at every start — ours, through
+# Maslow's gateway, only when the session was started as ours;
 # the person's own otherwise — told which in MASLOW_AUTH, and from the
 # person's own copy where they have one. Sourced, never run; never
 # returns.
@@ -8,10 +8,10 @@ start() {
   local name=$1
   shift
   . /opt/maslow/bin/auth-env
-  # A session of ours has nothing to run on where the machine holds no key
-  # of ours, and never runs on what the person provided instead.
-  if [ "${MASLOW_AUTH:-}" = managed ] && [ -z "${MASLOW_MODEL_KEY:-}" ]; then
-    echo "This computer holds no key of Maslow's, so a session of Maslow's cannot run here." >&2
+  # A session of ours has nothing to run on where the machine was given
+  # no way to the gateway, and never runs on what the person provided.
+  if [ "${MASLOW_AUTH:-}" = managed ] && [ -z "${MASLOW_MODEL_TOKEN:-}" ]; then
+    echo "This computer has no way to Maslow's models, so a session of Maslow's cannot run here." >&2
     exit 78
   fi
   export MASLOW_AUTH="$maslow_auth"

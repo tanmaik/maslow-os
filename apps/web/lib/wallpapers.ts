@@ -1,7 +1,7 @@
 import type { Query } from "@maslow/db";
 import { ownWallpapers, wallpaperOf } from "@maslow/db/wallpapers";
 
-import type { Kept, Papers } from "@/app/room/wallpapers";
+import type { Kept, Papers } from "@/app/desktop/wallpapers";
 import { storage } from "@/lib/storage";
 
 // One wallpaper of the person's own, with the address it is drawn from.

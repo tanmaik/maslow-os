@@ -9,9 +9,8 @@ import {
   type Target,
 } from "@maslow/brain";
 import { asPerson, isUuid } from "@maslow/db";
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { wakeShared } from "@/lib/computer";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
@@ -48,10 +47,6 @@ export async function POST(request: Request) {
       if (form.get("intent") === "unshare") await unshare(db, on, subject);
       else await share(db, on, subject, level);
     });
-    // Whoever it reached is woken once the share has landed, never
-    // holding the page.
-    if (form.get("intent") !== "unshare")
-      after(() => wakeShared(p, [on], [subject]));
   } catch (err) {
     if (
       err instanceof Invalid ||

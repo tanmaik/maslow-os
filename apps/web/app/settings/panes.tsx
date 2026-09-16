@@ -11,7 +11,6 @@ import {
   RiApps2Line,
   RiBuilding2Line,
   RiComputerLine,
-  RiDeleteBinLine,
   RiGroupLine,
   RiPaletteLine,
   RiKey2Line,
@@ -21,11 +20,17 @@ import {
   RiUserLine,
 } from "@remixicon/react";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type ReactNode,
+} from "react";
 
 import { InputBase } from "@/components/base/input/input";
 import { EagerLink } from "@/components/eager-link";
-import type { Mark } from "@/app/room/blocks";
+import type { Mark } from "@/app/desktop/apps";
 import { cx } from "@/utils/cx";
 
 // One pane of settings: where it sits in the rail, what it is called, and
@@ -41,14 +46,13 @@ export type Pane = {
 const MARKS: Record<string, Mark> = {
   you: RiUserLine,
   computer: RiComputerLine,
-  claude: RiSparklingLine,
+  agent: RiSparklingLine,
   look: RiPaletteLine,
   apps: RiApps2Line,
   access: RiKey2Line,
   org: RiBuilding2Line,
   members: RiTeamLine,
   groups: RiGroupLine,
-  delete: RiDeleteBinLine,
 };
 
 export function Panes({
@@ -62,6 +66,9 @@ export function Panes({
   children?: ReactNode;
 }) {
   const router = useRouter();
+  // The pane just clicked lights up at once; the page follows.
+  const [going, setGoing] = useState<string | null>(null);
+  const [, start] = useTransition();
   const [query, setQuery] = useState("");
   const field = useRef<HTMLInputElement>(null);
   const typed = query.trim().toLowerCase();
@@ -84,11 +91,14 @@ export function Panes({
       `${url.pathname}?pane=${pane.id}`,
     );
   }, [pane.id]);
+  useEffect(() => setGoing(null), [pane.id]);
   const open = (id: string) => {
     setQuery("");
     field.current?.blur();
-    router.push(`/settings?pane=${id}`);
+    setGoing(id);
+    start(() => router.push(`/settings?pane=${id}`));
   };
+  const lit = going && going !== pane.id ? going : pane.id;
   const groups = [...new Set(shown.map((p) => p.group))];
   return (
     <div className="prefs">
@@ -124,7 +134,7 @@ export function Panes({
                 .filter((p) => p.group === group)
                 .map((p) => {
                   const Icon = MARKS[p.id] ?? RiApps2Line;
-                  const on = p.id === pane.id;
+                  const on = p.id === lit;
                   return (
                     <EagerLink
                       key={p.id}

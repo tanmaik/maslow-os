@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 // Whether this device has answered the browser's own prompt: "on" once
 // granted, "off" once declined, unanswered, or turned off in Settings, and
 // unset before it has ever been asked. The ask and the weather can be in
-// different frames of the same page (Settings is one, the desk is
+// different frames of the same page (Settings is one, the desktop is
 // another), so a change here is told to both.
 const LOCATION_KEY = "maslow.location";
 
@@ -80,7 +80,7 @@ export type Weather = {
   place: string | null;
 };
 
-// How often the position and the weather are read while the desk is open
+// How often the position and the weather are read while the desktop is open
 // and being looked at.
 const EVERY = 60_000;
 
@@ -182,7 +182,7 @@ function report(
 }
 
 // Asks the browser for the person's location, straight from wherever this
-// is called: the row in Settings turning the switch on, or the desk on its
+// is called: the row in Settings turning the switch on, or the desktop on its
 // own the first time it is drawn. Granted, the row and the weather agree
 // at once; refused, both stay off, and nothing asks again.
 export async function askLocation(): Promise<boolean> {
@@ -196,7 +196,7 @@ export function turnLocationOff() {
 }
 
 // The weather beside the clock, and the minute that reports it. Reads the
-// browser's own permission once a minute while the desk is open and
+// browser's own permission once a minute while the desktop is open and
 // looked at, and at once on landing and on coming back into view. Off
 // where this deployment makes no computers, since there is no door to
 // carry a location to and no reset the "no fake" rule allows.

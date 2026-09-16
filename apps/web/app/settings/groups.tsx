@@ -38,16 +38,7 @@ export function Groups({
   said: Told;
 }) {
   return (
-    <Section
-      id="groups"
-      title="Groups"
-      description={
-        <>
-          Who a record can be shared with, besides one person at a time.
-          {!owner && " Owners manage groups."}
-        </>
-      }
-    >
+    <Section id="groups" title="Groups">
       <Rows>
         {groups.map((g) => {
           const out = members.filter(

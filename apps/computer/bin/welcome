@@ -5,6 +5,6 @@ name=$(id -un)
 dim=$'\e[2m' bold=$'\e[1m' off=$'\e[0m'
 printf '%s\n' \
   "${dim}Hi, ${name^}. This is your computer: Linux, yours to keep, always on.${off}" \
-  "  ${bold}claude${off}   ${dim}Claude Code${off}          ${bold}open .${off}   ${dim}this folder, on the desk${off}          ${bold}exit${off}   ${dim}closes this shell${off}" \
+  "  ${bold}claude${off}   ${dim}Claude Code${off}          ${bold}open .${off}   ${dim}this folder, on the desktop${off}          ${bold}exit${off}   ${dim}closes this shell${off}" \
   "  ${dim}⌘↩ another shell · ⌘D split · double-click a shell in the list to name it${off}" \
   ""

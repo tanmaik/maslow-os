@@ -4,7 +4,7 @@ import { Look } from "@/app/computer/files/look";
 import { principal } from "@/lib/session";
 
 // One file of the person's, as a page of its own: what the Preview window
-// shows on the desk, reachable by address.
+// shows on the desktop, reachable by address.
 export default async function ViewPage({
   searchParams,
 }: {

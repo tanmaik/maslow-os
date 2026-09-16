@@ -7,7 +7,7 @@ import { Button } from "@/components/base/buttons/button";
 import { initials } from "@/lib/initials";
 
 import { AccountName } from "./account-name";
-import { Finder } from "./finder";
+import { AppSearch } from "./app-search";
 import { Row, Rows } from "./row";
 import { Said } from "./said";
 import { Section } from "./section";
@@ -18,14 +18,12 @@ import type { Told } from "./told";
 // way to connect more. Null for either list means the vendor did not
 // answer.
 export function Connections({
-  orgName,
   enabled,
   connections,
   mostUsed,
   focus,
   said,
 }: {
-  orgName: string;
   enabled: boolean;
   connections: Connection[] | null;
   mostUsed: App[] | null;
@@ -37,11 +35,7 @@ export function Connections({
     apps.set(c.app, [...(apps.get(c.app) ?? []), c]);
 
   return (
-    <Section
-      id="apps"
-      title="Connected apps"
-      description={`Your accounts, for your computer to act in as you. Nobody else in ${orgName} sees them. Name each account so you both can tell them apart.`}
-    >
+    <Section id="apps" title="Connected apps">
       {!enabled ? (
         <p className="text-body-2-regular text-text-secondary">
           Connections are not set up on this deployment.
@@ -133,7 +127,7 @@ export function Connections({
               </div>
             )
           )}
-          <Finder mostUsed={mostUsed} />
+          <AppSearch mostUsed={mostUsed} />
         </>
       )}
     </Section>

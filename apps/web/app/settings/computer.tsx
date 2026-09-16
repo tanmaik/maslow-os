@@ -50,7 +50,6 @@ export async function ComputerPane({ p }: { p: Principal }) {
               : "off"
           }
           update={updateOn(c)}
-          heartbeat={c?.heartbeatEvery ?? 0}
         />
       )}
     </div>

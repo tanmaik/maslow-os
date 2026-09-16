@@ -67,19 +67,17 @@ function Shared({ ports }: { ports: SharedPort[] }) {
   );
 }
 
-// Every way into the person's computer and brain other than the desk, in
+// Every way into the person's computer and brain other than the desktop, in
 // one pane: SSH from their own Mac, the ports they have opened and who
 // each reaches, the ports others opened to them, and the agents signed in
 // to their brain.
 export async function AccessPane({
   p,
-  orgName,
   agents,
   saidKeys,
   saidAgent,
 }: {
   p: Principal;
-  orgName: string;
   agents: Agent[];
   saidKeys: Told;
   saidAgent: Told;
@@ -103,9 +101,7 @@ export async function AccessPane({
         >
           <Head>SSH</Head>
           <p className="px-3 text-body-2-regular text-text-secondary">
-            Your computer is <code>{ssh.name}</code>. Run this once on your Mac,
-            and <code>ssh {ssh.name}</code> lands in the same terminal the
-            Terminal window shows.
+            Run once on your Mac, then <code>ssh {ssh.name}</code>.
           </p>
           <Command text={ssh.command} />
           <Textarea
@@ -116,7 +112,6 @@ export async function AccessPane({
             defaultValue={c?.authorizedKeys ?? ""}
             placeholder="ssh-ed25519 AAAA… you@yourmac"
             spellCheck="false"
-            hint="The public keys that open it, one per line. 1Password's SSH agent or ssh-keygen gives you one."
             inputClassName="resize-none font-mono text-caption-1-regular"
           />
           <div className="flex items-center justify-between gap-3">
@@ -133,7 +128,7 @@ export async function AccessPane({
       <Shared ports={shared} />
       <div className="flex flex-col gap-2">
         <Head>Agents on your brain</Head>
-        <Agents orgName={orgName} agents={agents} said={saidAgent} />
+        <Agents agents={agents} said={saidAgent} />
       </div>
     </div>
   );

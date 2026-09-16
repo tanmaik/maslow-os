@@ -11,23 +11,14 @@ import { on } from "./when";
 
 // The agents the signed-in person let into their brain, and a way to end
 // each one's access.
-export function Agents({
-  orgName,
-  agents,
-  said,
-}: {
-  orgName: string;
-  agents: Agent[];
-  said: Told;
-}) {
+export function Agents({ agents, said }: { agents: Agent[]; said: Told }) {
   return (
     <Section
       id="agents"
       title="Agents"
       description={
         <>
-          Each reads and writes as you, in {orgName}, until you disconnect it.
-          Connect another by adding this site&apos;s <code>/mcp</code> as an MCP
+          Connect one by adding this site&apos;s <code>/mcp</code> as an MCP
           server.
         </>
       }

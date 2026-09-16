@@ -8,9 +8,8 @@ import {
   type Access,
 } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
-import { after, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { wakeShared } from "@/lib/computer";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
@@ -43,14 +42,6 @@ export async function POST(request: Request) {
         else await share(db, { record }, subject!, level);
       }
     });
-    if (!remove_)
-      after(() =>
-        wakeShared(
-          p,
-          ids.map((record) => ({ record })),
-          [subject!],
-        ),
-      );
   } catch (err) {
     if (
       err instanceof Invalid ||

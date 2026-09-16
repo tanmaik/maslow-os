@@ -118,7 +118,7 @@ export function Status({
         <PopoverContent align="end" className="w-[360px] p-0">
           <AgentLimitsCard
             plan="Maslow"
-            planHref="/settings?pane=claude"
+            planHref="/settings?pane=agent"
             context={context ?? { max: 1_000_000, segments: [] }}
             limits={
               usage

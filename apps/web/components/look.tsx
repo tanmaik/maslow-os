@@ -21,7 +21,7 @@ export type Accent = keyof typeof ACCENTS;
 
 // Set on the root before the first paint, so nobody sees the other look
 // flash past, and set again whenever the choice changes anywhere: a pick
-// made in Settings reaches the desk and every window on it at once, and
+// made in Settings reaches the desktop and every window on it at once, and
 // the device's own change of look is followed. Its own script, not React,
 // which runs too late for the first paint.
 export const beforePaint = `(function(){function a(){try{var k=localStorage.getItem("${KEY}");var d=k==="dark"||(k!=="light"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);var c=localStorage.getItem("${ACCENT}");if(c)document.documentElement.dataset.accent=c;else delete document.documentElement.dataset.accent}catch(e){}}a();addEventListener("storage",a);try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",a)}catch(e){}})()`;

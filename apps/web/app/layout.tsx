@@ -14,7 +14,7 @@ import { principal } from "@/lib/session";
 // opens without the browser's chrome, edge to edge.
 export const metadata = {
   title: "Maslow",
-  // The status bar is the app's own, so the desk reaches the top of the
+  // The status bar is the app's own, so the desktop reaches the top of the
   // screen rather than stopping under a bar of the browser's colour.
   appleWebApp: {
     capable: true,

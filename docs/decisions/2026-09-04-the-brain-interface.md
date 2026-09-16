@@ -66,4 +66,4 @@ Considered and rejected: a client-side data grid. The tables are server
 rendered from URL state, so every view is a link, the back button works, and
 nothing is fetched twice. A form that fails validation gets the write door's
 sentence as a plain response, the same as every other route here; a nicer
-surface for errors waits until the notice pattern in settings is generalised.
+surface for errors waits until the notification pattern in settings is generalised.

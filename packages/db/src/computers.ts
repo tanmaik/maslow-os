@@ -42,9 +42,6 @@ export type Computer = {
   updateReadyAt: Date | null;
   updateWhen: UpdateWhen | null;
   updateSecurity: boolean;
-  // How often the person's agent runs on its own on the machine, in
-  // minutes; zero is off.
-  heartbeatEvery: number;
 };
 
 // When a computer takes an update: at once, at three in the morning where
@@ -77,7 +74,6 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.session_id as "sessionId", c.move,
   c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
   c.update_when as "updateWhen", c.update_security as "updateSecurity",
-  c.heartbeat_every as "heartbeatEvery",
   (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
@@ -325,14 +321,6 @@ export async function setUpdateWhen(
   ]);
 }
 
-// How often the person's agent runs on its own, in minutes; zero is off.
-export async function setHeartbeatEvery(q: Query, id: string, every: number) {
-  await q.query("update computers set heartbeat_every = $2 where id = $1", [
-    id,
-    every,
-  ]);
-}
-
 // How far the move has got, or null once it is over.
 export async function setMove(q: Query, id: string, move: Move | null) {
   await q.query("update computers set move = $2 where id = $1", [
@@ -490,6 +478,24 @@ export async function sharePort(
       [computerId, port, to.memberIds],
     );
   }
+}
+
+// A computer by its id, within its org, for the gateway's look at whose
+// token this is. Null when the org holds none.
+export async function computerById(
+  q: Query,
+  id: string,
+): Promise<Computer | null> {
+  await q.query("select set_config('app.past_members', 'on', true)");
+  return (
+    (
+      await q.query<Computer>(
+        `select ${COLUMNS} from computers c join users u on u.id = c.user_id and u.org_id = c.org_id
+         where c.id = $1`,
+        [id],
+      )
+    ).rows[0] ?? null
+  );
 }
 
 // The computer a machine is, read by anyone in its org. Null when the org

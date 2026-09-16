@@ -1,6 +1,6 @@
 "use client";
 
-// The lock screen: the way into Maslow, drawn on the desk's own wallpaper.
+// The lock screen: the way into Maslow, drawn on the desktop's own wallpaper.
 // Three steps on one screen — who you are, the code we mailed you, and
 // which org you land in when you are in more than one.
 
@@ -8,7 +8,7 @@ import { RiCloseLine } from "@remixicon/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { srcOf } from "@/app/room/wallpapers";
+import { srcOf } from "@/app/desktop/wallpapers";
 import { AuthCard } from "@/components/application/auth/auth-card";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Chip } from "@/components/base/badges/chip";
@@ -62,7 +62,7 @@ function known(): Known[] {
   }
 }
 
-// Remembers whoever is at the desk, so the next sign-in on this device
+// Remembers whoever is at the desktop, so the next sign-in on this device
 // offers their face.
 export function remember(who: Known): void {
   const rest = known().filter((p) => p.email !== who.email);
@@ -82,9 +82,9 @@ export function rememberPaper(choice: string | null): void {
   else localStorage.removeItem(PAPER);
 }
 
-// What the desk lies on, under the lock screen: the picture this device
+// What the desktop lies on, under the lock screen: the picture this device
 // last saw, Dusk until it has seen one, and a darkening over it deep enough
-// that white words read over the lightest thing a desk can wear.
+// that white words read over the lightest thing a desktop can wear.
 function Paper() {
   const [src, setSrc] = useState<string | null>(null);
   const [lit, setLit] = useState(false);
@@ -497,7 +497,7 @@ export function LockScreen({
     );
 
   return (
-    // Chrome over a wallpaper is the dark look, whichever look the desk
+    // Chrome over a wallpaper is the dark look, whichever look the desktop
     // wears: the words are on a picture, not on paper.
     <div className="dark fixed inset-0 z-50 overflow-y-auto">
       <Paper />

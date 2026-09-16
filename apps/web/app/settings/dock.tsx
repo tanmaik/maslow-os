@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { DOCK_SIZE, ICON_LARGEST, ICON_SMALLEST } from "@/app/room/dock";
+import { DOCK_SIZE, ICON_LARGEST, ICON_SMALLEST } from "@/app/desktop/dock";
 import { Row } from "@/app/settings/row";
 import {
   SegmentedControl,
@@ -11,8 +11,8 @@ import {
 import { Slider } from "@/components/base/slider/slider";
 import { Switch } from "@/components/base/switch/switch";
 
-// Where the dock lies and how it behaves, kept on this device. The desk
-// keeps the same three keys under the same names (app/room/room.tsx).
+// Where the dock lies and how it behaves, kept on this device. The desktop
+// keeps the same three keys under the same names (app/desktop/desktop.tsx).
 const SIDE = "maslow.dock.side";
 const HIDING = "maslow.dock.hiding";
 const MAGNIFY = "maslow.dock.magnify";
@@ -20,7 +20,7 @@ const ICON_DEFAULT = 48;
 
 type Side = "left" | "bottom" | "right";
 
-// Keeps one setting and says so, on this page and on the desk holding it,
+// Keeps one setting and says so, on this page and on the desktop holding it,
 // so a change here reaches the dock without a reload.
 function keep(key: string, value: string) {
   localStorage.setItem(key, value);
@@ -30,7 +30,7 @@ function keep(key: string, value: string) {
         .StorageEvent;
       w.dispatchEvent(new Made("storage", { key, newValue: value }));
     } catch {
-      // A desk we may not reach is a desk that reads the key on its next
+      // A desktop we may not reach is a desktop that reads the key on its next
       // load; nothing here is lost.
     }
   };

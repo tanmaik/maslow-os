@@ -4,8 +4,8 @@ import type { Query } from "./index.ts";
 // one of its sections, an app on a port, or anything else with an address.
 export type Kind = "port" | "record" | "brain" | "settings" | "page";
 
-// One window on a desk: what it frames, and where it sits and how big it
-// is, each as a share of the desk's width and height, so a desk laid out
+// One window on a desktop: what it frames, and where it sits and how big it
+// is, each as a share of the desktop's width and height, so a desktop laid out
 // on one display reads the same on another. Later in the list is nearer
 // the front.
 export type Card = {
@@ -20,17 +20,17 @@ export type Card = {
   h: number;
   // Put away in the dock, keeping the place it will come back to.
   stowed?: boolean;
-  // On the desk itself, behind every window and with no bar: a widget.
+  // On the desktop itself, behind every window and with no bar: a widget.
   pinned?: boolean;
 };
 
-// A desk: the windows on it, in the order they stack. A desk is the size
+// A desktop: the windows on it, in the order they stack. A desktop is the size
 // of the display, drawn on the canvas, and never scrolls.
 export type Screen = { cards: Card[] };
 
-// A desk, with how many times it has been kept: a save names the count it
+// A desktop, with how many times it has been kept: a save names the count it
 // rests on, and one resting on an older count is refused.
-export type Desktop = {
+export type SavedDesktop = {
   id: string;
   position: number;
   layout: Screen | null;
@@ -39,19 +39,21 @@ export type Desktop = {
 
 const COLUMNS = "id, position, layout, rev";
 
-// The person's desks in order, as they left them.
-export async function desktopsOf(q: Query): Promise<Desktop[]> {
+// The person's desktops in order, as they left them.
+export async function desktopsOf(q: Query): Promise<SavedDesktop[]> {
   return (
-    await q.query<Desktop>(`select ${COLUMNS} from desktops order by position`)
+    await q.query<SavedDesktop>(
+      `select ${COLUMNS} from desktops order by position`,
+    )
   ).rows;
 }
 
-// A new desk after the last, holding these windows.
+// A new desktop after the last, holding these windows.
 export async function addDesktop(
   q: Query,
   layout: Screen | null,
-): Promise<Desktop> {
-  const { rows } = await q.query<Desktop>(
+): Promise<SavedDesktop> {
+  const { rows } = await q.query<SavedDesktop>(
     `insert into desktops (position, layout)
      values ((select coalesce(max(position) + 1, 0) from desktops), $1::jsonb)
      returning ${COLUMNS}`,
@@ -60,15 +62,15 @@ export async function addDesktop(
   return rows[0]!;
 }
 
-// The desk as it now is. Null when it is not theirs, or when it names a
-// count the desk has moved past.
+// The desktop as it now is. Null when it is not theirs, or when it names a
+// count the desktop has moved past.
 export async function saveDesktop(
   q: Query,
   id: string,
   layout: Screen | null,
   rev?: number,
-): Promise<Desktop | null> {
-  const { rows } = await q.query<Desktop>(
+): Promise<SavedDesktop | null> {
+  const { rows } = await q.query<SavedDesktop>(
     `update desktops set layout = $2::jsonb, rev = rev + 1
      where id = $1 and ($3::int is null or rev = $3)
      returning ${COLUMNS}`,
@@ -77,10 +79,10 @@ export async function saveDesktop(
   return rows[0] ?? null;
 }
 
-// The person's first desk, held against anyone else changing it for the
+// The person's first desktop, held against anyone else changing it for the
 // rest of the transaction.
-export async function holdDesktop(q: Query): Promise<Desktop | null> {
-  const { rows } = await q.query<Desktop>(
+export async function holdDesktop(q: Query): Promise<SavedDesktop | null> {
+  const { rows } = await q.query<SavedDesktop>(
     `select ${COLUMNS} from desktops order by position limit 1 for update`,
   );
   return rows[0] ?? null;

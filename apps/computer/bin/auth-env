@@ -1,22 +1,21 @@
 # The environment Claude Code runs under on this computer. Two Claude
 # Codes run here and they never share credentials. A session of ours,
-# started with MASLOW_AUTH=managed and the key in MASLOW_MODEL_KEY in its
-# environment, both put there by the door — the agent behind the Agent
-# window and the terminals it runs its commands in — runs on that key,
-# through OpenRouter's Anthropic-shaped address, on GLM 5.3 Flash on
-# whichever of its providers is fastest, and nothing else. Everything else, above all
+# started with MASLOW_AUTH=managed and a token in MASLOW_MODEL_TOKEN in
+# its environment, both put there by the door — the agent behind the Agent
+# window and the terminals it runs its commands in — sends every model
+# call to Maslow's gateway at MASLOW_MODEL_URL, which holds the key, meters
+# the person, and runs the one model, GLM 5.3 Flash, whatever was asked. Everything else, above all
 # `claude` in the person's own terminal, is plain Claude Code on whatever
 # they set up themselves, an Anthropic sign-in or a key of their own:
 # nothing of ours is set, and anything of ours left in the environment is
-# taken back. The key is written nowhere in the person's Linux, so there
-# is no choice and no switch: the only way to the managed agent is the
-# app. Sourced, never run: by `claude`, by `claude-code-acp`, and by every
+# taken back. No key of ours is on this computer at all: the token opens
+# the gateway and nothing else, so there is no choice and no switch. Sourced, never run: by `claude`, by `claude-code-acp`, and by every
 # login shell, so any way of starting Claude Code finds the same rule.
 # This file answers in maslow_auth, managed or own.
-if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
+if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_TOKEN:-}" ]; then
   maslow_auth=managed
-  export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
-  export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_KEY"
+  export ANTHROPIC_BASE_URL="$MASLOW_MODEL_URL"
+  export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_TOKEN"
   export ANTHROPIC_API_KEY=""
   export ANTHROPIC_MODEL="z-ai/glm-5.3-flash:nitro"
   # Every name Claude Code's own /model offers points at the one model
@@ -27,12 +26,13 @@ if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
   export ANTHROPIC_DEFAULT_HAIKU_MODEL="z-ai/glm-5.3-flash:nitro"
   export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash:nitro"
   export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
-  # GLM 5.3 Flash takes over a million tokens; Claude Code does not know
-  # the model, so it is told, or it would compact at 200k.
-  export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
+  # GLM 5.3 Flash takes over a million tokens, but a call goes through
+  # the gateway, which takes a few megabytes at most: a quarter of a
+  # million tokens stays under it.
+  export CLAUDE_CODE_MAX_CONTEXT_TOKENS=250000
 else
   maslow_auth=own
-  if [ "${ANTHROPIC_BASE_URL:-}" = "https://openrouter.ai/api" ]; then
+  if [ -n "${MASLOW_MODEL_URL:-}" ] && [ "${ANTHROPIC_BASE_URL:-}" = "$MASLOW_MODEL_URL" ]; then
     unset ANTHROPIC_BASE_URL ANTHROPIC_AUTH_TOKEN ANTHROPIC_API_KEY ANTHROPIC_MODEL \
       ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
       ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \

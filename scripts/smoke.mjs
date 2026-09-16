@@ -121,12 +121,34 @@ try {
   const out = await page();
   check("signed out", out.includes(SIGNED_OUT), "sign-in page");
 
+  // The model gateway takes a token of a computer's and nothing else: a
+  // stranger and a made-up token are refused, a path it does not carry is
+  // not there, and a deployment that mints no keys says so.
+  const gate = (token, path = "/v1/messages") =>
+    fetch(`${stack.url}/model${path}`, {
+      method: "POST",
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+      body: "{}",
+    }).then((r) => r.status);
+  const [noToken, madeUp, elsewhere] = await Promise.all([
+    gate(null),
+    gate("nobody.0000"),
+    gate(null, "/v1/models"),
+  ]);
+  check(
+    "model gateway refuses a stranger",
+    [401, 503].includes(noToken) &&
+      [401, 503].includes(madeUp) &&
+      elsewhere === 404,
+    `no token ${noToken}, made-up ${madeUp}, other path ${elsewhere}`,
+  );
+
   // The first org signs in again at the end: its second visit reuses a pooled
   // connection where an old org setting exists as '' rather than missing.
   for (const org of [...orgs, orgs[0]]) {
     const cookie = await signIn(org.users[0].id);
     const html = await page(cookie);
-    const got = (await settingsPage(cookie)).match(/(\d+) members? in /);
+    const got = (await settingsPage(cookie)).match(/>(\d+) members?</);
     check(
       `${org.users[0].firstName} (${org.name})`,
       new RegExp(`<h1[^>]*>${org.name}</h1>`).test(html) &&
@@ -207,7 +229,7 @@ try {
   check(
     "invited person admitted",
     hire.orgId === orgs[0].id &&
-      /3 members in /.test(after) &&
+      />3 members</.test(after) &&
       !/invited/.test(
         after.split("hire@acme-rockets.test")[1]?.slice(0, 200) ?? "",
       ),
@@ -672,7 +694,7 @@ try {
     margeOwner,
   );
   const afterHandOver = await settingsPage(ottoNow);
-  const deletion = await settingsPage(ottoNow, "delete");
+  const deletion = await settingsPage(ottoNow, "org");
   check(
     "the principal hands the org over",
     handed.headers.get("location")?.endsWith("member=handed") &&

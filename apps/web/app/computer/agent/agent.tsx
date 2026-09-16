@@ -85,7 +85,7 @@ function when(at: string | undefined): string {
 export function Agent({ href }: { href?: string } = {}) {
   const still = useReducedMotion();
   const wanted = href
-    ? new URL(href, "http://desk").searchParams.get("chat")
+    ? new URL(href, "http://desktop").searchParams.get("chat")
     : null;
   const {
     away,
@@ -430,7 +430,7 @@ export function Agent({ href }: { href?: string } = {}) {
           // The loader paints the pill and orbits its rim; a pill painting
           // its own ground would cover the light.
           className="bg-transparent shadow-none dark:bg-transparent"
-          placeholder={away ?? "Ask Claude Code to do something"}
+          placeholder={away ?? "Ask your agent to do something"}
         />
       </ComposerLoader>
       {why !== null && (

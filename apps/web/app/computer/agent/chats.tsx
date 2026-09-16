@@ -29,7 +29,7 @@ import {
 import { liveSocket } from "@/lib/live";
 
 // Every conversation the person's computer has open, held once for the
-// whole desk: one socket to the door, the record of each conversation as
+// whole desktop: one socket to the door, the record of each conversation as
 // it arrives, and the words the Agent window says back.
 // Nothing durable is here; the conversations are on the machine, and the
 // next tab finds them where they are.
@@ -247,11 +247,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         if (w.terminal)
           setWrote((was) => ({ ...was, [w.terminal!.id]: w.terminal! }));
         if (w.state === "failed")
-          setAway(w.why ?? "Claude Code would not start on your computer.");
+          setAway(w.why ?? "Your agent would not start on your computer.");
         else if (w.state === "ready") {
           setAway(null);
           void list();
-        } else if (w.state) setAway("Starting Claude Code…");
+        } else if (w.state) setAway("Starting your agent…");
         return;
       }
       const sid = line.params?.sessionId;
@@ -287,7 +287,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
               };
             }
           | undefined;
-        const title = p?.toolCall?.title ?? "Claude Code wants to run a tool.";
+        const title = p?.toolCall?.title ?? "Your agent wants to run a tool.";
         // The adapter's own shell tool comes as no kind in particular; a
         // command is known by the command.
         const kind =
@@ -334,7 +334,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         if (!answer) return;
         heard.delete(line.id as number);
         if (line.error)
-          setRefused(line.error.message ?? "Claude Code could not do that.");
+          setRefused(line.error.message ?? "Your agent could not do that.");
         answer(line.result);
       }
     };
@@ -390,7 +390,7 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     };
   }, [ask, list, patch]);
 
-  // What the desk says back, each the same function for as long as the
+  // What the desktop says back, each the same function for as long as the
   // socket lives, so nothing that depends on one re-runs as the
   // conversations change under it.
   const begin = useCallback(() => {

@@ -53,9 +53,10 @@ export type Computers =
       // Every machine has its own name under this: `<machine>.<domain>`.
       domain: string;
       checkout: string | null;
-      // Where a machine reaches this deployment's brain, or null where it
-      // cannot, as on a laptop.
+      // Where a machine reaches this deployment's brain and its model
+      // gateway, or null where it cannot, as on a laptop.
       brain: string | null;
+      model: string | null;
     }
   | { kind: "none" };
 
@@ -186,6 +187,7 @@ function computers(): Computers {
       domain,
       checkout: production ? null : (process.env.CHECKOUT ?? "laptop"),
       brain: site ? `https://${site}/mcp` : null,
+      model: site ? `https://${site}/model` : null,
     };
   if (production)
     throw new Error(

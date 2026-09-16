@@ -22,7 +22,6 @@ import pty from "node-pty";
 
 import { backup } from "./backup.mjs";
 import * as files from "./files.mjs";
-import { heartbeat } from "./heartbeat.mjs";
 import { stats } from "./stats.mjs";
 
 const SECRET = process.env.DOOR_SECRET;
@@ -216,9 +215,11 @@ const tabsTold = (text) =>
 
 // The brain, where this deployment has no address a machine can reach:
 // the app dials in and holds one socket open, and what Claude Code asks
-// for on this machine goes down it and comes back. Nothing streams, so an
-// ask is a line out and a line back, paired by number.
+// for on this machine goes down it and comes back, paired by number: the
+// brain's answer as one line, a model's as a head, its chunks and an end.
 const ANSWER_IN = 30_000;
+// A model call that says nothing for this long is over.
+const STREAM_QUIET = 120_000;
 let brain = null;
 let asks = 0;
 const waiting = new Map();
@@ -234,7 +235,10 @@ function brainLine(ws) {
       return ws.sendText(JSON.stringify({ pong: said.ping }));
     const answer = said && waiting.get(said.id);
     if (!answer) return;
-    waiting.delete(said.id);
+    // A streamed answer keeps its place until its end; a whole one is
+    // done with the line it came on.
+    if (said.chunk === undefined && said.head === undefined)
+      waiting.delete(said.id);
     answer(said);
   };
   ws.closed = () => {
@@ -280,6 +284,63 @@ async function askTheBrain(req, res) {
   if (!answer) return say(res, 504, "The brain did not answer.");
   res.writeHead(answer.status, { "content-type": "application/json" });
   res.end(answer.body ?? "");
+}
+
+// A model call from this machine, carried up the same line to the
+// laptop's gateway and streamed back down: the head first, then each
+// chunk as it comes, then the end.
+async function askTheModel(req, res, path) {
+  if (req.method !== "POST")
+    return say(res, 405, "The gateway answers a POST.");
+  if (!brain)
+    return say(res, 503, "No gateway is listening for this computer.");
+  const body = await bodyOf(req);
+  const line = brain;
+  if (!line) return say(res, 503, "No gateway is listening for this computer.");
+  const headers = {};
+  for (const name of [...CARRIED, "anthropic-version", "anthropic-beta"])
+    if (req.headers[name]) headers[name] = req.headers[name];
+  const id = ++asks;
+  let quiet = null;
+  const over = () => {
+    clearTimeout(quiet);
+    waiting.delete(id);
+    if (!res.headersSent) say(res, 504, "The gateway did not answer.");
+    else res.end();
+  };
+  const tick = () => {
+    clearTimeout(quiet);
+    quiet = setTimeout(over, STREAM_QUIET);
+  };
+  tick();
+  waiting.set(id, (said) => {
+    if (said === null) return over();
+    tick();
+    if (said.head !== undefined) {
+      if (!res.headersSent)
+        res.writeHead(said.head, {
+          "content-type": said.type ?? "application/json",
+          "cache-control": "no-store",
+        });
+      return;
+    }
+    if (said.chunk !== undefined) {
+      res.write(Buffer.from(said.chunk, "base64"));
+      return;
+    }
+    clearTimeout(quiet);
+    waiting.delete(id);
+    res.end();
+  });
+  res.on("close", () => {
+    clearTimeout(quiet);
+    waiting.delete(id);
+  });
+  try {
+    line.sendText(JSON.stringify({ id, path, headers, body }));
+  } catch {
+    over();
+  }
 }
 
 // Whether an ask came from the machine itself, which nothing outside it
@@ -517,7 +578,7 @@ const server = http.createServer(async (req, res) => {
   }
   // Something a program on the machine wants opened, told to the person on
   // every terminal they have open: a port of this machine's, which opens
-  // that port's window on their desk; a file or folder of theirs, which
+  // that port's window on their desktop; a file or folder of theirs, which
   // opens Files there; or any other web address, which is offered for them
   // to open on their own device. Only the machine itself can ask: the
   // request has to come from loopback, which nothing outside it reaches.
@@ -603,6 +664,13 @@ const server = http.createServer(async (req, res) => {
     }
     return say(res, 400, "No such tool.");
   }
+  // The models, for what runs on this machine where the gateway cannot be
+  // dialled: the call goes up the laptop's line and streams back.
+  if (to.mine && url.pathname.startsWith("/maslow/model/")) {
+    if (!fromTheMachine(req))
+      return say(res, 403, "Only the machine itself may ask.");
+    return askTheModel(req, res, url.pathname.slice("/maslow/model".length));
+  }
   // The brain, for what runs on this machine: the person's own agent asks
   // here, and the token it carries says whose brain answers.
   if (to.mine && url.pathname === "/maslow/brain") {
@@ -623,7 +691,6 @@ const server = http.createServer(async (req, res) => {
         ...numbers,
         idleSince: new Date(lastSeen).toISOString(),
         running: programs,
-        heartbeat: heartbeat.state(),
       }),
     );
   }
@@ -680,39 +747,6 @@ const server = http.createServer(async (req, res) => {
     fs.mkdirSync("/data/keys", { recursive: true });
     fs.writeFileSync("/data/keys/me", text, { mode: 0o644 });
     return say(res, 200, "keys written");
-  }
-  // The heartbeat, for our server alone: how often the agent runs on its
-  // own, in minutes, and a run now, saying why.
-  if (to.mine && url.pathname === "/maslow/heartbeat") {
-    if (!ours(req.headers["x-maslow-ticket"]))
-      return say(res, 401, "That ticket is not good here.");
-    if (req.method === "PUT") {
-      const every = Number(await bodyOf(req));
-      if (!Number.isInteger(every) || every < 0)
-        return say(res, 400, "How often is a number of minutes.");
-      heartbeat.set(every);
-      return say(res, 200, "heartbeat set");
-    }
-    if (req.method === "POST") {
-      const why = (await bodyOf(req)).trim();
-      if (why.length > 4000 || /[\p{Cc}\p{Zl}\p{Zp}]/u.test(why))
-        return say(
-          res,
-          400,
-          "A reason is one line of words, and not a speech.",
-        );
-      const wake = url.searchParams.has("wake");
-      if (wake && heartbeat.state().every === 0)
-        return say(res, 409, "the heartbeat is off");
-      // A key names an ask that is answered once, however often it is
-      // asked.
-      const key = url.searchParams.get("key");
-      if (key !== null && !/^[\w:-]{1,80}$/.test(key))
-        return say(res, 400, "A key is a short name.");
-      return heartbeat.run(why || "the person pressed Run now", key)
-        ? say(res, 202, "running")
-        : say(res, 202, "after the run going now");
-    }
   }
   // Reset, for our server alone: the next boot starts the person's Linux
   // over and keeps their home. The mark is on the disk, outside their
@@ -949,7 +983,7 @@ const tmux = (...args) =>
     );
   });
 
-// Every terminal window on the desk is a tmux session of its own, grouped
+// Every terminal window on the desktop is a tmux session of its own, grouped
 // with main, and numbered so the door can ask after it.
 let talked = 0;
 
@@ -1024,7 +1058,7 @@ function talk(ws, url) {
       "SHELL=/bin/bash",
       "LANG=C.UTF-8",
       "TERM=xterm-256color",
-      // A terminal window just opened on the desk asks for a shell of its
+      // A terminal window just opened on the desktop asks for a shell of its
       // own; one coming back finds the session as it was.
       `FRESH=${url.searchParams.get("fresh") === "1" ? 1 : 0}`,
       `TALK=${session}`,
@@ -1750,14 +1784,15 @@ const chatSaid = (chat) => ({
   title: titles[chat.id] ?? null,
 });
 
-// The key of Maslow's this machine holds, which is what a session of ours
-// runs on. It is the door's, given by our server with the machine, and is
-// written nowhere in the person's Linux: the door hands it to the agent
-// behind the Agent window and to the terminals it runs its commands in,
-// and `claude` in the person's own terminal never sees it.
+// The way to Maslow's models this machine holds: the gateway's address
+// and a token of this computer's, given by our server with the machine.
+// No key is on the machine. The door hands them to the agent behind the
+// Agent window and to the terminals it runs its commands in, and `claude`
+// in the person's own terminal never sees them.
 const asOurs = () => [
   "MASLOW_AUTH=managed",
-  `MASLOW_MODEL_KEY=${process.env.MODEL_KEY ?? ""}`,
+  `MASLOW_MODEL_URL=${process.env.MODEL_URL ?? ""}`,
+  `MASLOW_MODEL_TOKEN=${process.env.MODEL_TOKEN ?? ""}`,
 ];
 
 // The whole picture of the conversation: what the process is doing, which
@@ -1861,7 +1896,7 @@ function entitled(id, title) {
 
 async function entitle(chat) {
   const id = chat.id;
-  if (!id || titles[id] || naming.has(id) || !process.env.MODEL_KEY) return;
+  if (!id || titles[id] || naming.has(id) || !process.env.MODEL_TOKEN) return;
   const words = (kind) =>
     chat.ring
       .filter(
@@ -1877,10 +1912,10 @@ async function entitle(chat) {
   if (!person) return;
   naming.add(id);
   try {
-    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    const res = await fetch(`${process.env.MODEL_URL}/v1/chat/completions`, {
       method: "POST",
       headers: {
-        authorization: `Bearer ${process.env.MODEL_KEY}`,
+        authorization: `Bearer ${process.env.MODEL_TOKEN}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
@@ -2079,7 +2114,7 @@ function terminalStart(params) {
   ).filter(
     (e) =>
       /^[A-Za-z_][A-Za-z0-9_]*=/.test(e) &&
-      !/^MASLOW_(AUTH|MODEL_KEY)=/.test(e),
+      !/^MASLOW_(AUTH|MODEL_URL|MODEL_TOKEN)=/.test(e),
   );
   const proc = spawn(
     "/usr/sbin/chroot",
@@ -2697,30 +2732,6 @@ function frameOf(first, payload) {
 }
 
 server.listen(8080, "::", () => console.log("the door is open on 8080"));
-
-// The heartbeat's runs are the person's, in their Linux, on a session of
-// ours, like the agent the desk opens, thinking a few thousand tokens at
-// most before each step, since nobody is waiting on a long one.
-heartbeat.start((args) =>
-  spawn(
-    "/usr/sbin/chroot",
-    [
-      ...AS_THEM,
-      `USER=${PERSON}`,
-      `LOGNAME=${PERSON}`,
-      "SHELL=/bin/bash",
-      "LANG=C.UTF-8",
-      ...asOurs(),
-      "MAX_THINKING_TOKENS=4000",
-      "/bin/bash",
-      "-lc",
-      `cd ${HOME} && exec "$0" "$@"`,
-      ...args,
-    ],
-    // A group of its own, so a run past its time is stopped whole.
-    { cwd: "/", stdio: ["ignore", "pipe", "pipe"], detached: true },
-  ),
-);
 
 // The wakeups kept from before the door last ran, armed now: one whose
 // time passed meanwhile fires at once.

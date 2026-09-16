@@ -75,24 +75,6 @@ export type Stats = {
   // in their terminal now. Absent from a machine on an older image.
   idleSince?: string;
   running?: string[];
-  // The agent's own runs there. Absent from a machine on an older image.
-  heartbeat?: Heartbeat;
-};
-
-// The heartbeat as a machine reports it: how often the agent runs on its
-// own, in minutes, zero for off; when the run going now started, if one
-// is; and what came of the last, with the end of what it printed when it
-// did not finish.
-export type Heartbeat = {
-  every: number;
-  running: string | null;
-  last: {
-    at: string;
-    why: string;
-    took: number;
-    ok: boolean;
-    said: string;
-  } | null;
 };
 
 // A backup coming back into a folder of the home: where it is landing,
@@ -130,8 +112,9 @@ export type Shape = {
   brain: { url: string; token: string } | null;
   // The account's name and the machine's, so a prompt reads wile@acme.
   who: { person: string; org: string };
-  // The OpenRouter key Claude Code inside runs on, or none.
-  modelKey: string | null;
+  // Where the agent inside sends its model calls and what it carries
+  // there; none where this deployment mints no keys.
+  model: { url: string; token: string } | null;
   metadata: Record<string, string>;
 };
 
@@ -143,7 +126,7 @@ const shape = (m: Shape) => ({
     PERSON: m.who.person,
     ORG: m.who.org,
     ...(m.brain ? { BRAIN_URL: m.brain.url, BRAIN_TOKEN: m.brain.token } : {}),
-    ...(m.modelKey ? { MODEL_KEY: m.modelKey } : {}),
+    ...(m.model ? { MODEL_URL: m.model.url, MODEL_TOKEN: m.model.token } : {}),
   },
   guest: { cpu_kind: m.cpuKind, cpus: m.cpus, memory_mb: m.memoryMb },
   mounts: [{ volume: m.volumeId, path: "/data" }],
@@ -517,59 +500,6 @@ export const fly = {
     });
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
   },
-  // How often the agent runs on its own on the machine, in minutes; zero
-  // is off.
-  async pushHeartbeat(
-    machineId: string,
-    ticket: string,
-    every: number,
-  ): Promise<void> {
-    const res = await fetch(
-      `https://${config().app}.fly.dev/maslow/heartbeat`,
-      {
-        method: "PUT",
-        headers: {
-          "fly-force-instance-id": machineId,
-          "x-maslow-ticket": ticket,
-          "content-type": "text/plain",
-        },
-        body: String(every),
-        signal: AbortSignal.timeout(8_000),
-      },
-    );
-    if (!res.ok)
-      throw new Error(`heartbeat: ${res.status} ${await res.text()}`);
-  },
-
-  // A run of the agent now, told why; the door's own words when it will
-  // not. One that is nobody's ask, a wake, is refused where the cadence is
-  // off. One with a key is run once however often it is asked for.
-  async runHeartbeat(
-    machineId: string,
-    ticket: string,
-    why: string,
-    wake = false,
-    key?: string,
-  ): Promise<void> {
-    const ask = new URLSearchParams();
-    if (wake) ask.set("wake", "");
-    if (key) ask.set("key", key);
-    const res = await fetch(
-      `https://${config().app}.fly.dev/maslow/heartbeat${ask.size ? `?${ask}` : ""}`,
-      {
-        method: "POST",
-        headers: {
-          "fly-force-instance-id": machineId,
-          "x-maslow-ticket": ticket,
-          "content-type": "text/plain",
-        },
-        body: why,
-        signal: AbortSignal.timeout(8_000),
-      },
-    );
-    if (!res.ok) throw new Error(await res.text());
-  },
-
   // Asks the machine's door to start the person's Linux over at the next
   // boot, with a ticket it takes.
   async askReset(machineId: string, ticket: string): Promise<void> {

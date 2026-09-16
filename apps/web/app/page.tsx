@@ -1,20 +1,18 @@
-import { asPerson } from "@maslow/db";
-import { arrivalOf } from "@maslow/db/arrival";
 import { orgOf } from "@maslow/db/settings";
 import { after } from "next/server";
 
 import { ChatsProvider } from "@/app/computer/agent/chats";
-import { Room } from "@/app/room/room";
+import { Desktop } from "@/app/desktop/desktop";
 import { LockScreen } from "@/components/lock-screen";
 import { SignIn, notice, type Notice } from "@/components/sign-in";
 import { membershipsByEmail } from "@maslow/db/auth";
 import { deployment } from "@/lib/deployment";
 import { sweepIfDue } from "@/lib/meter";
-import { roomOf } from "@/lib/room";
+import { desktopOf } from "@/lib/desktop";
 import { principal } from "@/lib/session";
 import { storage } from "@/lib/storage";
 
-// Home is the room: the desk, the whole screen arranged as you left it,
+// Home is the room: the desktop, the whole screen arranged as you left it,
 // and a dock of blocks to open on it. Signed out, a way in.
 export default async function Page({
   searchParams,
@@ -27,17 +25,8 @@ export default async function Page({
   if (!p) return <SignIn said={said} />;
   // A look at the site is what runs the hourly sweep outside production.
   after(() => sweepIfDue());
-  const [
-    { desktops, ports, wallpaper },
-    { org, members },
-    memberships,
-    { arrived, owed },
-  ] = await Promise.all([
-    roomOf(p),
-    orgOf(p),
-    membershipsByEmail(p.email),
-    asPerson(p, arrivalOf),
-  ]);
+  const [{ desktops, ports, wallpaper }, { org, members }, memberships] =
+    await Promise.all([desktopOf(p), orgOf(p), membershipsByEmail(p.email)]);
 
   const me = members.find((m) => m.id === p.userId);
   const you = me && {
@@ -53,13 +42,11 @@ export default async function Page({
     <main>
       <h1 className="sr-only">{org.name}</h1>
       <ChatsProvider>
-        <Room
+        <Desktop
           desktop={desktops[0]!}
           ports={ports}
           wallpaper={wallpaper}
           computers={deployment.computers.kind !== "none"}
-          arrival={!arrived}
-          owed={owed}
           you={
             you && {
               ...you,

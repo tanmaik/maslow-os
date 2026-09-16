@@ -3,7 +3,7 @@ import { agentsOf } from "@maslow/db/auth";
 import { groupsOf } from "@maslow/db/groups";
 import { orgOf, type Member } from "@maslow/db/settings";
 import { redirect } from "next/navigation";
-import type { ReactNode } from "react";
+import { Suspense, type ReactNode } from "react";
 
 import {
   AlertDialog,
@@ -35,17 +35,17 @@ import { LookPicker } from "@/app/settings/look-picker";
 import { Wallpaper } from "@/app/settings/wallpaper";
 import { papersOf } from "@/lib/wallpapers";
 import { AccessPane } from "@/app/settings/access";
-import { ClaudePane } from "@/app/settings/claude";
+import { AgentPane } from "@/app/settings/agent";
+import { AppsPane } from "@/app/settings/apps-pane";
 import { DeleteOrg } from "@/app/settings/delete-org";
-import { Connections } from "@/app/settings/connections";
 import { Groups } from "@/app/settings/groups";
+import { PaneSkeleton } from "@/app/settings/pane-skeleton";
 import { Panes, type Pane } from "@/app/settings/panes";
 import { Row, Rows } from "@/app/settings/row";
 import { Said } from "@/app/settings/said";
 import { Section } from "@/app/settings/section";
 import type { Told } from "@/app/settings/told";
 import { on } from "@/app/settings/when";
-import { connections } from "@/lib/connections";
 import { deployment } from "@/lib/deployment";
 import { initials } from "@/lib/initials";
 import { principal } from "@/lib/session";
@@ -62,7 +62,7 @@ const PANE_OF: Partial<Record<keyof Notice, string>> = {
   connection: "apps",
   agent: "access",
   group: "groups",
-  delete: "delete",
+  delete: "org",
 };
 
 // What the last save left to say, by the query it redirected with.
@@ -230,31 +230,13 @@ export default async function Settings({
   // other pane, owe nothing to the vendor or the machine.
   const came = (Object.keys(n) as (keyof Notice)[]).find((k) => k in PANE_OF);
   const view = n.pane ?? (came && PANE_OF[came]) ?? "you";
-  // Live from the vendor; when it does not answer, the card says so rather
-  // than showing nothing connected or nothing to connect.
-  const unanswered = (err: Error) => {
-    console.error(`connections: ${err.message}`);
-    return null;
-  };
-  const [
-    { org, members, invited, past },
-    groups,
-    agents,
-    connected,
-    mostUsed,
-    papers,
-  ] = await Promise.all([
-    orgOf(p),
-    view === "groups" ? groupsOf(p) : [],
-    view === "access" ? agentsOf(p) : [],
-    view === "apps" && connections.enabled
-      ? connections.list(p).catch(unanswered)
-      : [],
-    view === "apps" && connections.enabled
-      ? connections.search("").catch(unanswered)
-      : [],
-    view === "look" ? asPerson(p, papersOf) : null,
-  ]);
+  const [{ org, members, invited, past }, groups, agents, papers] =
+    await Promise.all([
+      orgOf(p),
+      view === "groups" ? groupsOf(p) : [],
+      view === "access" ? agentsOf(p) : [],
+      view === "look" ? asPerson(p, papersOf) : null,
+    ]);
   const me = members.find((m) => m.id === p.userId)!;
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
@@ -291,8 +273,8 @@ export default async function Settings({
       ],
     },
     {
-      id: "claude",
-      title: "Claude Code",
+      id: "agent",
+      title: "Agent",
       group: "Yours",
       words: [
         "models",
@@ -329,7 +311,14 @@ export default async function Settings({
       ],
     },
     ...(owner
-      ? [{ id: "org", title: "Org", group: org.name, words: ["logo", "name"] }]
+      ? [
+          {
+            id: "org",
+            title: "Org",
+            group: org.name,
+            words: ["logo", "name", "delete", "close"],
+          },
+        ]
       : []),
     {
       id: "members",
@@ -343,16 +332,6 @@ export default async function Settings({
       group: org.name,
       words: ["sharing", "everyone"],
     },
-    ...(holder
-      ? [
-          {
-            id: "delete",
-            title: "Deletion",
-            group: org.name,
-            words: ["delete", "close"],
-          },
-        ]
-      : []),
   ];
   const pane = panes.find((x) => x.id === view) ?? panes[0]!;
   const role = (m: Member) =>
@@ -470,9 +449,9 @@ export default async function Settings({
         <ComputerPane p={p} />
       </Section>
     ),
-    claude: (
-      <Section id="claude" title="Claude Code">
-        <ClaudePane p={p} />
+    agent: (
+      <Section id="agent" title="Agent">
+        <AgentPane p={p} />
       </Section>
     ),
     look: (
@@ -490,26 +469,18 @@ export default async function Settings({
       </Section>
     ),
     apps: (
-      <Connections
-        orgName={org.name}
-        enabled={connections.enabled}
-        connections={connected}
-        mostUsed={mostUsed}
-        focus={n.account ?? null}
-        said={said("connection")}
-      />
+      <AppsPane p={p} focus={n.account ?? null} said={said("connection")} />
     ),
     access: (
       <AccessPane
         p={p}
-        orgName={org.name}
         agents={agents}
         saidKeys={said("keys")}
         saidAgent={said("agent")}
       />
     ),
     org: (
-      <Section id="org" title="Org" description="What everyone in it sees.">
+      <Section id="org" title="Org">
         <form
           action="/settings/org"
           method="post"
@@ -544,12 +515,6 @@ export default async function Settings({
                 className="w-[202px]"
               />
             </Row>
-            <Row label="People">
-              <span className="text-body-regular text-text-secondary">
-                {members.length} {members.length === 1 ? "member" : "members"},{" "}
-                {invited.length} invited, {past.length} past
-              </span>
-            </Row>
           </Rows>
           {!uploads && (
             <Note>Logos need object storage, which is not set up yet.</Note>
@@ -563,20 +528,18 @@ export default async function Settings({
             </Button>
           </div>
         </form>
+        {holder && (
+          <div className="flex items-center gap-3 border-t border-separator-border pt-4">
+            <DeleteOrg name={org.name} />
+            <Said {...said("delete")} />
+          </div>
+        )}
       </Section>
     ),
     members: (
       <Section
         id="members"
-        title="Members"
-        description={
-          <>
-            {members.length} {members.length === 1 ? "member" : "members"} in{" "}
-            {org.name}
-            {invited.length > 0 && `, ${invited.length} invited`}
-            {!owner && ". Owners manage the org and its members."}
-          </>
-        }
+        title={`${members.length} ${members.length === 1 ? "member" : "members"}`}
       >
         <form action="/invite" method="post" className="flex flex-col gap-2">
           <div className="flex items-start gap-2">
@@ -798,24 +761,14 @@ export default async function Settings({
         said={said("group")}
       />
     ),
-    delete: (
-      <Section
-        id="delete"
-        title={`Delete ${org.name}`}
-        description="Everything in it goes with it, for everyone in it. Hand the org over instead if someone else should keep it."
-      >
-        <div className="flex items-center gap-3">
-          <DeleteOrg name={org.name} />
-          <Said {...said("delete")} />
-        </div>
-      </Section>
-    ),
   };
   return (
     <main>
       <h1 className="sr-only">Settings</h1>
       <Panes panes={panes} pane={pane}>
-        {panels[pane.id]}
+        <Suspense key={pane.id} fallback={<PaneSkeleton />}>
+          {panels[pane.id]}
+        </Suspense>
       </Panes>
     </main>
   );

@@ -5,7 +5,7 @@ import type {
   Event,
   Person,
 } from "@maslow/brain";
-import type { Notice } from "@maslow/db/notices";
+import type { Notification } from "@maslow/db/notifications";
 
 // How the brain reads to an agent: one line per thing, the id first, then
 // only what is there.
@@ -219,11 +219,11 @@ export function event(e: Event, me: string): string {
   return moved.length ? `${head}: ${moved.join("; ")}` : head;
 }
 
-// One notice on a line: id, kind, when it was left, its title, whether the
+// One notification on a line: id, kind, when it was left, its title, whether the
 // person has seen it, then what an ask offers, what was answered, and the
 // records it points at. Below it the body it carries.
-// A widget on the desk: id "title" href at x,y size w×h, shares of the
-// desk to two places.
+// A widget on the desktop: id "title" href at x,y size w×h, shares of the
+// desktop to two places.
 export function widget(w: {
   id: string;
   title: string;
@@ -237,7 +237,7 @@ export function widget(w: {
   return `${w.id} ${quoted(flat(w.title))} ${w.href} at ${at(w.x)},${at(w.y)} size ${at(w.w)}×${at(w.h)}`;
 }
 
-export function notice(n: Notice): string {
+export function notification(n: Notification): string {
   const parts = [
     n.id,
     n.kind,

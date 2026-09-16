@@ -1,10 +1,10 @@
 #!/bin/bash
 # What this computer says to the person whose it is: a note in their
-# notification bar, or a question with the options they may pick. Both go
+# notification center, or a question with the options they may pick. Both go
 # through the brain the machine is already connected to, as the person, so
 # they reach whatever device they are at rather than a terminal nobody is
-# watching. An ask answers with the notice's id; the answer arrives when
-# they give it, and the brain's notices tool reads it back.
+# watching. An ask answers with the notification's id; the answer arrives when
+# they give it, and the brain's notifications tool reads it back.
 set -euo pipefail
 
 case ${1:-} in
@@ -35,7 +35,7 @@ title=${words[0]:-}
 body=${words[1]:-}
 
 if [ -z "$title" ]; then
-  echo "A notice needs a title: ${0##*/} \"title\" [\"body\"]" >&2
+  echo "A notification needs a title: ${0##*/} \"title\" [\"body\"]" >&2
   exit 2
 fi
 if [ -z "${MASLOW_BRAIN_URL:-}" ]; then

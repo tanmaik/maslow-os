@@ -1,7 +1,7 @@
 #!/bin/bash
-# Asks the person a question in their notification bar and answers with the
-# notice's id. Give options and they pick one; give none and they type an
-# answer. Nothing waits here: read the answer back with the brain's notices
+# Asks the person a question in their notification center and answers with the
+# notification's id. Give options and they pick one; give none and they type an
+# answer. Nothing waits here: read the answer back with the brain's notifications
 # tool.
 #   ask "Deploy this?" "The branch is green." --options Yes,No
 exec /opt/maslow/bin/notice ask "$@"

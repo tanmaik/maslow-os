@@ -2,7 +2,7 @@ import * as brain from "@maslow/brain";
 import { asPerson, Gone, type Query } from "@maslow/db";
 import { fullName, type Session } from "@maslow/db/auth";
 import { computerOf } from "@maslow/db/computers";
-import * as notices from "@maslow/db/notices";
+import * as notifications from "@maslow/db/notifications";
 import { spend, spentSince } from "@maslow/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
@@ -11,7 +11,7 @@ import { connections } from "./connections";
 import { embed, model, RateLimited } from "./embeddings";
 import * as lines from "./lines";
 import { CEILINGS, PRICES } from "./prices";
-import { deskOf, place, unplace } from "./room";
+import { widgetsOf, place, unplace } from "./desktop";
 import { named, Refused, tools, type Action } from "./tools";
 
 // Who and what an agent is connected to, read once when it connects.
@@ -188,7 +188,7 @@ const REFUSALS = [
   brain.Forbidden,
   Gone,
   Refused,
-  notices.Unanswerable,
+  notifications.Unanswerable,
 ];
 
 // What a tool answered, compact, and no more than a screenful; the agent
@@ -212,7 +212,7 @@ const action = (a: Action) =>
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
-// What a level lets someone do, said as the person reads it on the notice
+// What a level lets someone do, said as the person reads it on the notification
 // an ask to share leaves them.
 const MAY = { view: "see", edit: "change", owner: "own" } as const;
 
@@ -553,8 +553,8 @@ export function brainServer(
       }
       const ask = await brain.askToShare(q, a);
       // An ask to share waits with everything else that waits on the
-      // person: one notice, answered where they see it.
-      const notice = await notices.leaveNotice(q, {
+      // person: one notification, answered where they see it.
+      const notification = await notifications.leaveNotification(q, {
         kind: "ask",
         title: "Your agent asks to share",
         body: `Let ${a.to.join(", ")} ${MAY[a.level]} ${asked(a)}.\n\n${a.reason}`,
@@ -563,26 +563,26 @@ export function brainServer(
         request: ask.id,
       });
       return {
-        text: `asked ${ask.id} as notice ${notice.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,
-        data: { ...ask, notice: notice.id },
+        text: `asked ${ask.id} as notification ${notification.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,
+        data: { ...ask, notification: notification.id },
       };
     }),
   );
 
   server.registerTool(
-    "desk",
+    "desktop",
     {
       description:
-        "What lies on the person's desk: each widget's id, what it shows, and where it sits, as shares of the desk's width and height from the top left corner; and the ports colleagues have opened to the person, which could lie there too. The windows the person has open are theirs and are not listed.",
+        "What lies on the person's desktop: each widget's id, what it shows, and where it sits, as shares of the desktop's width and height from the top left corner; and the ports colleagues have opened to the person, which could lie there too. The windows the person has open are theirs and are not listed.",
       inputSchema: {},
       annotations: { readOnlyHint: true },
     },
     door(async (q) => {
-      const { widgets, shared } = await deskOf(q);
+      const { widgets, shared } = await widgetsOf(q);
       return {
         text: [
           ...widgets.map(lines.widget),
-          ...(widgets.length === 0 ? ["nothing is on the desk"] : []),
+          ...(widgets.length === 0 ? ["nothing is on the desktop"] : []),
           ...shared.map(
             (s) => `shared: port ${s.port} on ${s.machineId}, ${s.owner}'s`,
           ),
@@ -596,7 +596,7 @@ export function brainServer(
     "place",
     {
       description:
-        "Puts a widget on the person's desk, or moves one already there by its id, which keeps what it shows unless told otherwise. A widget is an app served on a port: of the person's own computer, or of a colleague's computer that was opened to them, named by its machine. Where it lies and how big it is are shares of the desk, 0 to 1, from the top left; left out, it goes where the next widget goes, at the size a window of it opens at. A widget lies under the person's windows, on every device they open the desk on, and they may move, resize, put away or remove it like their own. Answers with the widget.",
+        "Puts a widget on the person's desktop, or moves one already there by its id, which keeps what it shows unless told otherwise. A widget is an app served on a port: of the person's own computer, or of a colleague's computer that was opened to them, named by its machine. Where it lies and how big it is are shares of the desktop, 0 to 1, from the top left; left out, it goes where the next widget goes, at the size a window of it opens at. A widget lies under the person's windows, on every device they open the desktop on, and they may move, resize, put away or remove it like their own. Answers with the widget.",
       inputSchema: {
         port: z.number().int().min(1).max(65535).optional(),
         machine: z
@@ -609,7 +609,7 @@ export function brainServer(
           .string()
           .regex(/^[a-z0-9]{4,16}$/)
           .optional()
-          .describe("a widget already on the desk, to move"),
+          .describe("a widget already on the desktop, to move"),
         x: z.number().min(0).max(1).optional(),
         y: z.number().min(0).max(1).optional(),
         w: z.number().min(0).max(1).optional(),
@@ -635,12 +635,12 @@ export function brainServer(
   server.registerTool(
     "unplace",
     {
-      description: "Takes a widget off the person's desk, by its id.",
+      description: "Takes a widget off the person's desktop, by its id.",
       inputSchema: { id: z.string().regex(/^[a-z0-9]{4,16}$/) },
     },
     door(async (q, a) => {
       await unplace(q, a.id);
-      return `took ${a.id} off the desk`;
+      return `took ${a.id} off the desktop`;
     }),
   );
 
@@ -648,7 +648,7 @@ export function brainServer(
     "notify",
     {
       description:
-        "Leaves the person a note in their notification bar, behind the clock on the menu bar: a title, a body in markdown, and the records it is about, which they open from it. A note asks nothing and nothing waits on it; when you need an answer, use ask.",
+        "Leaves the person a note in their notification center, behind the clock on the menu bar: a title, a body in markdown, and the records it is about, which they open from it. A note asks nothing and nothing waits on it; when you need an answer, use ask.",
       inputSchema: {
         title: z.string().min(1).max(200),
         body: z.string().max(4000).optional().describe("markdown"),
@@ -656,7 +656,10 @@ export function brainServer(
       },
     },
     door(async (q, a) => {
-      const n = await notices.leaveNotice(q, { kind: "note", ...a });
+      const n = await notifications.leaveNotification(q, {
+        kind: "note",
+        ...a,
+      });
       return { text: `noted ${n.id}: ${n.title}`, data: n };
     }),
   );
@@ -665,7 +668,7 @@ export function brainServer(
     "ask",
     {
       description:
-        "Asks the person a question in their notification bar and answers with the notice's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notices tool reads it back.",
+        "Asks the person a question in their notification center and answers with the notification's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notifications tool reads it back.",
       inputSchema: {
         title: z.string().min(1).max(200).describe("the question itself"),
         body: z.string().max(4000).optional().describe("markdown"),
@@ -678,21 +681,23 @@ export function brainServer(
       },
     },
     door(async (q, a) => {
-      const n = await notices.leaveNotice(q, { kind: "ask", ...a });
+      const n = await notifications.leaveNotification(q, { kind: "ask", ...a });
       return {
-        text: `asked ${n.id}: ${n.title}; read the answer with notices ids=[${n.id}]`,
+        text: `asked ${n.id}: ${n.title}; read the answer with notifications ids=[${n.id}]`,
         data: n,
       };
     }),
   );
 
   server.registerTool(
-    "notices",
+    "notifications",
     {
       description:
         "The notes and asks left for this person, newest first, each marked read or unread and carrying its answer where one was given. ids reads particular ones; unanswered narrows it to the asks still waiting on them.",
       inputSchema: {
-        ids: ids.optional().describe("particular notices, as ask answered"),
+        ids: ids
+          .optional()
+          .describe("particular notifications, as ask answered"),
         unanswered: z.boolean().optional(),
         limit: z.number().int().min(1).max(100).optional(),
       },
@@ -701,14 +706,16 @@ export function brainServer(
     door(async (q, a) => {
       const all = a.ids
         ? (
-            await Promise.all(a.ids.map((id) => notices.noticeOf(q, id)))
+            await Promise.all(
+              a.ids.map((id) => notifications.notificationOf(q, id)),
+            )
           ).filter((n): n is NonNullable<typeof n> => n !== null)
-        : await notices.noticesOf(q, a);
+        : await notifications.notificationsOf(q, a);
       return {
         text:
-          all.map(lines.notice).join("\n") ||
-          (a.unanswered ? "nothing waiting" : "no notices"),
-        data: { notices: all },
+          all.map(lines.notification).join("\n") ||
+          (a.unanswered ? "nothing waiting" : "no notifications"),
+        data: { notifications: all },
       };
     }),
   );

@@ -18,7 +18,7 @@ import { Terminal as Xterm } from "@xterm/xterm";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
-import { BarButton, InBar } from "@/app/room/panel";
+import { BarButton, InBar } from "@/app/desktop/panel";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { IconButton } from "@/components/base/buttons/icon-button";
@@ -184,7 +184,7 @@ export function Terminal({
   id,
 }: {
   fresh?: boolean;
-  // This window on the desk, so two terminals each remember their own
+  // This window on the desktop, so two terminals each remember their own
   // shell.
   id?: string;
 }) {
@@ -273,7 +273,7 @@ export function Terminal({
         cursorBlink: true,
         theme: theme(),
         // Option is Meta, so Option-Backspace and Option-arrow move and
-        // delete by word, as they do in a terminal on the desk.
+        // delete by word, as they do in a terminal on the desktop.
         macOptionIsMeta: true,
       });
       term.current = t;
@@ -460,7 +460,7 @@ export function Terminal({
               };
               // An address is offered, to be opened on this device. A
               // port or a file of theirs is already theirs to reach, so
-              // the desk opens it and the window is the answer.
+              // the desktop opens it and the window is the answer.
               if (typeof said.open === "string")
                 setOffered(forThisDevice(said.open));
               else if (said.open)
@@ -666,7 +666,7 @@ export function Terminal({
             phone, where it would otherwise cost the terminal its width.
             One line each, the one in view marked, a tap turns this
             terminal to it, and the plus opens another. Every terminal on
-            the desk shares the same shells and each looks at one of its
+            the desktop shares the same shells and each looks at one of its
             own. */}
         {(() => {
           const rows = (
@@ -850,7 +850,7 @@ export function Terminal({
           );
         })()}
         <div className="relative min-h-0 flex-1">
-          {/* A tap anywhere on it brings the keyboard, on a phone as on a desk. */}
+          {/* A tap anywhere on it brings the keyboard, on a phone as on a desktop. */}
           <div
             ref={box}
             // The terminal's own stylesheet clears its scrolling box to

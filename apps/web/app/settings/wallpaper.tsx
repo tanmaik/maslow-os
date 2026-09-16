@@ -8,7 +8,7 @@ import {
   PAPERS,
   type Kept,
   type Papers,
-} from "@/app/room/wallpapers";
+} from "@/app/desktop/wallpapers";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { cx } from "@/utils/cx";
 
@@ -20,7 +20,7 @@ const LIMIT = 24 * 1024 * 1024;
 // recorded once the object is there. A store that signs no address answers
 // with none, and the picture is sent to the server whole.
 async function kept(file: File): Promise<Response> {
-  const asked = await fetch("/room/wallpaper", {
+  const asked = await fetch("/desktop/wallpaper", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ type: file.type, bytes: file.size }),
@@ -30,20 +30,20 @@ async function kept(file: File): Promise<Response> {
   if (!to) {
     const body = new FormData();
     body.append("wallpaper", file);
-    return fetch("/room/wallpaper", { method: "POST", body });
+    return fetch("/desktop/wallpaper", { method: "POST", body });
   }
   const put = await fetch(to.url, { method: "PUT", body: file });
   if (!put.ok)
     return new Response("That picture could not be kept.", { status: 502 });
-  return fetch("/room/wallpaper", {
+  return fetch("/desktop/wallpaper", {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ key: to.key }),
   });
 }
 
-// Tells the desk showing this page which wallpaper to wear, so a choice
-// made in a Settings window reaches the desk behind it at once.
+// Tells the desktop showing this page which wallpaper to wear, so a choice
+// made in a Settings window reaches the desktop behind it at once.
 function told(choice: string) {
   if (window.parent !== window)
     window.parent.postMessage({ maslow: "wallpaper", choice }, location.origin);
@@ -99,7 +99,7 @@ function Tile({
   );
 }
 
-// What the desk lies on: the wallpapers that ship with Maslow, then the
+// What the desktop lies on: the wallpapers that ship with Maslow, then the
 // person's own and the place to add one. Picking wears it at once.
 export function Wallpaper({ papers }: { papers: Papers | null }) {
   const [worn, setWorn] = useState(papers?.choice ?? null);
@@ -111,7 +111,7 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
   const wear = (to: string) => {
     setWorn(to);
     told(to);
-    void fetch("/room/wallpaper", {
+    void fetch("/desktop/wallpaper", {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ choice: to }),
@@ -148,19 +148,14 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
       setWorn("plain");
       told("plain");
     }
-    await fetch(`/room/wallpaper?key=${encodeURIComponent(key)}`, {
+    await fetch(`/desktop/wallpaper?key=${encodeURIComponent(key)}`, {
       method: "DELETE",
     }).catch(() => {});
   };
 
   return (
     <div id="wallpaper" className="flex scroll-mt-20 flex-col gap-3">
-      <div>
-        <h3 className="text-body-regular text-text-primary">Wallpaper</h3>
-        <p className="text-body-2-regular text-text-secondary">
-          What your desk lies on. Yours are kept at the size you made them.
-        </p>
-      </div>
+      <h3 className="text-body-regular text-text-primary">Wallpaper</h3>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {PAPERS.map((p) => (
           <Tile

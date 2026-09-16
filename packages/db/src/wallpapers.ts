@@ -3,7 +3,7 @@ import type { Query } from "./index.ts";
 // One wallpaper a person put in the bucket: its object and what it weighs.
 export type Own = { id: string; key: string; bytes: number; createdAt: Date };
 
-// What a desk wears: a built-in's name, "plain" for the bare ground, or
+// What a desktop wears: a built-in's name, "plain" for the bare ground, or
 // "own:<key>" for one of the person's own.
 export type Choice = string;
 
@@ -18,7 +18,7 @@ export async function ownWallpapers(q: Query): Promise<Own[]> {
   ).rows;
 }
 
-// The wallpaper the person's desk wears, or null while they have not
+// The wallpaper the person's desktop wears, or null while they have not
 // chosen one.
 export async function wallpaperOf(q: Query): Promise<Choice | null> {
   return (
@@ -60,7 +60,7 @@ export async function addWallpaper(
 }
 
 // Forgets one of the person's own wallpapers; the row's going owes its
-// object its deletion. A desk wearing it falls back to the bare ground.
+// object its deletion. A desktop wearing it falls back to the bare ground.
 // False when they have no such wallpaper.
 export async function removeWallpaper(q: Query, key: string): Promise<boolean> {
   const gone = await q.query("delete from wallpapers where key = $1", [key]);

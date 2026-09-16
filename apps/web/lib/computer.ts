@@ -1,8 +1,5 @@
-import type { Subject, Target } from "@maslow/brain";
 import { asMeter, asOrg, asPerson, type Query } from "@maslow/db";
-import { MOST } from "@maslow/db/arrival";
 import type { Principal } from "@maslow/db/auth";
-import { groupsIn } from "@maslow/db/groups";
 import {
   allComputers,
   claimComputer,
@@ -27,7 +24,6 @@ import {
   setReady,
   setSize,
   setUpdate,
-  setHeartbeatEvery,
   setRegion,
   setUpdateWhen,
   setVolume,
@@ -46,6 +42,7 @@ import {
 import { createHmac, timingSafeEqual } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
+import { modelToken, modelUrl } from "./models.ts";
 import {
   fly,
   FlyRefused,
@@ -64,7 +61,7 @@ import { above, sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-38";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-41";
 
 // An image whose label ends in -security does not wait on the person for
 // a week: it takes the idle rule from the day it is ready.
@@ -73,8 +70,7 @@ const SECURITY = /-security$/.test(IMAGE);
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
 // answers; moving while it is on its way to another region.
-export type Progress =
-  "off" | "disk" | "machine" | "starting" | "moving" | "ready";
+type Progress = "off" | "disk" | "machine" | "starting" | "moving" | "ready";
 
 // Where a move stands: the old machine stopping, its disk being copied,
 // the copy being restored in the new region, the machine there starting
@@ -224,7 +220,7 @@ export async function advance(p: Principal, region: string): Promise<State> {
       else if (c.readyAt) await revive(q, c, "the door did not answer");
       else await step(q, c, "sign-in");
     } catch (err) {
-      // What Fly refuses is never the page's to carry: the desk keeps
+      // What Fly refuses is never the page's to carry: the desktop keeps
       // drawing, the computer says it is still coming, and the refusal is
       // said in words, logged and written down, so the next ask tries
       // again. Anything else is ours and is thrown on.
@@ -336,7 +332,7 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
           secret: c.secret,
           brain: await brainOf(q, c),
           who: await whoOf(q, c),
-          modelKey: await modelKeyOf(q, c),
+          model: await modelOf(q, c),
           metadata: tags(c),
         }));
     } catch (err) {
@@ -381,10 +377,19 @@ const keyPrefix = () => {
   return `maslow ${deployment.where} ${d.kind === "fly" ? (d.checkout ?? "production") : "off"} `;
 };
 
-// The OpenRouter key Claude Code on the machine runs on: minted once per
-// computer against a weekly cap in dollars, which is kept on its row so it
-// can differ per person, and given to the machine. Null where this
+// What the machine carries for its model calls: the gateway's address and
+// a token of the computer's own. The OpenRouter key behind it is minted
+// once per computer against a weekly cap in dollars, kept on its row so it
+// can differ per person, and never leaves this server. Null where this
 // deployment mints none; the person's own account then.
+async function modelOf(
+  q: Query,
+  c: Computer,
+): Promise<{ url: string; token: string } | null> {
+  if (!(await modelKeyOf(q, c))) return null;
+  return { url: modelUrl(), token: modelToken(c) };
+}
+
 async function modelKeyOf(q: Query, c: Computer): Promise<string | null> {
   const m = deployment.models;
   if (m.kind !== "openrouter") return null;
@@ -769,7 +774,7 @@ async function remake(
     secret: c.secret,
     brain: await brainOf(q, c),
     who: await whoOf(q, c),
-    modelKey: await modelKeyOf(q, c),
+    model: await modelOf(q, c),
     metadata: wanted(c, m),
   });
   await setReady(q, c.id, false);
@@ -928,18 +933,23 @@ async function reconcileOrg(
       const who = await whoOf(q, c);
       const named =
         m.config?.env?.PERSON === who.person && m.config?.env?.ORG === who.org;
-      // A machine made before this deployment minted keys gets one too.
-      const keyed =
-        deployment.models.kind !== "openrouter" || c.modelKeyHash !== null;
       // And one made before it could reach the brain: where the address
       // comes or goes, the machine is remade holding the new one.
       const brained =
         (m.config?.env?.BRAIN_URL ?? null) ===
         ((await brainOf(q, c))?.url ?? null);
+      // A machine carries the way to our models, and never a key: remade
+      // when it holds a key of ours, or a gateway address that is not the
+      // one modelOf would give it now (none where this deployment mints no
+      // keys). modelOf mints the row's key if it has none.
+      const want = await modelOf(q, c);
+      const modelled =
+        m.config?.env?.MODEL_KEY === undefined &&
+        (m.config?.env?.MODEL_URL ?? null) === (want?.url ?? null);
       const behind = m.config?.image?.split("@")[0] !== IMAGE;
       // What the machine cannot run without is put right at once, and the
       // image of the day comes with the restart it already costs.
-      if (c.current && (!sized || !named || !keyed || !brained)) {
+      if (c.current && (!sized || !named || !brained || !modelled)) {
         await remake(
           q,
           c,
@@ -948,8 +958,8 @@ async function reconcileOrg(
             ? "the person was named"
             : !brained
               ? "the brain came within reach"
-              : !keyed
-                ? "a key was minted"
+              : !modelled
+                ? "the way to our models changed"
                 : "the size was changed",
         );
         await reopens(q, c, m.id);
@@ -1030,15 +1040,11 @@ async function reconcileOrg(
           return;
         }
         await backUp(q, c);
-        // The keys again every hour, so a machine remade or reset has them,
-        // and the heartbeat's clock with them.
+        // The keys again every hour, so a machine remade or reset has them.
         if (c.authorizedKeys)
           await fly
             .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
             .catch(() => {});
-        await fly
-          .pushHeartbeat(c.machineId!, ticket(c, 60), c.heartbeatEvery)
-          .catch(() => {});
         await spend(q, c, m);
       }
     });
@@ -1262,7 +1268,7 @@ function ticket(c: Computer, seconds: number, port?: number): string {
 }
 
 // The member's ready computer, or null.
-export async function ready(p: Principal): Promise<Computer | null> {
+async function ready(p: Principal): Promise<Computer | null> {
   if (deployment.computers.kind === "none") return null;
   const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   return c?.readyAt && c.machineId ? c : null;
@@ -1439,7 +1445,7 @@ export async function liveTarget(
 }
 
 // A computer whose row an update or a restart reset, ready again the
-// moment its door answers: the desk alone asks nothing else that would
+// moment its door answers: the desktop alone asks nothing else that would
 // find it, and a person's pets should not wait on a page that polls.
 async function awoken(p: Principal): Promise<Computer | null> {
   const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
@@ -1543,7 +1549,7 @@ async function reshapeTo(
     secret: c.secret,
     brain: await brainOf(q, c),
     who: await whoOf(q, c),
-    modelKey: await modelKeyOf(q, c),
+    model: await modelOf(q, c),
     metadata: m ? wanted(c, m) : tags(c),
   });
 }
@@ -1672,7 +1678,7 @@ async function moveOn(
           secret: c.secret,
           brain: await brainOf(q, c),
           who: await whoOf(q, c),
-          modelKey: await modelKeyOf(q, c),
+          model: await modelOf(q, c),
           metadata: tags(c),
         }));
       await on({ machineId: made.id });
@@ -1736,169 +1742,6 @@ export async function pushKeys(p: Principal): Promise<void> {
   await fly.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
 }
 
-// How often the person's agent runs on its own on their computer, in
-// minutes, zero for off: written down, and given to the machine at once
-// when it is ready, under the computer's lock so two changes reach it in
-// the order they were written. Answers whether the machine was told: one
-// on an image from before the heartbeat hears once it takes the update
-// waiting for it; one that could not be reached hears from the sweep
-// within the hour.
-export async function setHeartbeat(
-  p: Principal,
-  every: number,
-): Promise<"told" | "behind" | "later"> {
-  return holdingComputer(p, async (q, c) => {
-    if (!c) return "later";
-    await setHeartbeatEvery(q, c.id, every);
-    if (!c.readyAt || !c.machineId) return "later";
-    if (c.updateImage === IMAGE) return "behind";
-    try {
-      await fly.pushHeartbeat(c.machineId, ticket(c, 60), every);
-      return "told";
-    } catch (err) {
-      console.error(`heartbeat ${p.personId}: ${(err as Error).message}`);
-      return "later";
-    }
-  });
-}
-
-// Runs fn with the person's computer held for the rest of the
-// transaction, the row read again under the hold since a move or an
-// update may have had it; null where they have none.
-function holdingComputer<T>(
-  p: Principal,
-  fn: (q: Query, c: Computer | null) => Promise<T>,
-): Promise<T> {
-  return asOrg(p.orgId, async (q) => {
-    const known = await computerOf(q, p.userId);
-    if (!known) return fn(q, null);
-    await q.query("select pg_advisory_xact_lock(hashtext($1))", [
-      `computer:${known.id}`,
-    ]);
-    return fn(q, (await computerOf(q, p.userId)) ?? known);
-  });
-}
-
-// A run of the agent on the person's computer now; false when it is not
-// ready, and the door's own words when it will not.
-export async function runHeartbeat(
-  p: Principal,
-  why = "the person pressed Run now",
-  key?: string,
-): Promise<boolean> {
-  const c = await ready(p);
-  if (!c) return false;
-  await fly.runHeartbeat(c.machineId!, ticket(c, 60), why, false, key);
-  return true;
-}
-
-// A person's words as the door takes them: whole, on one line, no
-// longer than the card allows.
-export const plain = (s: string) =>
-  s
-    .replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, MOST);
-
-// Wakes the person's own agent once they have answered an ask of it: their
-// computer, with a cadence set, is asked for a run now, told which ask and
-// what they said, so the answer is in the run's hands whatever becomes of
-// the notice.
-export const wakeAnswered = (p: Principal, notice: string, answer: string) =>
-  wake(
-    p,
-    `the person answered ${/^[a-z0-9]{10}$/.test(notice) ? `ask ${notice}` : "an ask"}: ${plain(answer)}`,
-  ).catch((err: Error) => console.error(`wake ${p.userId}: ${err.message}`));
-
-// Whether the person's ready computer runs the image of the day, as Fly
-// reports the machine, not as the sweep last wrote it down.
-export async function onImage(c: Computer): Promise<boolean> {
-  const m = await fly.machine(c.machineId!);
-  return m?.config?.image?.split("@")[0] === IMAGE;
-}
-
-// Tells the person's ready computer the cadence its row holds, read and
-// pushed under the computer's lock, so a change made in Settings the
-// same moment is never written over by an older value. Throws where the
-// machine could not be told.
-export async function tellCadence(p: Principal): Promise<void> {
-  await holdingComputer(p, async (_, c) => {
-    if (!c?.readyAt || !c.machineId)
-      throw new Error("the computer stopped answering");
-    await fly.pushHeartbeat(c.machineId, ticket(c, 60), c.heartbeatEvery);
-  });
-}
-
-// Wakes the person's own agent, told why: their computer, with a cadence
-// set, is asked for a run now. Nothing when it is not ready or the
-// cadence is off.
-async function wake(p: Principal, why: string): Promise<void> {
-  if (deployment.computers.kind === "none") return;
-  const c = await ready(p);
-  if (!c || c.heartbeatEvery === 0) return;
-  await fly.runHeartbeat(c.machineId!, ticket(c, 60), why, true);
-}
-
-// Wakes the agent of everyone a share reached: each of their computers
-// with a cadence set is asked for a run now, told who shared what with
-// the person. The sharer's own is not; a computer that cannot be reached
-// is left to its clock.
-export async function wakeShared(
-  p: Principal,
-  on: Target[],
-  subjects: Subject[],
-): Promise<void> {
-  if (deployment.computers.kind === "none" || on.length === 0) return;
-  // Named by id alone, never by a title or a name: what a colleague
-  // wrote is read through the brain's tools as data, and nothing of it is
-  // put in the run's own words.
-  // Past a page of them the reason counts rather than names, since the
-  // door takes a sentence and the brain's log names every one.
-  const records = on.flatMap((t) => ("record" in t ? [t.record] : []));
-  const types = on.flatMap((t) => ("type" in t ? [t.type] : []));
-  const named = (kind: string, ids: string[]) =>
-    ids.length > 50
-      ? `${ids.length} ${kind}s, which the brain's log names`
-      : `${ids.length === 1 ? kind : `${kind}s`} ${ids.join(", ")}`;
-  const what = [
-    records.length > 0 && named("record", records),
-    types.length > 0 && named("type", types),
-  ]
-    .filter(Boolean)
-    .join(" and ");
-  const why = `a colleague (member ${p.userId}) shared ${what} with the person`;
-  const asked = await asPerson(p, async (q) => {
-    const groups = await groupsIn(q);
-    const reached = new Set<string>();
-    for (const s of subjects) {
-      if (s.who === "member") reached.add(s.id);
-      else
-        for (const m of groups.find((g) =>
-          s.who === "everyone" ? g.everyone : g.id === s.id,
-        )?.members ?? [])
-          reached.add(m.id);
-    }
-    reached.delete(p.userId);
-    const computers = await Promise.all(
-      [...reached].map((id) => computerOf(q, id)),
-    );
-    return computers
-      .filter(
-        (c): c is Computer =>
-          c !== null && c.heartbeatEvery > 0 && !!c.readyAt && !!c.machineId,
-      )
-      .map((c) => c);
-  });
-  await Promise.all(
-    asked.map((c) =>
-      fly
-        .runHeartbeat(c.machineId!, ticket(c, 60), why, true)
-        .catch((err: Error) => console.error(`wake ${c.id}: ${err.message}`)),
-    ),
-  );
-}
-
 // What a person has spent on models, in dollars: this week against their
 // cap, the day it turns over, every day the ledger holds, and what each
 // model took. Nothing here is faked; a deployment that mints no keys has
@@ -1922,7 +1765,21 @@ function nextMonday(): Date {
   return d;
 }
 
-export async function usageOf(p: Principal): Promise<Usage | null> {
+// The vendor is asked once a minute for each person; a pane opened twice
+// in that minute reads the same answer.
+const usages = new Map<string, { at: number; usage: Promise<Usage | null> }>();
+export function usageOf(p: Principal): Promise<Usage | null> {
+  const held = usages.get(p.userId);
+  if (held && Date.now() - held.at < 60_000) return held.usage;
+  const usage = readUsage(p).catch((err: Error) => {
+    usages.delete(p.userId);
+    throw err;
+  });
+  usages.set(p.userId, { at: Date.now(), usage });
+  return usage;
+}
+
+async function readUsage(p: Principal): Promise<Usage | null> {
   const m = deployment.models;
   if (m.kind !== "openrouter") return null;
   const c =

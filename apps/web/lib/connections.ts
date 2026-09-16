@@ -116,14 +116,28 @@ const begun = (a: Account) => !["INITIALIZING", "INITIATED"].includes(a.status);
 // A name is short and on one line.
 export const NAME = /^[^\p{Cc}\p{Zl}\p{Zp}]{1,40}$/u;
 
+let mostUsed: { at: number; apps: Promise<App[]> } | null = null;
+
 export const connections = {
   // Whether this deployment can connect apps at all.
   get enabled() {
     return deployment.connections.kind !== "none";
   },
 
-  // The apps that match a search; the most used when it is empty.
-  search: (query: string) => vendor.search(query.trim()),
+  // The apps that match a search; the most used when it is empty, which
+  // barely changes and is kept for ten minutes so the pane never waits.
+  search(query: string): Promise<App[]> {
+    const q = query.trim();
+    if (q) return vendor.search(q);
+    if (!mostUsed || Date.now() - mostUsed.at > 10 * 60_000) {
+      const apps = vendor.search("").catch((err: Error) => {
+        mostUsed = null;
+        throw err;
+      });
+      mostUsed = { at: Date.now(), apps };
+    }
+    return mostUsed.apps;
+  },
 
   // The membership's connections, live from the vendor, oldest first.
   async list(p: Principal): Promise<Connection[]> {

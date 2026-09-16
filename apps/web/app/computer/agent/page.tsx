@@ -31,7 +31,7 @@ export default async function AgentPage() {
         <ComputerWaiting
           polls
           title="Your computer is not ready yet"
-          description="Claude Code appears here once it is."
+          description="Your agent appears here once it is."
         />
       ) : (
         <ChatsProvider>

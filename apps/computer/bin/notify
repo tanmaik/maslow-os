@@ -1,5 +1,5 @@
 #!/bin/bash
-# Leaves a note in the person's notification bar, behind the clock on their
-# desk. It asks nothing and nothing waits on it.
+# Leaves a note in the person's notification center, behind the clock on their
+# desktop. It asks nothing and nothing waits on it.
 #   notify "The build is green" "Every check passed on the branch."
 exec /opt/maslow/bin/notice note "$@"

@@ -15,10 +15,9 @@
     "./groups": "./src/groups.ts",
     "./desktops": "./src/desktops.ts",
     "./brain-views": "./src/brain-views.ts",
-    "./notices": "./src/notices.ts",
+    "./notifications": "./src/notifications.ts",
     "./wallpapers": "./src/wallpapers.ts",
-    "./oauth": "./src/oauth.ts",
-    "./arrival": "./src/arrival.ts"
+    "./oauth": "./src/oauth.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

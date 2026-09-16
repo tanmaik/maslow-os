@@ -864,15 +864,15 @@ export async function smokeMcp(stack, signIn) {
   });
   check(
     "share asks, and shares nothing until the person accepts",
-    /^asked \S+ as notice \S+: 1 item to 1 party at view; the person decides$/.test(
+    /^asked \S+ as notification \S+: 1 item to 1 party at view; the person decides$/.test(
       asked.lines[0] ?? "",
     ) && notYet.text === "no records",
     `${asked.lines[0]} / ${notYet.text}`,
   );
-  // The desk is the agent's to arrange, and a widget is an app on a port
+  // The desktop is the agent's to arrange, and a widget is an app on a port
   // of the person's computer: put down, listed, moved by its id alone,
-  // and taken off. A colleague's desk is their own.
-  const noDesk = await call(grant.access_token, "desk", {});
+  // and taken off. A colleague's desktop is their own.
+  const noDesk = await call(grant.access_token, "desktop", {});
   const noShown = await call(grant.access_token, "place", { x: 0.5 });
   const putDown = await call(grant.access_token, "place", {
     port: 3000,
@@ -883,18 +883,18 @@ export async function smokeMcp(stack, signIn) {
     h: 0.3,
   });
   const widgetId = putDown.lines[0]?.split(" ")[0] ?? "";
-  const onDesk = await call(grant.access_token, "desk", {});
+  const onDesk = await call(grant.access_token, "desktop", {});
   const shifted = await call(grant.access_token, "place", {
     id: widgetId,
     x: 0.5,
   });
-  const theirDesk = await call(colleagueGrant.access_token, "desk", {});
+  const theirDesk = await call(colleagueGrant.access_token, "desktop", {});
   const takenOff = await call(grant.access_token, "unplace", { id: widgetId });
-  const cleared = await call(grant.access_token, "desk", {});
+  const cleared = await call(grant.access_token, "desktop", {});
   const noWidget = await call(grant.access_token, "unplace", { id: widgetId });
   check(
-    "the agent places a widget on the desk, moves it, and takes it off",
-    noDesk.text === "nothing is on the desk" &&
+    "the agent places a widget on the desktop, moves it, and takes it off",
+    noDesk.text === "nothing is on the desktop" &&
       noShown.refused &&
       noShown.text === "a widget shows a port" &&
       /^[a-z0-9]{4,16} "Launch board" \/port\/\S+\/3000 at 0\.10,0\.05 size 0\.30×0\.30$/.test(
@@ -903,9 +903,9 @@ export async function smokeMcp(stack, signIn) {
       onDesk.text === putDown.text &&
       shifted.lines[0]?.startsWith(`${widgetId} "Launch board"`) &&
       shifted.lines[0]?.includes("at 0.50,0.05") &&
-      theirDesk.text === "nothing is on the desk" &&
-      takenOff.text === `took ${widgetId} off the desk` &&
-      cleared.text === "nothing is on the desk" &&
+      theirDesk.text === "nothing is on the desktop" &&
+      takenOff.text === `took ${widgetId} off the desktop` &&
+      cleared.text === "nothing is on the desktop" &&
       noWidget.refused,
     `${putDown.lines[0]} / ${shifted.lines[0]} / ${takenOff.text} / ${cleared.text} / ${noWidget.text}`,
   );

@@ -1735,24 +1735,26 @@ export async function smokeBrain(stack) {
     // What waits on a person is the person's alone: a note or an ask left
     // for one of them is invisible to everyone else, and an ask answers
     // once, with one of the options it offered.
-    const notices = await import("../packages/db/src/notices.ts");
+    const notifications = await import("../packages/db/src/notifications.ts");
     const left = await as(marge)(async (q) => {
-      const note = await notices.leaveNotice(q, {
+      const note = await notifications.leaveNotification(q, {
         kind: "note",
         title: "The levain is ready",
         body: "It doubled overnight.",
       });
-      const ask = await notices.leaveNotice(q, {
+      const ask = await notifications.leaveNotification(q, {
         kind: "ask",
         title: "Bake at six?",
         options: ["Yes", "No"],
       });
-      const counts = await notices.noticeCounts(q);
+      const counts = await notifications.notificationCounts(q);
       const outside = await attempt(() =>
-        notices.answerNotice(q, ask.id, "Maybe"),
+        notifications.answerNotification(q, ask.id, "Maybe"),
       );
-      const answered = await notices.answerNotice(q, ask.id, "Yes");
-      const twice = await attempt(() => notices.answerNotice(q, ask.id, "No"));
+      const answered = await notifications.answerNotification(q, ask.id, "Yes");
+      const twice = await attempt(() =>
+        notifications.answerNotification(q, ask.id, "No"),
+      );
       return {
         note,
         ask,
@@ -1760,18 +1762,18 @@ export async function smokeBrain(stack) {
         outside,
         answered,
         twice,
-        after: await notices.noticeCounts(q),
+        after: await notifications.notificationCounts(q),
       };
     });
     const others = await as(otto)(async (q) => ({
-      all: (await notices.noticesOf(q)).length,
-      byId: await notices.noticeOf(q, left.note.id),
+      all: (await notifications.notificationsOf(q)).length,
+      byId: await notifications.notificationOf(q, left.note.id),
       answering: await attempt(() =>
-        notices.answerNotice(q, left.ask.id, "No"),
+        notifications.answerNotification(q, left.ask.id, "No"),
       ),
     }));
     check(
-      "a notice is the person's alone",
+      "a notification is the person's alone",
       left.counts.waiting === 1 &&
         left.counts.unread === 2 &&
         left.outside === "Unanswerable" &&

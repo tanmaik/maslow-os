@@ -1,5 +1,5 @@
 #!/bin/bash
-# Opens something on the person's desk, or on their own device. A port of
+# Opens something on the person's desktop, or on their own device. A port of
 # this machine's opens that port's window in Maslow; a file or folder of
 # theirs opens Files there; any other web address is offered on their
 # terminal, and a click there opens it in their own browser, with their own
@@ -10,7 +10,7 @@ help() {
   cat <<'USAGE'
 usage: open <what>
 
-  open :3000                   the window for port 3000 on your desk
+  open :3000                   the window for port 3000 on your desktop
   open http://localhost:3000   the same
   open ~/notes/meeting.md      Files, at that folder, with the file picked
   open .                       Files, at this folder

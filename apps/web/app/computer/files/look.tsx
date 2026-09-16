@@ -22,7 +22,7 @@ import {
   readHref,
   size,
 } from "@/app/computer/files/kinds";
-import { InBar, useBeforeClose } from "@/app/room/panel";
+import { InBar, useBeforeClose } from "@/app/desktop/panel";
 import {
   ButtonGroup,
   ButtonGroupItem,

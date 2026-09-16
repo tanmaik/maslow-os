@@ -251,9 +251,9 @@ and what it holds is a session, listed and ended from settings like any
 other. Claude Code and claude.ai are the two clients it is checked against.
 
 The agent also says things to the person and asks them things, through the
-same door: `notify` leaves a note and `ask` a question, each a notice of
+same door: `notify` leaves a note and `ask` a question, each a notification of
 the person's alone, in the name of whatever wrote it, with the records it
-is about and, for an ask, the options the person may pick; `notices` reads
+is about and, for an ask, the options the person may pick; `notifications` reads
 them back with the answers. Nothing waits for an answer — the ask is left
 and the answer read later. An ask to share is one of them, so what waits on
 a person waits in one place. The same two words are on the person's
@@ -342,7 +342,7 @@ throws their Linux away and keeps home; it is a button, never automatic,
 and the backups are there to restore from afterwards. A new image is an
 update, not a restart: the sweep records on the person's row that one is
 ready and to which image, and says so quietly in three places — a
-notice behind the clock with now, tonight and when idle on it, counted
+notification behind the clock with now, tonight and when idle on it, counted
 among what waits on the person until they pick one; a line in the Maslow
 menu and in About This Computer; and a row on the Computer pane offering
 the same three. Now names what it will stop
@@ -373,7 +373,7 @@ pane of Settings, plain first, ready, the update if one waits, the last
 backup with the fourteen kept listed under it, each restoring into a
 dated folder of its own in the home and over nothing, and then its
 numbers, size, where, SSH and reset in the open; About This Computer
-in the Maslow menu is its face on the desk. A port is the person's until they share it
+in the Maslow menu is its face on the desktop. A port is the person's until they share it
 with a person, a group or everyone in the org, and it opens or is a 404;
 the agent asks for a port through the same share tool it asks for a
 record with, and never shares one itself. The door is the one way in, and
@@ -385,7 +385,7 @@ kills nothing and the next tab finds it mid-output — its tmux windows
 listed down a sidebar, each named for the program running in it or, at a
 bare prompt, the folder it is in, and renamed by a double-click on the
 name, which is then theirs and not tmux's; the one in view marked, any
-Terminal window on the desk turned to any of them, any but the last
+Terminal window on the desktop turned to any of them, any but the last
 closed from the list,
 one opened from the dock starting in a fresh shell of its own, and a
 shell nobody ever ran anything in going with its Terminal; and View, the machine's browser as real
@@ -412,7 +412,7 @@ the person's to pick; a new one, a fork of this one and any of the ones
 the machine keeps are a click away. Nothing durable lives in
 a tab: the tab is a view onto state on the machine, and the machine's
 browser never idles away. What a program on the machine opens goes to whoever is at the terminal:
-a port of theirs opens that port's window on the desk, a folder of theirs opens Files there, a
+a port of theirs opens that port's window on the desktop, a folder of theirs opens Files there, a
 file of theirs opens in the Preview window, and any other address is
 offered to open on their own device (Files lists Home and the usual
 places beside it, not every folder; the Preview window is one file in a
@@ -430,22 +430,27 @@ a person sets in settings, set up on a Mac by the one command the
 Computer pane shows, which installs the Python script the app serves as
 ssh's ProxyCommand and writes a `Host` named after the computer, and
 landing in the same tmux session the Terminal page shows, as a grouped
-session of its own; a command given to `ssh` runs plain. Model calls never
-route through us: each person holds an OpenRouter key we minted with a
-cap of five dollars a week, kept on their computer's row and shown to
-them in dollars — in the Agent window, on the Computer pane and in a
-Usage pane of its own — OpenRouter holds the record, and the sweep copies
-it; reaching the cap stops the calls and nothing else. Two Claude Codes
-run on the machine and they never share credentials. The Agent window's
-is ours: started with `MASLOW_AUTH=managed`, it runs on that key, on
-GLM 5.3 Flash on whichever of its providers is fastest and nothing else —
-every name Claude Code offers itself, opus, sonnet, haiku, points at it,
-so no Claude model is reachable on what Maslow pays for — and the app is
-the one way to it. The Agent window is BoardUI's AI Chat template wired
+session of its own; a command given to `ssh` runs plain. Every model
+call goes through us: the agent on the machine sends it to this
+deployment's gateway, `/model`, carrying a token of its computer's and
+no key, and the gateway sends it on with the OpenRouter key that
+computer's row holds, minted per person with a cap of five dollars a
+week. The key never leaves our server. What a person spent is shown to
+them in dollars, in the Agent window and on the Agent pane; OpenRouter
+holds the record, the sweep copies it, and reaching the cap stops the
+calls and nothing else. Where a machine cannot dial the deployment, as
+on a laptop, the call goes to its own door and up the line the laptop's
+stack holds open for the brain. Two Claude Codes run on the machine and
+they never share credentials. The Agent window's is ours: started with
+`MASLOW_AUTH=managed`, it runs through the gateway, on GLM 5.3 Flash on
+whichever of its providers is fastest and nothing else — the gateway puts
+that model on every call whatever name was asked for, so no Claude model
+is reachable on what Maslow pays for — and the app is the one way to it.
+The settled design is `docs/decisions/2026-09-16-the-model-gateway.md`. The Agent window is BoardUI's AI Chat template wired
 to it: a rail of chats with no folders, pinned ones first; the thread in
 its user and assistant turns, with what the agent did as its task list,
 a thought one step among the steps it came with and folded with them,
-what it asks before it acts as a notice, the kind of thing named, the
+what it asks before it acts as a notification, the kind of thing named, the
 thing itself as it would run, and the answers as buttons, which goes
 when the prompt does, and a question it asks the person, Claude Code's
 own questionnaire, standing in the thread and answered there; the pill
@@ -470,7 +475,7 @@ conversation as they come, into the running turn or as a turn of its
 own, waking it if it sleeps. There is no cron and no workflow. What the
 adapter lacks for this, a word into a running turn and a close, is put
 into its installed copy when the image is built, in
-`apps/computer/patch-acp.mjs`. Floating conversations on the desk, the
+`apps/computer/patch-acp.mjs`. Floating conversations on the desktop, the
 pets of 2026-09-15, were tried for a night and taken out the next
 morning: the window is the one shape. `claude` in the
 person's terminal is their own: plain Claude Code on their own Claude
@@ -507,29 +512,11 @@ person's from the image, so what Claude Code builds for them looks like
 Maslow. The
 brain's MCP is the brain and the connectors, and nothing of the machine:
 no hand that runs a command or reads or writes a file goes into it.
-The heartbeat is that same Claude Code running on its own: on a cadence
-the person sets on the Computer pane, off until they set one, and at
-their Run now, the door starts it as them on a session of ours, with a
-brief that says what is on the machine, what each surface of Maslow is
-for (the desk is where the person looks and a widget is an app the
-agent builds and serves on a port; the bar is for what is read once or
-answered), why this run started, and nothing of what matters, and a fourth reason for a run, the person
-just arriving with what they said they are working toward, asked for
-under a key the door answers once, a time no run goes past and the weekly cap on
-their key as the only ceiling on what it spends, one run at a time. A share wakes the agent of whoever it reached: once it
-has landed, each of their computers with a cadence set is asked for a
-run now, told who shared what, and an ask the person answers wakes
-their own the same way, told which ask and what they answered; a reason that arrives mid-run
-waits for the run after. How often,
-whether one is going and what came of the last are the machine's to
-say, kept on its disk outside their Linux so a restart keeps the clock,
-and the sweep tells every machine its cadence each hour. The settled
-design is `docs/decisions/2026-09-14-the-heartbeat.md`.
 
 ## Interface
 
 The canvas is the screen and the chrome floats over it: dark, warm, quiet,
-one look with no light one. Home is a desk the size of the display that
+one look with no light one. Home is a desktop the size of the display that
 never scrolls, and every surface of Maslow is a window on it, drawn in
 the window with its controls in the window's bar, placed
 anywhere, at any size the person drags it to, overlapping if they like,
@@ -541,11 +528,11 @@ icon's menu opens another, and every window after the first is
 numbered, on the bar, in the menu and on its icon when put away. The dock and the window's frame are ryOS's
 (github.com/ryokun6/ryos), carried over as code under its licence, which
 is now ours too: AGPL-3.0, in `LICENSE`, with `NOTICE` saying what came
-from where. What the desk lies on is ours: eight abstract wallpapers that ship with
+from where. What the desktop lies on is ours: eight abstract wallpapers that ship with
 the app, a few kilobytes of gradient and grain each, and the bare warm
 ground, which is also what is left when a picture will not load. A person
 adds their own, kept whole in the bucket and theirs alone. They are all
-in Settings under Look, where a right-click on the desk goes, and the one
+in Settings under Look, where a right-click on the desktop goes, and the one
 picked is worn at once and follows the person to any device. Glass is the browser's own: a surface's backdrop is what
 is truly behind it, frosted and bent at the edges through one SVG filter
 (`components/glass.tsx`), never a picture of the page; Chrome bends,
@@ -571,34 +558,34 @@ About This Computer (the machine, where it is, its size and image, and
 what it is using, laid out as ryOS's is), Settings, your other orgs and
 the way out; the
 front window's own menu stands beside it; Window lists every window on
-every desk; the clock is at the right. Left of it, the weather shows once
+every desktop; the clock is at the right. Left of it, the weather shows once
 granted: a mark for the condition and the temperature, in the device's own
 unit, with a tooltip naming the condition and the place. The ask is the
-browser's own location prompt, made the moment the desk is drawn for a
+browser's own location prompt, made the moment the desktop is drawn for a
 signed-in person and never asked again on that device once it is refused,
 until Settings turns it back on. Any window fills the screen with
 one press and comes back. A snapped window fills exactly the screen
 under the menu bar and up to the dock, edge to edge. A port can be put
-on the desk itself, from its icon's menu: a widget, with no bar, under
+on the desktop itself, from its icon's menu: a widget, with no bar, under
 every window, moved by the grip along its top and resized by its
 edges, kept where it was left, and made a window again or taken off
-from the grip's menu. The desk is the ground under the windows, and the agent arranges it:
-`desk`, `place` and `unplace` on the brain's MCP put a widget down at a
+from the grip's menu. The desktop is the ground under the windows, and the agent arranges it:
+`desktop`, `place` and `unplace` on the brain's MCP put a widget down at a
 place and size, move one, or take one off, and say what lies there and
 which ports colleagues opened to the person; a widget is an app served
 on a port, of the person's own computer, which the agent builds and runs
 there, or of a colleague's opened to them, and nothing else, since a
-record's page on a desk is a document and not a widget. The windows the
+record's page on a desktop is a document and not a widget. The windows the
 person has open are theirs and the agent never sees or touches them. A
 widget the agent placed is an ordinary one, dragged, resized, put away
-or made a window like any other. The desk is kept on the server with a count of how many times it
+or made a window like any other. The desktop is kept on the server with a count of how many times it
 was kept: a save from the page names the count it saw and one that fell
-behind is refused and takes the newer desk in, its own changes kept over
-it, and the page's five-second ask after ports says when the desk was
+behind is refused and takes the newer desktop in, its own changes kept over
+it, and the page's five-second ask after ports says when the desktop was
 kept elsewhere, so what the agent placed is on screen within seconds on
-every device. There is one desk
+every device. There is one desktop
 for now. The keys reach all of it. Command-K opens the command bar,
-one field over the desk that finds an app, a window, a port, a pane of
+one field over the desktop that finds an app, a window, a port, a pane of
 Settings, a record or a file in the person's home by its words and goes
 there on Return; a letter
 typed with nothing focused opens it with that letter. Control and
@@ -606,7 +593,7 @@ Option with a key act on the window in front, since the keys a browser
 or a Mac owns are never taken: N opens another of its app, W closes it,
 M puts it away, Tab and Shift-Tab go to the next and the previous,
 comma opens Settings, and the arrows, U, I, J, K and Return put it on a
-side, a corner or the whole desk; the Window menu lists every one
+side, a corner or the whole desktop; the Window menu lists every one
 beside its key. Tab reaches the dock as one stop and the arrows walk
 its icons. A framed page keeps every key of its own but Command-K. A
 phone is its own shell over the same windows, laid out as a phone is.
@@ -624,7 +611,7 @@ that scrolls sideways, the rest goes to the sheet; the brain keeps its
 search and one Filter button, with its conditions and sort as a sheet
 and its view switch under one more control, and its table drags
 sideways with the title column held. Every menu — a window's, the
-desk's, a row's — opens as a sheet from the bottom edge, on a long press
+desktop's, a row's — opens as a sheet from the bottom edge, on a long press
 where a right-click goes, with rows a thumb can hit. The command bar
 opens from the menu bar's search icon or a two-finger tap, and stands
 full width. Nothing but the window's own content scrolls. A tap acts at
@@ -640,20 +627,19 @@ what matches, and one pane at a time on the right, its parts lying on
 the pane one under another with a hairline between, no card and no head
 of its own; on a phone the rail is a strip along the top. Yours are six,
 each named for the question it answers: You, Look, Computer (the
-machine alone: ready, update, size, where, backups, reset), Claude Code
-(whose credentials it runs on and whether their own account is signed
-in, the model, and what it spent this week against the cap; the signing
-in itself is Claude Code's own, in the terminal, and passes through
-nothing of ours), Apps, and Access (SSH, the ports they opened and who reaches
-each, the ports opened to them, and the agents signed in to their brain);
-the org's are Org, Members, Groups and Deletion. What waits on you waits behind the clock: a click on it slides
-a panel in from the right over the desk, closed by the clock again,
-Escape or a click outside, holding every notice newest first — a note
+machine alone: ready, update, size, where, backups, reset), Agent (what
+it spent this week against the cap, and nothing else), Apps, and Access
+(SSH, the ports they opened and who reaches each, the ports opened to
+them, and the agents signed in to their brain); the org's are Org, with
+deletion at its foot, Members and Groups. Each fact is on one pane and
+said once, and no pane explains what its rows already show. What waits on you waits behind the clock: a click on it slides
+a panel in from the right over the desktop, closed by the clock again,
+Escape or a click outside, holding every notification newest first — a note
 read and cleared, an ask answered where it stands, by picking one of the
 options it offers or typing an answer, and marked with what you said
 once you have. A note points at records as chips that open them, "Clear
 read" at the top takes away what is done with, and one that arrives
-while you are at the desk stands at the top right for six seconds, or
+while you are at the desktop stands at the top right for six seconds, or
 until you point at it. The clock carries a dot while anything is unread
 and the count of the asks still waiting on you; the Brain carries
 nothing. "Waiting on you" is what asks something of you and is still
@@ -662,26 +648,10 @@ the pages teammates' agents put in front of you; a shared record is
 knowledge, not a demand, and nothing tracks whether you opened it. The
 settled designs are
 `docs/decisions/2026-09-09-the-canvas-is-the-screen.md` and
-`docs/decisions/2026-09-11-the-screen-is-a-desk.md`, with the skin over it
+`docs/decisions/2026-09-11-the-screen-is-a-desktop.md`, with the skin over it
 in `docs/decisions/2026-09-12-the-look-is-warm.md`.
 
-A person's first desk meets them with a card while their computer is
-made behind it, three questions one at a time, each written into what
-already exists, the cadence a Settings pane later and the wish a file of
-theirs: how much their agent
-does on its own (nothing; tell me in the bar, every half hour; arrange
-my desk, once a day), which sets the heartbeat's cadence and writes a
-paragraph in their own words into their `CLAUDE.md` on their computer
-once it is ready; which apps it may read, the few most connected,
-connected as Settings would; and what they are trying to get to in the
-next year or two, in their words, which the first run is told as its
-reason and the agent writes into the brain in its own vocabulary,
-since the brain has no type of ours for a goal. Skipped, the card never
-comes back and nothing changes; nothing chosen outright sets the
-cadence off. The settled design is
-`docs/decisions/2026-09-15-arrival.md`.
-
-The way in is a lock screen: the desk's own wallpaper, darkened, with the
+The way in is a lock screen: the desktop's own wallpaper, darkened, with the
 clock and the date over it and one column in the middle. It asks for an
 address, and offers the faces of whoever has signed in on this device — kept
 on the device, nowhere else, five at most, and forgotten one by one from the
@@ -689,7 +659,7 @@ face itself; picking one goes straight to the code. The code is six boxes and
 the last digit sends it, over that person's picture where the device knows
 them, since the server never says whether an address has an account before
 the code is right. A person in more than one org says which one they are in
-on the same screen, after the code and before the desk. The seeded people
+on the same screen, after the code and before the desktop. The seeded people
 stay under a quiet divider, for development, and are not there in production.
 
 The skin is BoardUI's (boardui.com), a design system bought outright
@@ -794,9 +764,9 @@ not come.
 ## Merging
 
 A pull request merges when nothing lingers behind it. The gate is mechanical
-where it can be, and a reader where it cannot: Codex, run as `codex exec
-review` against the base branch, or a review agent of Claude's. What a
-reviewer walks by hand is `REVIEW.md`.
+where it can be, and a reader where it cannot: Greptile on the pull
+request, or Codex run as `codex exec review` against the base branch.
+What a reviewer walks by hand is `REVIEW.md`.
 
 - `check` is green: typecheck, format, unused code, the secrets check —
   the database URLs are named only where they are opened, and shipped code
@@ -804,10 +774,9 @@ reviewer walks by hand is `REVIEW.md`.
   empty database and signs in as every seeded org.
 - The preview built and its database migrated. Both are required checks, so a
   change that fails `next build` or a migration never reaches main.
-- A reader read it: Codex or a review agent, on the whole diff against main,
-  before the merge, and its findings are fixed or answered in the pull
-  request. Since 2026-09-11; Macroscope, which did this before, ran out of
-  credits and is off.
+- A reader read it: Greptile on the pull request, or Codex on the whole
+  diff against main, before the merge, and its findings are fixed or
+  answered in the pull request.
 - Every environment is answered: it works locally with no credentials, on the
   preview, and in production. A vendor it adds is in `docs/dependencies.md`
   in the same commit.
