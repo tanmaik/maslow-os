@@ -1,3 +1,4 @@
+import { known } from "@maslow/db/auth";
 import { allow, clear } from "@maslow/db/throttle";
 
 import { deployment } from "@/lib/deployment";
@@ -15,6 +16,11 @@ const WINDOW = 10 * 60;
 // The longest address a mailbox can have.
 const MAX_EMAIL = 254;
 
+// Whether anyone may sign up. Closed 2026-09-15 on Tanmai's word, to be
+// quiet for now: a person already here, or invited, signs in as ever;
+// anyone else is told it is invite-only. Flip to open again.
+const OPEN = false;
+
 // First leg of a code sign-in: a six-digit code goes to the address. Outside
 // production, with no mail configured, it goes to the server's terminal
 // instead, and the page says so.
@@ -31,6 +37,8 @@ export async function POST(request: Request) {
     return new Response("An email address is required.", { status: 400 });
   const address = email.trim().toLowerCase();
   const to = destination(origin(request), form.get("next"));
+  if (!OPEN && !(await known(address)))
+    return abandoned(noticed(to, "email=closed"));
 
   // The network address is what the nearest proxy reports; with no proxy
   // there is none to count against.

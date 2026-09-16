@@ -9,7 +9,7 @@ import { pendingFlow } from "@/lib/session";
 // with. `orgs` is not a notice: it says the person who just signed in has
 // more than one org to land in.
 export type Notice = {
-  email?: "slow" | "rejected";
+  email?: "slow" | "rejected" | "closed";
   code?: "wrong" | "locked";
   orgs?: string;
 };
@@ -17,6 +17,8 @@ export type Notice = {
 const NOTICES = {
   "email=slow": "Too many codes asked for. Wait ten minutes and try again.",
   "email=rejected": "That address was refused. Check it and try again.",
+  "email=closed":
+    "Maslow is invite-only for now. Someone already in can invite you.",
   "code=wrong": "That code didn't work. Try again or start over.",
   "code=locked": "Too many wrong codes. Ask for a new one.",
 } as const;

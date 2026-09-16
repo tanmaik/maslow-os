@@ -72,6 +72,24 @@ type Person = {
   avatar_key: string | null;
 };
 
+// Whether an address is expected: a person already here, or one invited
+// and not yet arrived. While sign-ups are closed, nobody else gets a code.
+export async function known(email: string): Promise<boolean> {
+  return asEmail(
+    email,
+    async (q) =>
+      (
+        await q.query(
+          `select 1 from people where email = $1
+           union all
+           select 1 from invitations where email = $1 and accepted_at is null
+           limit 1`,
+          [email],
+        )
+      ).rowCount === 1,
+  );
+}
+
 async function admit(identity: Identity): Promise<Principal> {
   const email = identity.email.toLowerCase();
   const { person, invitedTo } = await asEmail(email, async (q) => {
