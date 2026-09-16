@@ -1,7 +1,9 @@
 # How Claude Code starts on this computer, whichever door it comes
-# through: on the auth `auth` chose, read at every start so a switch takes
-# at once, told which in MASLOW_AUTH, and from the person's own copy where
-# they have one. Sourced, never run; never returns.
+# through: on the rule auth-env reads at every start — ours, on the key
+# Maslow gave the machine, only when the session was started as ours;
+# the person's own otherwise — told which in MASLOW_AUTH, and from the
+# person's own copy where they have one. Sourced, never run; never
+# returns.
 start() {
   local name=$1
   shift
@@ -13,6 +15,21 @@ start() {
     exit 78
   fi
   export MASLOW_AUTH="$maslow_auth"
+  # An env block in the person's own Claude Code settings outranks all of
+  # the above, and one that names the API's address or key sends every call
+  # somewhere else. Their own claude is theirs to send where they like; a
+  # session of ours will not run through it, and says why.
+  if [ "$maslow_auth" = managed ]; then
+    local over
+    over=$(node -e '
+      const j = require(process.env.HOME + "/.claude/settings.json");
+      console.log(Object.keys(j.env ?? {}).filter((k) => /^ANTHROPIC_(BASE_URL|AUTH_TOKEN|API_KEY)$/.test(k)).join(", "));
+    ' 2>/dev/null || true)
+    if [ -n "$over" ]; then
+      echo "~/.claude/settings.json sets $over, which would send Maslow's agent elsewhere. Take that env block out to run it." >&2
+      exit 78
+    fi
+  fi
   . /opt/maslow/bin/theirs
   exec "$(theirs "$name" "/opt/maslow/node_modules/.bin/$name")" "$@"
 }

@@ -354,7 +354,7 @@ function Line({
             onClick={onOpen}
             className={cx(
               "min-w-0 max-w-full cursor-pointer truncate rounded-lg px-2 py-1 text-right text-body-regular outline-none",
-              "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring",
+              "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover active:bg-background-secondary-active focus-visible:ring-2 focus-visible:ring-border-focus-ring",
               shown ? "text-text-primary" : "text-text-tertiary",
             )}
           >

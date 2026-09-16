@@ -7,18 +7,18 @@
 /* Both looks. The dark one applies under .dark, set on the root before paint. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* BoardUI's skin, warmed. Its neutral ramp is Tailwind's grey; ours carries
-   a little of the same warmth in every step so the greys agree with the
-   accent rather than sit beside it. Its accent ramp is blue; ours is spun
+/* BoardUI's skin. Its neutral ramp is Tailwind's grey; ours is pure grey,
+   no hue in any step, so paper is white and the greys carry nothing of
+   their own beside the accent. Its accent ramp is blue; ours is spun
    from the hue and chroma the person picked under Look in Settings, so
    every button, ring, switch and selection follows the pick. */
 @theme {
   /* One knob for the whole rhythm: every padding, gap, margin and
-     spacing-unit size tightens by a tenth in proportion. What must keep
+     spacing-unit size tightens by a fifth in proportion. What must keep
      a physical measure regardless — the dock's icon and pitch, a
      window's lights and bar height, tap targets on a phone, a terminal
      cell — is pinned in px or rem where it lives, not here. */
-  --spacing: 0.225rem;
+  --spacing: 0.2rem;
   /* The motion of the product: four curves and four clocks, and nothing
      between them. Everything arriving or settling decelerates hard and
      never overshoots; something already on screen moving from A to B
@@ -35,18 +35,18 @@
      ours and not on Tailwind's. */
   --default-transition-duration: 150ms;
   --default-transition-timing-function: ease;
-  --color-neutral-50: oklch(0.985 0.004 78);
-  --color-neutral-100: oklch(0.966 0.006 76);
-  --color-neutral-200: oklch(0.928 0.008 74);
-  --color-neutral-300: oklch(0.872 0.01 72);
-  --color-neutral-400: oklch(0.712 0.014 68);
-  --color-neutral-500: oklch(0.562 0.016 64);
-  --color-neutral-600: oklch(0.452 0.012 62);
-  --color-neutral-700: oklch(0.372 0.008 60);
-  --color-neutral-800: oklch(0.272 0.006 58);
-  --color-neutral-900: oklch(0.212 0.005 58);
-  --color-neutral-925: oklch(0.182 0.005 58);
-  --color-neutral-950: oklch(0.148 0.004 58);
+  --color-neutral-50: oklch(0.985 0 0);
+  --color-neutral-100: oklch(0.966 0 0);
+  --color-neutral-200: oklch(0.928 0 0);
+  --color-neutral-300: oklch(0.872 0 0);
+  --color-neutral-400: oklch(0.712 0 0);
+  --color-neutral-500: oklch(0.562 0 0);
+  --color-neutral-600: oklch(0.452 0 0);
+  --color-neutral-700: oklch(0.372 0 0);
+  --color-neutral-800: oklch(0.272 0 0);
+  --color-neutral-900: oklch(0.212 0 0);
+  --color-neutral-925: oklch(0.182 0 0);
+  --color-neutral-950: oklch(0.148 0 0);
   /* The eleven steps of the accent, at the lightness and the chroma
      BoardUI tuned its own ramp to, spun onto the hue the person picked:
      colour rises slowly through the tints, so a ghost button's ground and
@@ -208,7 +208,7 @@
   --border: var(--color-border-button-default);
   --input: var(--color-border-button-default);
   --ring: var(--color-border-focus-ring);
-  --cast: oklch(0.28 0.045 55 / 16%);
+  --cast: oklch(0.28 0 0 / 16%);
   --float: 0 1px 2px -1px var(--cast), 0 14px 34px -18px var(--cast);
   /* The glass: a breath of the accent, clear enough to see through. */
   --glass: color-mix(in srgb, var(--primary) 6%, rgba(250, 251, 253, 0.26));
@@ -230,7 +230,7 @@
   --primary: var(--color-accent-400);
   --primary-foreground: oklch(0.19 0.02 var(--accent-hue));
   --destructive: var(--color-red-400);
-  --cast: oklch(0.05 0.02 50 / 55%);
+  --cast: oklch(0.05 0 0 / 55%);
   --float: 0 1px 2px -1px var(--cast), 0 16px 38px -18px var(--cast);
   --glass: color-mix(in srgb, var(--primary) 7%, rgba(26, 27, 31, 0.32));
   --glass-rim: rgba(0, 0, 0, 0.45);
@@ -381,6 +381,15 @@ details summary::-webkit-details-marker {
   body {
     -webkit-tap-highlight-color: transparent;
   }
+  a,
+  button,
+  [role="button"],
+  input,
+  select,
+  textarea,
+  label {
+    touch-action: manipulation;
+  }
   /* The body's size: 14 on 20, tracked in very slightly. On body and not the
      root, where a smaller size would resize every rem in the product. */
   body {
@@ -507,9 +516,8 @@ html[data-framed] .brain-layout:has(.brain-nav[data-away]) > main {
 }
 html[data-framed] .prefs {
   margin: 0;
-  min-height: 100%;
+  height: 100%;
 }
-html[data-framed] .prefs-grid,
 html[data-framed] .prefs-pane {
   flex: 1 0 auto;
   background: var(--color-background-full);
@@ -582,6 +590,11 @@ html[data-accent="graphite"] {
   -webkit-backdrop-filter: blur(22px) saturate(185%);
   backdrop-filter: blur(22px) saturate(185%);
 }
+/* A sheet with more of the desk in it: the notices, which lie over the
+   wallpaper and hold little. */
+.glass-sheet.glass-airy {
+  background: color-mix(in srgb, var(--popover) 58%, transparent);
+}
 /* A window's frame: the same solid glass without the bend, since the
    bend is drawn on the CPU over the whole backdrop and a window is most
    of the screen; frost alone the GPU does for nothing. */
@@ -605,251 +618,125 @@ html[data-accent="graphite"] {
   font-weight: 500;
 }
 
-/* Settings, as ryOS lays out its control panels: a toolbar, a grid of
-   panes in bands, a search that dims all but what matches, and one pane
-   at a time with its rows. The bones are ryOS's; every part is BoardUI's. */
+/* Settings, as a Mac lays out System Settings: a rail of panes down the
+   left with a search over it, and the pane on the right, its name over
+   its wells. Every part is BoardUI's. */
 .prefs {
   --prefs-line: var(--color-separator-border);
-  /* One width for everything a person reads: the grid's marks and a
-     pane's wells centre on it, however wide the window is. */
-  --prefs-width: 720px;
-  --prefs-inset: 16px;
-  --prefs-scrim: color-mix(in srgb, var(--color-neutral-950) 34%, transparent);
+  /* One width for what a person reads: a pane's wells centre on it,
+     however wide the window is. */
+  --prefs-width: 640px;
   /* The surface owns the whole body box, so no ground of the page's shows
      above, beside or below it. */
   margin: -1.5rem -1.5rem -7rem;
-  min-height: 100dvh;
+  height: 100dvh;
   display: flex;
-  flex-direction: column;
+  overflow: hidden;
   background: var(--color-background-full);
   color: var(--color-text-primary);
 }
-.dark .prefs {
-  --prefs-scrim: color-mix(in srgb, var(--color-neutral-950) 62%, transparent);
-}
-/* The toolbar is a solid band, not a window's glass: the pane scrolls
-   under it, so it needs a ground of its own. */
-.prefs-toolbar {
+/* The rail: the search, then the panes in their groups. It keeps its
+   width and its own scroll; the pane beside it scrolls on its own, so
+   the rail stands still however far the pane goes. */
+.prefs-side {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-  padding: 8px var(--prefs-inset);
-  background: var(--color-background-full);
-  border-bottom: 1px solid var(--prefs-line);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.prefs-toolbar-nav {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex: 1 1 auto;
-}
-/* The controls keep their width; only the pane's name gives way, and it
-   truncates. */
-.prefs-toolbar-nav > div {
+  flex-direction: column;
+  gap: 2px;
+  width: 196px;
   flex-shrink: 0;
-}
-.prefs-search {
-  position: relative;
-  display: flex;
-  align-items: center;
-  /* 240 where there is room, and never under 120, so a phone's toolbar
-     still holds Back, Forward and Show All whole. */
-  flex: 0 1 240px;
-  min-width: 120px;
-}
-.prefs-search-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  right: 0;
-  z-index: 50;
-  min-width: 200px;
-  max-width: 280px;
-  max-height: calc(36px * 5.5 + 20px);
-  transform-origin: top right;
-  animation: prefs-menu-in var(--transition-duration-fast) var(--ease-out-quart);
-}
-@keyframes prefs-menu-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-    filter: blur(2px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-    filter: blur(0);
-  }
-}
-
-.prefs-grid {
-  position: relative;
-  padding: 0 var(--prefs-inset) var(--prefs-inset);
-  flex: 1;
-}
-/* A band spans the window; what is written on it centres with everything
-   else, so a wide window has no dead half. */
-.prefs-section {
-  position: relative;
-  margin: 0 calc(-1 * var(--prefs-inset));
-  padding: 12px var(--prefs-inset);
-}
-.prefs-section > * {
-  max-width: var(--prefs-width);
-  margin-inline: auto;
-}
-.prefs-section:not(:first-of-type) {
-  border-top: 1px solid var(--prefs-line);
-}
-.prefs-section:nth-of-type(even) {
+  padding: 10px 8px;
+  overflow-y: auto;
+  border-right: 1px solid var(--prefs-line);
   background: var(--color-background-secondary-default);
 }
-.prefs-section-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, 84px);
-  gap: 8px;
-  justify-items: center;
-  align-items: start;
+.prefs-search {
+  margin-bottom: 6px;
+}
+.prefs-group {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.prefs-group + .prefs-group {
+  margin-top: 8px;
+}
+.prefs-group-name {
+  padding: 4px 8px 2px;
 }
 .prefs-item {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: 8px;
-  width: 84px;
-  padding: 8px 0;
+  min-height: 30px;
+  padding: 3px 8px 3px 5px;
   border-radius: var(--radius-2lg);
-  text-align: center;
   outline: none;
   transition: background-color var(--transition-duration-fast) var(--ease-plain);
 }
-@media (hover: hover) and (pointer: fine) {
-  .prefs-item:hover {
-    background: var(--color-background-primary-hover);
-  }
-  .prefs-section:nth-of-type(even) .prefs-item:hover {
-    background: var(--color-background-secondary-hover);
-  }
-}
 .prefs-item:focus-visible {
   outline: 2px solid var(--color-border-focus-ring);
-  outline-offset: 2px;
+  outline-offset: -2px;
 }
-/* The mark sits on a disc, as BoardUI's settings rail draws its marks: a
-   secondary disc on the plain band, a primary one on the tinted band. */
+/* The mark on a small tile, as a Mac's are. */
 .prefs-item-mark {
-  position: relative;
   display: grid;
   place-items: center;
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-2lg);
-  background: var(--color-background-secondary-default);
-  color: var(--color-foreground-icon-primary);
-  z-index: 1;
-  transition:
-    background-color var(--transition-duration-fast) var(--ease-plain),
-    filter var(--transition-duration-fast) var(--ease-plain);
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+  border-radius: 7px;
 }
-.prefs-section:nth-of-type(even) .prefs-item-mark {
-  background: var(--color-stat-card-icon-background);
-  box-shadow: var(--shadow-card);
+.prefs-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
 }
-.prefs-item:active .prefs-item-mark {
-  filter: brightness(0.92);
-}
-.prefs-item-label {
-  min-height: 2.4em;
-  z-index: 1;
-}
-
-/* A search dims the grid; the panes that match punch through, the one
-   under the hand brightest. */
-.prefs-grid[data-searching]::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  background: var(--prefs-scrim);
-  pointer-events: none;
-  animation: prefs-scrim-in var(--transition-duration-fast)
-    var(--ease-out-quart);
-}
-.prefs-grid[data-searching] .prefs-item[data-hit] {
-  position: relative;
-  z-index: 2;
-}
-.prefs-item[data-hit] .prefs-item-mark::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 56px;
-  height: 56px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  /* The accent is what a person is meant to look at, so a match glows in
-     it, and the one under the hand glows brighter. */
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--color-accent-500) 42%, transparent) 0%,
-    color-mix(in srgb, var(--color-accent-500) 42%, transparent) 64%,
-    transparent 86%
-  );
-  z-index: -1;
-  animation: prefs-spot-in var(--transition-duration-base) var(--ease-out-quart);
-}
-.prefs-item[data-lit] .prefs-item-mark::before {
-  background: radial-gradient(
-    circle,
-    color-mix(in srgb, var(--color-accent-500) 78%, transparent) 0%,
-    color-mix(in srgb, var(--color-accent-500) 78%, transparent) 64%,
-    transparent 86%
-  );
-}
-@keyframes prefs-spot-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, -50%) scale(0.7);
-  }
-  to {
-    opacity: 1;
-    transform: translate(-50%, -50%) scale(1);
-  }
-}
-@keyframes prefs-scrim-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .prefs-search-menu,
-  .prefs-grid[data-searching]::before,
-  .prefs-item[data-hit] .prefs-item-mark::before {
-    animation: none;
-  }
-}
-
 /* A pane: its wells, one below another, centred however wide the window
    is. */
 .prefs-pane {
-  padding: 20px 20px 32px;
+  padding: 24px 24px 32px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
   flex: 1;
 }
 .prefs-pane > * {
   width: 100%;
   max-width: var(--prefs-width);
   margin-inline: auto;
+}
+/* On a phone the rail is a strip along the top: the search, then the
+   panes as a row that scrolls sideways, and the pane under it. */
+@media (max-width: 639px) {
+  .prefs {
+    flex-direction: column;
+  }
+  .prefs-side {
+    width: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    padding: 8px;
+    overflow: visible;
+    border-right: 0;
+    border-bottom: 1px solid var(--prefs-line);
+  }
+  .prefs-search {
+    width: 100%;
+    margin-bottom: 2px;
+  }
+  .prefs-group {
+    display: contents;
+  }
+  .prefs-group-name {
+    display: none;
+  }
+  .prefs-item {
+    min-height: 34px;
+  }
 }
 
 /* Under reduced motion the travel goes and the meaning stays: a menu or a

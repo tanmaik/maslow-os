@@ -213,21 +213,9 @@ async function ports() {
     .sort((a, b) => a.port - b.port);
 }
 
-// Whose credentials Claude Code runs on here: managed while the machine
-// holds a key of ours and the person has not chosen their own; own
-// otherwise; none when the machine holds no key at all.
-async function auth() {
-  if (!process.env.MODEL_KEY) return "none";
-  const choice = await readFile(`${HOME}/.config/maslow/auth`, "utf8").catch(
-    () => "managed",
-  );
-  return choice.trim() === "own" ? "own" : "managed";
-}
-
 export async function stats() {
   const disk = await statfs("/data").catch(() => null);
   return {
-    auth: await auth(),
     cpu,
     memory: memory(),
     used,

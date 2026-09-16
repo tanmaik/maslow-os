@@ -8,3 +8,9 @@ export PATH="/opt/maslow/bin:$NPM_CONFIG_PREFIX/bin:$PNPM_HOME:$HOME/.local/bin:
 # An address a program opens is offered on the person's terminal, to open
 # on their own device with their own logins.
 export BROWSER=/opt/maslow/bin/open
+# A word on the way in: once per shell, for a person at a terminal and
+# never for a program.
+[ -n "$PS1" ] && [ -t 1 ] && [ -z "$MASLOW_WELCOMED" ] && {
+  export MASLOW_WELCOMED=1
+  /opt/maslow/bin/welcome
+}

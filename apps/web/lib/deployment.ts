@@ -200,7 +200,7 @@ function computers(): Computers {
 function models(): Models {
   const provisioningKey = process.env.OPENROUTER_PROVISIONING_KEY;
   if (!provisioningKey) return { kind: "none" };
-  return { kind: "openrouter", provisioningKey, capUsd: 10 };
+  return { kind: "openrouter", provisioningKey, capUsd: 5 };
 }
 
 // The sweep is what meters and cleans; production without its cron's

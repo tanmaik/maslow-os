@@ -137,6 +137,14 @@ async function narrow(q: Query, opts: ReadOptions) {
     opts.since ?? null,
     opts.until ?? null,
     opts.query?.trim() || null,
+    // The same words as a prefix search, so a word still being typed
+    // already finds what it is the start of.
+    opts.query
+      ?.split(/\s+/)
+      .map((w) => w.replace(/[^\p{L}\p{N}]/gu, ""))
+      .filter(Boolean)
+      .map((w) => `${w}:*`)
+      .join(" & ") || null,
   ];
   const where = [
     "($1::boolean or deleted_at is null)",
@@ -153,7 +161,9 @@ async function narrow(q: Query, opts: ReadOptions) {
            and p.id in (select same_record($4)))))`,
     "($5::timestamptz is null or coalesce(occurred_at, created_at) >= $5)",
     "($6::timestamptz is null or coalesce(occurred_at, created_at) < $6)",
-    "($7::text is null or search @@ websearch_to_tsquery('english', $7))",
+    `($7::text is null
+       or search @@ websearch_to_tsquery('english', $7)
+       or search @@ to_tsquery('english', $8))`,
     scope === "mine"
       ? "person_id = current_member()"
       : scope === "shared"

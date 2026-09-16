@@ -27,7 +27,6 @@ type About = {
     memory: { used: number; total: number };
     disk: number | null;
     free: number | null;
-    auth: "managed" | "own" | "none" | null;
   } | null;
 };
 
@@ -172,14 +171,6 @@ export function AboutComputer({
                 </p>
               )}
               <p>machine {about?.machine ?? "not made yet"}</p>
-              <p>
-                Claude Code on{" "}
-                {s?.auth === "own"
-                  ? "your own account"
-                  : s?.auth === "managed"
-                    ? "our key"
-                    : "…"}
-              </p>
             </div>
           </div>
         </div>

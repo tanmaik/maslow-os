@@ -6,8 +6,12 @@ import {
   useEffect,
   useRef,
   type ReactNode,
+  type Ref,
 } from "react";
 import { createPortal } from "react-dom";
+
+import type { Mark } from "@/app/room/blocks";
+import { cx } from "@/utils/cx";
 
 // A window's bar has room for the panel's own controls: after the name,
 // or, for one that stands for the panel as a whole, before it, right
@@ -38,11 +42,15 @@ export function InBar({
   children,
   as,
   leading = false,
+  name = true,
   phone = "overflow",
 }: {
   children: ReactNode;
   as?: (controls: ReactNode) => ReactNode;
   leading?: boolean;
+  // Whether the window's name still stands beside these: a control that
+  // says where the panel is, an address, is the name.
+  name?: boolean;
   // Where these controls go on a phone: the sheet the bar opens, or the
   // strip under it.
   phone?: "strip" | "overflow";
@@ -63,6 +71,7 @@ export function InBar({
       // on them neither drags nor fills the screen.
       <span
         className="contents"
+        data-nameless={name ? undefined : ""}
         onPointerDown={(e) => e.stopPropagation()}
         onDoubleClick={(e) => e.stopPropagation()}
       >
@@ -74,6 +83,44 @@ export function InBar({
   // and are drawn only while it is open: the bar has no room for them.
   if (bar?.phone) return null;
   return <>{as ? as(children) : children}</>;
+}
+
+// One control in a window's bar: an icon with no frame, lit under the
+// hand. A frame around a control in a bar that is already a frame is a
+// frame too many.
+export function BarButton({
+  icon: Icon,
+  label,
+  onClick,
+  pressed,
+  title,
+  className,
+  ref,
+}: {
+  icon: Mark;
+  label: string;
+  onClick: () => void;
+  pressed?: boolean;
+  title?: string;
+  className?: string;
+  ref?: Ref<HTMLButtonElement>;
+}) {
+  return (
+    <button
+      ref={ref}
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      title={title}
+      onClick={onClick}
+      className={cx(
+        "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-2lg text-foreground-icon-secondary transition-colors duration-fast ease-plain outline-none hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring",
+        className,
+      )}
+    >
+      <Icon className="size-4" aria-hidden />
+    </button>
+  );
 }
 
 // Holds this panel's window open until its own question is answered: an

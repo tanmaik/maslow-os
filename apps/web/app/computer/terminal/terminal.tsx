@@ -4,6 +4,8 @@ import "@xterm/xterm/css/xterm.css";
 
 import {
   RiAddLine,
+  RiCheckLine,
+  RiFileCopyLine,
   RiLayoutColumnLine,
   RiLayoutRowLine,
   RiSideBarLine,
@@ -16,14 +18,16 @@ import { Terminal as Xterm } from "@xterm/xterm";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
-import { InBar } from "@/app/room/panel";
+import { BarButton, InBar } from "@/app/room/panel";
 import { Button } from "@/components/base/buttons/button";
-import {
-  ButtonGroup,
-  ButtonGroupItem,
-} from "@/components/base/buttons/button-group";
-import { IconButton } from "@/components/base/buttons/icon-button";
 import { CloseButton } from "@/components/base/buttons/close-button";
+import { IconButton } from "@/components/base/buttons/icon-button";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { liveSocket } from "@/lib/live";
 import { FAST, LEAVE } from "@/lib/motion";
@@ -193,6 +197,8 @@ export function Terminal({
   const term = useRef<Xterm | null>(null);
   const [away, setAway] = useState<string | null>("Connecting…");
   const [offered, setOffered] = useState<string | null>(null);
+  // Whether the offered address was just copied, shown on its mark.
+  const [copied, setCopied] = useState(false);
   // Words the machine copied that this device's browser would not take.
   const [kept, setKept] = useState<string | null>(null);
   // Why something a person tried did not happen.
@@ -204,6 +210,10 @@ export function Terminal({
   // double-click on a name opens it, Enter keeps it, Escape leaves it.
   const [naming, setNaming] = useState<number | null>(null);
   const [draft, setDraft] = useState("");
+  const name = (w: Window) => {
+    setDraft(shellName(w.name));
+    setNaming(w.index);
+  };
   // The shell just picked, marked before the machine has answered, so the
   // rail turns under the hand rather than a round trip later. The machine's
   // own list takes over the moment it agrees, and in any case two seconds on.
@@ -444,7 +454,8 @@ export function Terminal({
             if (m.data instanceof ArrayBuffer) t.write(new Uint8Array(m.data));
             else {
               const said = JSON.parse(m.data as string) as {
-                open?: string | { port?: number; path?: string };
+                open?:
+                  string | { port?: number; path?: string; file?: boolean };
                 windows?: Window[];
               };
               // An address is offered, to be opened on this device. A
@@ -533,16 +544,37 @@ export function Terminal({
           across the terminal's rows cannot be picked up from them. */}
       {offered && (
         <>
-          <div className="flex items-center gap-2 border-b border-separator-border bg-background-secondary-default px-2 py-2">
-            <span className="min-w-0 flex-1 truncate text-body-regular text-text-secondary">
-              {offered}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator-border bg-background-secondary-default px-2 py-1.5">
+            <span className="shrink-0 text-caption-1-regular text-text-tertiary">
+              Your computer asked to open
+            </span>
+            <span className="flex min-w-0 flex-1 items-center gap-1">
+              <span className="min-w-0 truncate text-body-regular text-text-secondary">
+                {offered}
+              </span>
+              <IconButton
+                size="small"
+                icon={copied ? RiCheckLine : RiFileCopyLine}
+                aria-label="Copy the address"
+                onClick={() => {
+                  void navigator.clipboard.writeText(offered);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }}
+              />
             </span>
             <Button
               size="small"
               variant="secondary"
-              onClick={() => void navigator.clipboard.writeText(offered)}
+              onClick={() => {
+                window.postMessage(
+                  { maslow: "open", url: offered },
+                  location.origin,
+                );
+                setOffered(null);
+              }}
             >
-              Copy address
+              Open in the computer's browser
             </Button>
             <Button
               size="small"
@@ -551,7 +583,7 @@ export function Terminal({
                 setOffered(null);
               }}
             >
-              Open {new URL(offered).host} on this device
+              Open on this device
             </Button>
             <CloseButton
               size="sm"
@@ -593,56 +625,40 @@ export function Terminal({
           />
         </div>
       )}
-      {/* The list of shells is shown or hidden from the bar. */}
+      {/* The terminal's controls, together at the far end of the bar, away
+          from the name: the list of shells shown or hidden, and the shell
+          in view split beside or below itself, as Command-D and
+          Command-Shift-D do. */}
       <InBar
-        leading
         as={(controls) => (
-          // 44 of bar and its hairline below it, so the control inside
-          // lands on whole pixels, on the card's own 8px rule.
-          <div className="flex h-[45px] shrink-0 items-center border-b border-separator-border px-2">
+          <div className="flex h-8 shrink-0 items-center justify-end border-b border-separator-border px-2">
             {controls}
           </div>
         )}
       >
-        <IconButton
-          ref={leave}
-          size="small"
-          icon={RiSideBarLine}
-          aria-label={shown ? "Hide the shells list" : "Show the shells list"}
-          aria-pressed={shown}
-          title={ESCAPE}
-          onClick={toggleRail}
-          className={cx(!shown && "text-foreground-icon-tertiary")}
-        />
-      </InBar>
-      {/* The shell in view split beside or below itself, as the keys
-          Command-D and Command-Shift-D do: a pair at the far end of the
-          bar, away from the name. */}
-      <InBar
-        as={(controls) => (
-          <div className="flex h-[45px] shrink-0 items-center justify-end border-b border-separator-border px-2">
-            {controls}
-          </div>
-        )}
-      >
-        <ButtonGroup size="small" className="ml-auto" aria-label="Split">
-          <ButtonGroupItem
-            size="small"
-            iconOnly
-            leadingIcon={RiLayoutColumnLine}
-            aria-label="Split beside"
+        <span className="ml-auto flex items-center gap-1">
+          <BarButton
+            ref={leave}
+            icon={RiSideBarLine}
+            label={shown ? "Hide the shells list" : "Show the shells list"}
+            pressed={shown}
+            title={ESCAPE}
+            onClick={toggleRail}
+            className={cx(!shown && "text-foreground-icon-tertiary")}
+          />
+          <BarButton
+            icon={RiLayoutColumnLine}
+            label="Split beside"
             title="Split beside (⌘D)"
             onClick={() => socket.current?.send(encoder.encode(`${PREFIX}%`))}
           />
-          <ButtonGroupItem
-            size="small"
-            iconOnly
-            leadingIcon={RiLayoutRowLine}
-            aria-label="Split below"
+          <BarButton
+            icon={RiLayoutRowLine}
+            label="Split below"
             title="Split below (⌘⇧D)"
             onClick={() => socket.current?.send(encoder.encode(`${PREFIX}"`))}
           />
-        </ButtonGroup>
+        </span>
       </InBar>
       <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
         {/* The session's shells: down the side on a wide window, where the
@@ -713,56 +729,76 @@ export function Terminal({
                           />
                         </div>
                       ) : (
-                        <button
-                          type="button"
-                          aria-current={on ? "true" : undefined}
-                          onClick={() => {
-                            pick(w.index);
-                            if (!wide) setSheet(false);
-                          }}
-                          title="Double-click to rename"
-                          onDoubleClick={() => {
-                            setDraft(shellName(w.name));
-                            setNaming(w.index);
-                          }}
-                          className={cx(
-                            "flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-2lg p-2 text-left outline-none",
-                            "focus-visible:ring-2 focus-visible:ring-border-focus-ring",
-                            !wide && "min-h-11",
-                            windows.length > 1 && "pr-8",
-                            // The mark is a choice, not a hover: it lands the
-                            // moment it is made. Hover alone takes its time.
-                            on
-                              ? "bg-accent-600"
-                              : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover",
-                          )}
-                        >
-                          <RiTerminalBoxLine
-                            className={cx(
-                              "size-5 shrink-0",
-                              on
-                                ? "text-text-white"
-                                : "text-foreground-icon-secondary",
-                            )}
-                            aria-hidden
-                          />
-                          <span
-                            className={cx(
-                              "truncate text-body-medium",
-                              on ? "text-text-white" : "text-text-secondary",
-                            )}
+                        // The row's menu, on a right-click or a long press,
+                        // holds what a double-click and the close do.
+                        <ContextMenu>
+                          <ContextMenuTrigger
+                            render={
+                              <button
+                                type="button"
+                                aria-current={on ? "true" : undefined}
+                                onClick={() => {
+                                  pick(w.index);
+                                  if (!wide) setSheet(false);
+                                }}
+                                title="Double-click to rename"
+                                onDoubleClick={() => name(w)}
+                                className={cx(
+                                  "flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-2lg p-2 text-left outline-none",
+                                  "focus-visible:ring-2 focus-visible:ring-border-focus-ring",
+                                  !wide && "min-h-11",
+                                  windows.length > 1 && "pr-8",
+                                  // The mark is a choice, not a hover: it lands the
+                                  // moment it is made. Hover alone takes its time.
+                                  on
+                                    ? "bg-accent-600"
+                                    : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover",
+                                )}
+                              />
+                            }
                           >
-                            {shellName(w.name)}
-                          </span>
-                          <span
-                            className={cx(
-                              "ml-auto shrink-0 text-caption-1-medium tabular-nums",
-                              on ? "text-text-white" : "text-text-secondary",
+                            <RiTerminalBoxLine
+                              className={cx(
+                                "size-5 shrink-0",
+                                on
+                                  ? "text-text-white"
+                                  : "text-foreground-icon-secondary",
+                              )}
+                              aria-hidden
+                            />
+                            <span
+                              className={cx(
+                                "truncate text-body-medium",
+                                on ? "text-text-white" : "text-text-secondary",
+                              )}
+                            >
+                              {shellName(w.name)}
+                            </span>
+                            <span
+                              className={cx(
+                                "ml-auto shrink-0 text-caption-1-medium tabular-nums",
+                                on ? "text-text-white" : "text-text-secondary",
+                              )}
+                            >
+                              {w.index}
+                            </span>
+                          </ContextMenuTrigger>
+                          {/* The menu leaves the hand where it is: Rename
+                            puts it in the name field, and a menu that took
+                            it back would close the field at once. */}
+                          <ContextMenuContent finalFocus={false}>
+                            <ContextMenuItem onClick={() => name(w)}>
+                              Rename
+                            </ContextMenuItem>
+                            {windows.length > 1 && (
+                              <ContextMenuItem
+                                onClick={() => say({ close: w.index })}
+                              >
+                                Close
+                              </ContextMenuItem>
                             )}
-                          >
-                            {w.index}
-                          </span>
-                        </button>
+                          </ContextMenuContent>
+                        </ContextMenu>
                       )}
                       {/* Closes the shell, whatever is in it; the last one has
                         no close, since it would take the terminal with it. */}

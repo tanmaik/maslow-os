@@ -11,7 +11,6 @@ import {
   ChartTooltipContent,
   type ChartConfig,
 } from "@/components/ui/chart";
-import { Row, Rows } from "@/app/settings/row";
 import { useCountUp } from "@/hooks/use-count-up";
 import type { Stats } from "@/lib/fly";
 import { SIZES, specs, type SizeKey } from "@/lib/sizes";
@@ -156,43 +155,6 @@ export function Numbers({
         />
       </div>
     </div>
-  );
-}
-
-// Whose credentials Claude Code on the computer runs on, and how the person
-// switches. The cap is on our key where this deployment mints one.
-export function ClaudeCode({
-  auth,
-  capUsd,
-}: {
-  auth: Stats["auth"];
-  capUsd: number | null;
-}) {
-  return (
-    <Rows>
-      <Row
-        label="Claude Code"
-        description={
-          auth === "managed"
-            ? `Runs on a key of ours, capped at $${capUsd ?? "?"} a week. In its terminal, "auth own" switches it to credentials you provide.`
-            : auth === "own"
-              ? 'Runs on credentials you provided, by your choice. In its terminal, "auth managed" switches it back to our key.'
-              : auth === "none"
-                ? "Runs on credentials you provide: this computer holds no key of ours."
-                : "Whose credentials it runs on will show once the computer is on the newest image."
-        }
-      >
-        <span className="text-body-regular text-text-primary">
-          {auth === "managed"
-            ? "Our key"
-            : auth === "own"
-              ? "Your credentials"
-              : auth === "none"
-                ? "Yours"
-                : "—"}
-        </span>
-      </Row>
-    </Rows>
   );
 }
 

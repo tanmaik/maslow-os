@@ -6,6 +6,7 @@
 // clock at its right.
 
 import {
+  RiCloseLine,
   RiCloudLine,
   RiCloudyLine,
   RiDrizzleLine,
@@ -140,6 +141,8 @@ function Weather({ computers }: { computers: boolean }) {
 // where this deployment makes no computers.
 function useUpdate(computers: boolean) {
   const [update, setUpdate] = useState<{
+    image: string;
+    readyAt: string;
     when: "now" | "tonight" | "idle" | null;
   } | null>(null);
   useEffect(() => {
@@ -158,7 +161,18 @@ function useUpdate(computers: boolean) {
       clearInterval(beat);
     };
   }, [computers]);
-  return update;
+  // When the person says the update is taken: told to the app, and to
+  // the notice at once.
+  const schedule = async (when: "now" | "tonight" | "idle") => {
+    const res = await fetch("/computer/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ when }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    setUpdate((u) => (u ? { ...u, when } : u));
+  };
+  return { update, schedule };
 }
 
 // A menu's line: BoardUI's row, whose height, padding and highlight are
@@ -211,22 +225,18 @@ export function MenuBar({
   const [makingOrg, setMakingOrg] = useState(false);
   const [about, setAbout] = useState(false);
   const notices = useNotices();
-  // An update waiting is a dot on the Maslow menu and a line inside it:
-  // quiet, since nothing about it is urgent, and gone the moment the
-  // person has said when.
-  const update = useUpdate(computers);
+  // An update waiting is a notice behind the clock, with now, tonight
+  // and when idle on it, and a line in the Maslow menu: quiet, since
+  // nothing about it is urgent, and the notice goes the moment the person
+  // has said when.
+  const { update, schedule } = useUpdate(computers);
+  const waiting = notices.waiting + (update && !update.when ? 1 : 0);
   return (
     <div className="mac-top-menubar text-caption-1-medium text-text-white fixed top-0 right-0 left-0 z-[60] flex items-center pt-[env(safe-area-inset-top)] pr-[calc(0.5rem+env(safe-area-inset-right))] pl-[calc(0.5rem+env(safe-area-inset-left))]">
       <Menubar className="flex h-full shrink-0 items-stretch gap-0 rounded-none border-none bg-transparent p-0 whitespace-nowrap">
         <MenubarMenu>
           <MenubarTrigger className={`text-caption-1-semibold ${name}`}>
             Maslow
-            {update && !update.when && (
-              <span
-                aria-label="An update is ready"
-                className="bg-green-500 ml-1 inline-block size-1.5 rounded-full align-middle"
-              />
-            )}
           </MenubarTrigger>
           <MenubarContent align="start" alignOffset={0} sideOffset={1}>
             <MenubarItem className={item} onClick={() => setAbout(true)}>
@@ -349,15 +359,39 @@ export function MenuBar({
                 Nothing is open
               </MenubarItem>
             )}
+            {/* Every window, each closed from its row without leaving the
+                menu, and all of them at once. */}
             {open.map((w) => (
               <MenubarItem
                 key={w.card.id}
-                className={item}
+                className={`${item} group/w`}
                 onClick={() => onFront(w)}
               >
-                {w.card.stowed ? `${w.card.title} (put away)` : w.card.title}
+                <span className="min-w-0 flex-1 truncate">
+                  {w.card.stowed ? `${w.card.title} (put away)` : w.card.title}
+                </span>
+                <button
+                  type="button"
+                  aria-label={`Close ${w.card.title}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onClose(w);
+                  }}
+                  className="ml-2 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-foreground-icon-tertiary opacity-0 transition-opacity duration-instant ease-plain group-hover/w:opacity-100 hover:bg-background-tertiary-hover hover:text-text-primary focus-visible:opacity-100"
+                >
+                  <RiCloseLine className="size-3.5" aria-hidden />
+                </button>
               </MenubarItem>
             ))}
+            {open.length > 1 && (
+              <MenubarItem
+                className={item}
+                onClick={() => open.forEach((w) => onClose(w))}
+              >
+                Close all windows
+              </MenubarItem>
+            )}
             <MenubarSeparator />
             {/* What the keys do to the window in front, each with its key. */}
             <MenubarItem
@@ -436,16 +470,7 @@ export function MenuBar({
           </MenubarContent>
         </MenubarMenu>
       </Menubar>
-      <div className="ml-auto flex h-full items-center gap-3">
-        {/* The command bar, for a hand that has not learned the key yet. */}
-        <button
-          type="button"
-          aria-label="Search (⌘K)"
-          onClick={onSearch}
-          className="focus-visible:outline-border-focus-ring duration-fast ease-plain grid size-[22px] place-items-center rounded-lg outline-none transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1"
-        >
-          <RiSearchLine aria-hidden className="size-4" />
-        </button>
+      <div className="ml-auto flex h-full items-center gap-1.5">
         {/* Who is at the desk, and their own pane of Settings. Their other
             orgs and the way out are the Maslow menu's. */}
         {you && (
@@ -475,23 +500,32 @@ export function MenuBar({
           </Menubar>
         )}
         {you && <Weather computers={computers} />}
+        {/* The command bar, for a hand that has not learned the key yet. */}
+        <button
+          type="button"
+          aria-label="Search (⌘K)"
+          onClick={onSearch}
+          className="focus-visible:outline-border-focus-ring duration-fast ease-plain grid size-[22px] place-items-center rounded-lg outline-none transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1"
+        >
+          <RiSearchLine aria-hidden className="size-4" />
+        </button>
         {/* The clock, and behind it everything waiting on the person: a
             count of the asks nobody has answered, a dot while anything is
             unread, and the panel itself. */}
         <button
           type="button"
           aria-label={
-            notices.waiting > 0
-              ? `Notifications, ${notices.waiting} waiting on you`
+            waiting > 0
+              ? `Notifications, ${waiting} waiting on you`
               : "Notifications"
           }
           aria-expanded={notices.open}
           onClick={() => notices.show(!notices.open)}
           className="focus-visible:outline-border-focus-ring duration-fast ease-plain flex items-center gap-1.5 rounded-lg px-1 outline-none transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1 aria-expanded:bg-white/15"
         >
-          {notices.waiting > 0 ? (
-            <span className="text-caption-2-semibold bg-accent-500 text-text-white grid h-4 min-w-4 place-items-center rounded-full px-1 tabular-nums">
-              {notices.waiting}
+          {waiting > 0 ? (
+            <span className="text-caption-2-semibold bg-accent-500 text-text-white flex h-4 min-w-4 items-center justify-center rounded-full px-1 leading-none tabular-nums">
+              {waiting}
             </span>
           ) : notices.unread > 0 ? (
             <span className="bg-accent-500 size-1.5 rounded-full" />
@@ -499,7 +533,11 @@ export function MenuBar({
           <Clock />
         </button>
       </div>
-      <NoticesPanel notices={notices} />
+      <NoticesPanel
+        notices={notices}
+        update={update && !update.when ? update : null}
+        onUpdate={schedule}
+      />
       <NoticeToasts notices={notices} />
       <NewOrgDialog open={makingOrg} onOpenChange={setMakingOrg} />
       <AboutComputer

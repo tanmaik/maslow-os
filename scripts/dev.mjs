@@ -1,6 +1,9 @@
+import { spawn } from "node:child_process";
+import path from "node:path";
+
 import { answerTheBrain } from "./brain.mjs";
 import { renewLeases } from "./fly.mjs";
-import { checkout, devSecrets, freePort, startStack } from "./stack.mjs";
+import { checkout, devSecrets, freePort, root, startStack } from "./stack.mjs";
 
 // Development runs the real thing where the dev secrets hold a key —
 // WorkOS, the bucket, mail, Composio, Voyage — and fakes the rest, saying
@@ -60,9 +63,49 @@ if (stack.vendors.computers) {
 }
 console.log(`checkout  ${checkout}`);
 
+// Agentation's server, where a note made on the page lands, runs beside
+// the stack unless one already answers on its port, another checkout's or
+// a Claude session's: then that one serves, since every note goes to the
+// same place either way.
+const COMMENTS = "http://localhost:4747";
+const answering = () =>
+  fetch(`${COMMENTS}/health`, { signal: AbortSignal.timeout(1000) }).then(
+    (r) => r.ok,
+    () => false,
+  );
+let comments = null;
+if (!(await answering())) {
+  comments = spawn(
+    process.execPath,
+    [
+      path.join(
+        root,
+        "apps",
+        "web",
+        "node_modules",
+        "agentation-mcp",
+        "dist",
+        "cli.js",
+      ),
+      "server",
+    ],
+    { stdio: "ignore" },
+  );
+  for (let i = 0; i < 20 && !(await answering()); i++)
+    await new Promise((r) => setTimeout(r, 250));
+}
+console.log(
+  `comments  ${
+    (await answering())
+      ? `${COMMENTS}${comments ? "" : " (already up)"}`
+      : "off: Agentation's server did not start"
+  }`,
+);
+
 const shutdown = () => {
   if (leases) clearInterval(leases);
   if (brains) brains();
+  comments?.kill();
   return stack.stop().then(() => process.exit(0));
 };
 process.on("SIGINT", shutdown);

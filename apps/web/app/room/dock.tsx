@@ -103,7 +103,6 @@ export function useDockIconSize() {
   return size;
 }
 
-const AUTO_HIDE_DELAY_PHONE = 4000;
 const AUTO_HIDE_DELAY_DESKTOP = 6000;
 const AUTO_HIDE_COOLDOWN = 500;
 
@@ -143,11 +142,6 @@ const moved = (list: string[], from: number, to: number): string[] => {
   if (one !== undefined) out.splice(to, 0, one);
   return out;
 };
-
-// A swipe up from the bottom edge, as against a sideways one.
-const DOCK_SWIPE_UP_THRESHOLD_PX = 48;
-const shouldRevealDockFromSwipeUp = (deltaX: number, deltaY: number) =>
-  deltaY < -DOCK_SWIPE_UP_THRESHOLD_PX && Math.abs(deltaY) > Math.abs(deltaX);
 
 // Which icon the hand is on, and whether it came straight from another,
 // in which case the label swaps without its usual fade.
@@ -218,7 +212,6 @@ const DockIconButton = memo(function DockIconButton({
   draggable = false,
   onDragStart,
   onDragEnd,
-  onSwipeUp,
   badge,
   menu,
   onMenuOpen,
@@ -253,9 +246,6 @@ const DockIconButton = memo(function DockIconButton({
   draggable?: boolean;
   onDragStart?: (e: DragEvent) => void;
   onDragEnd?: () => void;
-  // A thumb flicked up off the icon: on a phone, the way to put its
-  // window away without going to it first.
-  onSwipeUp?: () => void;
   // Drawn over the icon's corner: a count.
   badge?: ReactNode;
   // What a right-click or a long press offers.
@@ -329,39 +319,11 @@ const DockIconButton = memo(function DockIconButton({
   const sizeSpring = useSpring(targetSize, SWELL);
   const widthValue = isPresent ? sizeSpring : 0;
 
-  // A thumb that went up off the icon asked for something else than the
-  // tap it would otherwise have been.
-  const flicked = useRef(false);
-
   const button = (
     <button
       type="button"
       aria-label={label}
-      onPointerDown={(e) => {
-        flicked.current = false;
-        if (!onSwipeUp || e.pointerType === "mouse") return;
-        const began = { x: e.clientX, y: e.clientY };
-        // The thumb leaves the icon as it goes up, so the lift is heard
-        // from the page and not from the icon it started on.
-        const up = (m: globalThis.PointerEvent) => {
-          window.removeEventListener("pointerup", up);
-          window.removeEventListener("pointercancel", up);
-          const dy = m.clientY - began.y;
-          if (
-            dy < -DOCK_SWIPE_UP_THRESHOLD_PX &&
-            Math.abs(dy) > Math.abs(m.clientX - began.x)
-          ) {
-            flicked.current = true;
-            onSwipeUp();
-          }
-        };
-        window.addEventListener("pointerup", up);
-        window.addEventListener("pointercancel", up);
-      }}
-      onClick={() => {
-        if (flicked.current) return void (flicked.current = false);
-        onClick();
-      }}
+      onClick={onClick}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
       draggable={draggable}
@@ -400,12 +362,12 @@ const DockIconButton = memo(function DockIconButton({
             transition={FAST}
             className="absolute"
             style={
-              // On a shelf along a side, the dot goes on the edge facing
-              // the desk, not the edge facing off the screen.
+              // The dot sits on the edge facing off the screen, as it does
+              // under a shelf along the bottom.
               side === "bottom"
                 ? { bottom: -9 }
                 : {
-                    [side === "left" ? "right" : "left"]: -9,
+                    [side]: -9,
                     top: "50%",
                     marginTop: -6,
                   }
@@ -540,7 +502,6 @@ function DockDivider({
 }
 
 export function Dock({
-  wide,
   hiding,
   magnify,
   side,
@@ -554,16 +515,14 @@ export function Dock({
   onPick,
   onPin,
   onFront,
-  onStow,
   onClose,
 }: {
-  wide: boolean;
   // Whether the dock hides when the hand leaves it, and whether its
   // icons swell under the pointer; a right-click on the shelf turns
   // either.
   hiding: boolean;
   magnify: boolean;
-  // The edge it lies along; a phone's is always the bottom.
+  // The edge it lies along.
   side: Side;
   onHiding: (to: boolean) => void;
   onMagnify: (to: boolean) => void;
@@ -578,11 +537,8 @@ export function Dock({
   onPin: (b: Dragged) => void;
   // A window brought to the front, back from the dock if it was put away.
   onFront: (w: Held) => void;
-  // A window put away, as a thumb flicked up off its icon asks.
-  onStow: (w: Held) => void;
   onClose: (w: Held) => void;
 }) {
-  const isPhone = !wide;
   const vertical = side !== "bottom";
   const iconSize = useDockIconSize();
   // The shelf's thickness and one icon's stretch along it, both measured
@@ -631,7 +587,6 @@ export function Dock({
       autoHideTimerRef.current = null;
     }
     if (busy) return;
-    const delay = isPhone ? AUTO_HIDE_DELAY_PHONE : AUTO_HIDE_DELAY_DESKTOP;
     autoHideTimerRef.current = setTimeout(() => {
       if (!isMouseInZoneRef.current) {
         setIsDockVisible(false);
@@ -641,8 +596,8 @@ export function Dock({
         autoHideTimerRef.current = null;
         restartAutoHideTimer();
       }
-    }, delay);
-  }, [isPhone, hiding, busy]);
+    }, AUTO_HIDE_DELAY_DESKTOP);
+  }, [hiding, busy]);
 
   useEffect(() => {
     if (hiding && isDockVisible && !busy) restartAutoHideTimer();
@@ -667,44 +622,6 @@ export function Dock({
     }
     setIsDockVisible(false);
   }, [hiding, busy]);
-
-  // On a phone a swipe up from the bottom edge brings a hidden dock back.
-  useEffect(() => {
-    if (!hiding || isDockVisible || !isPhone) return;
-    const zoneHeight = SHELF + 24;
-    let activePointer: {
-      pointerId: number;
-      startX: number;
-      startY: number;
-    } | null = null;
-    const clearActivePointer = () => {
-      activePointer = null;
-    };
-    const onPointerDown = (e: PointerEvent) => {
-      if (e.pointerType === "mouse") return;
-      if (e.clientY < window.innerHeight - zoneHeight) return;
-      activePointer = {
-        pointerId: e.pointerId,
-        startX: e.clientX,
-        startY: e.clientY,
-      };
-    };
-    const onPointerUp = (e: PointerEvent) => {
-      if (!activePointer || e.pointerId !== activePointer.pointerId) return;
-      const deltaX = e.clientX - activePointer.startX;
-      const deltaY = e.clientY - activePointer.startY;
-      clearActivePointer();
-      if (shouldRevealDockFromSwipeUp(deltaX, deltaY)) showDock();
-    };
-    window.addEventListener("pointerdown", onPointerDown);
-    window.addEventListener("pointerup", onPointerUp);
-    window.addEventListener("pointercancel", clearActivePointer);
-    return () => {
-      window.removeEventListener("pointerdown", onPointerDown);
-      window.removeEventListener("pointerup", onPointerUp);
-      window.removeEventListener("pointercancel", clearActivePointer);
-    };
-  }, [hiding, isDockVisible, isPhone, showDock]);
 
   const stowed = held.filter((w) => w.card.stowed);
 
@@ -884,21 +801,19 @@ export function Dock({
       <ContextMenuCheckboxItem checked={magnify} onCheckedChange={onMagnify}>
         Make the icons swell
       </ContextMenuCheckboxItem>
-      {!isPhone && (
-        <ContextMenuSub>
-          <ContextMenuSubTrigger>Position</ContextMenuSubTrigger>
-          <ContextMenuSubContent>
-            <ContextMenuRadioGroup
-              value={side}
-              onValueChange={(v) => onSide(v as Side)}
-            >
-              <ContextMenuRadioItem value="left">Left</ContextMenuRadioItem>
-              <ContextMenuRadioItem value="bottom">Bottom</ContextMenuRadioItem>
-              <ContextMenuRadioItem value="right">Right</ContextMenuRadioItem>
-            </ContextMenuRadioGroup>
-          </ContextMenuSubContent>
-        </ContextMenuSub>
-      )}
+      <ContextMenuSub>
+        <ContextMenuSubTrigger>Position</ContextMenuSubTrigger>
+        <ContextMenuSubContent>
+          <ContextMenuRadioGroup
+            value={side}
+            onValueChange={(v) => onSide(v as Side)}
+          >
+            <ContextMenuRadioItem value="left">Left</ContextMenuRadioItem>
+            <ContextMenuRadioItem value="bottom">Bottom</ContextMenuRadioItem>
+            <ContextMenuRadioItem value="right">Right</ContextMenuRadioItem>
+          </ContextMenuRadioGroup>
+        </ContextMenuSubContent>
+      </ContextMenuSub>
     </>
   );
   // The icon a window wears: a port's is whatever serves there.
@@ -923,9 +838,6 @@ export function Dock({
         label={b.title}
         icon={src}
         onClick={() => (last ? onFront(last) : onPick(item))}
-        onSwipeUp={
-          isPhone && last && !last.card.stowed ? () => onStow(last) : undefined
-        }
         showIndicator={mine.length > 0}
         mouseX={mouseX}
         magnifyEnabled={effectiveMagnifyEnabled}
@@ -1055,15 +967,6 @@ export function Dock({
                         padding: `${EDGE_PADDING}px ${PADDING}px`,
                         maxWidth: "min(92vw, 980px)",
                         transformOrigin: "center bottom",
-                        overflowX: isPhone ? "auto" : "visible",
-                        overflowY: isPhone ? "hidden" : "visible",
-                        WebkitOverflowScrolling: isPhone ? "touch" : undefined,
-                        overscrollBehaviorX: isPhone ? "contain" : undefined,
-                        // A shelf wider than the phone fades at both ends,
-                        // so it reads as carrying on rather than cut off.
-                        maskImage: isPhone
-                          ? "linear-gradient(to right, transparent, black 12px, black calc(100% - 12px), transparent)"
-                          : undefined,
                       }),
                 }}
                 transition={{
@@ -1200,7 +1103,7 @@ export function Dock({
 
         {/* The edge a hidden dock lies behind: a pointer there brings it
             back. */}
-        {hiding && !isDockVisible && !isPhone && (
+        {hiding && !isDockVisible && (
           <div
             className={cn(
               "fixed z-40",

@@ -4,14 +4,14 @@ import type { Size } from "@maslow/db/computers";
 // apart from it. Every computer starts at the first rung. Shared by the
 // page and the server, so it holds nothing but the ladder.
 export const SIZES = {
-  small: { name: "Small", cpuKind: "shared", cpus: 2, memoryMb: 2048 },
-  medium: { name: "Medium", cpuKind: "shared", cpus: 4, memoryMb: 4096 },
-  large: { name: "Large", cpuKind: "shared", cpus: 8, memoryMb: 8192 },
+  small: { name: "Small", cpuKind: "shared", cpus: 4, memoryMb: 8192 },
+  medium: { name: "Medium", cpuKind: "shared", cpus: 8, memoryMb: 16384 },
+  large: { name: "Large", cpuKind: "performance", cpus: 4, memoryMb: 16384 },
   dedicated: {
     name: "Dedicated",
     cpuKind: "performance",
-    cpus: 2,
-    memoryMb: 8192,
+    cpus: 8,
+    memoryMb: 32768,
   },
 } as const satisfies Record<string, Size & { name: string }>;
 
@@ -22,6 +22,18 @@ export const isSize = (v: unknown): v is SizeKey =>
 
 export const sameSize = (a: Size, b: Size) =>
   a.cpuKind === b.cpuKind && a.cpus === b.cpus && a.memoryMb === b.memoryMb;
+
+// The rung above a computer's: the next one up the whole ladder, so a lift
+// walks small to medium to large to dedicated and reaches the top; a
+// computer on no rung is lifted onto the first with more memory than it
+// has. Null at the top.
+export const above = (c: Size): SizeKey | null => {
+  const rungs = Object.keys(SIZES) as SizeKey[];
+  const on = rungs.findIndex((k) => sameSize(SIZES[k], c));
+  return on >= 0
+    ? (rungs[on + 1] ?? null)
+    : (rungs.find((k) => SIZES[k].memoryMb > c.memoryMb) ?? null);
+};
 
 // The rung a computer is on, or null when it is on none.
 export const sizeOf = (c: Size): SizeKey | null =>

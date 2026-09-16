@@ -1,6 +1,5 @@
 "use client";
 
-import { RiArrowLeftSLine, RiCloseLine, RiMoreLine } from "@remixicon/react";
 import {
   AnimatePresence,
   motion,
@@ -16,10 +15,10 @@ import {
   type ComponentType,
   type DragEvent,
   type PointerEvent,
-  type ReactNode,
 } from "react";
 
 import { LiveBrowser } from "@/app/browser/live";
+import { Look } from "@/app/computer/files/look";
 import { Finder } from "@/app/computer/files/finder";
 import { Agent } from "@/app/computer/agent/agent";
 import { Terminal } from "@/app/computer/terminal/terminal";
@@ -28,7 +27,6 @@ import {
   BLOCKS,
   boundsOf,
   boxOf,
-  markOf,
   pathOf,
   type Bounds,
 } from "@/app/room/blocks";
@@ -47,6 +45,7 @@ import {
 import { MenuBar, type Me } from "@/app/room/menubar";
 import { srcOf } from "@/app/room/wallpapers";
 import { BarSlot } from "@/app/room/panel";
+import { Phone } from "@/app/room/phone";
 import { remember, rememberPaper, type Known } from "@/components/lock-screen";
 import { Kbd } from "@/components/base/kbd/kbd";
 import { Notification } from "@/components/base/notification/notification";
@@ -75,7 +74,6 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 
 // Whether the dock hides when the hand leaves it, and whether its icons
 // swell under the pointer, remembered on this device.
@@ -93,16 +91,16 @@ const EMPTY: Screen = { cards: [] };
 // was just opened. Every other surface is framed as the page it is.
 const PANELS: Record<
   string,
-  ComponentType<{ fresh?: boolean; id?: string }>
+  ComponentType<{ fresh?: boolean; id?: string; href?: string }>
 > = {
   "/computer/agent": Agent,
   "/computer/terminal": Terminal,
   "/computer/files": Finder,
+  "/computer/files/view": Look,
   "/browser": LiveBrowser,
 };
 
-// One page of the rail: the desk on a wide display, or one of its
-// windows on a phone, where each window is a page of its own.
+// One page of the rail: a desk and the windows on it.
 type Page = { key: string; cards: Card[] };
 
 // Whether what is listening is what was listening, so a beat that finds
@@ -114,9 +112,6 @@ const MOST = 32;
 
 // How far past an edge still counts as meaning that edge.
 const OVER = 0.08;
-
-// How far a thumb travels before a drag on a phone's bar is a swipe.
-const SWIPE = 48;
 
 // Where a window goes when it is carried to a side of the desk: the side
 // gives it that half, and either end of that side gives it the quarter
@@ -280,13 +275,6 @@ export function Room({
   const [live, setLive] = useState(ports);
   // The command bar: open or not, and what was typed to open it.
   const [bar, setBar] = useState({ open: false, initial: "" });
-  // A phone's window menu, opened from the name in the bar. What it offers
-  // is done and the sheet is gone in the same breath.
-  const [menu, setMenu] = useState(false);
-  const act = (fn: () => void) => {
-    setMenu(false);
-    fn();
-  };
   // Counted up on every look, so what is watching knows a look happened
   // even when nothing about the ports changed.
   const [looks, setLooks] = useState(0);
@@ -373,7 +361,6 @@ export function Room({
     }
   }, [looks]);
 
-  const [current, setCurrent] = useState(0);
   const [expanded, setExpanded] = useState<string | null>(null);
   // A block picked from the toolbar, waiting to be put down where the
   // person clicks.
@@ -382,8 +369,6 @@ export function Room({
   // pointer: a frame would swallow the drag as its own.
   const [carried, setCarried] = useState(false);
   const [preview, setPreview] = useState<Point | null>(null);
-  const rail = useRef<HTMLDivElement>(null);
-  const still = useReducedMotion();
 
   // Whether the dock hides when the hand leaves it. Hidden, the desk
   // takes the whole page.
@@ -441,8 +426,8 @@ export function Room({
     return () => q.removeEventListener("change", read);
   }, []);
   // The edge the dock lies along, for the desk to keep clear of: none
-  // while it hides, and a phone's is always the bottom.
-  const away: Side | null = hiding ? null : wide ? side : "bottom";
+  // while it hides.
+  const away: Side | null = hiding ? null : side;
 
   // Escape brings an expanded window back down.
   useEffect(() => {
@@ -463,62 +448,22 @@ export function Room({
   // The windows, as the dock and the menu bar list them: a widget is
   // neither open nor put away, it is part of the desk.
   const windows = held.filter((w) => !w.card.pinned);
-  const out = screen.cards.filter((c) => !c.stowed && !c.pinned);
-  const pages: Page[] =
-    wide || out.length === 0
-      ? [{ key: desktop.id, cards: wide ? screen.cards : out }]
-      : out.map((c) => ({ key: `${desktop.id}:${c.id}`, cards: [c] }));
+  const page: Page = { key: desktop.id, cards: screen.cards };
 
-  // A window just opened, waiting for its page to exist.
-  const [opened, setOpened] = useState<string | null>(null);
-  // A window brought to the front, out of the dock if it was put away,
-  // and on a phone the rail taken to it.
+  // A window brought to the front, out of the dock if it was put away.
   const raise = (w: Held) => {
     if (w.card.pinned) return;
     setScreen((l) => {
       const c = l.cards.find((x) => x.id === w.card.id);
       if (!c) return null;
-      // On a phone a window is a page, and the pages stand in the order
-      // they were opened: going to one never moves the rest under the
-      // thumb. On a desk, coming forward is coming to the top of the pile.
-      return wide
-        ? {
-            cards: [
-              ...l.cards.filter((x) => x.id !== w.card.id),
-              { ...c, stowed: false },
-            ],
-          }
-        : {
-            cards: l.cards.map((x) =>
-              x.id === w.card.id ? { ...x, stowed: false } : x,
-            ),
-          };
+      return {
+        cards: [
+          ...l.cards.filter((x) => x.id !== w.card.id),
+          { ...c, stowed: false },
+        ],
+      };
     });
-    if (!wide) setOpened(`${w.screen}:${w.card.id}`);
   };
-  // The rail taken to a window the moment its page exists, and not before.
-  useEffect(() => {
-    if (!opened) return;
-    if (!pages.some((p) => p.key === opened)) return;
-    setOpened(null);
-    requestAnimationFrame(() =>
-      rail.current
-        ?.querySelector(`[data-page="${CSS.escape(opened)}"]`)
-        ?.scrollIntoView({ inline: "start", block: "nearest" }),
-    );
-  }, [opened, pages]);
-
-  // Which page is in view, from how far the rail has been swiped.
-  const track = () => {
-    const el = rail.current;
-    if (!el) return;
-    setCurrent(Math.round(el.scrollLeft / el.clientWidth));
-  };
-  const goTo = (i: number) =>
-    rail.current?.scrollTo({
-      left: i * rail.current.clientWidth,
-      behavior: still ? "auto" : "smooth",
-    });
 
   // How many times the desk has been kept, as this page last saw it. A
   // save names it; one that fell behind is refused, and the desk as it now
@@ -777,13 +722,8 @@ export function Room({
     setPreview(null);
   };
 
-  // A block picked from the dock opens on the desk, and on a phone, where
-  // a window is a page of its own, the rail goes to it: one opened out of
-  // sight is one that did not seem to open at all.
-  const pick = (b: Dragged) => {
-    const made = land(b);
-    if (!wide && made) setOpened(`${desktop.id}:${made.id}`);
-  };
+  // A block picked from the dock opens on the desk.
+  const pick = (b: Dragged) => void land(b);
   // An app as the dock opens it: its last window forward, or a first one.
   const open = (b: Dragged) => {
     const last = windows
@@ -855,14 +795,41 @@ export function Room({
     awaited.current = null;
     show(it);
   }, [looks]);
-  // A file or folder of theirs, named as their home has it: Files, at
-  // that folder, with the file picked.
+  // A folder of theirs, named as their home has it: Files, at that
+  // folder.
   const openFile = (path: string) =>
     pick({
       kind: "page",
       title: path.split("/").filter(Boolean).at(-1) ?? "Files",
       href: `/computer/files?path=${encodeURIComponent(path)}`,
       box: boxOf({ kind: "page", href: "/computer/files" }),
+    });
+  // A web address: the computer's own browser turned to it, the window
+  // already up or a first one.
+  const openBrowser = (url: string) => {
+    const href = `/browser?url=${encodeURIComponent(url)}&at=${Date.now()}`;
+    const had = windows
+      .filter((w) => pathOf(w.card.href) === "/browser")
+      .at(-1);
+    if (had) {
+      raise(had);
+      shape(had.card.id, { href }, true);
+      return;
+    }
+    pick({
+      kind: "page",
+      title: "Agent's browser",
+      href,
+      box: boxOf({ kind: "page", href: "/browser" }),
+    });
+  };
+  // A file of theirs: the Preview window, named for the file.
+  const openView = (path: string) =>
+    pick({
+      kind: "page",
+      title: path.split("/").filter(Boolean).at(-1) ?? "Preview",
+      href: `/computer/files/view?path=${encodeURIComponent(path)}`,
+      box: { w: 0.46, h: 0.62 },
     });
 
   // The next window forward, or the front one to the back.
@@ -883,9 +850,8 @@ export function Room({
       };
     });
 
-  // The window in front on the page being looked at.
-  const page = pages[Math.min(current, pages.length - 1)];
-  const top = page?.cards.filter((c) => !c.stowed && !c.pinned).at(-1);
+  // The window in front.
+  const top = page.cards.filter((c) => !c.stowed && !c.pinned).at(-1);
   const atFront: Held | null = top ? { screen: desktop.id, card: top } : null;
   // What the desk answers to. Command-K opens the bar from anywhere in
   // the room; a plain letter typed with nothing focused opens it with
@@ -970,6 +936,9 @@ export function Room({
         title?: unknown;
         port?: unknown;
         path?: unknown;
+        view?: unknown;
+        file?: unknown;
+        url?: unknown;
       };
       if (asked?.maslow === "command") setBar({ open: true, initial: "" });
       // A record named anywhere on the desk — the menu bar's notices, a
@@ -988,7 +957,10 @@ export function Room({
       // is Files at its folder.
       if (asked?.maslow === "open") {
         if (typeof asked.port === "number") openPort(asked.port);
-        else if (typeof asked.path === "string") openFile(asked.path);
+        else if (typeof asked.view === "string") openView(asked.view);
+        else if (typeof asked.path === "string")
+          (asked.file ? openView : openFile)(asked.path);
+        else if (typeof asked.url === "string") openBrowser(asked.url);
       }
     };
     window.addEventListener("keydown", key);
@@ -1057,6 +1029,8 @@ export function Room({
         onSnap={(place) => top && shape(top.id, PLACES[place]!, true)}
         onSettings={settings}
       />
+      <link rel="prefetch" href="/settings?pane=you" as="document" />
+      <link rel="prefetch" href="/brain" as="document" />
       {trouble && (
         <div className="fixed top-12 right-4 z-50 max-w-sm">
           <Notification
@@ -1090,122 +1064,81 @@ export function Room({
         onPin={pin}
         onPane={settings}
         onRecord={(id, title) => brain(`/brain/records/${id}`, title)}
-        onFile={(path, name) =>
-          pick({
-            kind: "page",
-            title: name,
-            href: `/computer/files?path=${encodeURIComponent(path)}`,
-            box: boxOf({ kind: "page", href: "/computer/files" }),
-          })
-        }
+        onFile={(path) => openView(path)}
       />
-      <div
-        ref={rail}
-        onScroll={track}
-        className={`fixed inset-0 z-10 flex snap-x snap-mandatory overflow-x-auto overflow-y-hidden overscroll-x-contain [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
-          carried ? "[&_iframe]:pointer-events-none" : ""
-        }`}
-      >
-        {pages.map((p, i) => (
-          <Desk
-            key={p.key}
-            page={p}
-            index={i}
-            count={pages.length}
-            current={current}
-            onGo={goTo}
-            onMenu={() => setMenu(true)}
-            wide={wide}
-            away={away}
-            computers={computers}
-            carried={carried}
-            carrying={carrying}
-            preview={preview}
-            expanded={expanded}
-            afresh={afresh}
-            born={born.current}
-            onHover={setPreview}
-            onDrop={(at) => {
-              const item = carrying.current;
-              end();
-              if (item) land(item, at);
-            }}
-            onClose={(key) => void close(key)}
-            onGuard={guard}
-            onShape={shape}
-            onFront={front}
-            onUnpin={unpin}
-            onCarry={setCarried}
-            onExpand={setExpanded}
-            onCollapse={() => setExpanded(null)}
-            onSettings={settings}
-            onSearch={() => setBar({ open: true, initial: "" })}
-            onWallpaper={() => settings("look", "wallpaper")}
-          />
-        ))}
-      </div>
-
-      {/* A phone's window bar folds the front window's menu and the Window
-          menu under its name: a tap there opens both as one sheet. */}
       {!wide && (
-        <PhoneSheet
-          open={menu}
-          onClose={() => setMenu(false)}
-          label={atFront?.card.title ?? "Windows"}
-        >
-          {atFront && (
-            <>
-              <SheetRow
-                onClick={() => act(() => pick(anotherOf(atFront.card)))}
-              >
-                New window
-              </SheetRow>
-              <SheetRow
-                onClick={() =>
-                  act(() => shape(atFront.card.id, { stowed: true }, true))
-                }
-              >
-                Put away
-              </SheetRow>
-              <SheetRow onClick={() => act(() => void close(atFront.card.id))}>
-                Close
-              </SheetRow>
-            </>
-          )}
-          {windows.length > 0 && (
-            <>
-              <div className="bg-separator-border my-2 h-px" />
-              {windows.map((w) => (
-                <SheetRow
-                  key={w.card.id}
-                  current={w.card.id === atFront?.card.id}
-                  onClick={() => act(() => raise(w))}
-                >
-                  {w.card.stowed ? `${w.card.title} (put away)` : w.card.title}
-                </SheetRow>
-              ))}
-            </>
-          )}
-        </PhoneSheet>
+        <Phone
+          cards={screen.cards}
+          ports={live}
+          computers={computers}
+          panels={PANELS}
+          onOpen={open}
+          onAnother={(c) => pick(anotherOf(c))}
+          onFront={(c) => raise({ screen: desktop.id, card: c })}
+          onClose={(key) => void close(key)}
+          onGuard={guard}
+          born={born.current}
+          afresh={afresh}
+        />
       )}
-      <Dock
-        wide={wide}
-        onStow={(w) => shape(w.card.id, { stowed: true }, true)}
-        hiding={hiding}
-        magnify={magnify}
-        side={wide ? side : "bottom"}
-        onHiding={hide}
-        onMagnify={swell}
-        onSide={place}
-        ports={live}
-        held={windows}
-        onPin={pin}
-        onBegin={begin}
-        onEnd={end}
-        onPick={pick}
-        onFront={raise}
-        onClose={(w) => void close(w.card.id)}
-      />
+      {wide && (
+        <div
+          className={`fixed inset-0 z-10 flex ${
+            carried ? "[&_iframe]:pointer-events-none" : ""
+          }`}
+        >
+          {[page].map((p) => (
+            <Desk
+              key={p.key}
+              page={p}
+              away={away}
+              computers={computers}
+              carried={carried}
+              carrying={carrying}
+              preview={preview}
+              expanded={expanded}
+              afresh={afresh}
+              born={born.current}
+              onHover={setPreview}
+              onDrop={(at) => {
+                const item = carrying.current;
+                end();
+                if (item) land(item, at);
+              }}
+              onClose={(key) => void close(key)}
+              onGuard={guard}
+              onShape={shape}
+              onFront={front}
+              onUnpin={unpin}
+              onCarry={setCarried}
+              onExpand={setExpanded}
+              onCollapse={() => setExpanded(null)}
+              onSettings={settings}
+              onSearch={() => setBar({ open: true, initial: "" })}
+              onWallpaper={() => settings("look", "wallpaper")}
+            />
+          ))}
+        </div>
+      )}
+
+      {wide && (
+        <Dock
+          hiding={hiding}
+          magnify={magnify}
+          side={side}
+          onHiding={hide}
+          onMagnify={swell}
+          onSide={place}
+          ports={live}
+          held={windows}
+          onPin={pin}
+          onBegin={begin}
+          onEnd={end}
+          onPick={pick}
+          onFront={raise}
+          onClose={(w) => void close(w.card.id)}
+        />
+      )}
     </>
   );
 }
@@ -1298,12 +1231,6 @@ function Wallpaper({ choice }: { choice: string | null }) {
 // a right-click or a long press.
 function Desk({
   page,
-  index,
-  count,
-  current,
-  onGo,
-  onMenu,
-  wide,
   away,
   computers,
   carried,
@@ -1327,16 +1254,6 @@ function Desk({
   onWallpaper,
 }: {
   page: Page;
-  // Which page of the rail this is, how many there are, and the way to
-  // another: on a phone one window is one page.
-  index: number;
-  count: number;
-  // Which page the rail is on, which every page's dots mark.
-  current: number;
-  onGo: (i: number) => void;
-  // A phone's window menu, opened from the name in its bar.
-  onMenu: () => void;
-  wide: boolean;
   // Whether the desk keeps clear of the dock.
   away: Side | null;
   computers: boolean;
@@ -1439,20 +1356,18 @@ function Desk({
   const middle = (c: Card) => {
     const r = box.current?.getBoundingClientRect();
     if (!r) return null;
-    return wide
-      ? {
-          x: r.left + (c.x + c.w / 2) * size.w,
-          y: r.top + (c.y + c.h / 2) * size.h,
-        }
-      : { x: r.left + size.w / 2, y: r.top + size.h / 2 };
+    return {
+      x: r.left + (c.x + c.w / 2) * size.w,
+      y: r.top + (c.y + c.h / 2) * size.h,
+    };
   };
 
   return (
     <div
       data-page={page.key}
-      className="relative h-full w-full shrink-0 snap-start"
+      className="relative h-full w-full"
       onDragOver={(e) => {
-        if (!carrying.current || !wide) return;
+        if (!carrying.current) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         onHover(pointAt(e.clientX, e.clientY));
@@ -1462,7 +1377,7 @@ function Desk({
           onHover(null);
       }}
       onDrop={(e) => {
-        if (!carrying.current || !wide) return;
+        if (!carrying.current) return;
         e.preventDefault();
         const at = preview ?? pointAt(e.clientX, e.clientY);
         if (at) onDrop(landing(at.x, at.y) ?? at);
@@ -1497,16 +1412,6 @@ function Desk({
         }}
       >
         <WindowFrameSnapZoneIndicator snapZoneStyle={glow()} />
-        {/* A page a window fills has nowhere left to take hold of it: a
-            touch inside a window belongs to what it is showing and never
-            reaches the desk. Both edges stay the desk's, so the next
-            window is always a thumb away. */}
-        {!wide && (
-          <>
-            <div className="pointer-events-auto absolute top-8 bottom-0 left-0 z-30 w-5" />
-            <div className="pointer-events-auto absolute top-8 right-0 bottom-0 z-30 w-5" />
-          </>
-        )}
         <AnimatePresence>
           {size.h > 0 &&
             // Drawn in one steady order and stacked by number, so raising a
@@ -1520,11 +1425,14 @@ function Desk({
                 // A window is a box on the desk in every state it has:
                 // where it was left, where it was carried, the half it
                 // was snapped to, or the whole desk when it is filling
-                // the screen. Nothing teleports, because nothing ever
-                // changes how it is placed — only its four numbers.
-                const box = wide
-                  ? rectOf(full ? WHOLE : c, bounds)
-                  : { left: 0, top: 0, width: size.w, height: size.h };
+                // the screen, which means the whole of it: the most a
+                // surface is worth being holds a window, not the screen.
+                // Nothing teleports, because nothing ever changes how it
+                // is placed — only its four numbers.
+                const box = rectOf(
+                  full ? WHOLE : c,
+                  full ? { min: bounds.min } : bounds,
+                );
                 return (
                   <motion.div
                     key={c.id}
@@ -1541,12 +1449,6 @@ function Desk({
                       card={c}
                       computers={computers}
                       full={full}
-                      wide={wide}
-                      index={index}
-                      count={count}
-                      current={current}
-                      onGo={onGo}
-                      onMenu={onMenu}
                       front={
                         c.id ===
                         page.cards.filter((x) => !x.stowed && !x.pinned).at(-1)
@@ -1579,113 +1481,6 @@ function Desk({
   );
 }
 
-// Which window a phone is looking at, one dot each, along the foot of the
-// window's bar; a tap on a dot goes to that window.
-function Dots({
-  count,
-  current,
-  onGo,
-}: {
-  count: number;
-  current: number;
-  onGo: (i: number) => void;
-}) {
-  if (count < 2) return null;
-  return (
-    <div
-      role="tablist"
-      aria-label="Windows"
-      className="flex h-4 shrink-0 items-center justify-center gap-1 pb-1"
-    >
-      {Array.from({ length: count }, (_, i) => (
-        <button
-          key={i}
-          type="button"
-          role="tab"
-          aria-label={`Window ${i + 1} of ${count}`}
-          aria-selected={i === current}
-          onClick={() => onGo(i)}
-          // 6 of dot in a 44 target, as a finger needs.
-          className="focus-visible:ring-border-focus-ring relative grid h-3 w-8 place-items-center rounded-full outline-none before:absolute before:inset-x-0 before:-inset-y-4 before:content-[''] focus-visible:ring-2"
-        >
-          <span
-            className={`duration-fast ease-plain size-1.5 rounded-full transition-colors ${
-              i === current ? "bg-accent-500" : "bg-foreground-icon-quaternary"
-            }`}
-          />
-        </button>
-      ))}
-    </div>
-  );
-}
-
-// A sheet up from the bottom of a phone: what a menu is there. It stays in
-// the page whether it is open or not, so the controls a panel put in it
-// are never taken away and made again.
-function PhoneSheet({
-  open,
-  onClose,
-  label,
-  children,
-  bodyRef,
-  controls = false,
-}: {
-  open: boolean;
-  onClose: () => void;
-  label: string;
-  children?: ReactNode;
-  bodyRef?: (el: HTMLDivElement | null) => void;
-  // Whether what it holds is a panel's own controls, which stretch to the
-  // sheet's width, rather than rows of words, which read from the left.
-  controls?: boolean;
-}) {
-  return (
-    <Drawer open={open} onOpenChange={(to) => to || onClose()} showSwipeHandle>
-      <DrawerContent className="glass-sheet z-[70] rounded-t-3xl border-0 px-3 pt-2 pb-[calc(env(safe-area-inset-bottom)+12px)] [--drawer-content-max-height:70dvh]">
-        <DrawerTitle className="text-caption-1-medium text-text-tertiary px-2 pb-1 text-left">
-          {label}
-        </DrawerTitle>
-        <div
-          ref={bodyRef}
-          className={`flex flex-col items-stretch gap-2 overflow-y-auto ${
-            controls
-              ? "[&_[data-slot=button-group]]:w-full [&_button]:justify-center"
-              : ""
-          }`}
-        >
-          {children}
-        </div>
-      </DrawerContent>
-    </Drawer>
-  );
-}
-
-// One line of a phone's sheet: a whole row to a thumb.
-function SheetRow({
-  children,
-  onClick,
-  current,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-  current?: boolean;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-current={current ? "true" : undefined}
-      className={`text-body-medium focus-visible:ring-border-focus-ring duration-fast ease-plain flex min-h-[44px] items-center rounded-2lg px-3 text-left outline-none transition-colors focus-visible:ring-2 active:bg-background-secondary-hover ${
-        current
-          ? "text-text-primary bg-background-secondary-default"
-          : "text-text-secondary"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
 // One window's frame, drawn as ryOS draws one: three lights and its name
 // in a bar to drag it by, every edge and corner to resize it by, and the
 // surface itself. Touching it brings it to the front; it arrives from the
@@ -1696,12 +1491,6 @@ function Frame({
   card,
   computers,
   full,
-  wide,
-  index,
-  count,
-  current,
-  onGo,
-  onMenu,
   front,
   born,
   stowed,
@@ -1724,14 +1513,6 @@ function Frame({
   card: Card;
   computers: boolean;
   full: boolean;
-  wide: boolean;
-  // Which window of how many, on a phone, and the ways to another and to
-  // this one's own menu.
-  index: number;
-  count: number;
-  current: number;
-  onGo: (i: number) => void;
-  onMenu: () => void;
   // Whether it is the window in front on its desk.
   front: boolean;
   // Whether it was just opened from the dock, and the word that it has
@@ -1757,55 +1538,23 @@ function Frame({
   onExpand: () => void;
   onCollapse: () => void;
 }) {
-  const Mark = markOf(card);
-  const free = wide && !full;
+  const free = !full;
   // On the desk as a widget: a strip of its own to move it by instead of
   // a bar, and a menu there for making it a window or taking it off.
   const widget = !!card.pinned;
   // The most this window is worth drawing at; a widget is whatever size
   // it was put down at.
   const bounds = boundsOf(card);
-  const Panel = PANELS[card.href];
+  const Panel = PANELS[pathOf(card.href)];
   // Where the panel's own controls go, in the bar after the name.
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const [lead, setLead] = useState<HTMLDivElement | null>(null);
-  // A phone's two places for a panel's controls: the strip under the bar,
-  // and the sheet the bar's last control opens.
-  const [strip, setStrip] = useState<HTMLDivElement | null>(null);
-  const [sheet, setSheet] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   // The panel's own way to hold this window open while it asks something.
   const beforeClose = useCallback(
     (ask: (() => Promise<boolean>) | null) => onGuard(card.id, ask),
     [onGuard, card.id],
   );
-
-  // A phone's bar is the window's handle: a drag along it turns to the
-  // window beside this one, a drag down it puts this one away.
-  const swipe = (e: PointerEvent<HTMLDivElement>) => {
-    if (wide) return;
-    const from = { x: e.clientX, y: e.clientY };
-    const done = (m: globalThis.PointerEvent) => {
-      window.removeEventListener("pointerup", done);
-      window.removeEventListener("pointercancel", give);
-      const dx = m.clientX - from.x;
-      const dy = m.clientY - from.y;
-      if (Math.abs(dy) > Math.abs(dx)) {
-        if (dy > SWIPE) onStow();
-      } else if (Math.abs(dx) > SWIPE && count > 1) {
-        const to = index + (dx < 0 ? 1 : -1);
-        if (to >= 0 && to < count) onGo(to);
-      }
-    };
-    // A drag the browser takes for itself ends it as far as we are
-    // concerned: nothing is acted on twice.
-    const give = () => {
-      window.removeEventListener("pointerup", done);
-      window.removeEventListener("pointercancel", give);
-    };
-    window.addEventListener("pointerup", done);
-    window.addEventListener("pointercancel", give);
-  };
 
   // A window holding somebody else's page comes to the front when that
   // page takes the keyboard.
@@ -2021,76 +1770,11 @@ function Frame({
               </ContextMenuItem>
             </ContextMenuContent>
           </ContextMenu>
-        ) : !wide ? (
-          // A phone's bar: the way back at the left, the name in the
-          // middle, and one control at the right for everything the
-          // panel itself offers. No lights, nothing to drag by, nothing
-          // to fill: a window here is already the screen.
-          <>
-            <div className="border-separator-border bg-background-primary-default/70 shrink-0 border-b">
-              <div
-                onPointerDown={swipe}
-                className="grid h-[44px] grid-cols-[44px_1fr_44px] items-center [touch-action:none] select-none"
-              >
-                <button
-                  type="button"
-                  aria-label={count > 1 ? "Back" : "Close"}
-                  onClick={() =>
-                    count > 1
-                      ? onGo(index > 0 ? index - 1 : count - 1)
-                      : onClose()
-                  }
-                  className="text-foreground-icon-secondary focus-visible:ring-border-focus-ring grid size-[44px] place-items-center rounded-2lg outline-none focus-visible:ring-2"
-                >
-                  {count > 1 ? (
-                    <RiArrowLeftSLine aria-hidden className="size-5" />
-                  ) : (
-                    <RiCloseLine aria-hidden className="size-5" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={onMenu}
-                  aria-haspopup="dialog"
-                  className="text-body-medium text-text-primary focus-visible:ring-border-focus-ring mx-auto flex h-[44px] min-w-0 items-center gap-2 rounded-2lg px-2 outline-none focus-visible:ring-2"
-                >
-                  <Mark
-                    aria-hidden
-                    className="text-foreground-icon-secondary size-4 shrink-0"
-                  />
-                  <span className="truncate">{card.title}</span>
-                </button>
-                {Panel ? (
-                  <button
-                    type="button"
-                    aria-label="What this window can do"
-                    aria-expanded={sheet}
-                    onClick={() => setSheet(true)}
-                    className="text-foreground-icon-secondary focus-visible:ring-border-focus-ring grid size-[44px] place-items-center rounded-2lg outline-none focus-visible:ring-2"
-                  >
-                    <RiMoreLine aria-hidden className="size-5" />
-                  </button>
-                ) : (
-                  <span />
-                )}
-              </div>
-              <Dots count={count} current={current} onGo={onGo} />
-            </div>
-            {/* The few controls a panel is looked at through — a path, an
-                address — stay in view, in a strip that scrolls sideways. */}
-            {Panel && (
-              <div
-                ref={setStrip}
-                data-controls
-                className="border-separator-border flex h-[38px] shrink-0 items-center gap-2 overflow-x-auto border-b px-3 [scrollbar-width:none] empty:hidden [&::-webkit-scrollbar]:hidden"
-              />
-            )}
-          </>
         ) : (
           <div
             onPointerDown={free ? drag("move") : undefined}
             onDoubleClick={full ? onCollapse : onExpand}
-            className={`border-separator-border bg-background-primary-default/70 relative flex h-[44px] shrink-0 items-center border-b select-none ${
+            className={`border-separator-border bg-background-primary-default/70 relative flex h-8 shrink-0 items-center border-b select-none [&:has([data-nameless])_[data-name]]:hidden ${
               free ? "cursor-move touch-none" : ""
             }`}
           >
@@ -2130,19 +1814,23 @@ function Frame({
                 className="ml-2 flex shrink-0 items-center gap-1 empty:hidden"
               />
             )}
+            {/* The name in the middle of the bar, as a Mac's is, over
+                nothing: the panel's controls keep to the right of it. */}
             <span
-              className={`text-body-medium pointer-events-none ml-3 flex min-w-0 shrink items-center gap-2 ${
+              data-name
+              className={`text-body-medium pointer-events-none absolute left-1/2 max-w-[40%] -translate-x-1/2 truncate ${
                 front ? "text-text-primary" : "text-text-secondary"
               }`}
             >
-              <Mark className="text-foreground-icon-secondary size-5 shrink-0" />
-              <span className="truncate">{card.title}</span>
+              {card.title}
             </span>
             {Panel && (
+              // The last control ends 14 from the edge: its 10 corner sits
+              // inside the window's 24 as one curve, and clear of it.
               <div
                 ref={setSlot}
                 data-controls
-                className="mr-2 ml-3 flex min-w-0 flex-1 items-center gap-2"
+                className="mr-3.5 ml-3 flex min-w-0 flex-1 items-center justify-end gap-2"
               />
             )}
           </div>
@@ -2165,12 +1853,12 @@ function Frame({
               value={{
                 controls: slot,
                 leading: lead,
-                strip,
-                phone: !wide,
+                strip: null,
+                phone: false,
                 beforeClose,
               }}
             >
-              <Panel fresh={fresh.current} id={card.id} />
+              <Panel fresh={fresh.current} id={card.id} href={card.href} />
             </BarSlot>
           </div>
         ) : (
@@ -2196,17 +1884,6 @@ function Frame({
           />
         )}
       </div>
-      {/* What the panel's own controls become on a phone: rows in a sheet
-          the bar opens. */}
-      {!wide && Panel && (
-        <PhoneSheet
-          open={sheet}
-          onClose={() => setSheet(false)}
-          label={card.title}
-          bodyRef={setSlot}
-          controls
-        />
-      )}
       {/* Outside the pane, which clips what it holds, so each strip
           straddles the frame it takes hold of. */}
       {free &&

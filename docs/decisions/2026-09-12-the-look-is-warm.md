@@ -24,13 +24,13 @@ still dense; what changed is that it no longer reads as a terminal.
   it on the few things a person is meant to look at: the main button on a
   page, what waits on you, the window a drag will land in, the desk in
   view. Everything else stays neutral.
-- **Warm neutrals.** Every grey carries a little of the same warmth, so
-  the greys agree with the orange rather than sitting beside it. The desk
+- **Pure neutrals.** (Since 2026-09-14; the greys were warmed at first and
+  read as stone.) Every grey is grey with no hue in it, so paper is white
+  and the one colour is the only colour. The desk
   is a shade darker than the windows on it, and faintly dotted, so a
   window reads as something resting on a surface.
 - **Rounded and lifted.** A window, the dock and the dots have soft
-  corners and a soft shadow. Shadows are warm rather than grey, so one
-  reads as light falling on the page and not as a smudge under it.
+  corners and a soft shadow, neutral like the greys.
 - **Three sizes rather than one.** The body stays at 14 on 20. A label in
   a bar drops to 12 and a title climbs, so a page says where to start
   before it is read.

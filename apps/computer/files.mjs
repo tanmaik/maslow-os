@@ -40,8 +40,9 @@ const PICTURES = new Set([
   "bmp",
 ]);
 const VIDEOS = new Set(["mp4", "m4v", "mov", "webm", "mkv", "avi"]);
-// Documents a word processor, a spreadsheet or a slide deck made. They
-// are shown as their first page, through a PDF.
+// Documents a word processor, a spreadsheet or a slide deck made. Their
+// picture is their first page, and the Preview window reads all of them
+// as a PDF, both through LibreOffice.
 const DOCUMENTS = new Set([
   "doc",
   "docx",
@@ -195,6 +196,78 @@ async function read(req, res, at) {
   stream.pipe(res);
 }
 
+// One version of a file, as its path, when it changed and how big it is.
+const versionOf = (at, s) =>
+  createHash("sha1").update(`${at}|${s.mtimeMs}|${s.size}`).digest("hex");
+
+// A document as a PDF, made once per version and kept on the machine:
+// LibreOffice writes it into a folder of its own, since it needs somewhere
+// to keep its profile, and the PDF is moved out and the folder dropped.
+async function pdfOf(at, key) {
+  const kept = path.join(PREVIEWS, `${key}.pdf`);
+  if (fs.existsSync(kept)) return kept;
+  await fsp.mkdir(PREVIEWS, { recursive: true });
+  const room = `${kept}.office`;
+  try {
+    await fsp.mkdir(room, { recursive: true });
+    await run(
+      OFFICE,
+      [
+        "--headless",
+        "--norestore",
+        `-env:UserInstallation=file://${room}/profile`,
+        "--convert-to",
+        "pdf",
+        "--outdir",
+        room,
+        at,
+      ],
+      {
+        timeout: 120_000,
+        env: { ...process.env, HOME: room, LD_LIBRARY_PATH: OFFICE_LIBS },
+      },
+    );
+    await fsp.rename(
+      path.join(room, `${path.basename(at, path.extname(at))}.pdf`),
+      kept,
+    );
+  } finally {
+    await fsp.rm(room, { recursive: true, force: true });
+  }
+  return kept;
+}
+
+// A file as a PDF the browser's own viewer reads whole, every page: a PDF
+// as it is, a document through LibreOffice. Anything else has none.
+async function pdf(res, at) {
+  let s;
+  try {
+    s = await fsp.stat(at);
+  } catch {
+    return say(res, 404, "No such file.");
+  }
+  if (!s.isFile()) return say(res, 400, "That is not a file.");
+  const kind = ending(at);
+  let file = at;
+  if (DOCUMENTS.has(kind)) {
+    try {
+      file = await pdfOf(at, versionOf(at, s));
+    } catch (err) {
+      return say(res, 500, `Could not read it as a PDF: ${err.message}`);
+    }
+  } else if (kind !== "pdf") return say(res, 404, "No PDF of that.");
+  const name = `${path.basename(at, path.extname(at))}.pdf`;
+  res.writeHead(200, {
+    "content-type": "application/pdf",
+    "content-disposition": `inline; filename="${name.replace(/[^\x20-\x7e]|"/g, "_")}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+    "content-length": (await fsp.stat(file)).size,
+    "cache-control": "private, max-age=3600",
+  });
+  const stream = fs.createReadStream(file);
+  stream.on("error", () => res.destroy());
+  stream.pipe(res);
+}
+
 // A small picture of a file, as a JPEG: a photo scaled down and turned the
 // way its camera held it, the frame a second into a video, the first page
 // of a PDF. Made once per version of the file and kept on the machine.
@@ -218,9 +291,7 @@ async function preview(res, at) {
           ? "document"
           : null;
   if (!how) return say(res, 404, "No picture of that.");
-  const key = createHash("sha1")
-    .update(`${at}|${s.mtimeMs}|${s.size}`)
-    .digest("hex");
+  const key = versionOf(at, s);
   const kept = path.join(PREVIEWS, `${key}.jpg`);
   if (!fs.existsSync(kept)) {
     await fsp.mkdir(PREVIEWS, { recursive: true });
@@ -259,36 +330,9 @@ async function preview(res, at) {
           { timeout: 30_000 },
         );
       } else {
-        // A document becomes a PDF of its own first, in a folder that
-        // dies with the picture; LibreOffice needs somewhere of its own
-        // to keep its profile, and that is ours too.
-        let pdf = at;
-        if (how === "document") {
-          const room = `${making}.office`;
-          await fsp.mkdir(room, { recursive: true });
-          await run(
-            OFFICE,
-            [
-              "--headless",
-              "--norestore",
-              `-env:UserInstallation=file://${room}/profile`,
-              "--convert-to",
-              "pdf",
-              "--outdir",
-              room,
-              at,
-            ],
-            {
-              timeout: 120_000,
-              env: {
-                ...process.env,
-                HOME: room,
-                LD_LIBRARY_PATH: OFFICE_LIBS,
-              },
-            },
-          );
-          pdf = path.join(room, `${path.basename(at, path.extname(at))}.pdf`);
-        }
+        // A document's picture is the first page of its PDF, the same
+        // one the Preview window reads, made once.
+        const pdf = how === "document" ? await pdfOf(at, key) : at;
         await run(
           "pdftoppm",
           [
@@ -307,12 +351,10 @@ async function preview(res, at) {
           ],
           { timeout: 30_000 },
         );
-        await fsp.rm(`${making}.office`, { recursive: true, force: true });
       }
       await fsp.rename(making, kept);
     } catch (err) {
       await fsp.rm(making, { force: true });
-      await fsp.rm(`${making}.office`, { recursive: true, force: true });
       return say(res, 500, `Could not picture it: ${err.message}`);
     }
   }
@@ -489,6 +531,7 @@ export async function serve(req, res, url) {
   if (what === "" && req.method === "GET") return list(res, at);
   if (what === "/read" && req.method === "GET") return read(req, res, at);
   if (what === "/preview" && req.method === "GET") return preview(res, at);
+  if (what === "/pdf" && req.method === "GET") return pdf(res, at);
   if (what === "/write" && req.method === "PUT")
     return write(req, res, at, url.searchParams.get("append") === "1");
   if (what === "/upload" && req.method === "GET") return have(res, at, url);

@@ -19,7 +19,7 @@ export default async function FilesPage({
     // reaches the bottom of the display and nothing scrolls under it.
     <main className="-mx-6 -mt-6 -mb-28 flex h-dvh min-h-0 flex-col">
       <h1 className="sr-only">Files</h1>
-      <Finder initialPath={path} />
+      <Finder initialPath={path} standalone />
     </main>
   );
 }

@@ -672,11 +672,12 @@ try {
     margeOwner,
   );
   const afterHandOver = await settingsPage(ottoNow);
+  const deletion = await settingsPage(ottoNow, "delete");
   check(
     "the principal hands the org over",
     handed.headers.get("location")?.endsWith("member=handed") &&
       /otto@bluewhale\.test[\s\S]*?principal<\/span>/.test(afterHandOver) &&
-      afterHandOver.includes("Delete Blue Whale Bakery"),
+      deletion.includes("Delete Blue Whale Bakery"),
     "Otto holds the bakery and may delete it",
   );
   // A demotion that lands first is honoured by a request that was already

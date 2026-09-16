@@ -75,7 +75,7 @@ function View({
         "transition-colors duration-fast ease-plain focus-visible:ring-2 focus-visible:ring-border-focus-ring",
         lit
           ? "bg-linear-to-b from-accent-500 to-accent-600 shadow-nav-selected"
-          : "hover:bg-background-secondary-hover",
+          : "hover:bg-background-secondary-hover active:bg-background-secondary-active",
       )}
     >
       {share !== null && !lit && (
@@ -272,7 +272,7 @@ function Group({
         type="button"
         aria-expanded={here || open}
         onClick={() => setOpen(!open)}
-        className="hidden shrink-0 cursor-pointer items-center justify-between gap-2 rounded-2lg py-1 pr-2 pl-2 text-left outline-none transition-colors duration-fast ease-plain hover:bg-background-secondary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring md:flex"
+        className="hidden shrink-0 cursor-pointer items-center justify-between gap-2 rounded-2lg py-1 pr-2 pl-2 text-left outline-none transition-colors duration-fast ease-plain hover:bg-background-secondary-hover active:bg-background-secondary-active focus-visible:ring-2 focus-visible:ring-border-focus-ring md:flex"
       >
         <span className="truncate text-caption-1-semibold text-text-secondary">
           {group.owner} shared

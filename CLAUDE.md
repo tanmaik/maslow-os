@@ -341,9 +341,11 @@ rename touches nothing. Home is `/home/me`,
 throws their Linux away and keeps home; it is a button, never automatic,
 and the backups are there to restore from afterwards. A new image is an
 update, not a restart: the sweep records on the person's row that one is
-ready and to which image, and says so quietly in three places — a dot on
-the Maslow menu, a line in About This Computer, a row on the Computer
-pane offering now, tonight or when idle. Now names what it will stop
+ready and to which image, and says so quietly in three places — a
+notice behind the clock with now, tonight and when idle on it, counted
+among what waits on the person until they pick one; a line in the Maslow
+menu and in About This Computer; and a row on the Computer pane offering
+the same three. Now names what it will stop
 before it stops it; tonight is three in the morning where the machine is;
 idle is half an hour with nothing typed and nothing asked of a port, and
 a port that listens is called busy, since what a program serves itself
@@ -351,9 +353,11 @@ never passes the door. After seven days the idle rule runs on its own,
 and a security image uses it from the first day. None of it is on the
 machine.
 Sizes are a ladder of CPU and memory, shown without a price, and a
-restart of a few seconds; nothing changes a computer's size but the
-person; the disk grows
-before it fills and never shows a cap. Where it is is one of the
+restart of a few seconds; the first rung is four shared CPUs and eight
+gigabytes, since the door, the browser and a few Claude Codes at once do
+not fit in two; the person moves a computer up or down, and the sweep moves one it
+finds with its memory nearly full up a rung on its own, never down; the
+disk grows before it fills and never shows a cap. Where it is is one of the
 North American regions Fly still makes disks in, seven today, since Fly
 retires regions now and then and a retired one refuses a new disk;
 it is guessed at sign-in from where the request came
@@ -408,9 +412,15 @@ the person's to pick; a new one, a fork of this one and any of the ones
 the machine keeps are a click away. Nothing durable lives in
 a tab: the tab is a view onto state on the machine, and the machine's
 browser never idles away. What a program on the machine opens goes to whoever is at the terminal:
-a port of theirs opens that port's window on the desk, a file or folder
-of theirs opens Files there, and any other address is offered to open on
-their own device, because a
+a port of theirs opens that port's window on the desk, a folder of theirs opens Files there, a
+file of theirs opens in the Preview window, and any other address is
+offered to open on their own device (Files lists Home and the usual
+places beside it, not every folder; the Preview window is one file in a
+window of its own named for it, a picture or a video shown as it is, a
+PDF or an Office document read whole by the browser's own viewer, every
+page, the document made into a PDF once on the machine and kept there,
+text edited and saved there, and the way a file opens from Files, from
+the command bar and from the machine), because a
 sign-in page that judges a browser by where it sits refuses the machine's;
 a sign-in whose answer comes back to the machine says so on the page, and
 the person carries the answer back by pasting the address that would not
@@ -422,20 +432,54 @@ ssh's ProxyCommand and writes a `Host` named after the computer, and
 landing in the same tmux session the Terminal page shows, as a grouped
 session of its own; a command given to `ssh` runs plain. Model calls never
 route through us: each person holds an OpenRouter key we minted with a
-cap of so many dollars a week, kept on their computer's row and shown to
+cap of five dollars a week, kept on their computer's row and shown to
 them in dollars — in the Agent window, on the Computer pane and in a
 Usage pane of its own — OpenRouter holds the record, and the sweep copies
-it; reaching the cap stops the calls and nothing else. Claude Code
-runs on it by default, on GLM 5.3 Flash, and on our key that is the whole
-choice: two models, GLM 5.3 and GLM 5.3 Flash, and every name Claude Code
-offers — opus, sonnet, haiku — points at one of them, so no Claude model
-is reachable on what Maslow pays for. That is managed auth. `auth own` in the computer's
-terminal switches it to credentials the person provides, an Anthropic
-sign-in or a key of theirs, and `auth managed` switches it back, so a
-person whose own runs dry keeps working on ours; a session of ours on
-their machine is started with `MASLOW_AUTH=managed` and never spends
-what they provided; a deployment without our provisioning
-key runs everyone on their own, and says so. Laptops, previews and
+it; reaching the cap stops the calls and nothing else. Two Claude Codes
+run on the machine and they never share credentials. The Agent window's
+is ours: started with `MASLOW_AUTH=managed`, it runs on that key, on
+GLM 5.3 Flash on whichever of its providers is fastest and nothing else —
+every name Claude Code offers itself, opus, sonnet, haiku, points at it,
+so no Claude model is reachable on what Maslow pays for — and the app is
+the one way to it. The Agent window is BoardUI's AI Chat template wired
+to it: a rail of chats with no folders, pinned ones first; the thread in
+its user and assistant turns, with what the agent did as its task list,
+a thought one step among the steps it came with and folded with them,
+what it asks before it acts as a notice, the kind of thing named, the
+thing itself as it would run, and the answers as buttons, which goes
+when the prompt does, and a question it asks the person, Claude Code's
+own questionnaire, standing in the thread and answered there; the pill
+composer with the one model named and dictation where the
+browser has it, live while the agent works, since a word typed then goes
+into the running turn as it does in Claude Code's own terminal, and under
+it how the agent acts, the week's spend and how full the conversation is.
+One conversation is in view at a time and the rest stand open behind it,
+each with its own Claude Code process, running on; a new one is handed
+over at once, since the door keeps one warm; one quiet for three minutes
+is closed, its process freed, and opens again whole when wanted. A chat
+is named by the same model after its first exchange, or by the person
+with a click on the name, and the name is the door's, kept on the disk.
+A conversation picked in the rail is in view at once, whole from the
+door's own record when it was open before, and Claude Code loads it
+behind. Two tools are the door's own, handed to every
+conversation as a small MCP server started beside it under a token of
+that conversation's: a wakeup, which prompts the conversation again after
+a while and is kept on the disk so a door coming back still keeps it, and
+a monitor, a command run as the person whose lines reach the
+conversation as they come, into the running turn or as a turn of its
+own, waking it if it sleeps. There is no cron and no workflow. What the
+adapter lacks for this, a word into a running turn and a close, is put
+into its installed copy when the image is built, in
+`apps/computer/patch-acp.mjs`. Floating conversations on the desk, the
+pets of 2026-09-15, were tried for a night and taken out the next
+morning: the window is the one shape. `claude` in the
+person's terminal is their own: plain Claude Code on their own Claude
+account, signed into inside Claude Code, and nothing of it passes
+through us; there is no switch between the two. An env block in the
+person's own Claude Code settings that names the API's address or key is
+theirs to have, and a session of ours refuses to run through it; a
+deployment without our provisioning key has no Agent of ours, and says
+so. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
 ever calls home. The person's location, read from their browser once a
@@ -445,9 +489,9 @@ through us or into our database. Claude Code lives in the person's Linux, instal
 boot, where it updates itself the way Claude Code does and `claude
 update` works; the image carries a copy under ours, read-only and unable
 to update itself, which runs until theirs arrives. `claude` on their path
-is ours either way, and it hands whichever copy they have the auth they
-chose; an editor drives the same Claude Code over the Agent Client
-Protocol through `claude-code-acp`, on the same account. It starts in auto
+is ours either way, and it hands whichever copy they have their own
+credentials; an editor drives the same Claude Code over the Agent Client
+Protocol through `claude-code-acp`. It starts in auto
 mode, seeded into their own `~/.claude/settings.json` and theirs to change. It knows
 three MCP servers out of the box, seeded into its
 settings: the browser tool, `packages/browser`,
@@ -565,37 +609,44 @@ comma opens Settings, and the arrows, U, I, J, K and Return put it on a
 side, a corner or the whole desk; the Window menu lists every one
 beside its key. Tab reaches the dock as one stop and the arrows walk
 its icons. A framed page keeps every key of its own but Command-K. A
-phone is its own shell over the same windows. The desk is still the
-desk — wallpaper, menu bar, dock along the bottom — but one window
-fills it at a time, edge to edge, with nothing to drag and nothing to
-resize, and a widget is never drawn there. Its bar is a way back at the
-left (back to the window before it, or close when it is the only one),
-the name in the middle, and one control at the right holding everything
-the window itself offers, as a sheet of rows; no lights. A tap on the
-name opens that window's menu and the Window menu as one sheet. Under
-the bar a dot for every window says which one this is and goes to any
-of them, a swipe along the bar turns to the next or the one before, and
-a swipe down it puts the window away. The dock is the app switcher: a
-tap opens or goes to, the open ones dotted, a flick up off an icon puts
-its window away. Going to a window never reorders the rest. Every page's
-toolbar folds to one row — the path or the address stays in a strip that
-scrolls sideways, the rest goes to the sheet; the brain keeps its search
-and one Filter button, with its conditions and sort as a sheet and its
-view switch under one more control, and its table drags sideways with
-the title column held. Every menu — a window's, the desk's, the dock's,
-a row's — opens as a sheet from the bottom edge, on a long press where a
-right-click goes, with rows a thumb can hit. The command bar opens from
-the menu bar's search icon or a two-finger tap, and stands full width.
-Nothing but the window's own content scrolls.
-Nothing else animates. The look is warm: warm neutrals with one colour in them, an
+phone is its own shell over the same windows, laid out as a phone is.
+Home is a grid of tiles: the apps, the ports opened, and the widgets. A
+tap opens one as the whole screen under the menu bar's strip, with
+nothing to drag and nothing to resize, and one control at the right of
+its bar holds everything the window itself offers as a sheet of rows:
+another of its app, close, and the other windows. Under the screen is a
+handle: a tap on it goes home, a swipe up from it opens the recents, a
+deck of the open windows to go to or flick away. Never the system's own
+gestures, which the browser owns. Going to a window brings it to the
+front of that deck. The dock and the rail are not drawn. Every page's
+toolbar folds to one row — the path or the address stays in a strip
+that scrolls sideways, the rest goes to the sheet; the brain keeps its
+search and one Filter button, with its conditions and sort as a sheet
+and its view switch under one more control, and its table drags
+sideways with the title column held. Every menu — a window's, the
+desk's, a row's — opens as a sheet from the bottom edge, on a long press
+where a right-click goes, with rows a thumb can hit. The command bar
+opens from the menu bar's search icon or a two-finger tap, and stands
+full width. Nothing but the window's own content scrolls. A tap acts at
+once, with no wait for a second and no highlight, and a row pressed is
+one step darker.
+Nothing else animates. The look is one colour on pure grey: no hue in any neutral, an
 orange unless the person picks another under Look in Settings, kept
 on their device, spent only on what they are meant to look at; the body stays
-at 14, a label in a bar drops to 12 and a title climbs. Settings is ryOS's
-control panels made ours: a toolbar of back, forward and Show All with
-a search at its right, a grid of panes in two bands, yours and the
-org's, a search that dims all but what matches and lists them under the
-field, and one pane at a time of wells and rows beneath the same
-toolbar. What waits on you waits behind the clock: a click on it slides
+at 14, a label in a bar drops to 12 and a title climbs. Settings is laid out
+as a Mac's System Settings: a rail of panes down the left in two
+groups, yours and the org's, with a search over it that leaves only
+what matches, and one pane at a time on the right, its parts lying on
+the pane one under another with a hairline between, no card and no head
+of its own; on a phone the rail is a strip along the top. Yours are six,
+each named for the question it answers: You, Look, Computer (the
+machine alone: ready, update, size, where, backups, reset), Claude Code
+(whose credentials it runs on and whether their own account is signed
+in, the model, and what it spent this week against the cap; the signing
+in itself is Claude Code's own, in the terminal, and passes through
+nothing of ours), Apps, and Access (SSH, the ports they opened and who reaches
+each, the ports opened to them, and the agents signed in to their brain);
+the org's are Org, Members, Groups and Deletion. What waits on you waits behind the clock: a click on it slides
 a panel in from the right over the desk, closed by the clock again,
 Escape or a click outside, holding every notice newest first — a note
 read and cleared, an ask answered where it stands, by picking one of the
@@ -659,8 +710,8 @@ context menu, menu bar, dropdown, popover, command, progress, skeleton,
 and the like, each restyled to BoardUI's geometry and motion so the two
 are one skin. Nothing is hand-rolled beside either: a component is taken
 from the catalogue, never written beside it. Styling is Tailwind on
-BoardUI's semantic tokens, warmed: its neutral ramp carries a little of
-the accent's warmth in every step, its accent ramp is spun from the hue
+BoardUI's semantic tokens: its neutral ramp is pure grey with no hue in
+any step, its accent ramp is spun from the hue
 the person picked, and every shadcn token name points at the BoardUI
 token it means. Type is BoardUI's composite utilities
 (`text-body-medium`, `text-caption-1-semibold`), never a size and a

@@ -83,12 +83,15 @@ export function Finder({ mostUsed }: { mostUsed: App[] | null }) {
               key={a.slug}
               label={
                 <span className="flex items-center gap-2.5">
-                  <Avatar
-                    size="sm"
-                    src={a.logo ?? undefined}
-                    initials={initials(a.name)}
-                    className="rounded-md"
-                  />
+                  {a.logo ? (
+                    <img
+                      src={a.logo}
+                      alt=""
+                      className="size-5 shrink-0 object-contain"
+                    />
+                  ) : (
+                    <Avatar size="sm" initials={initials(a.name)} />
+                  )}
                   <span className="min-w-0 truncate text-body-regular text-text-primary">
                     {a.name}
                   </span>

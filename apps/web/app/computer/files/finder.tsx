@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  RiExternalLinkLine,
+  RiCloseLine,
   RiFileLine,
   RiFileTextLine,
   RiFolderLine,
@@ -15,6 +15,7 @@ import {
 } from "@remixicon/react";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  type DragEvent,
   useCallback,
   useEffect,
   useRef,
@@ -23,21 +24,22 @@ import {
 } from "react";
 import type { SortDescriptor } from "react-aria-components";
 
-import { Editor } from "@/app/computer/files/editor";
-import { InBar, useBeforeClose, useFolded } from "@/app/room/panel";
+import {
+  type Entry,
+  isImage,
+  isText,
+  isVideo,
+  size,
+} from "@/app/computer/files/kinds";
+import { BarButton, InBar, useFolded } from "@/app/room/panel";
 import {
   Breadcrumb,
   BreadcrumbItem,
 } from "@/components/base/breadcrumb/breadcrumb";
 import { Button } from "@/components/base/buttons/button";
-import {
-  ButtonGroup,
-  ButtonGroupItem,
-} from "@/components/base/buttons/button-group";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { IconButton } from "@/components/base/buttons/icon-button";
 import { InputBase } from "@/components/base/input/input";
-import { Notification } from "@/components/base/notification/notification";
 import { Pagination } from "@/components/base/pagination/pagination";
 import {
   Table,
@@ -48,15 +50,6 @@ import {
   TableRow,
 } from "@/components/base/table/table";
 import { ChevronSortDown } from "@/components/foundations/icons/chevrons";
-import {
-  AlertDialog,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
-import { Button as ShadButton } from "@/components/ui/button";
 import {
   ContextMenu,
   ContextMenuCheckboxItem,
@@ -70,16 +63,29 @@ import { BASE, FAST, LEAVE } from "@/lib/motion";
 import { liveSocket } from "@/lib/live";
 import { cx } from "@/utils/cx";
 
-// Where the device keeps whether the folders rail is shown.
+// Where the device keeps whether the folders rail is shown, and what the
+// person dropped on it to keep there.
 const RAIL = "files-rail";
+const PINS = "files-pins";
+// One of the person's own things, carried by a drag.
+const CARRIED = "application/x-maslow-entry";
+type Pin = { path: string; kind: "dir" | "file" };
 
-// One thing in a folder, as the door lists it.
-type Entry = {
-  name: string;
-  kind: "dir" | "file" | "link" | "other";
-  size: number;
-  modified: string;
-};
+// The folders the rail offers beside Home, where they exist: the places a
+// Mac's sidebar keeps, not every folder at the top of the home.
+const PLACES = new Set([
+  "Desktop",
+  "Documents",
+  "Downloads",
+  "Pictures",
+  "Movies",
+  "Music",
+  "Projects",
+  "Code",
+  "code",
+  "src",
+  "work",
+]);
 
 // An upload in flight: how far it has got, and what stopped it if anything.
 type Upload = { done: number; total: number; error?: string };
@@ -88,73 +94,9 @@ type Upload = { done: number; total: number; error?: string };
 // one piece and picks up from the last the door kept.
 const PIECE = 8 * 1024 * 1024;
 
-// The most text the editor takes into the tab. Past this a file is opened
-// rather than read here, so a huge log never freezes the window.
-const MOST_TEXT = 2 * 1024 * 1024;
-
 // How many rows a page of a folder holds, so a folder of thousands still
 // draws at once.
 const PER_PAGE = 100;
-
-const TEXT = new Set([
-  "txt",
-  "md",
-  "json",
-  "js",
-  "mjs",
-  "ts",
-  "tsx",
-  "css",
-  "html",
-  "sh",
-  "py",
-  "yml",
-  "yaml",
-  "toml",
-  "env",
-  "gitignore",
-  "csv",
-  "log",
-  "xml",
-  "sql",
-]);
-const IMAGE = new Set([
-  "png",
-  "jpg",
-  "jpeg",
-  "gif",
-  "webp",
-  "svg",
-  "avif",
-  "heic",
-  "tif",
-  "tiff",
-  "bmp",
-]);
-const VIDEO = new Set(["mp4", "m4v", "mov", "webm", "mkv"]);
-const DOCUMENT = new Set([
-  "doc",
-  "docx",
-  "xls",
-  "xlsx",
-  "ppt",
-  "pptx",
-  "odt",
-  "ods",
-  "odp",
-  "rtf",
-]);
-
-const ending = (name: string) =>
-  name.includes(".") ? name.split(".").pop()!.toLowerCase() : "";
-// A link is followed: until the door says what it points at, it is looked
-// at as a file is.
-const opens = (e: Entry) => e.kind === "file" || e.kind === "link";
-const isText = (e: Entry) => opens(e) && TEXT.has(ending(e.name));
-const isImage = (e: Entry) => opens(e) && IMAGE.has(ending(e.name));
-const isVideo = (e: Entry) => opens(e) && VIDEO.has(ending(e.name));
-const isPdf = (e: Entry) => opens(e) && ending(e.name) === "pdf";
-const isDocument = (e: Entry) => opens(e) && DOCUMENT.has(ending(e.name));
 
 // The mark a thing wears in the list.
 const markOf = (e: Entry) =>
@@ -170,16 +112,6 @@ const markOf = (e: Entry) =>
             ? RiFileTextLine
             : RiFileLine;
 
-// Bytes in words a person reads at a glance.
-const size = (n: number) =>
-  n < 1024
-    ? `${n} B`
-    : n < 1024 ** 2
-      ? `${(n / 1024).toFixed(0)} KB`
-      : n < 1024 ** 3
-        ? `${(n / 1024 ** 2).toFixed(1)} MB`
-        : `${(n / 1024 ** 3).toFixed(2)} GB`;
-
 // A moment as a short date, or the time if it is today.
 const when = (iso: string) => {
   const d = new Date(iso);
@@ -189,11 +121,6 @@ const when = (iso: string) => {
     ? d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })
     : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 };
-
-const readHref = (path: string) =>
-  `/computer/files/read?path=${encodeURIComponent(path)}`;
-const previewHref = (path: string, modified: string) =>
-  `/computer/files/preview?path=${encodeURIComponent(path)}&v=${encodeURIComponent(modified)}`;
 
 // One piece of a file, sent with the bytes it has written reported as they
 // go, so the bar moves before the piece lands.
@@ -275,7 +202,7 @@ function Toolbar({
   children: ReactNode;
 }) {
   const row = (controls: ReactNode) => (
-    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-separator-border px-3">
+    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-separator-border px-3">
       {controls}
     </div>
   );
@@ -302,11 +229,14 @@ function Place({
   mark: Mark,
   on,
   onClick,
+  onRemove,
   children,
 }: {
   mark: typeof RiFolderLine;
   on: boolean;
   onClick: () => void;
+  // For a place the person put here: the way to take it off again.
+  onRemove?: () => void;
   children: ReactNode;
 }) {
   return (
@@ -315,7 +245,7 @@ function Place({
       aria-current={on ? "true" : undefined}
       onClick={onClick}
       className={cx(
-        "flex w-full min-h-11 shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-2lg p-2 text-left outline-none",
+        "group/place flex w-full min-h-11 shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-2lg p-2 text-left outline-none",
         "focus-visible:ring-2 focus-visible:ring-border-focus-ring sm:min-h-8",
         on
           ? "bg-accent-600"
@@ -337,28 +267,64 @@ function Place({
       >
         {children}
       </span>
+      {onRemove && (
+        <span
+          role="button"
+          tabIndex={0}
+          aria-label="Take off the sidebar"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onRemove();
+            }
+          }}
+          className={cx(
+            "ml-auto flex size-5 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-instant ease-plain group-hover/place:opacity-100 focus-visible:opacity-100",
+            on
+              ? "text-text-white hover:bg-accent-700"
+              : "text-foreground-icon-tertiary hover:bg-background-tertiary-hover",
+          )}
+        >
+          <RiCloseLine className="size-3.5" aria-hidden />
+        </span>
+      )}
     </button>
   );
 }
 
 export function Finder({
   initialPath,
-}: { initialPath?: string; fresh?: boolean } = {}) {
+  href,
+  standalone = false,
+}: {
+  initialPath?: string;
+  href?: string;
+  // On a page of its own, with no desk to ask, a file opens in a tab.
+  standalone?: boolean;
+  fresh?: boolean;
+} = {}) {
   const folded = useFolded();
-  const asked = initialPath?.split("/").filter(Boolean) ?? [];
+  // The folder asked for: by the page's address, or by the window's on the
+  // desk.
+  const asked = (
+    initialPath ??
+    (href ? new URL(href, "http://x").searchParams.get("path") : null) ??
+    ""
+  )
+    .split("/")
+    .filter(Boolean);
   const [path, setPath] = useState<string[]>(asked.slice(0, -1));
   // A file asked for by name, opened once its folder has loaded.
   const opening = useRef<string | null>(asked.at(-1) ?? null);
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
-  const [picked, setPicked] = useState<Entry | null>(null);
-  const [text, setText] = useState<string | null>(null);
   // A text file too big to take into the tab: shown as a file, not read.
-  const [heavy, setHeavy] = useState(false);
-  const [dirty, setDirty] = useState(false);
-  const [saving, setSaving] = useState(false);
   // What the door said when it would not take a save.
-  const [refused, setRefused] = useState<string | null>(null);
   const [uploads, setUploads] = useState<Record<string, Upload>>({});
   const [dragging, setDragging] = useState(false);
   // Files whose names start with a dot are the machine's own business
@@ -371,21 +337,27 @@ export function Finder({
     column: "name",
     direction: "ascending",
   });
-  // What is waiting on an answer about the edit that has not been saved:
-  // where to go once it is answered, and what to tell whoever is waiting
-  // when the answer is to stay.
-  const [ask, setAsk] = useState<{
-    go: () => void;
-    stop?: () => void;
-  } | null>(null);
   // Whether the folders rail is shown, as the person last left it. On a
   // phone the rail has nowhere to stand beside the list, so it opens as a
   // sheet instead, and starts closed rather than remembered.
   const [rail, setRail] = useState(true);
   const [sheet, setSheet] = useState(false);
   const [wide, setWide] = useState(true);
+  // What the person dropped on the rail to keep there, and whether a
+  // drag is over it now.
+  const [pins, setPins] = useState<Pin[]>([]);
+  const [over, setOver] = useState(false);
+  const keep = (next: Pin[]) => {
+    setPins(next);
+    localStorage.setItem(PINS, JSON.stringify(next));
+  };
   useEffect(() => {
     setRail(localStorage.getItem(RAIL) !== "hidden");
+    try {
+      setPins(JSON.parse(localStorage.getItem(PINS) ?? "[]") as Pin[]);
+    } catch {
+      setPins([]);
+    }
     const q = matchMedia("(min-width: 640px)");
     const read = () => setWide(q.matches);
     read();
@@ -425,11 +397,6 @@ export function Finder({
   }, [dir]);
 
   useEffect(() => {
-    setPicked(null);
-    setText(null);
-    setHeavy(false);
-    setRefused(null);
-    setDirty(false);
     setEntries(null);
     setQuery("");
     setPage(1);
@@ -499,53 +466,26 @@ export function Finder({
     if (dir === "" && entries) setTop(entries);
   }, [dir, entries]);
 
-  // Nothing typed is thrown away without asking: anything that would
-  // leave an edited file behind goes through here first.
-  const leaving = (go: () => void) => {
-    if (dirty) setAsk({ go });
-    else go();
+  // Nothing in Files holds an edit any more, so leaving is leaving.
+  const leaving = (go: () => void) => go();
+
+  // A file opens in the Preview window: the desk is asked, and on a page
+  // of its own the address is followed.
+  const openPath = (file: string) => {
+    if (standalone)
+      window.open(
+        `/computer/files/view?path=${encodeURIComponent(file)}`,
+        "_blank",
+      );
+    else window.postMessage({ maslow: "open", view: file }, location.origin);
   };
-
-  // The window's own close is the one path the guard above cannot see:
-  // the room asks here before it takes the window away.
-  useBeforeClose(
-    () =>
-      new Promise<boolean>((decide) => {
-        if (!dirty) return decide(true);
-        setAsk({ go: () => decide(true), stop: () => decide(false) });
-      }),
-  );
-
-  // A tab closed or reloaded with an edit in it asks the browser's own
-  // question, which is the only one it will show.
-  useEffect(() => {
-    if (!dirty) return;
-    const hold = (e: BeforeUnloadEvent) => e.preventDefault();
-    window.addEventListener("beforeunload", hold);
-    return () => window.removeEventListener("beforeunload", hold);
-  }, [dirty]);
-
-  // Which file was picked last, so a slow read of an earlier one lands
-  // nowhere.
-  const picking = useRef(0);
   const open = (e: Entry) =>
     leaving(() => {
       if (e.kind === "dir") {
         setPath([...path, e.name]);
         return;
       }
-      const mine = ++picking.current;
-      setPicked(e);
-      setText(null);
-      setRefused(null);
-      setDirty(false);
-      setHeavy(isText(e) && e.size > MOST_TEXT);
-      if (isText(e) && e.size <= MOST_TEXT)
-        void (async () => {
-          const res = await fetch(readHref(at(e.name)));
-          const got = res.ok ? await res.text() : "";
-          if (picking.current === mine) setText(got);
-        })();
+      openPath(at(e.name));
     });
 
   // The file asked for by name, once its folder has answered.
@@ -556,24 +496,6 @@ export function Finder({
     if (found) open(found);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries]);
-
-  const save = async () => {
-    if (!picked || text === null) return false;
-    setSaving(true);
-    setRefused(null);
-    const res = await fetch(
-      `/computer/files/write?path=${encodeURIComponent(at(picked.name))}`,
-      { method: "PUT", body: text },
-    );
-    setSaving(false);
-    if (!res.ok) {
-      setRefused((await res.text()) || "The machine would not take it.");
-      return false;
-    }
-    setDirty(false);
-    void load();
-    return true;
-  };
 
   // Sends one file to the machine's door in pieces. A piece that fails is
   // not retried blindly: the door is asked how far it got, and the next
@@ -677,26 +599,12 @@ export function Finder({
   const here = Math.min(page, pages);
   const rows = shown?.slice((here - 1) * PER_PAGE, here * PER_PAGE) ?? [];
 
-  const close = () =>
-    leaving(() => {
-      setPicked(null);
-      setText(null);
-      setRefused(null);
-      setDirty(false);
-    });
-
   return (
     <div
       className="@container relative flex min-h-0 flex-1 flex-col"
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && picked) {
-          e.stopPropagation();
-          close();
-        }
-      }}
       onDragOver={(e) => {
         e.preventDefault();
-        setDragging(true);
+        if (e.dataTransfer.types.includes("Files")) setDragging(true);
       }}
       onDragLeave={(e) => {
         // A drag crossing a row leaves the row, not the window: the
@@ -771,7 +679,12 @@ export function Finder({
             setQuery(e.target.value);
             setPage(1);
           }}
-          fieldClassName={folded ? "w-full" : "w-36 shrink-0"}
+          // A faint ring at rest, so the field reads as one before a hand
+          // reaches it; hover and focus keep their own.
+          fieldClassName={cx(
+            "h-7 not-data-hovered:not-data-focus-within:ring-border-button-default",
+            folded ? "w-full" : "w-36 shrink-0",
+          )}
         />
         <input
           ref={input}
@@ -783,15 +696,12 @@ export function Finder({
             e.target.value = "";
           }}
         />
-        <Button
-          variant="secondary"
-          size="small"
-          leadingIcon={RiUploadLine}
-          className="shrink-0"
+        <BarButton
+          icon={RiUploadLine}
+          label="Upload"
+          title="Upload a file, or drop one anywhere here"
           onClick={() => input.current?.click()}
-        >
-          Upload
-        </Button>
+        />
       </Toolbar>
 
       {Object.keys(uploads).length > 0 && (
@@ -881,10 +791,7 @@ export function Finder({
                 Home
               </Place>
               {top
-                .filter(
-                  (e) =>
-                    e.kind === "dir" && (dotfiles || !e.name.startsWith(".")),
-                )
+                .filter((e) => e.kind === "dir" && PLACES.has(e.name))
                 .map((e) => (
                   <Place
                     key={e.name}
@@ -900,13 +807,54 @@ export function Finder({
                     {e.name}
                   </Place>
                 ))}
+              {pins.map((pin) => (
+                <Place
+                  key={pin.path}
+                  mark={pin.kind === "dir" ? RiFolderLine : RiFileLine}
+                  on={pin.kind === "dir" && path.join("/") === pin.path}
+                  onClick={() =>
+                    leaving(() => {
+                      if (pin.kind === "dir")
+                        setPath(pin.path.split("/").filter(Boolean));
+                      else openPath(pin.path);
+                      if (!wide) setSheet(false);
+                    })
+                  }
+                  onRemove={() => keep(pins.filter((x) => x.path !== pin.path))}
+                >
+                  {pin.path.split("/").filter(Boolean).at(-1) ?? pin.path}
+                </Place>
+              ))}
             </>
           );
+          // A folder or file of theirs dragged here is kept here.
+          const takes = {
+            onDragOver: (e: DragEvent<HTMLElement>) => {
+              if (!e.dataTransfer.types.includes(CARRIED)) return;
+              e.preventDefault();
+              e.stopPropagation();
+              setOver(true);
+            },
+            onDragLeave: () => setOver(false),
+            onDrop: (e: DragEvent<HTMLElement>) => {
+              setOver(false);
+              const got = e.dataTransfer.getData(CARRIED);
+              if (!got) return;
+              e.preventDefault();
+              e.stopPropagation();
+              const pin = JSON.parse(got) as Pin;
+              if (!pins.some((x) => x.path === pin.path)) keep([...pins, pin]);
+            },
+          };
           return wide ? (
             rail && (
               <nav
                 aria-label="Folders"
-                className="flex w-48 shrink-0 flex-col gap-1 overflow-y-auto border-r border-separator-border bg-background-secondary-default/55 p-2"
+                {...takes}
+                className={cx(
+                  "flex w-48 shrink-0 flex-col gap-1 overflow-y-auto border-r border-separator-border bg-background-secondary-default/55 p-2 transition-colors duration-fast ease-plain",
+                  over && "bg-accent-50",
+                )}
               >
                 {places}
               </nav>
@@ -930,12 +878,7 @@ export function Finder({
         })()}
         <ContextMenu>
           <ContextMenuTrigger
-            className={cx(
-              "@container/list flex min-h-0 flex-col",
-              picked
-                ? "max-h-[40%] flex-none border-b border-separator-border @md:max-h-none @md:w-2/5 @md:shrink-0 @md:border-r @md:border-b-0"
-                : "flex-1",
-            )}
+            className={cx("@container/list flex min-h-0 flex-col", "flex-1")}
           >
             <ScrollArea className="min-h-0 flex-1">
               {shown === undefined ? (
@@ -1026,7 +969,7 @@ export function Finder({
                   <TableBody>
                     {rows.map((e) => {
                       const Mark = markOf(e);
-                      const on = picked?.name === e.name;
+                      const on = false;
                       return (
                         <TableRow
                           key={e.name}
@@ -1040,7 +983,20 @@ export function Finder({
                           )}
                         >
                           <TableCell>
-                            <span className="flex items-center gap-2 @max-[400px]/list:min-h-8">
+                            <span
+                              className="flex items-center gap-2 @max-[400px]/list:min-h-8"
+                              draggable={e.kind === "dir" || e.kind === "file"}
+                              onDragStart={(ev) => {
+                                ev.dataTransfer.setData(
+                                  CARRIED,
+                                  JSON.stringify({
+                                    path: at(e.name),
+                                    kind: e.kind,
+                                  }),
+                                );
+                                ev.dataTransfer.effectAllowed = "link";
+                              }}
+                            >
                               <Mark
                                 className="size-5 shrink-0 text-foreground-icon-secondary"
                                 aria-hidden
@@ -1116,144 +1072,6 @@ export function Finder({
             </ContextMenuCheckboxItem>
           </ContextMenuContent>
         </ContextMenu>
-
-        <AnimatePresence initial={false}>
-          {picked && (
-            <motion.div
-              key="look"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0, transition: LEAVE }}
-              transition={FAST}
-              className="flex min-h-0 flex-1 flex-col"
-            >
-              {/* The file's own bar: its name and size, what can be done
-                  with it fused into one control, and the way out. */}
-              <div className="flex h-11 shrink-0 items-center gap-2 border-b border-separator-border px-3">
-                <span className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <span className="min-w-0 truncate text-body-medium text-text-primary">
-                    {picked.name}
-                  </span>
-                  {dirty && (
-                    <span
-                      className="size-1.5 shrink-0 rounded-full bg-accent-500"
-                      title="Not saved yet"
-                      aria-label="Not saved yet"
-                      role="img"
-                    />
-                  )}
-                </span>
-                <span className="shrink-0 text-caption-1-medium text-text-secondary tabular-nums">
-                  {size(picked.size)}
-                </span>
-                <ButtonGroup size="small" aria-label="What to do with it">
-                  {isText(picked) && !heavy && (
-                    <ButtonGroupItem
-                      size="small"
-                      disabled={!dirty || saving}
-                      onClick={() => void save()}
-                    >
-                      <AnimatePresence mode="popLayout" initial={false}>
-                        <motion.span
-                          key={saving ? "saving" : "save"}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          exit={{ opacity: 0, transition: LEAVE }}
-                          transition={BASE}
-                          className="block"
-                        >
-                          {saving ? "Saving…" : "Save"}
-                        </motion.span>
-                      </AnimatePresence>
-                    </ButtonGroupItem>
-                  )}
-                  <ButtonGroupItem
-                    size="small"
-                    leadingIcon={RiExternalLinkLine}
-                    onClick={() =>
-                      window.open(
-                        readHref(at(picked.name)),
-                        "_blank",
-                        "noopener",
-                      )
-                    }
-                  >
-                    Open
-                  </ButtonGroupItem>
-                </ButtonGroup>
-                <CloseButton size="sm" aria-label="Close" onClick={close} />
-              </div>
-              {refused && (
-                <div className="shrink-0 border-b border-separator-border p-3">
-                  <Notification
-                    status="error"
-                    title="That was not saved"
-                    description={refused}
-                    dismissible
-                    onDismiss={() => setRefused(null)}
-                  />
-                </div>
-              )}
-              <div className="min-h-0 flex-1">
-                {isVideo(picked) ? (
-                  <div className="grid h-full place-items-center bg-background-full">
-                    {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-                    <video
-                      key={picked.name}
-                      controls
-                      playsInline
-                      preload="metadata"
-                      poster={previewHref(at(picked.name), picked.modified)}
-                      src={readHref(at(picked.name))}
-                      className="h-full w-full object-contain"
-                    />
-                  </div>
-                ) : isImage(picked) || isPdf(picked) || isDocument(picked) ? (
-                  <div className="grid h-full place-items-center overflow-auto bg-background-secondary-default p-3">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      key={picked.name}
-                      // A picture is made on the machine; a small SVG is shown as is.
-                      src={
-                        ending(picked.name) === "svg"
-                          ? readHref(at(picked.name))
-                          : previewHref(at(picked.name), picked.modified)
-                      }
-                      alt={picked.name}
-                      className="max-h-full max-w-full object-contain shadow-card"
-                    />
-                  </div>
-                ) : isText(picked) && !heavy ? (
-                  text === null ? (
-                    <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
-                      Looking…
-                    </p>
-                  ) : (
-                    <Editor
-                      name={picked.name}
-                      value={text}
-                      onChange={(next) => {
-                        setText(next);
-                        setDirty(true);
-                      }}
-                    />
-                  )
-                ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center">
-                    <span className="text-body-medium text-text-secondary">
-                      {picked.name}
-                    </span>
-                    <span className="text-body-regular text-text-tertiary">
-                      {size(picked.size)}.{" "}
-                      {heavy ? "Too big to open here." : "Nothing to show."}{" "}
-                      Open it to save it.
-                    </span>
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </div>
 
       <AnimatePresence>
@@ -1271,56 +1089,6 @@ export function Finder({
       </AnimatePresence>
 
       {/* An edit is never thrown away without a word. */}
-      <AlertDialog
-        open={ask !== null}
-        onOpenChange={(on) => {
-          if (on) return;
-          ask?.stop?.();
-          setAsk(null);
-        }}
-      >
-        <AlertDialogContent size="sm">
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              Save what you changed in {picked?.name}?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              It has not been saved to your computer yet.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <ShadButton
-              variant="outline"
-              onClick={() => {
-                ask?.stop?.();
-                setAsk(null);
-              }}
-            >
-              Cancel
-            </ShadButton>
-            <ShadButton
-              variant="outline"
-              onClick={() => {
-                const go = ask?.go;
-                setDirty(false);
-                setAsk(null);
-                go?.();
-              }}
-            >
-              Discard
-            </ShadButton>
-            <ShadButton
-              onClick={() => {
-                const { go, stop } = ask ?? {};
-                setAsk(null);
-                void save().then((ok) => (ok ? go?.() : stop?.()));
-              }}
-            >
-              Save
-            </ShadButton>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

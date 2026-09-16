@@ -10,9 +10,14 @@ import { principal } from "@/lib/session";
 
 // The person's computer's browser, the one Claude Code drives, live and
 // in their hands.
-export default async function BrowserPage() {
+export default async function BrowserPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ url?: string }>;
+}) {
   const p = await principal();
   if (!p) redirect("/");
+  const { url } = await searchParams;
   const off = deployment.computers.kind === "none";
   const c = off ? null : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   // Ready is the door answering, not a date on the row.
@@ -36,7 +41,9 @@ export default async function BrowserPage() {
           description="Its browser appears here once it is."
         />
       ) : (
-        <LiveBrowser />
+        <LiveBrowser
+          href={url ? `/browser?url=${encodeURIComponent(url)}` : undefined}
+        />
       )}
     </main>
   );

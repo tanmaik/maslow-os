@@ -10,12 +10,8 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { InBar } from "@/app/room/panel";
+import { BarButton, InBar } from "@/app/room/panel";
 import { Button } from "@/components/base/buttons/button";
-import {
-  ButtonGroup,
-  ButtonGroupItem,
-} from "@/components/base/buttons/button-group";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { Divider } from "@/components/base/divider/divider";
 import { InputBase } from "@/components/base/input/input";
@@ -80,7 +76,17 @@ type Said =
   | { size: { w: number; h: number } }
   | { pong: number };
 
-export function LiveBrowser() {
+// The address a browser window was opened at, if one was named.
+const askedOf = (href?: string) => {
+  const url = new URLSearchParams(href?.split("?")[1] ?? "").get("url");
+  return url && /^https?:\/\//.test(url) ? url : undefined;
+};
+
+export function LiveBrowser({ href }: { href?: string }) {
+  // An address to turn to as soon as the browser is open, once; a window
+  // already up and turned to a new one goes there at once.
+  const asked = askedOf(href);
+  const goTo = useRef(asked);
   const [state, setState] = useState<"asking" | "open" | "closed" | "failed">(
     "asking",
   );
@@ -110,6 +116,19 @@ export function LiveBrowser() {
   const sock = useRef<WebSocket | null>(null);
   // Each hand is numbered, so the browser's answer finds who asked.
   const seq = useRef(0);
+  const turnTo = (ws: WebSocket, url: string) => {
+    ws.send(
+      JSON.stringify({ act: { kind: "navigate", url }, id: ++seq.current }),
+    );
+    goTo.current = undefined;
+  };
+  useEffect(() => {
+    const asked = askedOf(href);
+    if (!asked) return;
+    goTo.current = asked;
+    if (sock.current?.readyState === WebSocket.OPEN)
+      turnTo(sock.current, asked);
+  }, [href]);
   const waiting = useRef(new Map<number, (answer: Answer) => void>());
   // Where a drag began on the picture, while the button is down, and what
   // came of the last drag: the words it selected, or why it could not
@@ -203,6 +222,7 @@ export function LiveBrowser() {
           if ("browser" in s) {
             seen = s.browser === "open";
             setState(s.browser);
+            if (seen && goTo.current) turnTo(next, goTo.current);
           } else if ("tabs" in s) {
             setTabs(s.tabs);
             setCurrent(s.current);
@@ -412,11 +432,13 @@ export function LiveBrowser() {
       {/* Where it has been, where it is, and where it is going: one row,
           in the window's own bar when there is one. */}
       <InBar
-        // Where the browser is is the browser: on a phone the address
-        // keeps the strip under the bar, the width of the screen.
+        // Where the browser is is the browser: the address stands in the
+        // bar for the window's name, and on a phone keeps the strip under
+        // the bar, the width of the screen.
+        name={false}
         phone="strip"
         as={(controls) => (
-          <div className="flex h-[45px] shrink-0 items-center border-b border-separator-border px-2">
+          <div className="flex h-8 shrink-0 items-center border-b border-separator-border px-2">
             {controls}
           </div>
         )}
@@ -428,29 +450,23 @@ export function LiveBrowser() {
             if (url.trim()) send({ kind: "navigate", url: url.trim() });
           }}
         >
-          <ButtonGroup size="small" aria-label="This page">
-            <ButtonGroupItem
-              size="small"
-              iconOnly
-              leadingIcon={RiArrowLeftLine}
-              aria-label="Back"
-              onClick={() => send({ kind: "back" })}
-            />
-            <ButtonGroupItem
-              size="small"
-              iconOnly
-              leadingIcon={RiArrowRightLine}
-              aria-label="Forward"
-              onClick={() => send({ kind: "forward" })}
-            />
-            <ButtonGroupItem
-              size="small"
-              iconOnly
-              leadingIcon={RiRefreshLine}
-              aria-label="Reload"
-              onClick={() => send({ kind: "reload" })}
-            />
-          </ButtonGroup>
+          {/* Bare arrows, as a browser's are: nothing framed in a bar that
+              is already a frame. */}
+          <BarButton
+            icon={RiArrowLeftLine}
+            label="Back"
+            onClick={() => send({ kind: "back" })}
+          />
+          <BarButton
+            icon={RiArrowRightLine}
+            label="Forward"
+            onClick={() => send({ kind: "forward" })}
+          />
+          <BarButton
+            icon={RiRefreshLine}
+            label="Reload"
+            onClick={() => send({ kind: "reload" })}
+          />
           <InputBase
             ref={address}
             size="small"
@@ -480,7 +496,7 @@ export function LiveBrowser() {
           raised, any can be closed, and there is always room for one more.
           Words picked on the page are carried from here, where they cannot
           be read as the address. */}
-      <div className="flex h-[37px] shrink-0 items-center gap-1 overflow-x-auto border-b border-separator-border px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div className="flex h-[32px] shrink-0 items-center gap-1 overflow-x-auto border-b border-separator-border px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <PillTabList aria-label="Tabs">
           <AnimatePresence initial={false}>
             {tabs.map((t) => (
@@ -521,14 +537,11 @@ export function LiveBrowser() {
             ))}
           </AnimatePresence>
         </PillTabList>
-        <button
-          type="button"
-          aria-label="Open a new tab"
+        <BarButton
+          icon={RiAddLine}
+          label="Open a new tab"
           onClick={() => tell({ newTab: true })}
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-2lg text-foreground-icon-secondary transition-colors duration-fast ease-plain outline-none hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring"
-        >
-          <RiAddLine className="size-4" aria-hidden />
-        </button>
+        />
         {selected && (
           <Button
             variant="ghost"

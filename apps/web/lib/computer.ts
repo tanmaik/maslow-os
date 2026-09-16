@@ -36,6 +36,7 @@ import {
   sharePort,
   spentByDay,
   type Computer,
+  type Size,
   type Move,
   type PortShare,
   type SharedPort,
@@ -57,13 +58,13 @@ import {
 import { openrouter } from "./openrouter.ts";
 import { isRegion, regionName, type Region } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
-import { sameSize, SIZES, type SizeKey } from "./sizes.ts";
+import { above, sameSize, SIZES, type SizeKey } from "./sizes.ts";
 
 // Every computer starts at the ladder's first rung, with this much disk.
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-20";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-38";
 
 // An image whose label ends in -security does not wait on the person for
 // a week: it takes the idle rule from the day it is ready.
@@ -818,9 +819,9 @@ async function stray(held: Set<string>): Promise<void> {
 }
 
 // The key's spend since the last sweep, into the ledger, and its ceiling
-// set again where the key carries less than the row's cap or still resets
-// by the month. A key OpenRouter no longer has is forgotten and the
-// machine remade with a fresh one.
+// set again where the key carries a different cap than the row's or still
+// resets by the month. A key OpenRouter no longer has is forgotten and
+// the machine remade with a fresh one.
 async function spend(q: Query, c: Computer, m: Machine): Promise<void> {
   const models = deployment.models;
   if (models.kind !== "openrouter" || !c.modelKeyHash) return;
@@ -829,18 +830,18 @@ async function spend(q: Query, c: Computer, m: Machine): Promise<void> {
   try {
     const read = await openrouter.spent(c.modelKeyHash);
     total = read.usage;
-    const behind = read.limit !== null && read.limit < capUsd;
+    const off = read.limit !== capUsd;
     const monthly = read.every !== "weekly";
-    if (behind || monthly) {
+    if (off || monthly) {
       await openrouter.cap(c.modelKeyHash, capUsd);
       await note(q, {
         orgId: c.orgId,
         userId: c.userId,
         resource: "key",
-        event: "grown",
+        event: "capped",
         ref: c.modelKeyHash,
         detail: { capUsd, was: read.limit, wasEvery: read.every },
-        why: monthly ? "the cap is weekly now" : "the cap grew",
+        why: monthly ? "the cap is weekly now" : "the cap changed",
       });
     }
   } catch (err) {
@@ -1016,7 +1017,10 @@ async function reconcileOrg(
         const s = await fly
           .stats(c.machineId!, ticket(c, 60))
           .catch(() => null);
-        if (s) await grow(q, c, s);
+        if (s) {
+          await grow(q, c, s);
+          await lift(q, c, s);
+        }
         // The update waiting on this computer, once the person's word and
         // the machine's own state agree that it is time.
         const quiet = idle(s);
@@ -1206,6 +1210,19 @@ async function grow(q: Query, c: Computer, s: Stats): Promise<void> {
   await extend(q, c, "the disk was nearly full");
 }
 
+// A computer found with its memory nearly full moves up a rung on its
+// own, never down; at the top, says so to us and leaves it.
+async function lift(q: Query, c: Computer, s: Stats): Promise<void> {
+  if (!s.memory?.total || s.memory.used < s.memory.total * 0.9) return;
+  const key = above(c);
+  if (!key) {
+    console.error(`computer ${c.id}: memory nearly full at the top rung`);
+    return;
+  }
+  if (!(await holdComputer(q, c.id))) return;
+  await reshapeTo(q, c, SIZES[key], "memory was nearly full");
+}
+
 // Grows the disk by half again, up to the ceiling; at the ceiling, says
 // so to us and leaves it.
 async function extend(q: Query, c: Computer, why: string): Promise<void> {
@@ -1369,6 +1386,7 @@ export async function files(p: Principal): Promise<{
   list(at: string): Promise<Entry[]>;
   read(at: string, range?: string): Promise<Response>;
   preview(at: string): Promise<Response>;
+  pdf(at: string): Promise<Response>;
   // Written whole, or added to the end, which keeps what anyone wrote
   // to it meanwhile.
   write(at: string, body: string, append?: boolean): Promise<number>;
@@ -1381,6 +1399,7 @@ export async function files(p: Principal): Promise<{
     list: (at) => fly.files.list(m, t(), at),
     read: (at, range) => fly.files.read(m, t(), at, range),
     preview: (at) => fly.files.preview(m, t(), at),
+    pdf: (at) => fly.files.pdf(m, t(), at),
     write: (at, body, append) => fly.files.write(m, t(), at, body, append),
   };
 }
@@ -1410,12 +1429,24 @@ export async function liveTarget(
   p: Principal,
 ): Promise<{ door: string; ticket: string } | null> {
   const d = deployment.computers;
-  const c = await ready(p);
-  if (!c || d.kind === "none") return null;
+  if (d.kind === "none") return null;
+  const c = (await ready(p)) ?? (await awoken(p));
+  if (!c) return null;
   return {
     door: `wss://${c.machineId}.${d.domain}`,
     ticket: ticket(c, 3600),
   };
+}
+
+// A computer whose row an update or a restart reset, ready again the
+// moment its door answers: the desk alone asks nothing else that would
+// find it, and a person's pets should not wait on a page that polls.
+async function awoken(p: Principal): Promise<Computer | null> {
+  const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  if (!c?.machineId || c.readyAt || c.move || !(await doorAnswers(c)))
+    return null;
+  await asOrg(p.orgId, (q) => setReady(q, c.id, true));
+  return { ...c, readyAt: new Date() };
 }
 
 // Where the person's browser sends their location: the machine's own
@@ -1473,35 +1504,47 @@ export async function resize(p: Principal, key: SizeKey): Promise<boolean> {
     if (!c?.readyAt || !c.machineId || !(await holdComputer(q, c.id)))
       return false;
     if (sameSize(size, c)) return true;
-    await setSize(q, c.id, size);
-    await setReady(q, c.id, false);
-    await note(q, {
-      orgId: c.orgId,
-      userId: c.userId,
-      resource: "machine",
-      event: "resized",
-      ref: c.machineId,
-      detail: {
-        cpuKind: size.cpuKind,
-        cpus: size.cpus,
-        memoryMb: size.memoryMb,
-      },
-      why: "the person asked",
-    });
-    const m = await fly.machine(c.machineId);
-    await fly.reshape(c.machineId, {
-      image: IMAGE,
-      volumeId: c.volumeId!,
+    await reshapeTo(q, c, size, "the person asked");
+    return true;
+  });
+}
+
+// Puts a held, ready computer on a size: the row first, so the row is
+// always the truth the sweep restores, then the machine remade into it on
+// its own disk.
+async function reshapeTo(
+  q: Query,
+  c: Computer,
+  size: Size,
+  why: string,
+): Promise<void> {
+  await setSize(q, c.id, size);
+  await setReady(q, c.id, false);
+  await note(q, {
+    orgId: c.orgId,
+    userId: c.userId,
+    resource: "machine",
+    event: "resized",
+    ref: c.machineId,
+    detail: {
       cpuKind: size.cpuKind,
       cpus: size.cpus,
       memoryMb: size.memoryMb,
-      secret: c.secret,
-      brain: await brainOf(q, c),
-      who: await whoOf(q, c),
-      modelKey: await modelKeyOf(q, c),
-      metadata: m ? wanted(c, m) : tags(c),
-    });
-    return true;
+    },
+    why,
+  });
+  const m = await fly.machine(c.machineId!);
+  await fly.reshape(c.machineId!, {
+    image: IMAGE,
+    volumeId: c.volumeId!,
+    cpuKind: size.cpuKind,
+    cpus: size.cpus,
+    memoryMb: size.memoryMb,
+    secret: c.secret,
+    brain: await brainOf(q, c),
+    who: await whoOf(q, c),
+    modelKey: await modelKeyOf(q, c),
+    metadata: m ? wanted(c, m) : tags(c),
   });
 }
 
@@ -1854,15 +1897,6 @@ export async function wakeShared(
         .catch((err: Error) => console.error(`wake ${c.id}: ${err.message}`)),
     ),
   );
-}
-
-// Whose account Claude Code on the computer runs on: ours, with the weekly
-// cap, where this deployment mints keys; the person's own elsewhere.
-export function modelOf(): { kind: "ours"; capUsd: number } | { kind: "mine" } {
-  const m = deployment.models;
-  return m.kind === "openrouter"
-    ? { kind: "ours", capUsd: m.capUsd }
-    : { kind: "mine" };
 }
 
 // What a person has spent on models, in dollars: this week against their

@@ -379,6 +379,7 @@ export async function note(
       | "reset"
       | "resized"
       | "grown"
+      | "capped"
       | "spent"
       | "ready"
       | "scheduled"

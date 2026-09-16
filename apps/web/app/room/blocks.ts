@@ -1,12 +1,10 @@
 import {
   RiBrainLine,
   RiChat3Line,
-  RiFileTextLine,
   RiFolderLine,
   RiGlobalLine,
   RiSettings3Line,
   RiTerminalBoxLine,
-  RiWindowLine,
 } from "@remixicon/react";
 import type { ComponentType, SVGProps } from "react";
 
@@ -142,12 +140,6 @@ export const boundsOf = (t: {
     ? WIDGET
     : (BLOCKS.find((b) => b.href === pathOf(t.href))?.bounds ??
       (t.kind === "record" ? RECORD : PORT));
-
-// The mark a window wears: the block's, or the kind's when the dock did
-// not offer it, like a port or a record.
-export const markOf = (t: { kind: Kind; href: string }): Mark =>
-  BLOCKS.find((b) => b.href === pathOf(t.href))?.mark ??
-  (t.kind === "record" ? RiFileTextLine : RiWindowLine);
 
 // The icon a window wears in the dock: the block's, or the kind's.
 export const faceOf = (t: { kind: Kind; href: string }): string =>

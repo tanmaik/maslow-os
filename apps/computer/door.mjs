@@ -6,7 +6,12 @@
 // another machine's name is passed to that machine's door over Fly's
 // private network, whatever its size.
 import { execFile, spawn } from "node:child_process";
-import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomBytes,
+  timingSafeEqual,
+} from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -223,6 +228,10 @@ function brainLine(ws) {
   brain = ws;
   ws.text = (text) => {
     const said = parse(text);
+    // A ping from the other end is answered, so it can tell this line is
+    // still the door's and not one a restart left hanging open.
+    if (said?.ping !== undefined)
+      return ws.sendText(JSON.stringify({ pong: said.ping }));
     const answer = said && waiting.get(said.id);
     if (!answer) return;
     waiting.delete(said.id);
@@ -535,7 +544,13 @@ const server = http.createServer(async (req, res) => {
     if (typeof ask?.path === "string") {
       const rel = files.within(ask.path);
       if (rel === null) return say(res, 400, "That is not in your home.");
-      return offer({ path: rel });
+      // A file opens in the Preview window and a folder in Files, so
+      // which it is goes with it.
+      let file = false;
+      try {
+        file = !fs.statSync(path.join(FIND_HOME, rel)).isDirectory();
+      } catch {}
+      return offer({ path: rel, file });
     }
     let open;
     try {
@@ -546,6 +561,47 @@ const server = http.createServer(async (req, res) => {
     if (!/^https?:$/.test(open.protocol))
       return say(res, 400, "Only a web address can be opened.");
     return offer(open.href);
+  }
+  // The two tools of the door's own, asked for by the small server it
+  // hands every conversation of the agent's: a wakeup, which prompts the
+  // conversation again after a while, and a monitor, which prompts it
+  // with each line a command prints. The token names the conversation.
+  if (to.mine && url.pathname === "/maslow/tools" && req.method === "POST") {
+    if (!fromTheMachine(req))
+      return say(res, 403, "Only the machine itself may ask.");
+    const ask = parse(await bodyOf(req));
+    const id = acp?.tokens.get(ask?.token);
+    if (!id)
+      return say(res, 403, "That is no conversation of this computer's.");
+    const args = ask?.args ?? {};
+    if (ask?.tool === "schedule_wakeup") {
+      const delay = Math.min(
+        86400,
+        Math.max(30, Number(args.delay_seconds) || 0),
+      );
+      const prompt = String(args.prompt ?? "").trim();
+      if (!prompt) return say(res, 400, "Say what to wake up with.");
+      wakeupSet(id, delay, prompt);
+      return say(res, 200, `You will be woken in ${delay} seconds.`);
+    }
+    if (ask?.tool === "monitor") {
+      const command = String(args.command ?? "").trim();
+      if (!command) return say(res, 400, "Say what to run.");
+      const told = monitorStart(
+        id,
+        command,
+        String(args.description ?? command),
+      );
+      return say(res, told.ok ? 200 : 400, told.said);
+    }
+    if (ask?.tool === "stop_monitor") {
+      const m = monitors.get(String(args.id ?? ""));
+      if (!m || m.chat !== id)
+        return say(res, 404, "No monitor of yours by that id.");
+      monitorStop(m);
+      return say(res, 200, `Monitor ${m.id} stopped.`);
+    }
+    return say(res, 400, "No such tool.");
   }
   // The brain, for what runs on this machine: the person's own agent asks
   // here, and the token it carries says whose brain answers.
@@ -988,8 +1044,9 @@ function talk(ws, url) {
   term.onData((data) => ws.sendBytes(data));
   term.onExit(() => ws.close());
   // The session's windows, in order, and which this terminal is looking
-  // at: asked every second and said whenever they change, so the page
-  // lists them and marks the one in view.
+  // at: asked four times a second, so a window opened or renamed in the
+  // terminal itself shows in the list about as fast as it happened, and
+  // said only when they change, so the page is quiet the rest of the time.
   let windows = null;
   const list = async () => {
     const out = await tmux(
@@ -1017,7 +1074,7 @@ function talk(ws, url) {
     windows = now;
     ws.sendText(now);
   };
-  const listing = setInterval(() => void list(), 1000);
+  const listing = setInterval(() => void list(), 250);
   ws.bytes = (data) => {
     seen();
     term.write(data);
@@ -1450,8 +1507,9 @@ function frame(nals) {
 
 // The agent: Claude Code on this machine as an editor talks to it, over
 // the Agent Client Protocol. One process for the machine, started as the
-// person in their home on the auth the terminal's `claude` runs on, and
-// started again when it ends. The door holds the conversation, not the
+// person in their home on the key Maslow gave the machine, and started
+// again when it ends. It is the one way to that key: the person's own
+// `claude` in a terminal never sees it. The door holds the conversation, not the
 // tab: the sockets carry the protocol's lines both ways, one JSON message
 // to a frame, what the agent said while nobody watched is kept and
 // replayed to the next socket, and the session id is written to the disk
@@ -1460,9 +1518,13 @@ function frame(nals) {
 // Where the agent works: the person's home, as any shell of theirs opens.
 const HOME = "/home/me";
 
-// Which conversation this computer is in, outside the person's Linux so a
-// reset of theirs never takes it.
-const SESSION = "/data/.agent-session";
+// The conversations this computer has open, outside the person's Linux so
+// a reset of theirs never takes them; opened again when the door starts.
+const CHATS = "/data/.agent-chats.json";
+// A conversation quiet this long is closed, its Claude Code process
+// freed, and opened again with its whole history the next time it is
+// wanted.
+const SLEEP = 3 * 60_000;
 
 // The most of what the agent said that is kept for the next socket.
 const KEPT = 2000;
@@ -1474,43 +1536,401 @@ const watchers = new Set();
 // socket has ever asked for one.
 let acp = null;
 
-// The conversation this computer was last in, as the disk has it.
-function sessionWas() {
+// The conversations open when the door last ran, as the disk has them.
+function chatsWere() {
   try {
-    const id = fs.readFileSync(SESSION, "utf8").trim();
-    return /^[0-9a-fA-F-]{36}$/.test(id) ? id : null;
+    const ids = JSON.parse(fs.readFileSync(CHATS, "utf8"));
+    return Array.isArray(ids)
+      ? ids.filter((id) => /^[0-9a-fA-F-]{36}$/.test(id)).slice(0, 4)
+      : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-const sessionIs = (id) => {
+const chatsAre = (room) => {
   try {
-    fs.writeFileSync(SESSION, id);
+    fs.writeFileSync(CHATS, JSON.stringify([...room.chats.keys()]));
   } catch {
     // A disk that will not take it costs the next door its history and
     // nothing else.
   }
 };
 
+// The server of the door's own tools, handed to a conversation as it is
+// opened: Claude Code starts it beside the conversation over stdio, and
+// every call comes back to the door under this token, which is the
+// conversation's name to the door and nothing else's.
+function handed() {
+  const token = randomBytes(16).toString("hex");
+  return {
+    token,
+    servers: [
+      {
+        name: "maslow",
+        command: "node",
+        args: ["/opt/maslow/agent-tools.mjs"],
+        env: [{ name: "MASLOW_TOOL_TOKEN", value: token }],
+      },
+    ],
+  };
+}
+
+// A word to a conversation from the door itself, a wakeup firing or a
+// monitor's lines: into the record as a line of the person's, into the
+// running turn if one runs and as a turn of its own if not, and the
+// conversation woken first if it sleeps.
+async function chatSay(id, text) {
+  const room = acp ?? agentStart();
+  await room.started;
+  if (acp !== room) return;
+  const chat = await chatOpen(room, id);
+  if (!chat || acp !== room) return;
+  fromAgent(room, {
+    jsonrpc: "2.0",
+    method: "session/update",
+    params: {
+      sessionId: chat.id,
+      update: {
+        sessionUpdate: "user_message_chunk",
+        content: { type: "text", text },
+      },
+    },
+  });
+  const steer = (chat.busy ?? 0) > 0;
+  if (!steer) {
+    chat.busy = (chat.busy ?? 0) + 1;
+    chatRunning(room, chat, true);
+  }
+  try {
+    await agentAsk(room, "session/prompt", {
+      sessionId: chat.id,
+      prompt: [{ type: "text", text }],
+    });
+  } catch {
+    // A turn that failed ends like any other; the record says what it said.
+  } finally {
+    if (!steer && acp === room && room.chats.get(chat.id) === chat) {
+      chat.busy = Math.max(0, (chat.busy ?? 1) - 1);
+      settle(room, chat);
+    }
+  }
+}
+
+// A wakeup: one per conversation, kept on the disk so the door coming
+// back still keeps it, and fired at once when its time passed while the
+// door was down.
+const WAKEUPS = "/data/.agent-wakeups.json";
+const wakeups = new Map();
+function wakeupsWere() {
+  try {
+    const w = JSON.parse(fs.readFileSync(WAKEUPS, "utf8"));
+    return w && typeof w === "object" ? w : {};
+  } catch {
+    return {};
+  }
+}
+const wakeupsAre = (w) => {
+  try {
+    fs.writeFileSync(WAKEUPS, JSON.stringify(w));
+  } catch {
+    // Kept in memory alone, then.
+  }
+};
+function wakeupArm(id, at, prompt) {
+  clearTimeout(wakeups.get(id));
+  wakeups.set(
+    id,
+    setTimeout(
+      () => {
+        wakeups.delete(id);
+        void chatSay(id, prompt).then(() => {
+          const w = wakeupsWere();
+          delete w[id];
+          wakeupsAre(w);
+        });
+      },
+      Math.max(0, at - Date.now()),
+    ),
+  );
+}
+function wakeupSet(id, delay, prompt) {
+  const at = Date.now() + delay * 1000;
+  const w = wakeupsWere();
+  w[id] = { at, prompt };
+  wakeupsAre(w);
+  wakeupArm(id, at, prompt);
+}
+
+// A monitor: a command run as the person, whose lines reach its
+// conversation as they come, a second's worth at a time. It outlives the
+// conversation's sleep, waking it with what it prints, and ends with the
+// door.
+const monitors = new Map();
+let ranMonitors = 0;
+function monitorStart(chat, command, description) {
+  let mine = 0;
+  for (const m of monitors.values()) if (m.chat === chat) mine++;
+  if (mine >= 4)
+    return {
+      ok: false,
+      said: "Four monitors already run for you; stop one first.",
+    };
+  const id = `m${++ranMonitors}`;
+  const proc = spawn(
+    "/usr/sbin/chroot",
+    [
+      ...AS_THEM,
+      `USER=${PERSON}`,
+      `LOGNAME=${PERSON}`,
+      "SHELL=/bin/bash",
+      "LANG=C.UTF-8",
+      "/bin/bash",
+      "-lc",
+      `cd ${HOME} && ${command}`,
+    ],
+    { cwd: "/", stdio: ["ignore", "pipe", "pipe"], detached: true },
+  );
+  const m = {
+    id,
+    chat,
+    proc,
+    held: "",
+    lines: [],
+    timer: undefined,
+    stopped: false,
+  };
+  monitors.set(id, m);
+  const tell = () => {
+    m.timer = undefined;
+    if (!m.lines.length) return;
+    const said = m.lines.splice(0).join("\n");
+    void chatSay(chat, `[monitor ${id}: ${description}]\n${said}`);
+  };
+  const heard = (buf) => {
+    const parts = (m.held + buf).split("\n");
+    m.held = parts.pop() ?? "";
+    if (m.held.length > 4096) {
+      m.lines.push(`${m.held.slice(0, 4096)} …`);
+      m.held = "";
+    }
+    for (const line of parts) if (line.trim()) m.lines.push(line);
+    if (m.lines.length > 200) m.lines.splice(0, m.lines.length - 200);
+    if (!m.timer) m.timer = setTimeout(tell, 1000);
+  };
+  proc.stdout.on("data", heard);
+  proc.stderr.on("data", heard);
+  proc.on("error", (err) => heard(`${err.message}\n`));
+  proc.on("exit", (code, signal) => {
+    monitors.delete(id);
+    if (m.held.trim()) m.lines.push(m.held);
+    clearTimeout(m.timer);
+    if (!m.stopped) m.lines.push(`(ended: ${signal ?? `exit ${code}`})`);
+    tell();
+  });
+  return {
+    ok: true,
+    said: `Monitor ${id} started: ${description}. What it prints reaches you as it comes; stop_monitor ${id} ends it.`,
+  };
+}
+function monitorStop(m) {
+  m.stopped = true;
+  try {
+    process.kill(-m.proc.pid, "SIGTERM");
+  } catch {
+    // Gone already.
+  }
+}
+
+// A conversation as the page is told of it.
+const chatSaid = (chat) => ({
+  id: chat.id,
+  running: chat.running,
+  modes: chat.session?.modes ?? null,
+  title: titles[chat.id] ?? null,
+});
+
+// The key of Maslow's this machine holds, which is what a session of ours
+// runs on. It is the door's, given by our server with the machine, and is
+// written nowhere in the person's Linux: the door hands it to the agent
+// behind the Agent window and to the terminals it runs its commands in,
+// and `claude` in the person's own terminal never sees it.
+const asOurs = () => [
+  "MASLOW_AUTH=managed",
+  `MASLOW_MODEL_KEY=${process.env.MODEL_KEY ?? ""}`,
+];
+
 // The whole picture of the conversation: what the process is doing, which
 // conversation it is in, and whether a prompt is running. `clear` says the
 // transcript a socket holds is no longer this one's, so the page begins
 // again on what follows.
-// Whether this machine holds a key of Maslow's, which is what a session of
-// ours runs on: the boot writes it into the person's Linux, or does not.
-const managed = () => fs.existsSync(`${OS}/etc/profile.d/maslow-model-key.sh`);
-
 const agentHello = (clear) => ({
   maslow: {
     clear,
-    managed: managed(),
     state: acp?.state ?? "off",
     why: acp?.why ?? null,
-    session: acp?.session ?? null,
-    running: acp?.running ?? false,
+    chats: acp ? [...acp.chats.values()].map(chatSaid) : [],
   },
 });
+
+// How full the conversation is, reckoned from Claude Code's own record of
+// it on the machine, since a model reached through OpenRouter reports no
+// token counts of its own: what was said, what the tools said back and
+// what was thought, about four characters to a token, counted since the
+// last time Claude Code folded the conversation down. Told to every
+// socket when a conversation is opened and each time a prompt ends.
+const WINDOW = 1_000_000;
+const record = (id) =>
+  `${FIND_HOME}/.claude/projects/${HOME.replaceAll("/", "-")}/${id}.jsonl`;
+async function contextOf(id) {
+  let text;
+  try {
+    const at = record(id);
+    const { size } = await fs.promises.stat(at);
+    if (size > 64 * 1024 * 1024) return null;
+    text = await fs.promises.readFile(at, "utf8");
+  } catch {
+    return null;
+  }
+  let said = 0;
+  let tools = 0;
+  let thought = 0;
+  const grow = (s) =>
+    typeof s === "string" ? s.length : JSON.stringify(s ?? "").length;
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    let j;
+    try {
+      j = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    // A fold: what came before it is no longer in the window.
+    if (j.type === "summary" || j.isCompactSummary) {
+      said = grow(j.summary ?? j.message?.content);
+      tools = 0;
+      thought = 0;
+      continue;
+    }
+    const content = j.message?.content;
+    if (content === undefined) continue;
+    if (typeof content === "string") {
+      said += content.length;
+      continue;
+    }
+    for (const c of content) {
+      if (c?.type === "text") said += grow(c.text);
+      else if (c?.type === "thinking") thought += grow(c.thinking);
+      else if (c?.type === "tool_use") tools += grow(c.input);
+      else if (c?.type === "tool_result") tools += grow(c.content);
+    }
+  }
+  const tokens = (n) => Math.round(n / 4);
+  return {
+    max: WINDOW,
+    segments: [
+      { label: "Messages", tokens: tokens(said) },
+      { label: "Tools and their output", tokens: tokens(tools) },
+      { label: "Thinking", tokens: tokens(thought) },
+    ],
+  };
+}
+// What a conversation is called: a few plain words from its first
+// exchange, asked of the model the key runs once the first answer is in,
+// kept on the disk beside the session id, and laid over the first-prompt
+// names Claude Code's own list gives.
+const TITLES = "/data/.agent-titles.json";
+let titles = {};
+try {
+  titles = JSON.parse(fs.readFileSync(TITLES, "utf8"));
+} catch {
+  titles = {};
+}
+const naming = new Set();
+// A conversation's name, whoever gave it: kept on the disk and told to
+// every socket.
+function entitled(id, title) {
+  titles[id] = title;
+  try {
+    fs.writeFileSync(TITLES, JSON.stringify(titles));
+  } catch {
+    // The disk keeps it next time.
+  }
+  toWatchers({ maslow: { chat: { id, title } } });
+}
+
+async function entitle(chat) {
+  const id = chat.id;
+  if (!id || titles[id] || naming.has(id) || !process.env.MODEL_KEY) return;
+  const words = (kind) =>
+    chat.ring
+      .filter(
+        (m) =>
+          m.method === "session/update" &&
+          m.params?.update?.sessionUpdate === kind,
+      )
+      .map((m) => m.params.update.content?.text ?? "")
+      .join("")
+      .trim();
+  const person = words("user_message_chunk");
+  const agent = words("agent_message_chunk");
+  if (!person) return;
+  naming.add(id);
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${process.env.MODEL_KEY}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "z-ai/glm-5.3-flash:nitro",
+        // The model thinks before it answers and will not be told not to;
+        // the budget is wide enough that the name comes after the thought
+        // rather than in place of it.
+        max_tokens: 400,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Name this conversation in at most five plain words, as a title. No quotes, no full stop, no word 'conversation'. Answer with the title alone.",
+          },
+          {
+            role: "user",
+            content: `Person: ${person.slice(0, 600)}\n\nAgent: ${agent.slice(0, 600)}`,
+          },
+        ],
+      }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const j = await res.json();
+    const title = String(j?.choices?.[0]?.message?.content ?? "")
+      .trim()
+      .split("\n")[0]
+      .replace(/^["'“]|["'”.]$/g, "")
+      .slice(0, 60);
+    if (title) entitled(id, title);
+  } catch (err) {
+    // Unnamed is what Claude Code's own list calls it, and that stands.
+    console.error("naming a conversation:", err?.message ?? err);
+  } finally {
+    naming.delete(id);
+  }
+}
+const titled = (result) =>
+  result?.sessions
+    ? {
+        ...result,
+        sessions: result.sessions.map((s) =>
+          titles[s.sessionId] ? { ...s, title: titles[s.sessionId] } : s,
+        ),
+      }
+    : result;
+
+async function tellContext(chat) {
+  const context = await contextOf(chat.id).catch(() => null);
+  toWatchers({ maslow: { chat: { id: chat.id, context } } });
+}
 
 const toWatchers = (said) => {
   const line = JSON.stringify(said);
@@ -1529,6 +1949,9 @@ const toAgent = (room, said) => {
 // answers or when the process ends under it.
 function agentAsk(room, method, params) {
   return new Promise((answer, fail) => {
+    // A process that has ended answers nothing ever again, so an ask that
+    // arrives after it fails now rather than waiting for a reply.
+    if (room.gone) return fail(new Error("The agent stopped answering."));
     const id = ++room.asked;
     room.waiting.set(id, (said) =>
       said && !said.error
@@ -1543,15 +1966,63 @@ function agentAsk(room, method, params) {
 
 // Whether a prompt is running, told to every socket so each shows the way
 // to stop it, whichever of them sent it.
-function agentRunning(room, on) {
-  if (room.running === on) return;
-  room.running = on;
-  if (acp === room) toWatchers({ maslow: { running: on } });
+function chatRunning(room, chat, on) {
+  clearTimeout(chat.quiet);
+  chat.quiet = undefined;
+  if (chat.running !== on) {
+    chat.running = on;
+    toWatchers({ maslow: { chat: { id: chat.id, running: on } } });
+  }
+  if (on) return;
+  // A question the agent asked before it acted belongs to the prompt that
+  // just ended, answered or not; it is not asked of the next socket to
+  // arrive.
+  for (let i = chat.ring.length - 1; i >= 0; i--)
+    if (
+      /^(session\/request_permission|_maslow\/ask)$/.test(chat.ring[i].method)
+    ) {
+      const [gone] = chat.ring.splice(i, 1);
+      if (gone.id !== undefined)
+        toAgent(room, {
+          jsonrpc: "2.0",
+          id: gone.id,
+          error: { code: -32800, message: "The person moved on." },
+        });
+    }
+  void tellContext(chat);
+  void entitle(chat);
+  nap(room, chat);
 }
+
+// A turn is over once the agent has been quiet for a moment with no
+// prompt of the door's own still out and no question waiting on the
+// person: a word pushed into a running turn can start another the door
+// never asked for, and that one has no answer to mark its end.
+const SETTLE = 1000;
+const asking = (chat) =>
+  chat.ring.some((m) =>
+    /^(session\/request_permission|_maslow\/ask)$/.test(m.method),
+  );
+function settle(room, chat) {
+  clearTimeout(chat.settle);
+  chat.settle = setTimeout(() => {
+    chat.settle = undefined;
+    if (chat.busy > 0 || asking(chat)) return;
+    if (acp === room && room.chats.get(chat.id) === chat)
+      chatRunning(room, chat, false);
+  }, SETTLE);
+}
+
+// A conversation left alone sleeps after a while: its process is freed,
+// and it opens again whole when wanted.
+const nap = (room, chat) => {
+  clearTimeout(chat.quiet);
+  chat.quiet = setTimeout(() => void chatClose(room, chat.id), SLEEP);
+};
 
 // The terminals the agent runs its commands in. The protocol lets the
 // client own them: the agent asks for one, the door starts it as the
-// person in their home on the auth their `claude` runs on, and what it
+// person in their home on the key Maslow gave the machine, and what it
 // writes goes to every socket as it arrives, so a command's output is
 // live in the Agent window instead of a wall of text at the end. The
 // browser never runs anything; it is shown what this one did.
@@ -1596,15 +2067,20 @@ function terminalStart(params) {
     params?.command ?? "",
     ...(params?.args ?? []).map(quoted),
   ].join(" ");
-  // The environment the agent named, as either shape the protocol uses.
-  // Not MASLOW_AUTH: a session of ours runs on credentials of ours and
-  // never spends what the person provided, and `env -i` takes the last
-  // assignment, so an agent naming it would win.
+  // The environment the agent named, as either shape the protocol uses,
+  // kept to what a variable may be called — chroot reads every word before
+  // the command as an assignment — and never ours: a session of ours runs
+  // on credentials of ours and never spends what the person provided, and
+  // the last assignment wins, so an agent naming them would win.
   const named = (
     Array.isArray(params?.env)
       ? params.env.map((e) => `${e?.name}=${e?.value ?? ""}`)
       : Object.entries(params?.env ?? {}).map(([k, v]) => `${k}=${v}`)
-  ).filter((e) => !e.startsWith("MASLOW_AUTH="));
+  ).filter(
+    (e) =>
+      /^[A-Za-z_][A-Za-z0-9_]*=/.test(e) &&
+      !/^MASLOW_(AUTH|MODEL_KEY)=/.test(e),
+  );
   const proc = spawn(
     "/usr/sbin/chroot",
     [
@@ -1613,8 +2089,8 @@ function terminalStart(params) {
       `LOGNAME=${PERSON}`,
       "SHELL=/bin/bash",
       "LANG=C.UTF-8",
-      "MASLOW_AUTH=managed",
-      ...named.filter((e) => /^[A-Za-z_][A-Za-z0-9_]*=/.test(e)),
+      ...asOurs(),
+      ...named,
       "/bin/bash",
       "-lc",
       `cd ${quoted(cwd)} && ${line}`,
@@ -1723,10 +2199,37 @@ function fromAgent(room, said) {
   }
   if (typeof said.method === "string" && said.method.startsWith("terminal/"))
     return void terminalAsk(room, said);
-  room.ring.push(said);
-  if (room.ring.length > KEPT) room.ring.shift();
+  const chat = room.chats.get(said.params?.sessionId);
+  if (!chat) return;
+  if (chat.replaying && said.method === "session/update") return;
+  chat.ring.push(said);
+  if (chat.ring.length > KEPT) chat.ring.shift();
   toWatchers(said);
+  if (said.method === "session/update") {
+    const kind = said.params?.update?.sessionUpdate;
+    if (
+      /^(agent_message_chunk|agent_thought_chunk|tool_call|tool_call_update|plan)$/.test(
+        kind,
+      )
+    ) {
+      if (!chat.running) chatRunning(room, chat, true);
+      settle(room, chat);
+    }
+  } else if (asking(chat)) clearTimeout(chat.settle);
 }
+
+// The records of conversations closed since the door started, by id, so
+// one opened again is whole on the page before Claude Code has loaded it.
+// Only the last few are held: a door that runs for weeks would otherwise
+// keep every transcript it ever closed.
+const KEPT_CHATS = 8;
+const kept = new Map();
+const keep = (id, ring) => {
+  kept.set(id, ring);
+  // A Map hands back its keys in the order they were set, so the first is
+  // the one closed longest ago.
+  if (kept.size > KEPT_CHATS) kept.delete(kept.keys().next().value);
+};
 
 function agentStart() {
   const proc = spawn(
@@ -1739,7 +2242,7 @@ function agentStart() {
       "LANG=C.UTF-8",
       // A session of ours, on the key Maslow gave the machine, never on
       // what the person provided for their own.
-      "MASLOW_AUTH=managed",
+      ...asOurs(),
       "/bin/bash",
       "-lc",
       `cd ${HOME} && exec /opt/maslow/bin/claude-code-acp`,
@@ -1750,12 +2253,15 @@ function agentStart() {
     proc,
     state: "starting",
     why: null,
+    // Set when the process ends, so nothing asks a dead one anything.
+    gone: false,
     // What the agent answered `initialize` with, which every socket is
     // given: the process takes one client, and the door is it.
     init: null,
-    session: null,
-    running: false,
-    ring: [],
+    chats: new Map(),
+    tokens: new Map(),
+    spare: null,
+    warming: false,
     asked: 0,
     waiting: new Map(),
   };
@@ -1776,10 +2282,16 @@ function agentStart() {
   proc.stdin.on("error", () => {});
   proc.on("error", () => {});
   proc.on("exit", () => {
-    if (acp !== room) return;
-    acp = null;
+    // Nothing of this room outlives its process: what the door was waiting
+    // on is failed rather than left hanging, and the sleep timers are
+    // cleared, since one firing minutes later would close a conversation of
+    // the dead room and write its chats over the living one's.
+    room.gone = true;
     for (const answer of room.waiting.values()) answer(null);
     room.waiting.clear();
+    for (const chat of room.chats.values()) clearTimeout(chat.quiet);
+    if (acp !== room) return;
+    acp = null;
     // The terminals were the agent's; nothing of it is left running when
     // it goes.
     for (const t of terminals.values()) terminalEnd(t, true);
@@ -1803,26 +2315,12 @@ function agentStart() {
           terminal: true,
         },
       });
-      const was = sessionWas();
-      // Loading replays the conversation as the agent's own lines, so what
-      // the person said and what it answered are there before they look.
-      const back =
-        was &&
-        (await agentAsk(room, "session/load", {
-          sessionId: was,
-          cwd: HOME,
-          mcpServers: [],
-        }).catch(() => null));
-      if (back) room.session = { id: was, ...back };
-      else {
-        const made = await agentAsk(room, "session/new", {
-          cwd: HOME,
-          mcpServers: [],
-        });
-        room.session = { ...made, id: made.sessionId };
-        sessionIs(made.sessionId);
-      }
+      // The conversations open when the door last ran are opened again,
+      // each replayed as the agent's own lines, so what the person said
+      // and what it answered are there before they look.
       room.state = "ready";
+      for (const id of chatsWere()) await chatOpen(room, id);
+      void chatWarm(room);
     } catch (err) {
       room.state = "failed";
       room.why = err?.message ?? "The agent did not start.";
@@ -1832,25 +2330,111 @@ function agentStart() {
   return room;
 }
 
-// The conversation this computer is in, replaced: a new one, an earlier
-// one of the agent's own opened again, or this one forked so the work goes
-// two ways from here. Every socket is told to begin again before the
-// change, since loading replays the conversation as the agent's own lines;
-// one that cannot be opened is a new one rather than nothing.
-async function agentTurn(room, method, params) {
-  room.ring.length = 0;
-  toWatchers(agentHello(true));
-  const now = await agentAsk(room, method, params).catch(() => null);
-  if (acp !== room) return;
-  if (!now) {
-    if (method !== "session/new")
-      await agentTurn(room, "session/new", { cwd: HOME, mcpServers: [] });
-    return;
+// A conversation opened: a new one, or an earlier one of the agent's own
+// brought back. Several stand open at once, each with its own record and
+// its own prompt running or not. A record is made before the agent is
+// asked, since loading replays the conversation as the agent's own lines
+// and they must land in it, and anyone opening it meanwhile waits on the
+// same load; one that cannot be opened is forgotten. A new one is the
+// warm one when there is one, and the next is warmed behind it.
+async function chatOpen(room, id) {
+  const had = id ? room.chats.get(id) : undefined;
+  if (had) {
+    await had.ready;
+    return room.chats.get(id) ?? null;
   }
-  const id = now.sessionId ?? params.sessionId;
-  room.session = { ...now, id };
-  sessionIs(id);
-  toWatchers({ maslow: { session: room.session } });
+  const chat = {
+    id: id ?? null,
+    session: null,
+    token: null,
+    running: false,
+    ring: kept.get(id) ?? [],
+    replaying: kept.has(id),
+    quiet: undefined,
+    ready: null,
+  };
+  kept.delete(id);
+  if (id) {
+    room.chats.set(id, chat);
+    toWatchers({ maslow: { chat: { id, clear: true } } });
+    for (const said of chat.ring) toWatchers(said);
+  }
+  const spare = id ? null : room.spare;
+  if (!id) {
+    room.spare = null;
+    void chatWarm(room);
+  }
+  const tools = spare ?? handed();
+  chat.ready = spare
+    ? Promise.resolve(spare)
+    : agentAsk(
+        room,
+        id ? "session/load" : "session/new",
+        id
+          ? { sessionId: id, cwd: HOME, mcpServers: tools.servers }
+          : { cwd: HOME, mcpServers: tools.servers },
+      ).catch(() => null);
+  const now = await chat.ready;
+  chat.replaying = false;
+  if (acp !== room || (id && room.chats.get(id) !== chat)) return null;
+  if (!now) {
+    if (id) {
+      room.chats.delete(id);
+      toWatchers({ maslow: { chat: { id, gone: true } } });
+    }
+    return null;
+  }
+  chat.id = now.sessionId ?? id;
+  chat.session = { ...now, id: chat.id };
+  chat.token = tools.token;
+  room.tokens.set(chat.token, chat.id);
+  room.chats.set(chat.id, chat);
+  chatsAre(room);
+  toWatchers({ maslow: { chat: { ...chatSaid(chat), clear: !id } } });
+  void tellContext(chat);
+  nap(room, chat);
+  return chat;
+}
+
+// One conversation kept warm and unshown, so a new one is handed over the
+// moment it is asked for: starting Claude Code takes seconds, and the
+// person should not wait on it to say a word.
+async function chatWarm(room) {
+  if (room.spare || room.warming) return;
+  room.warming = true;
+  try {
+    const tools = handed();
+    const now = await agentAsk(room, "session/new", {
+      cwd: HOME,
+      mcpServers: tools.servers,
+    });
+    if (acp === room) room.spare = { ...now, ...tools };
+  } catch {
+    // The next new conversation starts cold, and warms the one after.
+  } finally {
+    room.warming = false;
+  }
+}
+
+// A conversation closed: its prompt stopped where it is, the agent told
+// to let it go, and its Claude Code process with it. Its record stays on
+// the disk, so it opens again whole.
+async function chatClose(room, id) {
+  const chat = room.chats.get(id);
+  if (!chat) return;
+  clearTimeout(chat.quiet);
+  room.chats.delete(id);
+  room.tokens.delete(chat.token);
+  keep(id, chat.ring);
+  chatsAre(room);
+  if (chat.running)
+    toAgent(room, {
+      jsonrpc: "2.0",
+      method: "session/cancel",
+      params: { sessionId: id },
+    });
+  await agentAsk(room, "_maslow/close", { sessionId: id }).catch(() => {});
+  if (!room.chats.has(id)) toWatchers({ maslow: { chat: { id, gone: true } } });
 }
 
 function agent(ws) {
@@ -1859,7 +2443,10 @@ function agent(ws) {
   // what this socket is given to catch up on is what it holds now.
   const first = acp ?? agentStart();
   ws.sendText(JSON.stringify(agentHello(true)));
-  for (const said of first.ring) ws.sendText(JSON.stringify(said));
+  for (const chat of first.chats.values()) {
+    for (const said of chat.ring) ws.sendText(JSON.stringify(said));
+    void tellContext(chat);
+  }
   // And what the commands in the record wrote, so a tab arriving mid-run
   // sees the output under the tool call rather than an empty terminal.
   for (const t of terminals.values())
@@ -1880,17 +2467,13 @@ function agent(ws) {
     // process holds it for every socket.
     if (said.maslow) {
       const w = said.maslow;
-      if (w.fresh === true)
-        return void agentTurn(room, "session/new", {
-          cwd: HOME,
-          mcpServers: [],
-        });
-      if (typeof w.open === "string")
-        return void agentTurn(room, "session/load", {
-          sessionId: w.open,
-          cwd: HOME,
-          mcpServers: [],
-        });
+      if (w.fresh === true) return void chatOpen(room, null);
+      if (typeof w.open === "string") return void chatOpen(room, w.open);
+      if (typeof w.close === "string") return void chatClose(room, w.close);
+      if (typeof w.name?.id === "string" && typeof w.name.title === "string") {
+        const title = w.name.title.trim().slice(0, 60);
+        if (title) entitled(w.name.id, title);
+      }
       return;
     }
     if (typeof said.method === "string") {
@@ -1913,15 +2496,49 @@ function agent(ws) {
             }),
           ),
         );
-      if (said.id === undefined) return toAgent(room, said);
+      if (said.id === undefined) {
+        const stopped = room.chats.get(said.params?.sessionId);
+        if (said.method === "session/cancel" && stopped) {
+          stopped.busy = 0;
+          chatRunning(room, stopped, false);
+        }
+        return toAgent(room, said);
+      }
+      // A prompt for a conversation that is asleep wakes it first.
+      const sid = said.params?.sessionId;
+      if (
+        said.method === "session/prompt" &&
+        typeof sid === "string" &&
+        !room.chats.get(sid)?.session
+      )
+        return void chatOpen(room, sid).then((chat) => {
+          if (chat && acp === room) ws.text(text);
+          else
+            ws.sendText(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: said.id,
+                error: {
+                  code: -32603,
+                  message: "That conversation could not be opened.",
+                },
+              }),
+            );
+        });
+      const chat = room.chats.get(sid);
       // Asked under a number of the door's own, so two tabs asking at once
       // never take each other's answer.
       const id = ++room.asked;
+      // A prompt while one runs is a word into the running turn: the
+      // agent hears it at its next step, and the turn is still the one.
+      const steer = said.method === "session/prompt" && (chat?.busy ?? 0) > 0;
+      if (said.method === "session/prompt" && chat && !steer) {
+        chat.busy = (chat.busy ?? 0) + 1;
+        chatRunning(room, chat, true);
+      }
       if (said.method === "session/prompt") {
-        agentRunning(room, true);
-        // What the person said goes into the record in their own words:
-        // the agent does not say it back, and without it a socket that
-        // arrives later would see only the agent's half.
+        // What the person said goes into the record in their own words,
+        // steer or not.
         const words = (said.params?.prompt ?? [])
           .filter((c) => c?.type === "text")
           .map((c) => c.text)
@@ -1940,14 +2557,25 @@ function agent(ws) {
           });
       }
       room.waiting.set(id, (answer) => {
-        if (said.method === "session/prompt") agentRunning(room, false);
+        if (said.method === "session/prompt" && !steer) {
+          const now = room.chats.get(sid);
+          if (now) {
+            now.busy = Math.max(0, (now.busy ?? 1) - 1);
+            settle(room, now);
+          }
+        }
         ws.sendText(
           JSON.stringify({
             jsonrpc: "2.0",
             id: said.id,
             ...(answer?.error
               ? { error: answer.error }
-              : { result: answer?.result ?? null }),
+              : {
+                  result:
+                    said.method === "session/list"
+                      ? titled(answer?.result ?? null)
+                      : (answer?.result ?? null),
+                }),
           }),
         );
       });
@@ -1957,12 +2585,15 @@ function agent(ws) {
     // number; answered, it leaves the record, so the next socket to arrive
     // is not asked it again.
     if (said.id === undefined) return;
-    const at = room.ring.findIndex(
-      (m) => m.id === said.id && m.method !== undefined,
-    );
-    if (at < 0) return;
-    room.ring.splice(at, 1);
-    toAgent(room, said);
+    for (const chat of room.chats.values()) {
+      const at = chat.ring.findIndex(
+        (m) => m.id === said.id && m.method !== undefined,
+      );
+      if (at < 0) continue;
+      chat.ring.splice(at, 1);
+      settle(room, chat);
+      return toAgent(room, said);
+    }
   };
   ws.closed = () => watchers.delete(ws);
 }
@@ -2079,7 +2710,7 @@ heartbeat.start((args) =>
       `LOGNAME=${PERSON}`,
       "SHELL=/bin/bash",
       "LANG=C.UTF-8",
-      "MASLOW_AUTH=managed",
+      ...asOurs(),
       "MAX_THINKING_TOKENS=4000",
       "/bin/bash",
       "-lc",
@@ -2090,3 +2721,8 @@ heartbeat.start((args) =>
     { cwd: "/", stdio: ["ignore", "pipe", "pipe"], detached: true },
   ),
 );
+
+// The wakeups kept from before the door last ran, armed now: one whose
+// time passed meanwhile fires at once.
+for (const [id, w] of Object.entries(wakeupsWere()))
+  if (w && typeof w.prompt === "string") wakeupArm(id, w.at, w.prompt);

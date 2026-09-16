@@ -64,12 +64,18 @@ export function Connections({
                     className="flex flex-col gap-2"
                   >
                     <div className="flex items-center gap-2 px-3">
-                      <Avatar
-                        size="sm"
-                        src={accounts[0]!.logo ?? undefined}
-                        initials={initials(accounts[0]!.appName)}
-                        className="rounded-md"
-                      />
+                      {accounts[0]!.logo ? (
+                        <img
+                          src={accounts[0]!.logo}
+                          alt=""
+                          className="size-5 shrink-0 object-contain"
+                        />
+                      ) : (
+                        <Avatar
+                          size="sm"
+                          initials={initials(accounts[0]!.appName)}
+                        />
+                      )}
                       <p className="text-body-2-medium text-text-secondary">
                         {accounts[0]!.appName}
                       </p>

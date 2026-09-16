@@ -84,7 +84,7 @@ function RecordChip({ id, data }: NodeProps<RecordNode>) {
       className={`flex cursor-grab items-center gap-1.5 rounded-md border border-border-button-default bg-background-primary-default px-1.5 leading-none text-text-primary transition-[background-color,border-color] duration-fast ease-plain active:cursor-grabbing ${
         attended
           ? "border-border-button-active bg-background-primary-hover"
-          : "hover:bg-background-primary-hover"
+          : "hover:bg-background-primary-hover active:bg-background-primary-active"
       } ${
         data.focus || attended
           ? "text-caption-1-semibold"

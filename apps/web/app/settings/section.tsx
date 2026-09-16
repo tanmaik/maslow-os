@@ -1,9 +1,9 @@
 import type { ReactNode } from "react";
 
-// One well of a pane: a BoardUI card, one line on what it holds, and the
-// rest. The toolbar already says which pane this is, so the name is there
-// for a screen reader and nowhere else. Settings has one radius, 16, the
-// one BoardUI's own settings card carries.
+// One part of a pane: one line on what it holds, and the rest, lying on
+// the pane itself with a hairline between it and the next. The pane's
+// head already says which pane this is, so the name is there for a
+// screen reader and nowhere else.
 export function Section({
   id,
   title,
@@ -18,7 +18,7 @@ export function Section({
   return (
     <section
       id={id}
-      className="prefs-well relative flex flex-col gap-4 rounded-2xl border border-border-button-default bg-background-primary-default p-5 shadow-card"
+      className="prefs-well relative flex flex-col gap-4 py-5 [&+&]:border-t [&+&]:border-separator-border"
     >
       <h2 className="sr-only">{title}</h2>
       {description && (

@@ -45,14 +45,21 @@ export type ToolCall = {
   toolName?: string;
 };
 
+// A question the agent asks the person before it goes on, as Claude
+// Code's own tool shapes it.
+export type Question = {
+  question: string;
+  header?: string;
+  options: { label: string; description?: string }[];
+  multiSelect?: boolean;
+};
+
 export type PlanEntry = {
   content: string;
   status: "pending" | "in_progress" | "completed";
 };
 
 export type Mode = { id: string; name: string; description?: string | null };
-
-export type Model = { modelId: string; name: string; description?: string };
 
 export type Command = { name: string; description?: string };
 
@@ -87,16 +94,6 @@ export type Update =
       availableCommands: Command[];
     };
 
-// Which conversation the computer is in, as the door keeps it.
-export type Session = {
-  id: string;
-  modes?: { currentModeId: string; availableModes: Mode[] } | null;
-  models?: { currentModelId: string; availableModels: Model[] } | null;
-};
-
-// What the door says about the conversation itself, beside the protocol:
-// what the process is doing, which session it is in, whether a prompt is
-// running, and whether the transcript in hand is still this one's.
 // What one of the agent's terminals has written, as the door says it: the
 // command's output so far, whether the door had to stop keeping it, and
 // how it ended once it has.
@@ -109,17 +106,41 @@ export type Terminal = {
 
 export type Word = {
   clear?: boolean;
-  // Whether the computer holds a key of Maslow's, which decides what the
-  // conversation may run on.
-  managed?: boolean;
   state?: "off" | "starting" | "ready" | "failed";
   why?: string | null;
-  session?: Session | null;
-  running?: boolean;
+  // Every conversation the door holds open, when a socket arrives; a door
+  // from before spoke of one `session` instead.
+  chats?: ChatSaid[];
+  session?: unknown;
+  // One conversation changed: opened afresh (clear), gone to sleep
+  // (gone), running or not, its modes, its name, or how full it is.
+  chat?: Partial<ChatSaid> & {
+    id: string;
+    clear?: boolean;
+    gone?: boolean;
+    context?: Context | null;
+  };
   terminal?: Terminal;
   // What a socket asks of the door rather than of the agent.
   fresh?: boolean;
   open?: string;
+  close?: string;
+  name?: { id: string; title: string };
+};
+
+// A conversation as the door tells of it.
+type ChatSaid = {
+  id: string;
+  running: boolean;
+  modes: { currentModeId: string; availableModes: Mode[] } | null;
+  title: string | null;
+};
+
+// How full a conversation is, as the door reckons it from Claude Code's
+// own record on the machine: about, by token bucket.
+export type Context = {
+  max: number;
+  segments: { label: string; tokens: number }[];
 };
 
 // One thing in the transcript. A message grows as its chunks arrive; a

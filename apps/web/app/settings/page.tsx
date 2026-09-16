@@ -34,14 +34,14 @@ import { LocationRow } from "@/app/settings/location";
 import { LookPicker } from "@/app/settings/look-picker";
 import { Wallpaper } from "@/app/settings/wallpaper";
 import { papersOf } from "@/lib/wallpapers";
-import { Agents } from "@/app/settings/agents";
+import { AccessPane } from "@/app/settings/access";
+import { ClaudePane } from "@/app/settings/claude";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { Connections } from "@/app/settings/connections";
 import { Groups } from "@/app/settings/groups";
 import { Panes, type Pane } from "@/app/settings/panes";
 import { Row, Rows } from "@/app/settings/row";
 import { Said } from "@/app/settings/said";
-import { UsagePane } from "@/app/settings/usage";
 import { Section } from "@/app/settings/section";
 import type { Told } from "@/app/settings/told";
 import { on } from "@/app/settings/when";
@@ -55,12 +55,12 @@ import { storage } from "@/lib/storage";
 const PANE_OF: Partial<Record<keyof Notice, string>> = {
   profile: "you",
   leave: "you",
-  keys: "computer",
+  keys: "access",
   org: "org",
   member: "members",
   invite: "members",
   connection: "apps",
-  agent: "agents",
+  agent: "access",
   group: "groups",
   delete: "delete",
 };
@@ -229,7 +229,7 @@ export default async function Settings({
   // when neither. Only that pane's rows are read: the grid, and every
   // other pane, owe nothing to the vendor or the machine.
   const came = (Object.keys(n) as (keyof Notice)[]).find((k) => k in PANE_OF);
-  const view = n.pane ?? (came && PANE_OF[came]);
+  const view = n.pane ?? (came && PANE_OF[came]) ?? "you";
   // Live from the vendor; when it does not answer, the card says so rather
   // than showing nothing connected or nothing to connect.
   const unanswered = (err: Error) => {
@@ -246,7 +246,7 @@ export default async function Settings({
   ] = await Promise.all([
     orgOf(p),
     view === "groups" ? groupsOf(p) : [],
-    view === "agents" ? agentsOf(p) : [],
+    view === "access" ? agentsOf(p) : [],
     view === "apps" && connections.enabled
       ? connections.list(p).catch(unanswered)
       : [],
@@ -268,6 +268,12 @@ export default async function Settings({
       words: ["name", "avatar", "picture", "email", "leave"],
     },
     {
+      id: "look",
+      title: "Look",
+      group: "Yours",
+      words: ["theme", "dark", "light", "accent", "colour", "color", "dock"],
+    },
+    {
       id: "computer",
       title: "Computer",
       group: "Yours",
@@ -285,28 +291,42 @@ export default async function Settings({
       ],
     },
     {
-      id: "usage",
-      title: "Usage",
+      id: "claude",
+      title: "Claude Code",
       group: "Yours",
-      words: ["models", "spend", "dollars", "limit", "cap", "openrouter"],
-    },
-    {
-      id: "look",
-      title: "Look",
-      group: "Yours",
-      words: ["theme", "dark", "light", "accent", "colour", "color", "dock"],
+      words: [
+        "models",
+        "spend",
+        "dollars",
+        "limit",
+        "cap",
+        "openrouter",
+        "sign in",
+        "auth",
+        "account",
+        "usage",
+      ],
     },
     {
       id: "apps",
-      title: "Connected apps",
+      title: "Apps",
       group: "Yours",
-      words: ["connect", "account", "gmail", "calendar"],
+      words: ["connect", "connected", "account", "gmail", "calendar"],
     },
     {
-      id: "agents",
-      title: "Agents",
+      id: "access",
+      title: "Access",
       group: "Yours",
-      words: ["mcp", "session", "brain"],
+      words: [
+        "ssh",
+        "key",
+        "port",
+        "share",
+        "mcp",
+        "session",
+        "brain",
+        "agents",
+      ],
     },
     ...(owner
       ? [{ id: "org", title: "Org", group: org.name, words: ["logo", "name"] }]
@@ -327,14 +347,14 @@ export default async function Settings({
       ? [
           {
             id: "delete",
-            title: `Delete ${org.name}`,
+            title: "Deletion",
             group: org.name,
             words: ["delete", "close"],
           },
         ]
       : []),
   ];
-  const pane = panes.find((x) => x.id === view) ?? null;
+  const pane = panes.find((x) => x.id === view) ?? panes[0]!;
   const role = (m: Member) =>
     m.id === org.principalId
       ? "principal"
@@ -447,12 +467,12 @@ export default async function Settings({
     ),
     computer: (
       <Section id="computer" title="Computer">
-        <ComputerPane p={p} said={said("keys")} />
+        <ComputerPane p={p} />
       </Section>
     ),
-    usage: (
-      <Section id="usage" title="Usage">
-        <UsagePane p={p} />
+    claude: (
+      <Section id="claude" title="Claude Code">
+        <ClaudePane p={p} />
       </Section>
     ),
     look: (
@@ -479,7 +499,15 @@ export default async function Settings({
         said={said("connection")}
       />
     ),
-    agents: <Agents orgName={org.name} agents={agents} said={said("agent")} />,
+    access: (
+      <AccessPane
+        p={p}
+        orgName={org.name}
+        agents={agents}
+        saidKeys={said("keys")}
+        saidAgent={said("agent")}
+      />
+    ),
     org: (
       <Section id="org" title="Org" description="What everyone in it sees.">
         <form
@@ -787,7 +815,7 @@ export default async function Settings({
     <main>
       <h1 className="sr-only">Settings</h1>
       <Panes panes={panes} pane={pane}>
-        {pane && panels[pane.id]}
+        {panels[pane.id]}
       </Panes>
     </main>
   );

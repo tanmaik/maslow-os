@@ -31,11 +31,11 @@ import {
 // The panes of Settings the bar can open straight to.
 const PANES: { id: string; title: string }[] = [
   { id: "you", title: "You" },
-  { id: "computer", title: "Computer" },
   { id: "look", title: "Look" },
-  { id: "apps", title: "Connected apps" },
-  { id: "agents", title: "Agents" },
-  { id: "ssh", title: "SSH" },
+  { id: "computer", title: "Computer" },
+  { id: "claude", title: "Claude Code" },
+  { id: "apps", title: "Apps" },
+  { id: "access", title: "Access" },
   { id: "org", title: "Org" },
   { id: "members", title: "Members" },
   { id: "groups", title: "Groups" },
@@ -261,7 +261,7 @@ export function CommandBar({
           autoFocus
           value={q}
           onValueChange={setQ}
-          placeholder="Find anything"
+          placeholder="Search your brain, files, ports, apps and settings"
         />
         <CommandList>
           <CommandEmpty>Nothing matches</CommandEmpty>

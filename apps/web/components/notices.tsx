@@ -4,6 +4,7 @@ import type { Notice } from "@maslow/db/notices";
 import {
   RiCheckLine,
   RiNotification3Line,
+  RiRefreshLine,
   RiQuestionAnswerLine,
   RiShareForwardLine,
 } from "@remixicon/react";
@@ -133,6 +134,10 @@ export function useNotices() {
   };
 }
 
+// The one notice that is not the brain's: the update waiting on the
+// computer.
+const UPDATE = "update";
+
 // How long ago, as a person says it.
 function ago(at: string): string {
   const seconds = Math.max(0, (Date.now() - new Date(at).getTime()) / 1000);
@@ -146,8 +151,44 @@ function ago(at: string): string {
 
 // The panel itself: every notice newest first, over the desk, out of the
 // way of the clock that opened it.
-export function NoticesPanel({ notices }: { notices: Notices }) {
+export function NoticesPanel({
+  notices,
+  update = null,
+  onUpdate,
+}: {
+  notices: Notices;
+  // An update waiting on the person's computer, until they say when.
+  update?: { image: string; readyAt: string } | null;
+  onUpdate?: (when: "now" | "tonight" | "idle") => Promise<void>;
+}) {
   const { open, show } = notices;
+  // The update as a notice: what it is, what taking it means, and the
+  // three times it can be taken, level with each other.
+  const updateRow: NotificationCenterItem | null = update
+    ? {
+        id: UPDATE,
+        category: "activity",
+        group: "",
+        title: "An update is ready for your computer",
+        description: (
+          <span className="text-body-regular text-text-secondary">
+            Image {update.image}, ready since {ago(update.readyAt)}. Taking it
+            restarts your computer, which takes about a minute. Now stops
+            whatever is running; tonight is three in the morning; when idle is a
+            quiet half hour.
+          </span>
+        ),
+        timestamp: ago(update.readyAt),
+        unread: true,
+        status: "information",
+        icon: RiRefreshLine,
+        actions: [
+          { id: "now", label: "Now", variant: "secondary" },
+          { id: "tonight", label: "Tonight", variant: "secondary" },
+          { id: "idle", label: "When idle", variant: "secondary" },
+        ],
+      }
+    : null;
   useEffect(() => {
     if (!open) return;
     const key = (e: KeyboardEvent) => e.key === "Escape" && show(false);
@@ -176,7 +217,7 @@ export function NoticesPanel({ notices }: { notices: Notices }) {
               transition: BASE,
             }}
             exit={{ opacity: 0, x: 24, filter: "blur(4px)", transition: LEAVE }}
-            className="glass-sheet fixed top-[calc(27px+env(safe-area-inset-top))] right-2 z-[70] w-[400px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-3xl"
+            className="glass-sheet glass-airy fixed top-[calc(27px+env(safe-area-inset-top))] right-2 z-[70] w-[400px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-3xl"
           >
             <NotificationCenter
               tabs={false}
@@ -188,8 +229,15 @@ export function NoticesPanel({ notices }: { notices: Notices }) {
                 onClear: notices.clear,
                 disabled: !clearable,
               }}
-              notifications={notices.notices.map((n) => row(n, notices))}
-              onAction={(id, answer) => void notices.answer(id, answer)}
+              notifications={[
+                ...(updateRow ? [updateRow] : []),
+                ...notices.notices.map((n) => row(n, notices)),
+              ]}
+              onAction={(id, answer) =>
+                id === UPDATE
+                  ? void onUpdate?.(answer as "now" | "tonight" | "idle")
+                  : void notices.answer(id, answer)
+              }
             />
             {notices.said && (
               <p className="text-body-2-regular text-text-error-primary px-4 pb-3">

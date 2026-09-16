@@ -233,7 +233,7 @@ export async function smokeMcp(stack, signIn) {
   check(
     "an app's token is not a browser's, nor a browser's an app's",
     asBrowser.status === 200 &&
-      (await asBrowser.text()).includes("Agents") &&
+      (await asBrowser.text()).includes("Access") &&
       asCookie.status === 307 &&
       new URL(asCookie.headers.get("location") ?? "", base).pathname === "/" &&
       asBearer.status === 401,
@@ -929,7 +929,7 @@ export async function smokeMcp(stack, signIn) {
   const sessionId = grant.access_token.split(".")[1];
   check(
     "settings lists the agent",
-    (await page(`${base}/settings?pane=agents`, wile)).includes(sessionId),
+    (await page(`${base}/settings?pane=access`, wile)).includes(sessionId),
     "listed by its session",
   );
   const disconnected = await fetch(`${base}/settings/agents`, {

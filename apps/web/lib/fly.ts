@@ -67,8 +67,6 @@ export type Stats = {
   disk: number | null;
   // Room left on the whole disk; absent from a machine on an older image.
   free?: number | null;
-  // Whose account Claude Code runs on there; absent from an older image.
-  auth?: "managed" | "own" | "none";
   // The face a thing serving there wears, when it has one: its own
   // favicon, which only the machine can reach to ask for.
   ports: { port: number; name: string; face?: string }[];
@@ -217,6 +215,29 @@ async function call<T>(
     throw new FlyRefused(res.status, text.slice(0, 300), `${method} ${path}`);
   // A tag or a stop answers with nothing.
   return (text ? JSON.parse(text) : null) as T;
+}
+
+// A picture or a PDF of one file, made on the machine and kept there,
+// which can take a while the first time.
+async function made(
+  machineId: string,
+  ticket: string,
+  at: string,
+  what: "preview" | "pdf",
+): Promise<Response> {
+  const res = await fetch(
+    `https://${config().app}.fly.dev/maslow/files/${what}?path=${encodeURIComponent(at)}`,
+    {
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+      },
+      signal: AbortSignal.timeout(150_000),
+    },
+  );
+  if (!res.ok)
+    throw new Error((await res.text()) || `the door answered ${res.status}`);
+  return res;
 }
 
 export const fly = {
@@ -618,21 +639,16 @@ export const fly = {
       ticket: string,
       at: string,
     ): Promise<Response> {
-      const res = await fetch(
-        `https://${config().app}.fly.dev/maslow/files/preview?path=${encodeURIComponent(at)}`,
-        {
-          headers: {
-            "fly-force-instance-id": machineId,
-            "x-maslow-ticket": ticket,
-          },
-          signal: AbortSignal.timeout(150_000),
-        },
-      );
-      if (!res.ok)
-        throw new Error(
-          (await res.text()) || `the door answered ${res.status}`,
-        );
-      return res;
+      return made(machineId, ticket, at, "preview");
+    },
+    // A file as a whole PDF, every page: a PDF as it is, a document made
+    // into one on the machine.
+    async pdf(
+      machineId: string,
+      ticket: string,
+      at: string,
+    ): Promise<Response> {
+      return made(machineId, ticket, at, "pdf");
     },
     async write(
       machineId: string,

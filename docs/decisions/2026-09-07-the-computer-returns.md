@@ -140,36 +140,41 @@ OpenRouter key, minted by us with a spending cap, placed on their machine;
 Claude Code uses it directly. Built 2026-09-08, restored 2026-09-11 after
 a day out: the key is minted with OpenRouter's provisioning key
 (`OPENROUTER_PROVISIONING_KEY`) when the machine is first made, named for
-the environment, the checkout and the computer, capped at twenty dollars a
+the environment, the checkout and the computer, capped at five dollars a
 month in production and two elsewhere, kept on the computer's row and
-given to the machine in its environment; the boot writes it to a profile
-file inside the person's Linux, again at every boot, so nothing the
-person does to their files loses it. `claude` on the machine is a wrapper
-of ours on the read-only side, on the path of any shell, a bare `ssh
-computer claude` included, that reads the key and the person's choice at
-every start and reaches OpenRouter through the Anthropic-shaped address
-it offers with the models named by OpenRouter's own ids: GLM 5.3 Flash by
-default, at Tanmai's word on 2026-09-08 and again on 2026-09-11, with the
-Claude 5 models one `/model` away. Ours is the default and the fallback:
-that is managed auth, and `auth own` in the computer's terminal
-switches Claude Code to credentials the person provides, an Anthropic
-sign-in from that terminal or a key of their own, since Anthropic itself
-has more than one way in and none of them is ours to name; `auth managed`
-switches it back at its next start, so a person whose own runs dry keeps
-working on ours. Named on 2026-09-12, over `model`, which it never was,
-and `account`, which it is not either: the one distinction that is ours
-is who provides the credential. A session of ours rather than the
-person's, a watchdog's or a timer's, is started with `MASLOW_AUTH=managed`
-in its environment, which the wrapper reads before the person's choice,
-so nothing of ours ever spends what they provided; their own terminal
-never sets it, and on a machine with no key of ours such a session
-refuses to start. Every Claude Code session is handed the answer in the
-same word, `MASLOW_AUTH`, managed or own, so a program it runs knows
-without asking; a login shell is not, since there the word is a request
-and a shell's later `auth` must still be heard. A choice made under the
-old name is carried over once at boot. The choice is a file in home,
-and the machine reports it with its numbers so the Computer page says
-which account is in use. A machine made before the deployment minted keys
+given to the machine in its environment, where it stays with the door,
+outside the person's Linux: the door hands it to the agent behind the
+Agent window and to the terminals that agent runs its commands in, and
+writes it nowhere the person's shells read (since 2026-09-14; before,
+the boot wrote it into a profile file every login shell sourced). A
+person is root in their own Linux and the agent runs as them, so a
+determined person can still read the key out of the agent's running
+process; what the rule closes is the ordinary road, and the key is capped
+per person either way. `claude` on the machine is a wrapper of ours on
+the read-only side, on the path of any shell, a bare `ssh computer
+claude` included, that reads the rule at every start and, as ours, reaches
+OpenRouter through the Anthropic-shaped address it offers with the model
+named by OpenRouter's own id: GLM 5.3 Flash on whichever of its
+providers is fastest (`:nitro`), and nothing else, at Tanmai's word late
+on 2026-09-14 (GPT-5.6 Luna was the one model from 2026-09-08 to that
+evening, and for an hour the two stood side by side in a picker). A
+protocol request the window makes — a mode, once a model — is a numbered
+line; a line without a number is a notification the agent drops, which is
+why modes had never taken before that night. Who runs on it was decided
+on 2026-09-14: only a session of ours, started with `MASLOW_AUTH=managed`
+in its environment — the agent behind the Agent window, the terminals it
+runs its commands in, a watchdog's or a timer's. The person's own
+`claude` in a terminal never sees the key: it is plain Claude Code on
+whatever they set up themselves, an Anthropic sign-in from that terminal
+or a key of their own, since Anthropic itself has more than one way in
+and none of them is ours to name. The app is the one way to the managed
+agent, and there is no switch between the two; the `auth own` / `auth
+managed` choice that stood from 2026-09-12, and a sign-in flow through
+Settings built the same day, were both taken out on Tanmai's word. Every
+Claude Code session is handed the answer in the same word,
+`MASLOW_AUTH`, managed or own, so a program it runs knows without asking.
+On a machine with no key of ours a session of ours refuses to start. A
+machine made before the deployment minted keys
 gets one at the next sweep. A deployment without the provisioning key
 mints none and says so on the Computer page: Claude Code runs on the
 person's own account there. The sweep copies each key's spend into the
@@ -246,14 +251,12 @@ runs a command or reads or writes a file goes into it. The computer is
 where Claude Code runs, not another set of remote tools.
 
 Claude Code is in the image, under `/opt/maslow` from npm, so it updates
-with the image and is `claude` on the person's path. It runs on our key by
-default, on GLM 5.3 Flash, and `auth own` in its terminal switches it to
-credentials the person provides, `auth managed` back. Zed's adapter
-for the Agent Client Protocol is beside it as `claude-code-acp`, so an
-editor on the person's Mac drives the same Claude Code over SSH on the
-same account: the choice and the key are read by a file every login
-shell and both wrappers source, proven 2026-09-11 with one prompt over
-ACP answered on GLM through OpenRouter with no Anthropic login on the
+with the image and is `claude` on the person's path, on their own
+credentials. Zed's adapter for the Agent Client Protocol is beside it as
+`claude-code-acp`; the door starts it as a session of ours, on our key
+and GPT-5.6 Luna, and that is the Agent window. The rule is read by a
+file every login shell and both wrappers source, proven 2026-09-11 with one prompt over
+ACP answered on GPT-5.6 Luna through OpenRouter with no Anthropic login on the
 machine. It knows two MCP servers out of the box, seeded
 into its settings, so a person who changes or removes one is left alone:
 

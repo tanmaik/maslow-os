@@ -53,7 +53,7 @@ export function ListView({
   const row = (r: BrainRecord) => (
     <EagerLink
       href={recordHref(r.id)}
-      className="flex min-h-11 items-baseline gap-4 border-t border-separator-border px-3 py-2.5 outline-none transition-colors duration-fast ease-plain hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:ring-inset"
+      className="flex min-h-11 items-baseline gap-4 border-t border-separator-border px-3 py-2.5 outline-none transition-colors duration-fast ease-plain hover:bg-background-primary-hover active:bg-background-primary-active focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:ring-inset"
     >
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="flex items-center gap-2">

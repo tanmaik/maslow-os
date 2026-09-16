@@ -10,6 +10,11 @@ import { machines } from "./fly.mjs";
 // each way, paired by number.
 const TICKET_FOR = 60 * 60;
 const LOOK_EVERY = 30_000;
+// How often a held door is pinged, and how long its silence is borne: a
+// machine that restarts leaves the socket to it looking open from here,
+// and only an unanswered ping tells them apart.
+const PING_EVERY = 20_000;
+const SILENCE = 65_000;
 
 // The door takes the same ticket from us as from a browser: a moment it
 // stops being good, signed with the machine's own secret.
@@ -27,13 +32,25 @@ function hold(held, id, secret, domain, mcp) {
   const letGo = () => {
     if (held.get(id) === ws) held.delete(id);
   };
+  let heard = Date.now();
+  let pings = 0;
+  const pinging = setInterval(() => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    if (Date.now() - heard > SILENCE) return ws.close();
+    ws.send(JSON.stringify({ ping: ++pings }));
+  }, PING_EVERY);
   ws.addEventListener("close", letGo);
   ws.addEventListener("error", letGo);
+  ws.addEventListener("close", () => clearInterval(pinging));
   ws.addEventListener("message", async (e) => {
     let asked;
     try {
       asked = JSON.parse(String(e.data));
     } catch {
+      return;
+    }
+    if (asked.pong !== undefined) {
+      heard = Date.now();
       return;
     }
     let status = 502;

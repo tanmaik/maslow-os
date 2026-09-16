@@ -4,6 +4,11 @@
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "boardui@latest", "mcp"]
+    },
+    "agentation": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["apps/web/node_modules/agentation-mcp/dist/cli.js", "server"]
     }
   }
 }

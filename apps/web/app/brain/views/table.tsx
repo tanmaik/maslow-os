@@ -400,7 +400,7 @@ export function TableView({
               key={row.id}
               id={row.id}
               onAction={() => router.push(recordHref(row.original.id))}
-              className="cursor-pointer outline-none transition-colors duration-fast ease-plain hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring"
+              className="cursor-pointer outline-none transition-colors duration-fast ease-plain hover:bg-background-primary-hover active:bg-background-primary-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring"
             >
               {row.getVisibleCells().map((c) => {
                 const title =

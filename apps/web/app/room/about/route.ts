@@ -29,7 +29,6 @@ export async function GET() {
       memory: stats.memory,
       disk: stats.disk,
       free: stats.free ?? null,
-      auth: stats.auth ?? null,
     },
   });
 }

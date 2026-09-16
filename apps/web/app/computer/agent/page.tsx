@@ -3,6 +3,7 @@ import { computerOf } from "@maslow/db/computers";
 import { redirect } from "next/navigation";
 
 import { Agent } from "@/app/computer/agent/agent";
+import { ChatsProvider } from "@/app/computer/agent/chats";
 import { ComputerWaiting } from "@/components/computer-waiting";
 import { stateNow } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
@@ -33,7 +34,9 @@ export default async function AgentPage() {
           description="Claude Code appears here once it is."
         />
       ) : (
-        <Agent />
+        <ChatsProvider>
+          <Agent />
+        </ChatsProvider>
       )}
     </main>
   );

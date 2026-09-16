@@ -9,16 +9,12 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Heartbeat } from "@/app/computer/heartbeat";
-import { ClaudeCode, Numbers, useStats } from "@/app/computer/numbers";
-import { Ports, type Sharing } from "@/app/computer/ports";
+import { Numbers, useStats } from "@/app/computer/numbers";
 import { Where, type From } from "@/app/computer/region";
 import { Sizes } from "@/app/computer/sizes";
 import { Row, Rows } from "@/app/settings/row";
-import { Said } from "@/app/settings/said";
-import type { Told } from "@/app/settings/told";
 import { StatusDot } from "@/components/base/badges/status-dot";
 import { Button } from "@/components/base/buttons/button";
-import { Textarea } from "@/components/base/textarea/textarea";
 import { Progress } from "@/components/ui/progress";
 import type { Kept, MoveStep, State, Update } from "@/lib/computer";
 import type { Restore, Stats } from "@/lib/fly";
@@ -57,12 +53,12 @@ const MOVE_STEPS: Record<MoveStep, [number, string]> = {
 };
 
 // A heading over one part of the pane, on the inset its rows sit on.
-const Head = ({ children }: { children: string }) => (
+export const Head = ({ children }: { children: string }) => (
   <p className="px-3 text-body-2-medium text-text-secondary">{children}</p>
 );
 
 // A command to run elsewhere, with a button that copies it whole.
-function Command({ text }: { text: string }) {
+export function Command({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-start gap-2">
@@ -333,8 +329,9 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
 
 // The person's computer once it is ready: what it is, what it is using,
 // its ports, its size, where it is, its backups, how a Mac reaches it over
-// SSH, whose credentials Claude Code runs on, and the way to start its
-// Linux over. Nothing here opens the computer: the dock does that.
+// The computer itself, ready: where and since when, the update if one
+// waits, its numbers, size, where, backups and the way to start its Linux
+// over. Nothing here opens the computer: the dock does that.
 function Ready({
   region,
   since,
@@ -342,12 +339,7 @@ function Ready({
   backedUp,
   update,
   onRestarting,
-  ssh,
-  keys,
-  said,
-  model,
   heartbeat,
-  sharing,
   door,
   where,
   moveFailed,
@@ -358,12 +350,9 @@ function Ready({
   backedUp: string | null | "off";
   update: Update | null;
   onRestarting: () => void;
-  ssh: { name: string; command: string } | null;
-  keys: string;
-  said: Told;
-  model: { kind: "ours"; capUsd: number } | { kind: "mine" };
+  // How often the person's agent runs on its own there, in minutes; zero
+  // is off.
   heartbeat: number;
-  sharing: Sharing | null;
   door: string | null;
   where: From;
   moveFailed: string | null;
@@ -385,48 +374,9 @@ function Ready({
         <Updating update={update} now={now} onRestarting={onRestarting} />
       )}
       <Numbers now={now} samples={samples} failed={failed} size={size} />
-      <Ports ports={now?.ports ?? []} sharing={sharing} />
       <Sizes current={size} />
       {door && region && <Where current={region} door={door} from={where} />}
       <Backups backedUp={backedUp} />
-      {ssh && (
-        <form
-          action="/settings/keys"
-          method="post"
-          className="flex flex-col gap-2"
-        >
-          <Head>SSH</Head>
-          <p className="px-3 text-body-2-regular text-text-secondary">
-            Your computer is <code>{ssh.name}</code>. Run this once on your Mac,
-            and <code>ssh {ssh.name}</code> lands in the same terminal the
-            Terminal page shows.
-          </p>
-          <Command text={ssh.command} />
-          <Textarea
-            size="small"
-            aria-label="Public key"
-            name="keys"
-            rows={3}
-            defaultValue={keys}
-            placeholder="ssh-ed25519 AAAA… you@yourmac"
-            spellCheck="false"
-            hint="The public keys that open it, one per line. 1Password's SSH agent or ssh-keygen gives you one."
-            inputClassName="resize-none font-mono text-caption-1-regular"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <Said {...said} />
-            </div>
-            <Button type="submit" size="small">
-              Save
-            </Button>
-          </div>
-        </form>
-      )}
-      <ClaudeCode
-        auth={now?.auth}
-        capUsd={model.kind === "ours" ? model.capUsd : null}
-      />
       <Heartbeat every={heartbeat} now={now?.heartbeat ?? null} />
       <Rows>
         <Row
@@ -475,12 +425,7 @@ export function Making({
   size,
   backedUp,
   update,
-  ssh,
-  keys,
-  said,
-  model,
   heartbeat,
-  sharing,
   door,
   where,
 }: {
@@ -496,17 +441,10 @@ export function Making({
   update: Update | null;
   // The computer's name and the one command that sets a Mac up to reach it
   // over SSH.
-  ssh: { name: string; command: string } | null;
-  // The public keys that open it today, one per line.
-  keys: string;
-  // What the last save of those keys left to say.
-  said: Told;
   // Whose account Claude Code on the computer runs on.
-  model: { kind: "ours"; capUsd: number } | { kind: "mine" };
   // How often the person's agent runs on its own there, in minutes; zero
   // is off.
   heartbeat: number;
-  sharing: Sharing | null;
   // The computer's own address, once it has one.
   door: string | null;
   where: From;
@@ -559,12 +497,7 @@ export function Making({
           restarting.current = Date.now();
           setState((was) => ({ ...was, progress: "starting" }));
         }}
-        ssh={ssh}
-        keys={keys}
-        said={said}
-        model={model}
         heartbeat={heartbeat}
-        sharing={sharing}
         door={door}
         where={where}
         moveFailed={moveFailed}

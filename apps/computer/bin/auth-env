@@ -1,40 +1,35 @@
-# The environment Claude Code runs under on this computer, from the key
-# Maslow gave the machine and the person's choice of auth: managed, our
-# key through OpenRouter's Anthropic-shaped address, GLM 5.3 Flash by
-# default with the Claude models one /model away; or own, whatever the
-# person set up themselves, in which case nothing of ours is set and what
-# we set before is taken back, and nothing of theirs is touched. Own is
-# also what a machine with no key of ours gets. Sourced, never run: by
-# `claude`, by `claude-code-acp`, and by every login shell, so any way of
-# starting Claude Code finds the same auth. MASLOW_AUTH in the
-# environment before this is read is a request, ours alone: a session of
-# ours, a watchdog's or a timer's, is started with MASLOW_AUTH=managed,
-# which outranks the person's choice. This file answers in maslow_auth,
-# managed or own, and sets nothing named MASLOW_AUTH itself, so a login
-# shell never turns the person's later choice into a request; the
-# wrappers hand the answer to Claude Code as MASLOW_AUTH.
-[ -r /etc/profile.d/maslow-model-key.sh ] && . /etc/profile.d/maslow-model-key.sh
-maslow_auth=${MASLOW_AUTH:-$(cat "$HOME/.config/maslow/auth" 2>/dev/null || echo managed)}
-if [ "$maslow_auth" != own ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
+# The environment Claude Code runs under on this computer. Two Claude
+# Codes run here and they never share credentials. A session of ours,
+# started with MASLOW_AUTH=managed and the key in MASLOW_MODEL_KEY in its
+# environment, both put there by the door — the agent behind the Agent
+# window and the terminals it runs its commands in — runs on that key,
+# through OpenRouter's Anthropic-shaped address, on GLM 5.3 Flash on
+# whichever of its providers is fastest, and nothing else. Everything else, above all
+# `claude` in the person's own terminal, is plain Claude Code on whatever
+# they set up themselves, an Anthropic sign-in or a key of their own:
+# nothing of ours is set, and anything of ours left in the environment is
+# taken back. The key is written nowhere in the person's Linux, so there
+# is no choice and no switch: the only way to the managed agent is the
+# app. Sourced, never run: by `claude`, by `claude-code-acp`, and by every
+# login shell, so any way of starting Claude Code finds the same rule.
+# This file answers in maslow_auth, managed or own.
+if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_KEY:-}" ]; then
   maslow_auth=managed
   export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
   export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_KEY"
   export ANTHROPIC_API_KEY=""
-  export ANTHROPIC_MODEL="z-ai/glm-5.3-flash"
-  # Every name Claude Code's own /model offers points at one of the two
-  # models our key pays for: the bigger one where it would reach for a
-  # bigger model, the fast one where it would reach for a fast one. No
-  # Claude model is reachable on Maslow's key; a person who wants one
-  # runs `auth own` and pays for it themselves.
-  export ANTHROPIC_DEFAULT_FABLE_MODEL="z-ai/glm-5.3"
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="z-ai/glm-5.3"
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="z-ai/glm-5.3"
-  export ANTHROPIC_DEFAULT_HAIKU_MODEL="z-ai/glm-5.3-flash"
-  export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash"
+  export ANTHROPIC_MODEL="z-ai/glm-5.3-flash:nitro"
+  # Every name Claude Code's own /model offers points at the one model
+  # our key pays for. No Claude model is reachable on Maslow's key.
+  export ANTHROPIC_DEFAULT_FABLE_MODEL="z-ai/glm-5.3-flash:nitro"
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="z-ai/glm-5.3-flash:nitro"
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="z-ai/glm-5.3-flash:nitro"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="z-ai/glm-5.3-flash:nitro"
+  export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash:nitro"
   export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
-  # GLM 5.3 Flash takes 1,310,720 tokens; Claude Code does not know the
-  # model, so it is told, or it would compact at 200k.
-  export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1310720
+  # GLM 5.3 Flash takes over a million tokens; Claude Code does not know
+  # the model, so it is told, or it would compact at 200k.
+  export CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000
 else
   maslow_auth=own
   if [ "${ANTHROPIC_BASE_URL:-}" = "https://openrouter.ai/api" ]; then
@@ -48,10 +43,8 @@ fi
 
 # Ours answers to `claude` however the path is ordered. Claude Code lives
 # in the person's home so it can update itself, and Debian's own
-# ~/.profile puts that folder first, ahead of ours; without this a switch
-# of auth would not be read until their next login, since the environment
-# is set once when a shell starts. A function outranks the path, and is
-# carried into the shells a shell opens.
+# ~/.profile puts that folder first, ahead of ours; a function outranks
+# the path, and is carried into the shells a shell opens.
 if [ -n "${BASH_VERSION:-}" ]; then
   claude() { /opt/maslow/bin/claude "$@"; }
   export -f claude
