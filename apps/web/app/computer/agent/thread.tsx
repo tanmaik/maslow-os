@@ -8,7 +8,6 @@ import {
   RiTerminalBoxLine,
   RiToolsLine,
 } from "@remixicon/react";
-import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import type {
@@ -33,8 +32,8 @@ import {
 } from "@/components/application/ai-chat/ai-chat-container";
 import { Questionnaire } from "@/components/application/questionnaire/questionnaire";
 import { Notification } from "@/components/base/notification/notification";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Markdown } from "@/components/markdown";
-import { FAST } from "@/lib/motion";
 import {
   TaskList,
   type TaskListStep,
@@ -63,7 +62,11 @@ const PATH = /(?:^|\s)((?:\/|~\/|\.\/)?[\w.-]+(?:\/[\w.-]+)+|\/[\w.-]+)/g;
 
 // The words of a step and the files it names, apart; a step that failed,
 // or a command that did not end well, says so in its line.
-function stepOf(call: ToolCall, terminal?: Terminal): TaskListStep {
+function stepOf(
+  call: ToolCall,
+  terminal: Terminal | undefined,
+  onShow: (call: ToolCall) => void,
+): TaskListStep {
   const title = titleOf(call);
   const paths = [...title.matchAll(PATH)].map((m) => m[1]!);
   const exit = terminal?.exitStatus;
@@ -82,6 +85,7 @@ function stepOf(call: ToolCall, terminal?: Terminal): TaskListStep {
   return {
     label: label || title,
     chips: paths.map((p) => ({ label: p.split("/").filter(Boolean).at(-1)! })),
+    ...(more(call, terminal) ? { onClick: () => onShow(call) } : {}),
   };
 }
 
@@ -185,11 +189,13 @@ function Did({
   running,
   under,
   terminalOf,
+  onShow,
 }: {
   calls: ToolCall[];
   running: boolean;
   under: (toolCallId: string) => ToolCall[];
   terminalOf: (call: ToolCall) => Terminal | undefined;
+  onShow: (call: ToolCall) => void;
 }) {
   // A subagent is a task of its own, with the steps it took; the rest of
   // the stretch is one task.
@@ -202,7 +208,7 @@ function Did({
       title: summaryOf(plain),
       runningTitle: doingOf(last),
       icon: markFor(last.kind, last.toolName),
-      steps: plain.map((c) => stepOf(c, terminalOf(c))),
+      steps: plain.map((c) => stepOf(c, terminalOf(c), onShow)),
     });
     plain = [];
   };
@@ -218,7 +224,7 @@ function Did({
       runningTitle: "A subagent is working",
       icon: markFor(c.kind, c.toolName),
       steps: steps.length
-        ? steps.map((s) => stepOf(s, terminalOf(s)))
+        ? steps.map((s) => stepOf(s, terminalOf(s), onShow))
         : [{ label: c.title }],
     });
   }
@@ -242,12 +248,14 @@ function Steps({
   running,
   under,
   terminalOf,
+  onShow,
 }: {
   calls: ToolCall[];
   /** Whether the agent is still at this run. */
   running: boolean;
   under: (toolCallId: string) => ToolCall[];
   terminalOf: (call: ToolCall) => Terminal | undefined;
+  onShow: (call: ToolCall) => void;
 }) {
   const stretches: { went: boolean; calls: ToolCall[] }[] = [];
   for (const c of calls) {
@@ -271,6 +279,7 @@ function Steps({
             running={running && i === stretches.length - 1}
             under={under}
             terminalOf={terminalOf}
+            onShow={onShow}
           />
         ),
       )}
@@ -288,12 +297,14 @@ function Log({
   live,
   under,
   terminalOf,
+  onShow,
 }: {
   pieces: Piece[];
   /** Whether the agent is still at this stretch. */
   live: boolean;
   under: (toolCallId: string) => ToolCall[];
   terminalOf: (call: ToolCall) => Terminal | undefined;
+  onShow: (call: ToolCall) => void;
 }) {
   const [open, setOpen] = useState(false);
   const shown = live || open;
@@ -333,6 +344,7 @@ function Log({
               running={now}
               under={under}
               terminalOf={terminalOf}
+              onShow={onShow}
             />
           ) : piece.kind === "thought" ? (
             <Thought key={piece.id} text={piece.text} live={now} />
@@ -459,8 +471,9 @@ export function Thread({
   onAnswer: (a: Ask, result: unknown) => void;
   onStop: () => void;
 }) {
-  const still = useReducedMotion();
   const bottom = useRef<HTMLDivElement>(null);
+  // A step opened onto what it did: the command's output, the edit.
+  const [showing, setShowing] = useState<ToolCall | null>(null);
   const { wrote } = useChats();
   const { items, asks, running } = chat;
   // How much this conversation's own terminals have written, so output in
@@ -542,19 +555,14 @@ export function Thread({
               </AssistantMessage>
             )
           ) : (
-            <motion.div
+            <Log
               key={run.items[0]!.id}
-              initial={still ? false : { opacity: 0, y: 4 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={FAST}
-            >
-              <Log
-                pieces={piecesOf(run.items)}
-                live={running && r === runs.length - 1}
-                under={stepsUnder}
-                terminalOf={terminalOf}
-              />
-            </motion.div>
+              pieces={piecesOf(run.items)}
+              live={running && r === runs.length - 1}
+              under={stepsUnder}
+              terminalOf={terminalOf}
+              onShow={setShowing}
+            />
           ),
         )}
         {running &&
@@ -575,6 +583,51 @@ export function Thread({
         ))}
         <div ref={bottom} />
       </div>
+      {showing && (
+        <Sheet open onOpenChange={(open) => !open && setShowing(null)}>
+          <SheetContent
+            side="bottom"
+            className="max-h-[70dvh] gap-3 rounded-t-3xl p-4"
+          >
+            <SheetTitle className="truncate text-headline-medium text-text-primary">
+              {titleOf(showing).replace(/^`+|`+$/g, "")}
+            </SheetTitle>
+            <Shown call={showing} terminal={terminalOf(showing)} />
+          </SheetContent>
+        </Sheet>
+      )}
+    </div>
+  );
+}
+
+// What a step did, whole: what the command printed, what an edit put in
+// a file, what a tool said back.
+const more = (call: ToolCall, terminal?: Terminal) =>
+  !!terminal?.output ||
+  call.content.some(
+    (c) =>
+      c.type === "diff" || (c.type === "content" && c.content.type === "text"),
+  );
+function Shown({ call, terminal }: { call: ToolCall; terminal?: Terminal }) {
+  const block =
+    "overflow-auto rounded-lg bg-background-secondary-default p-3 font-mono text-caption-1-regular whitespace-pre-wrap text-text-secondary";
+  return (
+    <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+      {call.content.map((c, i) =>
+        c.type === "diff" ? (
+          <div key={i} className="flex flex-col gap-1">
+            <span className="text-caption-1-medium text-text-tertiary">
+              {c.path}
+            </span>
+            <pre className={block}>{c.newText}</pre>
+          </div>
+        ) : c.type === "content" && c.content.type === "text" ? (
+          <pre key={i} className={block}>
+            {c.content.text}
+          </pre>
+        ) : null,
+      )}
+      {terminal?.output && <pre className={block}>{terminal.output}</pre>}
     </div>
   );
 }
