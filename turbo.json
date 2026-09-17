@@ -35,7 +35,8 @@
         "OPENROUTER_PROVISIONING_KEY",
         "SYNC_URL",
         "SYNC_SECRET",
-        "APP_URL"
+        "APP_URL",
+        "DEEPGRAM_API_KEY"
       ]
     },
     "typecheck": {
