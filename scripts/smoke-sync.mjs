@@ -56,13 +56,23 @@ export async function smokeSync(stack, signIn) {
       if (!res.ok) throw new Error(`live answered ${res.status}`);
       return res.json();
     };
+    // A connection the relay rejects never syncs, so a rejection fails
+    // this check at once, with the relay's own error output.
     const join = async (i) => {
       const { url, name, ticket } = await way(i);
       const person = open(url, name, ticket);
       opened.push(person);
-      await person.synced;
+      await Promise.race([
+        person.synced,
+        person.closed.then(() => {
+          throw new Error(`the relay rejected it: ${stack.sync.said()}`);
+        }),
+      ]);
       return person;
     };
+    // Request the app's sync route once before connecting, so `next dev`
+    // has compiled it before the relay's eight-second call to it.
+    await fetch(`${stack.url}/brain/sync/${id}`);
     const marge = await join(0);
     const runner = await join(1);
     check(
