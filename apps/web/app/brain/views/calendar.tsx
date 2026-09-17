@@ -13,12 +13,14 @@ import {
 } from "@/components/application/calendar/calendar-month-grid";
 import { CalendarMonthSwitcher } from "@/components/application/calendar/calendar-month-switcher";
 
-import { recordHref, typeColor } from "../format";
+import { recordPageHref, typeColor } from "../format";
+import { useHere } from "../here";
 import { monthOf } from "./month";
 import { WHEN, type Row } from "./query";
 
-// The records of a month laid on the days they were written, or on a date
-// field the person picked instead, on the calendar block's own switcher and grid.
+// The records of a month laid on the days they were last changed, or on a
+// date field the person picked instead, on the calendar block's own
+// switcher and grid.
 // A record opens from its chip.
 export function CalendarView({
   rows,
@@ -27,7 +29,8 @@ export function CalendarView({
   capped,
 }: {
   rows: Row[];
-  // The field the records are laid on: when they were written, or a date one.
+  // The field the records are laid on: when they were last changed, or a
+  // date one.
   on: string;
   // The date fields this type declares, which the records could be laid on.
   fields: string[];
@@ -38,6 +41,7 @@ export function CalendarView({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const from = useHere();
   const month = monthOf(params.get("month") ?? undefined);
   const [highlighted, setHighlighted] = useState<CalendarDate | null>(null);
   // The server has no zone and lays an instant on its UTC day; the browser
@@ -93,7 +97,7 @@ export function CalendarView({
       id: r.id,
       title: r.title || "(untitled)",
       color: typeColor(r.type),
-      href: recordHref(r.id),
+      href: recordPageHref(r.id, from),
     }));
 
   const monthLabel = new Intl.DateTimeFormat(undefined, {
@@ -135,8 +139,8 @@ export function CalendarView({
       </div>
       {capped && (
         <p className="text-caption-1-regular text-text-secondary">
-          This month holds more than the {rows.length} shown. Narrow it, or look
-          at it as a list.
+          This month has more than the {rows.length} shown. Add a filter, or
+          switch to the list.
         </p>
       )}
       <div className="min-h-0 flex-1 rounded-3xl bg-background-secondary-default p-3">

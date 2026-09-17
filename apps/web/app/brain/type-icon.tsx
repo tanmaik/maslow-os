@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { cx } from "@/utils/cx";
 
-import { typeColor, typeHref } from "./format";
+import { typeColor, typeHref, typeText } from "./format";
 
 // A type's mark, in the type's one colour.
 export function TypeIcon({
@@ -39,7 +39,7 @@ export function TypeMark({
   const inner = (
     <>
       <TypeIcon type={type} />
-      <span className="truncate">{type}</span>
+      <span className="truncate">{typeText(type)}</span>
     </>
   );
   const classes = cx("inline-flex min-w-0 items-center gap-2", className);

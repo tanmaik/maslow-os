@@ -44,6 +44,10 @@ export function cell(v: unknown, p?: { datatype: Datatype }): string {
 
 export const recordHref = (id: string) => `/brain/records/${id}`;
 
+// A record's page opened from a view, whose way back is that view.
+export const recordPageHref = (id: string, back: string) =>
+  `${recordHref(id)}?back=${encodeURIComponent(back)}`;
+
 // The table view of one type, or of everything. A type shared into this
 // brain is named with its owner.
 export const typeHref = (type?: string, owner?: string) => {
@@ -89,6 +93,13 @@ export function typeColor(type: string): string {
 
 // A verb as words: rests_on reads "rests on".
 export const verbText = (verb: string) => verb.replace(/_/g, " ");
+
+// A type's name as a person reads it, wherever it is read: dated_event is
+// "Dated event". The stored name is the agent's and never changes.
+export const typeText = (type: string) => {
+  const words = type.replace(/[_-]+/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
 
 // What a field can hold, in the words a person reads on the types page.
 export const HOLDS: Record<Datatype, string> = {

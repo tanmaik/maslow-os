@@ -1,6 +1,6 @@
 import type { Datatype, Filter, Property } from "@maslow/brain";
 
-import { cell } from "../format";
+import { cell, typeText } from "../format";
 
 // The ways of looking at a list of records, and what the address, the
 // filters and the sort mean. A view is a page of its own, so any of them
@@ -16,10 +16,10 @@ export type View = keyof typeof VIEWS;
 export const isView = (v: string | undefined): v is View =>
   !!v && Object.hasOwn(VIEWS, v);
 
-// When a record was written is not a declared field and never can be:
-// every record already has one. This is the name it goes by in a sort, a
-// filter and a calendar.
-export const WHEN = "written";
+// When a record was last changed is not a declared field and never can
+// be: every record already has one. This is the name it goes by in a sort,
+// a filter and a calendar.
+export const WHEN = "modified";
 
 // One condition a person set, as the address carries it: a field or WHEN, a
 // comparison, and what was typed. `in` gathers every value given for the
@@ -56,9 +56,9 @@ const WORDS: Partial<
   Record<Datatype | "when", Partial<Record<Filter["op"], string>>>
 > = {
   number: { gte: "at least", lte: "at most" },
-  date: { gte: "from", lt: "before" },
-  datetime: { gte: "from", lt: "before" },
-  when: { gte: "from", lt: "before" },
+  date: { gte: "on or after", lt: "before" },
+  datetime: { gte: "on or after", lt: "before" },
+  when: { gte: "on or after", lt: "before" },
 };
 const PLAIN: Record<Filter["op"], string> = {
   eq: "is",
@@ -66,7 +66,7 @@ const PLAIN: Record<Filter["op"], string> = {
   lt: "before",
   lte: "up to",
   gt: "after",
-  gte: "from",
+  gte: "at least",
   in: "is any of",
   contains: "contains",
   unset: "is empty",
@@ -184,7 +184,7 @@ export function termText(t: Term, properties: Property[]): string {
   const kind: Datatype | "when" =
     t.property === WHEN ? "when" : (p?.datatype ?? "text");
   const word = comparisonWord(kind, t.op);
-  const name = t.property === WHEN ? WHEN : t.property;
+  const name = t.property === WHEN ? "Modified" : typeText(t.property);
   if (t.op === "unset") return `${name} ${word}`;
   const said = t.values.map((v) =>
     p ? cell(typed(p.datatype, v), p) : cell(v, { datatype: "datetime" }),

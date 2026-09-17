@@ -21,7 +21,16 @@ import { OtherRecord } from "./other-record";
 
 // A new link from or to this record, under any verb, behind a dashed pill
 // among the links it joins.
-export function LinkForm({ id, type }: { id: string; type: string }) {
+export function LinkForm({
+  id,
+  type,
+  back,
+}: {
+  id: string;
+  type: string;
+  // Where the page comes back to once the link is made.
+  back: string;
+}) {
   return (
     <Dialog>
       <DialogTrigger
@@ -48,13 +57,14 @@ export function LinkForm({ id, type }: { id: string; type: string }) {
           method="post"
           className="contents"
         >
+          <input type="hidden" name="back" value={back} />
           <div className="-mx-5 grid gap-4 overflow-y-auto px-5">
             <div className="flex flex-col gap-1.5">
-              <Label>Reads as</Label>
+              <Label>Direction</Label>
               <Select
                 size="sm"
                 name="direction"
-                aria-label="Reads as"
+                aria-label="Direction"
                 defaultSelectedKey="out"
                 triggerClassName={`w-full ${FIELD}`}
                 popoverClassName="w-[var(--trigger-width)] max-w-none"
@@ -65,7 +75,7 @@ export function LinkForm({ id, type }: { id: string; type: string }) {
             </div>
             <Input size="small" name="verb" label="Verb" isRequired />
             <div className="flex flex-col gap-1.5">
-              <Label isRequired>The other record</Label>
+              <Label isRequired>Record</Label>
               <OtherRecord not={id} name="other" />
             </div>
           </div>

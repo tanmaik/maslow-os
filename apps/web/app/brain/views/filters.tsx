@@ -23,6 +23,7 @@ import { CloseButton } from "@/components/base/buttons/close-button";
 import { Checkbox } from "@/components/base/checkbox/checkbox";
 import {
   Dropdown,
+  DropdownDivider,
   DropdownGroup,
   DropdownItem,
   DropdownPopover,
@@ -45,7 +46,8 @@ import {
 } from "@/components/ui/sheet";
 import { cx } from "@/utils/cx";
 
-import { FIELD } from "../format";
+import { FIELD, typeText } from "../format";
+import { saidOutright } from "./kept";
 import {
   COMPARISONS,
   comparisonWord,
@@ -58,9 +60,9 @@ import {
 
 // Whose records a list holds where it can hold more than one person's.
 const WHOSE = {
-  all: "Everyone's",
-  mine: "Yours",
-  shared: "Shared with you",
+  all: "All",
+  mine: "Mine",
+  shared: "Shared with me",
 } as const;
 
 // A window of time asked for by name rather than by picking two days, read
@@ -123,6 +125,99 @@ function Choose({
   );
 }
 
+// One way of cutting a list into runs, each a page of its own.
+type Grouping = {
+  current: string;
+  options: { key: string; label: string; href: string }[];
+};
+
+// What the list is ordered by, in one menu: the field, which way, and,
+// where the list is cut into runs, by what. The trigger says the field and
+// shows the way with an arrow, as Linear's does.
+function SortMenu({
+  sort,
+  direction,
+  properties,
+  grouping,
+  onSort,
+  onDirection,
+}: {
+  sort: string;
+  direction: "asc" | "desc";
+  properties: Property[];
+  grouping?: Grouping;
+  onSort: (key: string) => void;
+  onDirection: (direction: "asc" | "desc") => void;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const Arrow = direction === "asc" ? RiArrowUpLine : RiArrowDownLine;
+  const byTime = sort === WHEN;
+  const pick = (act: () => void) => {
+    setOpen(false);
+    act();
+  };
+  return (
+    <Dropdown isOpen={open} onOpenChange={setOpen}>
+      <DropdownTrigger aria-label="Sort" className={cx(TRIGGER, "gap-1")}>
+        <span className={buttonStyles.label.small}>
+          {byTime ? "Modified" : sort}
+        </span>
+        <Arrow aria-hidden className="size-3.5" />
+      </DropdownTrigger>
+      <DropdownPopover aria-label="Sort" placement="bottom end">
+        <DropdownGroup label="Sort by">
+          {[
+            { key: WHEN, label: "Modified" },
+            ...properties
+              .filter((p) => p.datatype !== "list")
+              .map((p) => ({ key: p.name, label: typeText(p.name) })),
+          ].map((o) => (
+            <DropdownItem
+              key={o.key}
+              selected={o.key === sort}
+              onSelect={() => pick(() => onSort(o.key))}
+            >
+              {o.label}
+            </DropdownItem>
+          ))}
+        </DropdownGroup>
+        <DropdownDivider />
+        <DropdownGroup label="Order">
+          <DropdownItem
+            selected={direction === "desc"}
+            onSelect={() => pick(() => onDirection("desc"))}
+          >
+            {byTime ? "Newest first" : "Largest first"}
+          </DropdownItem>
+          <DropdownItem
+            selected={direction === "asc"}
+            onSelect={() => pick(() => onDirection("asc"))}
+          >
+            {byTime ? "Oldest first" : "Smallest first"}
+          </DropdownItem>
+        </DropdownGroup>
+        {grouping && (
+          <>
+            <DropdownDivider />
+            <DropdownGroup label="Group by">
+              {grouping.options.map((o) => (
+                <DropdownItem
+                  key={o.key}
+                  selected={o.key === grouping.current}
+                  onSelect={() => pick(() => router.push(o.href))}
+                >
+                  {o.label}
+                </DropdownItem>
+              ))}
+            </DropdownGroup>
+          </>
+        )}
+      </DropdownPopover>
+    </Dropdown>
+  );
+}
+
 // One condition being written: which field, how it compares, and what has
 // been typed so far.
 type Draft = { property: string; op: Filter["op"]; values: string[] };
@@ -145,17 +240,24 @@ export function Filters(props: {
   // Whether the view sorts itself. A table's own column headers say what
   // it is sorted by and turn it around, so the row does not say it again.
   sortsItself: boolean;
+  // How a list is cut into runs, offered inside the sort menu.
+  grouping?: Grouping;
 }) {
   const params = useSearchParams();
   const [sheet, setSheet] = useState(false);
   const many = termsFrom(params.getAll("f")).length;
   return (
     <>
-      {/* The row cancels the gap above it, so it sits against the search
-          exactly where it did when it was a block of its own. */}
-      <div className="hidden w-full flex-wrap items-center gap-2 sm:-mt-3 sm:flex">
-        <Conditions {...props} />
+      {/* The controls stand in the bar itself; the conditions, when there
+          are any, lie on a row of their own under it, as chips. */}
+      <div className="hidden shrink-0 items-center gap-2 sm:flex">
+        <Conditions {...props} part="controls" />
       </div>
+      {many > 0 && (
+        <div className="order-last hidden w-full flex-wrap items-center gap-2 sm:flex">
+          <Conditions {...props} part="chips" />
+        </div>
+      )}
       <Button
         variant="secondary"
         size="small"
@@ -176,10 +278,10 @@ export function Filters(props: {
             className="-mt-2 mx-auto h-1 w-9 shrink-0 rounded-full bg-foreground-icon-quaternary"
           />
           <SheetHeader className="p-0">
-            <SheetTitle>Narrow the list</SheetTitle>
+            <SheetTitle>Filter</SheetTitle>
           </SheetHeader>
           <div className="flex flex-wrap items-center gap-2">
-            <Conditions {...props} />
+            <Conditions {...props} part="all" />
           </div>
         </SheetContent>
       </Sheet>
@@ -192,12 +294,19 @@ function Conditions({
   people,
   offerWhose,
   sortsItself,
+  grouping,
+  part,
 }: {
   properties: Property[];
   people: { id: string; name: string }[];
   offerWhose: boolean;
   sortsItself: boolean;
+  grouping?: Grouping;
+  // Which of it to draw: the controls, the chips, or all of it in a sheet.
+  part: "controls" | "chips" | "all";
 }) {
+  const controls = part !== "chips";
+  const chips = part !== "controls";
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -213,8 +322,8 @@ function Conditions({
     const next = new URLSearchParams(params.toString());
     next.delete("cursor");
     change(next);
-    const s = next.toString();
-    router.push(s ? `${pathname}?${s}` : pathname);
+    saidOutright(next);
+    router.push(`${pathname}?${next}`);
   };
   const setTerms = (list: Term[]) =>
     go((next) => {
@@ -252,177 +361,184 @@ function Conditions({
 
   return (
     <>
-      <Popover
-        open={open}
-        onOpenChange={(to) => {
-          setOpen(to);
-          if (to) start(fields[0]!);
-          else setDraft(null);
-        }}
-      >
-        <PopoverTrigger
-          render={
-            <Button
-              variant="secondary"
-              size="small"
-              leadingIcon={RiFilter3Line}
-            >
-              Filter
-            </Button>
-          }
-        />
-        <PopoverContent align="start" className="w-80">
-          <div className="flex flex-col gap-1.5">
-            <Label>Narrow by</Label>
-            <Select
-              size="sm"
-              aria-label="Narrow by"
-              selectedKey={draft?.property ?? null}
-              onSelectionChange={(k) => start(String(k))}
-              triggerClassName={`w-full ${FIELD}`}
-              popoverClassName="w-[var(--trigger-width)] max-w-none"
-            >
-              {fields.map((name) => (
-                <SelectItem key={name} id={name}>
-                  {name}
-                </SelectItem>
-              ))}
-            </Select>
-          </div>
-          {draft && (
+      {controls && (
+        <Popover
+          open={open}
+          onOpenChange={(to) => {
+            setOpen(to);
+            if (to) start(fields[0]!);
+            else setDraft(null);
+          }}
+        >
+          <PopoverTrigger
+            render={
+              <Button
+                variant="secondary"
+                size="small"
+                leadingIcon={RiFilter3Line}
+              >
+                Filter
+              </Button>
+            }
+          />
+          <PopoverContent align="start" className="w-80">
             <div className="flex flex-col gap-1.5">
-              <Label>How</Label>
+              <Label>Field</Label>
               <Select
                 size="sm"
-                aria-label="How"
-                selectedKey={draft.op}
-                onSelectionChange={(k) =>
-                  setDraft({
-                    ...draft,
-                    op: String(k) as Filter["op"],
-                    values: [],
-                  })
-                }
+                aria-label="Field"
+                selectedKey={draft?.property ?? null}
+                onSelectionChange={(k) => start(String(k))}
                 triggerClassName={`w-full ${FIELD}`}
                 popoverClassName="w-[var(--trigger-width)] max-w-none"
               >
-                {COMPARISONS[kind].map((op) => (
-                  <SelectItem key={op} id={op}>
-                    {comparisonWord(kind, op)}
+                {fields.map((name) => (
+                  <SelectItem key={name} id={name}>
+                    {name === WHEN ? "Modified" : typeText(name)}
                   </SelectItem>
                 ))}
               </Select>
             </div>
-          )}
-          {draft && draft.op !== "unset" && (
-            <div className="flex flex-col gap-1.5">
-              <Label>What</Label>
-              {kind === "enum" ? (
-                <div className="flex flex-col gap-2">
-                  {options.map((o) => (
-                    <Checkbox
-                      size="sm"
-                      key={o}
-                      isSelected={draft.values.includes(o)}
-                      onChange={(on) =>
-                        setDraft({
-                          ...draft,
-                          values: on
-                            ? [...draft.values, o]
-                            : draft.values.filter((v) => v !== o),
-                        })
-                      }
-                    >
-                      {o}
-                    </Checkbox>
-                  ))}
-                </div>
-              ) : kind === "boolean" ? (
+            {draft && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Condition</Label>
                 <Select
                   size="sm"
-                  aria-label="What"
-                  selectedKey={draft.values[0] ?? null}
+                  aria-label="Condition"
+                  selectedKey={draft.op}
                   onSelectionChange={(k) =>
-                    setDraft({ ...draft, values: [String(k)] })
+                    setDraft({
+                      ...draft,
+                      op: String(k) as Filter["op"],
+                      values: [],
+                    })
                   }
                   triggerClassName={`w-full ${FIELD}`}
                   popoverClassName="w-[var(--trigger-width)] max-w-none"
                 >
-                  <SelectItem id="true">yes</SelectItem>
-                  <SelectItem id="false">no</SelectItem>
+                  {COMPARISONS[kind].map((op) => (
+                    <SelectItem key={op} id={op}>
+                      {comparisonWord(kind, op)}
+                    </SelectItem>
+                  ))}
                 </Select>
-              ) : kind === "date" || kind === "datetime" || kind === "when" ? (
-                <DateField
-                  id="narrow-day"
-                  name="narrow-day"
-                  time={kind !== "date"}
-                  onChange={(v) => setDraft({ ...draft, values: [v] })}
-                />
-              ) : (
-                <Input
-                  size="small"
-                  aria-label="What"
-                  type={kind === "number" ? "number" : "text"}
-                  value={draft.values[0] ?? ""}
-                  onChange={(v) => setDraft({ ...draft, values: [v] })}
-                  placeholder={kind === "number" ? "0" : "a word or two"}
-                />
-              )}
-            </div>
-          )}
-          {draft?.property === WHEN && (
-            <div className="flex flex-wrap gap-2">
-              {PRESETS.map(([name, range]) => (
-                <Button
-                  key={name}
-                  variant="secondary"
-                  size="small"
-                  onClick={() => {
-                    const [from, to] = range();
-                    shut();
-                    between(from, to);
-                  }}
-                >
-                  {name}
-                </Button>
-              ))}
-            </div>
-          )}
-          <Button
-            size="small"
-            disabled={!ready}
-            onClick={() => {
-              if (!draft) return;
-              shut();
-              put({ ...draft, values: draft.values.filter((v) => v !== "") });
-            }}
+              </div>
+            )}
+            {draft && draft.op !== "unset" && (
+              <div className="flex flex-col gap-1.5">
+                <Label>Value</Label>
+                {kind === "enum" ? (
+                  <div className="flex flex-col gap-2">
+                    {options.map((o) => (
+                      <Checkbox
+                        size="sm"
+                        key={o}
+                        isSelected={draft.values.includes(o)}
+                        onChange={(on) =>
+                          setDraft({
+                            ...draft,
+                            values: on
+                              ? [...draft.values, o]
+                              : draft.values.filter((v) => v !== o),
+                          })
+                        }
+                      >
+                        {o}
+                      </Checkbox>
+                    ))}
+                  </div>
+                ) : kind === "boolean" ? (
+                  <Select
+                    size="sm"
+                    aria-label="Value"
+                    selectedKey={draft.values[0] ?? null}
+                    onSelectionChange={(k) =>
+                      setDraft({ ...draft, values: [String(k)] })
+                    }
+                    triggerClassName={`w-full ${FIELD}`}
+                    popoverClassName="w-[var(--trigger-width)] max-w-none"
+                  >
+                    <SelectItem id="true">yes</SelectItem>
+                    <SelectItem id="false">no</SelectItem>
+                  </Select>
+                ) : kind === "date" ||
+                  kind === "datetime" ||
+                  kind === "when" ? (
+                  <DateField
+                    id="narrow-day"
+                    name="narrow-day"
+                    time={kind !== "date"}
+                    onChange={(v) => setDraft({ ...draft, values: [v] })}
+                  />
+                ) : (
+                  <Input
+                    size="small"
+                    aria-label="Value"
+                    type={kind === "number" ? "number" : "text"}
+                    value={draft.values[0] ?? ""}
+                    onChange={(v) => setDraft({ ...draft, values: [v] })}
+                    placeholder={kind === "number" ? "0" : "a word or two"}
+                  />
+                )}
+              </div>
+            )}
+            {draft?.property === WHEN && (
+              <div className="flex flex-wrap gap-2">
+                {PRESETS.map(([name, range]) => (
+                  <Button
+                    key={name}
+                    variant="secondary"
+                    size="small"
+                    onClick={() => {
+                      const [from, to] = range();
+                      shut();
+                      between(from, to);
+                    }}
+                  >
+                    {name}
+                  </Button>
+                ))}
+              </div>
+            )}
+            <Button
+              size="small"
+              disabled={!ready}
+              onClick={() => {
+                if (!draft) return;
+                shut();
+                put({ ...draft, values: draft.values.filter((v) => v !== "") });
+              }}
+            >
+              Apply
+            </Button>
+          </PopoverContent>
+        </Popover>
+      )}
+
+      {chips &&
+        terms.map((t) => (
+          <Chip
+            key={`${t.property}:${t.op}`}
+            color="soft"
+            className="gap-1 pr-1"
           >
-            Narrow the list
-          </Button>
-        </PopoverContent>
-      </Popover>
+            {termText(t, properties)}
+            <CloseButton
+              size="sm"
+              aria-label={`Remove filter on ${t.property}`}
+              title={`Remove filter on ${t.property}`}
+              onClick={() =>
+                setTerms(
+                  terms.filter(
+                    (x) => !(x.property === t.property && x.op === t.op),
+                  ),
+                )
+              }
+            />
+          </Chip>
+        ))}
 
-      {terms.map((t) => (
-        <Chip key={`${t.property}:${t.op}`} color="soft" className="gap-1 pr-1">
-          {termText(t, properties)}
-          <CloseButton
-            size="sm"
-            aria-label={`Stop narrowing by ${t.property}`}
-            title={`Stop narrowing by ${t.property}`}
-            onClick={() =>
-              setTerms(
-                terms.filter(
-                  (x) => !(x.property === t.property && x.op === t.op),
-                ),
-              )
-            }
-          />
-        </Chip>
-      ))}
-
-      <span className="flex-1" />
-
-      {offerWhose && (
+      {controls && offerWhose && (
         <Choose
           name="Whose records"
           said={
@@ -445,42 +561,25 @@ function Conditions({
         />
       )}
 
-      {!sortsItself && (
-        <>
-          <Choose
-            name="Sorted by"
-            said={`Sorted by ${sort}`}
-            options={[
-              { key: WHEN, label: WHEN },
-              ...properties
-                .filter((p) => p.datatype !== "list")
-                .map((p) => ({ key: p.name, label: p.name })),
-            ]}
-            onPick={(key) =>
-              go((next) =>
-                key === WHEN ? next.delete("sort") : next.set("sort", key),
-              )
-            }
-          />
-          <Button
-            variant="secondary"
-            size="small"
-            iconOnly
-            leadingIcon={direction === "asc" ? RiArrowUpLine : RiArrowDownLine}
-            aria-label={
-              direction === "asc" ? "Smallest first" : "Largest first, as now"
-            }
-            onClick={() =>
-              go((next) =>
-                direction === "asc"
-                  ? next.delete("dir")
-                  : next.set("dir", "asc"),
-              )
-            }
-          />
-        </>
+      {controls && !sortsItself && (
+        <SortMenu
+          sort={sort}
+          direction={direction}
+          properties={properties}
+          grouping={grouping}
+          onSort={(key) =>
+            go((next) =>
+              key === WHEN ? next.delete("sort") : next.set("sort", key),
+            )
+          }
+          onDirection={(to) =>
+            go((next) =>
+              to === "desc" ? next.delete("dir") : next.set("dir", "asc"),
+            )
+          }
+        />
       )}
-      {(terms.length > 0 || params.get("sort") || params.get("dir")) && (
+      {chips && terms.length > 0 && (
         <Button
           variant="secondary"
           size="small"

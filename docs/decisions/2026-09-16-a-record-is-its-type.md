@@ -12,12 +12,15 @@ changed and removed. Nothing else is universal. When a thing happened,
 and how sure the writer was, are fields a type declares when it needs
 them, as a `date`, `datetime` or `number` field, and the read door
 already filters and orders by any declared field. The one universal
-order is when a record was written.
+order is when a record was last modified, newest first, as a notes app
+orders its notes (amended 2026-09-17: it was when a record was written
+for a day, and Tanishk asked for the notes app's order, one built-in
+time and never two).
 
 The brain is read three ways, each one tool, each one question:
 
 - `list`: records of a type, filtered by any field the type declares and
-  by a window of when they were written, ordered by any field, paged.
+  by a window of when they were last modified, ordered by any field, paged.
 - `search`: records that say a thing or are about it. Exact hits on the
   words, quoted phrases and -exclusions over the title, the body and
   every field come first; where vectors are made, the records nearest in
@@ -36,7 +39,7 @@ what that tool actually is"; "read is more like recent or list"; and
 
 ## What it changes for the person
 
-The calendar lays records on the day they were written, or on a date
+The calendar lays records on the day they were last modified, or on a date
 field of the type's. The record page no longer shows a "when" or a "how
 sure" row of its own; a type that wants them has them as fields. A link
 between records is a verb and nothing else.

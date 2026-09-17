@@ -6,7 +6,7 @@ import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 
 import { recordHref } from "../../../format";
-import { refused } from "../../../refuse";
+import { backTo, refused } from "../../../refuse";
 
 // Links this record to another, in the direction the form chose, as a link
 // the signed-in person made. Linking the same pair the same way again
@@ -23,7 +23,7 @@ export async function POST(
   const other = String(form.get("other") ?? "");
   const verb = String(form.get("verb") ?? "");
   const out = form.get("direction") !== "in";
-  const back = recordHref(id);
+  const back = backTo(form.get("back"), recordHref(id));
   if (!isId(other)) {
     return refused(request, back, "A link needs the other record.");
   }

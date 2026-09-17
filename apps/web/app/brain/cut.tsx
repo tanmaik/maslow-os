@@ -1,6 +1,13 @@
 "use client";
 
-import { RiMoreLine } from "@remixicon/react";
+import {
+  RiCalendarLine,
+  RiKanbanView,
+  RiListUnordered,
+  RiMoreLine,
+  RiTableLine,
+} from "@remixicon/react";
+import type { ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
@@ -20,17 +27,39 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cx } from "@/utils/cx";
 
+// A way of cutting the list: its name and where it goes.
+type Option = { key: string; label: string; href: string };
+
+// The mark each way of looking at the list wears where the row is marks
+// alone.
+const MARKS: Record<
+  string,
+  ComponentType<{
+    className?: string;
+    "aria-hidden"?: boolean | "true" | "false";
+  }>
+> = {
+  list: RiListUnordered,
+  table: RiTableLine,
+  board: RiKanbanView,
+  calendar: RiCalendarLine,
+};
+
 // One way of cutting the list among a few, each a page of its own: picking
 // one goes there, and every one is fetched ahead so the pick is instant.
 export function Cut({
   label,
   options,
   current,
+  marked = false,
   className,
 }: {
   label: string;
-  options: { key: string; label: string; href: string }[];
+  options: Option[];
   current: string;
+  // Whether the segments are marks, each named for the pointer and the
+  // screen reader, rather than words.
+  marked?: boolean;
   className?: string;
 }) {
   const router = useRouter();
@@ -48,11 +77,19 @@ export function Cut({
       }}
       className={cx("shrink-0", className)}
     >
-      {options.map((o) => (
-        <SegmentedControlItem key={o.key} id={o.key}>
-          {o.label}
-        </SegmentedControlItem>
-      ))}
+      {options.map((o) => {
+        const Mark = marked ? MARKS[o.key] : undefined;
+        return (
+          <SegmentedControlItem
+            key={o.key}
+            id={o.key}
+            aria-label={Mark ? o.label : undefined}
+            className={Mark ? "px-2" : undefined}
+          >
+            {Mark ? <Mark className="size-4" aria-hidden /> : o.label}
+          </SegmentedControlItem>
+        );
+      })}
     </SegmentedControl>
   );
 }
@@ -66,7 +103,7 @@ export function Ways({
   cuts: {
     label: string;
     current: string;
-    options: { key: string; label: string; href: string }[];
+    options: Option[];
   }[];
 }) {
   const router = useRouter();
@@ -78,7 +115,7 @@ export function Ways({
       {/* A plain button, not BoardUI's: the trigger has to take the
           menu's own props, and a react-aria button swallows them. */}
       <DropdownMenuTrigger
-        aria-label="How to look at it"
+        aria-label="View"
         className={cx(
           buttonStyles.base,
           buttonStyles.size.small,

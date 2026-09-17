@@ -63,7 +63,7 @@ export function propsFrom(
 }
 
 // What every record has before its type declares anything.
-const BUILT_IN = new Set(["title", "body", "written"]);
+const BUILT_IN = new Set(["title", "body", "modified"]);
 
 // The fields a posted form declares for a type it makes up, numbered
 // f0.name, f0.datatype, f0.options and so on; one left without a name is

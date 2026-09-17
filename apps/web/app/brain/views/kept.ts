@@ -10,11 +10,17 @@ export const KEPT = [
   "dir",
   "group",
   "on",
-  "show",
   "w",
   "by",
   "whose",
 ] as const;
+
+// An address that says nothing about how to look opens the view the person
+// kept, so one they have just cleared has to say so, or the clearing is
+// undone by what was kept: the list, written out.
+export function saidOutright(next: URLSearchParams): void {
+  if (!KEPT.some((k) => next.has(k))) next.set("view", "list");
+}
 
 // Which list a remembered view belongs to: everything, or one person's type.
 export const subjectOf = (type?: string, owner?: string) =>

@@ -467,7 +467,7 @@ html[data-framed] .brain-layout {
 @media (min-width: 768px) {
   html[data-framed] .brain-layout {
     display: grid;
-    grid-template-columns: 16.25rem minmax(0, 1fr);
+    grid-template-columns: 14rem minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
   }
 }
@@ -498,6 +498,21 @@ html[data-framed] .brain-layout > main {
 }
 html[data-framed] .brain-nav[data-away] {
   display: none;
+}
+/* The list and the record beside it each scroll on their own under the
+   bar, as the columns of a notes app do. */
+html[data-framed] .page-sheet:has(> .brain-split) {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+html[data-framed] .brain-split {
+  flex: 1;
+  min-height: 0;
+}
+html[data-framed] .brain-split > * {
+  min-height: 0;
+  overflow-y: auto;
 }
 /* A brain page whose content is a card on a ground, rather than the ground
    itself, keeps its gutter inside a window as it has one on a page. */

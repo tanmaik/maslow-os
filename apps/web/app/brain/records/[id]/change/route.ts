@@ -21,7 +21,7 @@ import { principal } from "@/lib/session";
 
 import { vocabulary } from "../../../catalog";
 import { recordHref } from "../../../format";
-import { refused } from "../../../refuse";
+import { backTo, refused } from "../../../refuse";
 import { fieldValue } from "../../../props";
 
 // The number of the last change to one record, which a page watching it
@@ -55,6 +55,8 @@ export async function POST(
   const { id } = await params;
   if (!isId(id)) return new Response(null, { status: 404 });
   const form = await request.formData();
+  // The view the change was made from, which the page comes back to.
+  const back = backTo(form.get("back"), recordHref(id));
   const intent = String(form.get("intent") ?? "edit");
   const bare = request.headers.get("accept")?.includes("application/json");
 
@@ -114,7 +116,7 @@ export async function POST(
           err instanceof Forbidden ? 403 : err instanceof Conflict ? 409 : 400,
       });
     }
-    return refused(request, recordHref(id), err.message);
+    return refused(request, back, err.message);
   }
-  return NextResponse.redirect(`${origin(request)}${recordHref(id)}`, 303);
+  return NextResponse.redirect(`${origin(request)}${back}`, 303);
 }

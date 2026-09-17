@@ -19,11 +19,14 @@ import { CloseButton } from "@/components/base/buttons/close-button";
 // until the pointer or the keyboard is on it.
 export function Unlink({
   action,
+  back,
   edge,
   title,
   verb,
 }: {
   action: string;
+  // Where the page comes back to once the link is gone.
+  back: string;
   edge: string;
   title: string;
   verb: string;
@@ -44,6 +47,7 @@ export function Unlink({
         <form action={action} method="post" className="contents">
           <input type="hidden" name="intent" value="unlink" />
           <input type="hidden" name="edge" value={edge} />
+          <input type="hidden" name="back" value={back} />
           <AlertDialogHeader>
             <AlertDialogTitle>Unlink {title}?</AlertDialogTitle>
             <AlertDialogDescription>

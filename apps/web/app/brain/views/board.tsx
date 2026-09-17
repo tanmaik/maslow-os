@@ -1,7 +1,5 @@
 "use client";
 
-import type { Property } from "@maslow/brain";
-import { RiLayoutColumnLine } from "@remixicon/react";
 import { motion } from "motion/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +15,8 @@ import {
 import { LocalTime } from "@/components/local-time";
 import { cx } from "@/utils/cx";
 
-import { cell, recordHref } from "../format";
+import { recordHref, recordPageHref } from "../format";
+import { useHere } from "../here";
 import { SAID } from "../refuse";
 import type { Row } from "./query";
 
@@ -43,7 +42,6 @@ export function BoardView({
   lanes,
   group,
   choices,
-  properties,
   canWrite,
 }: {
   lanes: Lane[];
@@ -51,13 +49,13 @@ export function BoardView({
   // Every choice field this type declares, since any of them could be the
   // columns.
   choices: string[];
-  properties: Property[];
   // A colleague's records are read here and never moved.
   canWrite: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const here = useHere();
   // A card moved but not yet answered for, so the board reads as the person
   // left it while the door is still writing. A move belongs to the field it
   // was made under: a value of one field means nothing under another.
@@ -65,13 +63,11 @@ export function BoardView({
     Record<string, { group: string; to: string | null }>
   >({});
   const [carrying, setCarrying] = useState<string | null>(null);
+  // Whether the menu of what the columns are is open; a pick closes it.
+  const [choosing, setChoosing] = useState(false);
   // When the last drag ended, so the release that finished it never opens
   // the record whose title it started on.
   const dropped = useRef(0);
-  const shown = (params.get("show") ?? "")
-    .split(",")
-    .filter((n) => n && n !== group && properties.some((p) => p.name === n));
-  const fields = properties.filter((p) => p.name !== group);
 
   const go = (change: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(params.toString());
@@ -141,23 +137,23 @@ export function BoardView({
     <div className="flex flex-col gap-3 px-3 pb-3">
       <div className="flex items-center gap-2">
         <span className="text-caption-1-semibold text-text-secondary">
-          Columns are
+          Group by
         </span>
         {choices.length > 1 ? (
-          <Dropdown>
-            <DropdownTrigger
-              aria-label="What the columns are"
-              className={TRIGGER}
-            >
+          <Dropdown isOpen={choosing} onOpenChange={setChoosing}>
+            <DropdownTrigger aria-label="Group by" className={TRIGGER}>
               <span className={buttonStyles.label.small}>{group}</span>
             </DropdownTrigger>
-            <DropdownPopover aria-label="What the columns are">
+            <DropdownPopover aria-label="Group by">
               <DropdownGroup>
                 {choices.map((name) => (
                   <DropdownItem
                     key={name}
                     selected={name === group}
-                    onSelect={() => go((p) => p.set("group", name))}
+                    onSelect={() => {
+                      setChoosing(false);
+                      go((p) => p.set("group", name));
+                    }}
                   >
                     {name}
                   </DropdownItem>
@@ -169,40 +165,6 @@ export function BoardView({
           <span className="text-caption-1-semibold text-text-secondary">
             {group}
           </span>
-        )}
-        <span className="flex-1" />
-        {fields.length > 0 && (
-          <Dropdown>
-            <DropdownTrigger aria-label="What a card shows" className={TRIGGER}>
-              <RiLayoutColumnLine className="size-4 shrink-0" aria-hidden />
-              <span className={buttonStyles.label.small}>What cards show</span>
-            </DropdownTrigger>
-            <DropdownPopover
-              aria-label="What a card shows"
-              placement="bottom end"
-            >
-              <DropdownGroup>
-                {fields.map((f) => (
-                  <DropdownItem
-                    key={f.name}
-                    selected={shown.includes(f.name)}
-                    onSelect={() => {
-                      const next = shown.includes(f.name)
-                        ? shown.filter((n) => n !== f.name)
-                        : [...shown, f.name];
-                      go((p) =>
-                        next.length
-                          ? p.set("show", next.join(","))
-                          : p.delete("show"),
-                      );
-                    }}
-                  >
-                    {f.name}
-                  </DropdownItem>
-                ))}
-              </DropdownGroup>
-            </DropdownPopover>
-          </Dropdown>
         )}
       </div>
       <div className="flex gap-3 overflow-x-auto pb-2">
@@ -227,7 +189,7 @@ export function BoardView({
               </div>
               {rows.length === 0 && (
                 <p className="px-1 py-6 text-center text-caption-1-regular text-text-placeholder">
-                  Nothing here
+                  No records
                 </p>
               )}
               {rows.map((r) => (
@@ -260,7 +222,7 @@ export function BoardView({
                   )}
                 >
                   <a
-                    href={recordHref(r.id)}
+                    href={recordPageHref(r.id, here)}
                     draggable={false}
                     onClick={(e) => {
                       if (Date.now() - dropped.current < 300)
@@ -273,19 +235,6 @@ export function BoardView({
                   {r.line && (
                     <span className="line-clamp-2 text-caption-1-regular text-text-secondary">
                       {r.line}
-                    </span>
-                  )}
-                  {shown.length > 0 && (
-                    <span className="flex flex-wrap gap-x-3 text-caption-1-regular text-text-secondary">
-                      {shown.map((name) => (
-                        <span key={name} className="truncate">
-                          {name}:{" "}
-                          {cell(
-                            r.props[name],
-                            properties.find((p) => p.name === name),
-                          ) || "—"}
-                        </span>
-                      ))}
                     </span>
                   )}
                   <span className="text-caption-2-regular text-text-secondary">

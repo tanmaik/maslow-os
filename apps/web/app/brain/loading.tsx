@@ -13,12 +13,9 @@ export default function Loading() {
         <Skeleton className="h-8 w-full rounded-2lg" />
       </div>
       {[0, 1, 2, 3, 4, 5].map((n) => (
-        <div
-          key={n}
-          className="flex min-h-11 items-center gap-4 border-t border-separator-border px-3 py-2.5"
-        >
-          <Skeleton className="h-4 flex-1 rounded-sm" />
-          <Skeleton className="h-3 w-32 shrink-0 rounded-sm" />
+        <div key={n} className="flex flex-col gap-1.5 px-5 py-2.5">
+          <Skeleton className="h-4 w-1/2 rounded-sm" />
+          <Skeleton className="h-3 w-3/4 rounded-sm" />
         </div>
       ))}
     </div>

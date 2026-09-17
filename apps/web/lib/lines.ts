@@ -55,7 +55,7 @@ function by(author: string, me: string): string {
   return /\s/.test(who) ? quoted(who) : who;
 }
 
-// One record on a line: id, type, when it was written, title, then its
+// One record on a line: id, type, when it was last modified, title, then its
 // origin, standing and fields. Below it the body, whole or its first line.
 export function record(
   r: BrainRecord,
@@ -64,7 +64,7 @@ export function record(
   const parts = [
     r.id,
     token(r.type),
-    when(r.createdAt),
+    when(r.updatedAt),
     quoted(r.title),
     `src=${token(r.source)}:${token(r.sourceRef)}`,
   ];

@@ -151,12 +151,19 @@ read.
 
 The brain's pages are read far more often than written, since most of what
 is in them the agent put there. The records page is a rail of the person's
-types beside the records themselves: each type carries a bar of how full it
-is against the fullest beside it, the types a colleague shared fold under
+types beside the records themselves: each type carries how many records it
+holds, the one open is filled and nothing else in the rail is coloured,
+the types a colleague shared fold under
 that person's name, and a brain of many types is narrowed by typing one.
 The records are rows of a title and the first line of what they say, cut
-either into their types or into the days they happened, and marked with
-whose they are where they are not the reader's. A record is a document: its
+either into their types or into the days they were last modified, since
+the one time every record carries and is ordered by is its last change,
+as a note's is in a notes app, and marked with
+whose they are where they are not the reader's; the one picked reads
+beside the list, as a note does in a notes app, the arrow keys walk to
+the next, a window too narrow for both shows one at a time, and a mark
+on the record or a double-click on its row opens it as a page of its
+own, whose way back is the list it came from with it still open. A record is a document: its
 body takes its shape as it is typed, a slash offers what a line can become,
 and markdown is what is stored, so an agent writes and a person writes the
 same text. The editor is Tiptap, which is not a component and has no shadcn
@@ -192,7 +199,8 @@ One list is looked at four ways, and which way is the person's to pick: the
 rows themselves; a table with a column for every field the type declares,
 sorted by any of them and dragged as wide as they like; a board of the
 values of one choice field, with a card carried from column to column to
-change it; and a month with the records on the days they happened. All four
+change it; and a month with the records on the days they were last
+modified, or on a date field of the type's. All four
 narrow the same way, in one row under the switch: a condition on any
 declared field or on when, as many as they want, each a chip they can take
 off, and a sort. Nothing narrows in the page — the read door takes the

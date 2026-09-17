@@ -23,24 +23,24 @@ import { Button } from "@/components/base/buttons/button";
 // on the control, its mark, and what it is about to do said plainly.
 const ACTS = {
   remove: {
-    said: "Remove",
+    said: "Delete",
     mark: RiDeleteBinLine,
-    asks: "Remove this record?",
+    asks: "Delete this record?",
     means:
-      "It stops being read anywhere, and nothing linked to it is touched. You can restore it from this page.",
+      "It will no longer appear anywhere. Nothing linked to it is affected, and you can restore it from this page.",
   },
   restore: {
     said: "Restore",
     mark: RiArrowGoBackLine,
     asks: "Restore this record?",
-    means: "It is read again everywhere it was before.",
+    means: "It will appear again everywhere it did before.",
   },
   unmerge: {
     said: "Unmerge",
     mark: RiGitMergeLine,
-    asks: "Take this record back out of the merge?",
+    asks: "Unmerge this record?",
     means:
-      "It stands on its own again. The record it was merged into keeps everything it has.",
+      "It will stand on its own again. The record it was merged into keeps everything.",
   },
 } as const;
 
@@ -49,7 +49,16 @@ export type Act = keyof typeof ACTS;
 // The one thing a record's owner does to the record itself, asked before it
 // is done: a record is read far more often than it is removed, restored or
 // taken back out of a merge.
-export function Whole({ action, act }: { action: string; act: Act }) {
+export function Whole({
+  action,
+  act,
+  back,
+}: {
+  action: string;
+  act: Act;
+  // Where the page comes back to once it is done.
+  back: string;
+}) {
   const { said, mark, asks, means } = ACTS[act];
   return (
     <AlertDialog>
@@ -62,21 +71,20 @@ export function Whole({ action, act }: { action: string; act: Act }) {
             iconOnly
             aria-label={said}
             title={said}
-            className={
-              act === "remove" ? "shrink-0 text-text-error-primary" : "shrink-0"
-            }
+            className="shrink-0"
           />
         }
       />
       <AlertDialogContent>
         <form action={action} method="post" className="contents">
           <input type="hidden" name="intent" value={act} />
+          <input type="hidden" name="back" value={back} />
           <AlertDialogHeader>
             <AlertDialogTitle>{asks}</AlertDialogTitle>
             <AlertDialogDescription>{means}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction type="submit">{said}</AlertDialogAction>
           </AlertDialogFooter>
         </form>

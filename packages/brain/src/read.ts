@@ -159,8 +159,8 @@ async function narrow(q: Query, opts: ReadOptions) {
          where (e.from_id = r.id or e.to_id = r.id)
            and e.deleted_at is null
            and p.id in (select same_record($4)))))`,
-    "($5::timestamptz is null or created_at >= $5)",
-    "($6::timestamptz is null or created_at < $6)",
+    "($5::timestamptz is null or updated_at >= $5)",
+    "($6::timestamptz is null or updated_at < $6)",
     `($7::text is null
        or search @@ websearch_to_tsquery('english', $7)
        or search @@ to_tsquery('english', $8))`,
@@ -239,8 +239,8 @@ async function narrow(q: Query, opts: ReadOptions) {
   return { where, params, param, field };
 }
 
-// Records, newest written first, filtered and searched. Every record
-// carries its source and ref, so a caller can cite it.
+// Records, most recently modified first, filtered and searched. Every
+// record carries its source and ref, so a caller can cite it.
 export async function read(
   q: Query,
   opts: ReadOptions = {},
@@ -249,7 +249,7 @@ export async function read(
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const { where, params, param, field } = await narrow(q, opts);
 
-  let order = "created_at";
+  let order = "updated_at";
   let orderType = "timestamptz";
   let direction: "asc" | "desc" = "desc";
   if (opts.orderBy) {

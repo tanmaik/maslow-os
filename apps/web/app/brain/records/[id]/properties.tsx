@@ -15,7 +15,6 @@ import {
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ComponentType } from "react";
 
-import { SettingsCard } from "@/components/application/settings/settings-rows";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { Select, SelectItem } from "@/components/base/select/select";
@@ -23,7 +22,7 @@ import { DateField } from "@/components/date-field";
 import { LocalTime } from "@/components/local-time";
 import { cx } from "@/utils/cx";
 
-import { cell, FIELD } from "../../format";
+import { cell, FIELD, typeText } from "../../format";
 import { save } from "./save";
 
 type Mark = ComponentType<{
@@ -50,8 +49,8 @@ const NONE = "none";
 // far below the title.
 const SHOWN = 5;
 
-// What a record holds beside its words, as rows of a card: each field. The first
-// few filled rows show; the rest, and
+// What a record holds beside its words, as quiet lines under its title:
+// each field. The first few filled rows show; the rest, and
 // every empty one, wait behind one row that says how many more there are.
 // A row is clicked into to change it and kept as it is left.
 export function Properties({
@@ -200,31 +199,33 @@ export function Properties({
   const more = stays.filter((x) => !x).length;
 
   return (
-    <SettingsCard>
+    <div className="flex flex-col items-start gap-0.5">
       <dl className="contents">
         {held.map((r, i) => (unfolded || stays[i]) && r.row)}
       </dl>
       {more > 0 && (
         <Button
-          variant="ghost"
-          size="small"
+          variant="secondary"
+          size="xs"
           leadingIcon={unfolded ? RiArrowUpSLine : RiArrowDownSLine}
           onClick={() => setUnfolded((u) => !u)}
-          className="my-1 mr-2.5 self-start"
+          className="mt-1"
         >
-          {unfolded ? "Show less" : `${more} ${filled ? "more" : "fields"}`}
+          {unfolded
+            ? "Show less"
+            : `${more} ${filled ? "more" : more === 1 ? "field" : "fields"}`}
         </Button>
       )}
       {trouble && (
-        <p className="py-2 pr-2.5 text-body-regular text-text-error-primary">
+        <p className="py-1 text-body-regular text-text-error-primary">
           {trouble}
         </p>
       )}
-    </SettingsCard>
+    </div>
   );
 }
 
-// One row: a quiet label with its mark, and the value at the right, or the
+// One line: a quiet label with its mark, and the value beside it, or the
 // control for it while it is being changed, with a way to leave it as it
 // was.
 function Line({
@@ -245,17 +246,14 @@ function Line({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="flex min-h-[52px] w-full items-center justify-between gap-4 border-b border-separator-border py-2.5 pr-2.5 last:border-b-0">
-      <dt className="flex min-w-0 shrink-0 items-center gap-2 text-body-regular text-text-primary">
-        <Mark
-          className="size-5 shrink-0 text-foreground-icon-secondary"
-          aria-hidden
-        />
-        <span className="truncate">{label}</span>
+    <div className="flex min-h-8 w-full items-center gap-3">
+      <dt className="flex w-36 shrink-0 items-center gap-1.5 text-body-2-regular text-text-tertiary">
+        <Mark className="size-4 shrink-0" aria-hidden />
+        <span className="truncate">{typeText(label)}</span>
       </dt>
-      <dd className="flex min-w-0 flex-1 justify-end">
+      <dd className="flex min-w-0 flex-1">
         {editing ? (
-          <div className="flex w-full flex-wrap items-center justify-end gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2">
             {children}
             <Button
               type="button"
@@ -271,7 +269,7 @@ function Line({
             type="button"
             onClick={onOpen}
             className={cx(
-              "min-w-0 max-w-full cursor-pointer truncate rounded-lg px-2 py-1 text-right text-body-regular outline-none",
+              "-ml-1.5 min-w-0 max-w-full cursor-pointer truncate rounded-lg px-1.5 py-1 text-left text-body-2-regular outline-none",
               "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover active:bg-background-secondary-active focus-visible:ring-2 focus-visible:ring-border-focus-ring",
               shown ? "text-text-primary" : "text-text-tertiary",
             )}
@@ -281,7 +279,7 @@ function Line({
         ) : (
           <span
             className={cx(
-              "truncate px-2 py-1 text-right text-body-regular",
+              "truncate py-1 text-body-2-regular",
               shown ? "text-text-primary" : "text-text-tertiary",
             )}
           >

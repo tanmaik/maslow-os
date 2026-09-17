@@ -140,5 +140,5 @@ export type Filter = {
 };
 
 // What to order by: a declared field, or, with no field named, when the
-// record was written.
+// record was last modified.
 export type Sort = { property?: string; direction?: "asc" | "desc" };

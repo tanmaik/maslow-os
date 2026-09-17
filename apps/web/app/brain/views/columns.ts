@@ -1,5 +1,6 @@
 import type { Datatype, Property } from "@maslow/brain";
 
+import { typeText } from "../format";
 import { WHEN } from "./query";
 
 // A column of the table: what it reads out of a record, what it is called,
@@ -35,12 +36,12 @@ export function columnsFor(
   everything: boolean,
 ): Column[] {
   const columns: Column[] = [
-    { key: "title", label: "title", kind: "title", width: WIDTH.title },
+    { key: "title", label: "Title", kind: "title", width: WIDTH.title },
   ];
   if (everything) {
     columns.push({
       key: "type",
-      label: "type",
+      label: "Type",
       kind: "type",
       width: WIDTH.type,
     });
@@ -48,11 +49,17 @@ export function columnsFor(
   for (const p of properties) {
     columns.push({
       key: p.name,
-      label: p.name,
+      label: typeText(p.name),
       kind: p.datatype,
       width: WIDTH[p.datatype],
     });
   }
-  columns.push({ key: WHEN, label: WHEN, kind: "when", width: WIDTH.when });
+  // When each record was last modified, which no field of the type's says.
+  columns.push({
+    key: WHEN,
+    label: "Modified",
+    kind: "when",
+    width: WIDTH.when,
+  });
   return columns;
 }

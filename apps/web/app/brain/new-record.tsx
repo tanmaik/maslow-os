@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { FieldInputs } from "./fields";
-import { FIELD } from "./format";
+import { FIELD, typeText } from "./format";
 import { TypeIcon } from "./type-icon";
 
 // What a field can hold, in the word a person picks it by.
@@ -120,18 +120,20 @@ export function NewRecord({
           <Button
             size="small"
             leadingIcon={RiAddLine}
-            aria-label={type ? `New ${type.name}` : "New record"}
+            aria-label={type ? `New ${typeText(type.name)}` : "New record"}
             className="max-sm:px-2"
           />
         }
       >
         <span className="max-sm:hidden">
-          {type ? `New ${type.name}` : "New record"}
+          {type ? `New ${typeText(type.name)}` : "New record"}
         </span>
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{type ? `New ${type.name}` : "New record"}</DialogTitle>
+          <DialogTitle>
+            {type ? `New ${typeText(type.name)}` : "New record"}
+          </DialogTitle>
         </DialogHeader>
         <form action="/brain/records" method="post" className="contents">
           <input type="hidden" name="back" value={back} />
@@ -147,8 +149,8 @@ export function NewRecord({
                     <Input
                       size="small"
                       name="type"
-                      aria-label="What to call the type"
-                      placeholder="What to call it"
+                      aria-label="Type name"
+                      placeholder="Type name"
                       isRequired
                       autoFocus
                       autoComplete="off"
@@ -158,7 +160,7 @@ export function NewRecord({
                       <CloseButton
                         type="button"
                         size="sm"
-                        aria-label="Pick a type instead"
+                        aria-label="Choose an existing type"
                         onClick={() => setChosen(first)}
                       />
                     )}
@@ -178,7 +180,7 @@ export function NewRecord({
                       {types.map((t) => (
                         <SelectItem key={t.id} id={t.name}>
                           <TypeIcon type={t.name} />
-                          {t.name}
+                          {typeText(t.name)}
                         </SelectItem>
                       ))}
                       <SelectItem id={NEW}>
@@ -219,7 +221,7 @@ export function NewRecord({
                         size="small"
                         value={f.label}
                         onChange={(v) => change(f.key, { label: v })}
-                        label="What to write down"
+                        label="Field name"
                         isRequired
                         pattern="[^A-Za-z]*[A-Za-z].*"
                         autoComplete="off"
@@ -246,9 +248,9 @@ export function NewRecord({
                       />
                     </div>
                     <div className="flex flex-col gap-1.5">
-                      <Label>What kind of thing</Label>
+                      <Label>Field type</Label>
                       <SegmentedControl
-                        aria-label="What kind of thing"
+                        aria-label="Field type"
                         selectedKeys={[f.datatype]}
                         onSelectionChange={(keys) => {
                           const k = [...keys][0];
@@ -269,8 +271,8 @@ export function NewRecord({
                         name={`f${i}.options`}
                         value={f.options}
                         onChange={(v) => change(f.key, { options: v })}
-                        label="The options"
-                        placeholder="The options, separated by commas"
+                        label="Options"
+                        placeholder="Options, separated by commas"
                         isRequired
                         pattern=".*\S.*"
                         autoComplete="off"

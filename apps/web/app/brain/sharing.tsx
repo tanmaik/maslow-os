@@ -36,12 +36,12 @@ export function ShareFields({
   return (
     <>
       <div className="flex flex-col gap-1.5">
-        <Label isRequired>With</Label>
+        <Label isRequired>Share with</Label>
         <Select
           size="sm"
           name="subject"
-          aria-label="With"
-          placeholder="Nobody yet"
+          aria-label="Share with"
+          placeholder="Choose people"
           isRequired
           triggerClassName={`w-full ${FIELD}`}
           popoverClassName="w-[var(--trigger-width)] max-w-none"
@@ -60,11 +60,11 @@ export function ShareFields({
         </Select>
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label>May</Label>
+        <Label>Permission</Label>
         <Select
           size="sm"
           name="level"
-          aria-label="May"
+          aria-label="Permission"
           defaultSelectedKey="view"
           triggerClassName={`w-full ${FIELD}`}
           popoverClassName="w-[var(--trigger-width)] max-w-none"
@@ -74,8 +74,8 @@ export function ShareFields({
           <SelectItem id="owner">{MAY.owner}</SelectItem>
         </Select>
         <p className="text-caption-1-regular text-text-secondary">
-          Everyone can only be given view. Editors change; owners also share,
-          remove and merge.
+          Everyone can only be given view. Editors can change; owners can also
+          share, delete and merge.
         </p>
       </div>
     </>
@@ -166,7 +166,7 @@ export function Sharing({
   const said =
     shares.length === 0
       ? ownerName === "you"
-        ? "Only you"
+        ? "Private"
         : `${ownerName}'s`
       : shares.some((g) => g.subject.who === "everyone")
         ? "Everyone"

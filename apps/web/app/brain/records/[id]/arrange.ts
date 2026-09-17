@@ -98,13 +98,22 @@ export function arrange(
       w: chipWidth(centre.title),
       h: CHIP_HEIGHT,
     });
-    // Same types sit together around the ring.
+    // Same types sit together around the ring, which starts on the pane's
+    // long side, so a record with one or two links spreads along it at
+    // full size rather than stacking across it and shrinking to fit.
     const sorted = [...others].sort(
       (a, b) => a.type.localeCompare(b.type) || a.title.localeCompare(b.title),
     );
+    const start = width >= height ? Math.PI : -Math.PI / 2;
+    // Along the long side a chip sits clear of the one in the middle, with
+    // room for the verb between them.
+    const across = Math.max(
+      radius * 1.2 * aspect,
+      chipWidth(centre.title) / 2 + (CHIP_MAX * 0.75) / 2 + 72,
+    );
     sorted.forEach((o, i) => {
-      const angle = -Math.PI / 2 + (i / n) * 2 * Math.PI;
-      const x = Math.cos(angle) * radius * 1.2 * aspect;
+      const angle = start + (i / n) * 2 * Math.PI;
+      const x = Math.cos(angle) * across;
       const y = (Math.sin(angle) * radius) / aspect;
       nodes.push({
         ...o,

@@ -1,20 +1,32 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ComponentType, ReactNode } from "react";
 
 import { buttonStyles } from "@/components/base/buttons/button";
 import { EagerLink } from "@/components/eager-link";
 import { cx } from "@/utils/cx";
 
-// A link wearing a button's face. The styles live in a client module, so a
-// page read on the server reaches them through a component, never by
-// spreading the recipe itself.
+// A link wearing a button's face, with words or a mark alone. The styles
+// live in a client module, so a page read on the server reaches them
+// through a component, never by spreading the recipe itself.
 export function LinkButton({
   href,
+  leadingIcon: Leading,
+  iconOnly = false,
+  className,
   children,
+  ...props
 }: {
   href: string;
-  children: ReactNode;
+  leadingIcon?: ComponentType<{
+    className?: string;
+    "aria-hidden"?: boolean | "true" | "false";
+  }>;
+  iconOnly?: boolean;
+  className?: string;
+  "aria-label"?: string;
+  title?: string;
+  children?: ReactNode;
 }) {
   return (
     <EagerLink
@@ -23,9 +35,15 @@ export function LinkButton({
         buttonStyles.base,
         buttonStyles.size.small,
         buttonStyles.variant.secondary,
+        iconOnly && buttonStyles.iconOnlySize.small,
+        className,
       )}
+      {...props}
     >
-      <span className={buttonStyles.label.small}>{children}</span>
+      {Leading && <Leading className={buttonStyles.icon.small} aria-hidden />}
+      {!iconOnly && children !== undefined && (
+        <span className={buttonStyles.label.small}>{children}</span>
+      )}
     </EagerLink>
   );
 }

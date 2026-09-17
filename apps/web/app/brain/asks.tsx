@@ -10,7 +10,7 @@ import { useRef, type ReactNode } from "react";
 import { Notification } from "@/components/base/notification/notification";
 import { SNAP } from "@/lib/motion";
 
-import { recordHref, typeHref } from "./format";
+import { recordHref, typeHref, typeText } from "./format";
 import { MAY } from "./sharing";
 import { TypeIcon } from "./type-icon";
 
@@ -100,7 +100,7 @@ export function Asks({
                       <>
                         {" "}
                         <TypeIcon type={name} className="self-center" />
-                        {name}
+                        {typeText(name)}
                       </>
                     ) : (
                       " it named"

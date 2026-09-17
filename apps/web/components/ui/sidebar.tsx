@@ -509,7 +509,10 @@ function SidebarMenuButton({
     isActive?: boolean;
     tooltip?: string | React.ComponentProps<typeof TooltipContent>;
   } & VariantProps<typeof sidebarMenuButtonVariants>) {
-  const { isMobile, state } = useSidebar();
+  // A menu that stands on its own, outside a Sidebar, has no state to read.
+  const sidebar = React.useContext(SidebarContext);
+  const isMobile = sidebar?.isMobile ?? false;
+  const state = sidebar?.state ?? "expanded";
   const comp = useRender({
     defaultTagName: "button",
     props: mergeProps<"button">(

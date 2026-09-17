@@ -27,7 +27,8 @@ import { ChevronSortDown } from "@/components/foundations/icons/chevrons";
 import { LocalTime } from "@/components/local-time";
 import { cx } from "@/utils/cx";
 
-import { cell, recordHref } from "../format";
+import { cell, recordPageHref, typeText } from "../format";
+import { useHere } from "../here";
 
 // A column that holds its place while the table is dragged sideways.
 const STUCK = "max-sm:sticky max-sm:z-10 max-sm:bg-background-primary-default";
@@ -35,6 +36,7 @@ const STUCK = "max-sm:sticky max-sm:z-10 max-sm:bg-background-primary-default";
 import { TypeIcon } from "../type-icon";
 import { Chosen } from "./chosen";
 import type { Column } from "./columns";
+import { saidOutright } from "./kept";
 import { WHEN, type Row } from "./query";
 
 const SELECT = "__select__";
@@ -120,7 +122,7 @@ function cellFor(c: Column, r: Row, properties: Property[]): ReactNode {
     return (
       <span className="flex items-center gap-2 truncate text-text-secondary">
         <TypeIcon type={r.type} />
-        {r.type}
+        {typeText(r.type)}
       </span>
     );
   }
@@ -131,10 +133,16 @@ function cellFor(c: Column, r: Row, properties: Property[]): ReactNode {
       </span>
     );
   }
-  return value(
-    c.kind,
-    r.props[c.key],
-    properties.find((p) => p.name === c.key),
+  // A value keeps to its column: cut with an ellipsis, never spilling
+  // into the next.
+  return (
+    <span className="block truncate">
+      {value(
+        c.kind,
+        r.props[c.key],
+        properties.find((p) => p.name === c.key),
+      )}
+    </span>
   );
 }
 
@@ -178,6 +186,7 @@ export function TableView({
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
+  const here = useHere();
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [dragging, setDragging] = useState<string | null>(null);
   const sort = params.get("sort") ?? WHEN;
@@ -198,6 +207,7 @@ export function TableView({
   const go = (change: (next: URLSearchParams) => void) => {
     const next = new URLSearchParams(params.toString());
     change(next);
+    saidOutright(next);
     router.replace(`${pathname}?${next}`, { scroll: false });
   };
   // A column is sorted by the door: clicking the one already sorted turns
@@ -237,7 +247,7 @@ export function TableView({
           <Checkbox
             size="sm"
             slot={null}
-            aria-label="Choose every record here"
+            aria-label="Select all"
             isSelected={table.getIsAllRowsSelected()}
             isIndeterminate={table.getIsSomeRowsSelected()}
             onChange={(on) => table.toggleAllRowsSelected(!!on)}
@@ -399,7 +409,9 @@ export function TableView({
             <TableRow
               key={row.id}
               id={row.id}
-              onAction={() => router.push(recordHref(row.original.id))}
+              onAction={() =>
+                router.push(recordPageHref(row.original.id, here))
+              }
               className="cursor-pointer outline-none transition-colors duration-fast ease-plain hover:bg-background-primary-hover active:bg-background-primary-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring"
             >
               {row.getVisibleCells().map((c) => {

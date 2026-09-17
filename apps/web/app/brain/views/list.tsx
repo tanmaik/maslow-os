@@ -1,4 +1,4 @@
-import type { BrainRecord, Property } from "@maslow/brain";
+import type { BrainRecord } from "@maslow/brain";
 import type { ReactNode } from "react";
 
 import { Avatar } from "@/components/base/avatar/avatar";
@@ -7,15 +7,9 @@ import { LocalTime } from "@/components/local-time";
 import { cx } from "@/utils/cx";
 
 import { BAND, Days } from "../days";
-import { cell, opening, recordHref } from "../format";
+import { opening, typeText } from "../format";
 import { TypeIcon, TypeMark } from "../type-icon";
-
-// Where a field's column shows: the first two once the list has room for
-// them beside the title, the rest only once it is wider still.
-const column = (n: number) =>
-  n < 2
-    ? "hidden w-24 shrink-0 @[34rem]:block"
-    : "hidden w-24 shrink-0 @[48rem]:block";
+import { Walk } from "./walk";
 
 // Whose a record is, as two letters, since at any size the name is the same
 // handful of words on every row.
@@ -27,38 +21,55 @@ const initials = (name: string) =>
     .join("");
 
 // The records as rows of a title and the first line of what they say, cut
-// either into their types or into the days they happened, and marked with
-// whose they are where they are not the reader's.
+// either into their types or into the days they were last changed, and marked with
+// whose they are where they are not the reader's. The one open reads
+// beside the list, the arrow keys walk to the next, and a double-click
+// opens a record as a whole page.
 export function ListView({
   records,
-  properties,
   by,
   me,
   people,
-  showFields,
+  open,
+  hrefOf,
+  fullOf,
 }: {
   records: BrainRecord[];
-  properties: Property[];
   // Whether the runs are the types or the days.
   by: "type" | "recent";
   me: string;
   people: Map<string, string>;
-  // A list of one type shows that type's first few fields beside the title.
-  showFields: boolean;
+  // The record open beside the list.
+  open?: string;
+  // Where a row goes: the same list with that record open.
+  hrefOf: (id: string) => string;
+  // Where a double-click on a row goes: the record as a whole page.
+  fullOf: (id: string) => string;
 }) {
   const whose = (r: BrainRecord) =>
     r.ownerId === me ? null : (people.get(r.ownerId) ?? "someone");
-  const at = (r: BrainRecord) => r.createdAt;
-  const shown = showFields ? properties.slice(0, 4) : [];
-  const row = (r: BrainRecord) => (
-    <EagerLink
-      href={recordHref(r.id)}
-      className="flex min-h-11 items-baseline gap-4 border-t border-separator-border px-3 py-2.5 outline-none transition-colors duration-fast ease-plain hover:bg-background-primary-hover active:bg-background-primary-active focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:ring-inset"
-    >
-      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+  const at = (r: BrainRecord) => r.updatedAt;
+  const row = (r: BrainRecord) => {
+    const lit = r.id === open;
+    return (
+      <EagerLink
+        key={r.id}
+        href={hrefOf(r.id)}
+        data-full={fullOf(r.id)}
+        aria-current={lit ? "true" : undefined}
+        className={cx(
+          "relative mx-2 flex flex-col gap-0.5 rounded-xl px-3 py-2 outline-none transition-colors duration-fast ease-plain focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:ring-inset",
+          // The hairline between two rows, drawn under each but the first
+          // and hidden where the open row's fill covers it.
+          "before:absolute before:inset-x-3 before:top-0 before:h-px before:bg-separator-border first:before:hidden",
+          lit
+            ? "bg-background-secondary-hover before:hidden [&+a]:before:hidden"
+            : "hover:bg-background-primary-hover active:bg-background-primary-active",
+        )}
+      >
         <span className="flex items-center gap-2">
           {by === "recent" && (
-            <TypeIcon type={r.type} className="self-center" />
+            <TypeIcon type={r.type} className="size-2.5 rounded-[3px]" />
           )}
           <span className="truncate text-body-medium text-text-primary">
             {r.title || "(untitled)"}
@@ -68,34 +79,27 @@ export function ListView({
               size="xs"
               initials={initials(whose(r)!)}
               title={whose(r)!}
+              className="ml-auto shrink-0"
             />
           )}
         </span>
-        {r.body.trim() && (
-          <span className="truncate text-caption-1-regular text-text-secondary">
-            {opening(r.body)}
+        <span className="flex items-baseline gap-2 text-caption-1-regular">
+          <span className="shrink-0 text-text-secondary tabular-nums">
+            {/* Under a day band the day is already said; only the time is
+                news. */}
+            <LocalTime
+              at={r.updatedAt}
+              fallback=""
+              clockOnly={by === "recent"}
+            />
           </span>
-        )}
-      </span>
-      {shown.map((f, n) => (
-        <span
-          key={f.id}
-          className={`${column(n)} truncate text-body-2-regular text-text-secondary`}
-        >
-          {cell(r.props[f.name], f)}
+          <span className="truncate text-text-tertiary">
+            {r.body.trim() ? opening(r.body) : typeText(r.type)}
+          </span>
         </span>
-      ))}
-      <span
-        className={cx(
-          "hidden shrink-0 text-right text-caption-1-regular whitespace-nowrap text-text-secondary tabular-nums @[26rem]:block",
-          // Under a day band the day is already said; only the time is news.
-          by === "recent" ? "w-12" : "w-32",
-        )}
-      >
-        <LocalTime at={r.createdAt} fallback="" clockOnly={by === "recent"} />
-      </span>
-    </EagerLink>
-  );
+      </EagerLink>
+    );
+  };
 
   // By type the rows do not arrive together, so each type gathers its own
   // and the fullest-recent type leads. By day the browser cuts them, since
@@ -113,16 +117,21 @@ export function ListView({
             <TypeMark
               type={r.type}
               owner={r.ownerId === me ? undefined : r.ownerId}
-              className="text-text-secondary"
+              className="text-text-tertiary"
             />
           ),
           rows: [r],
         });
     }
   }
+  const order = by === "type" ? bands.flatMap((b) => b.rows) : records;
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col pb-2">
+      <Walk
+        hrefs={order.map((r) => hrefOf(r.id))}
+        at={order.findIndex((r) => r.id === open)}
+      />
       {by === "recent" && (
         <Days
           rows={records.map((r) => ({
@@ -134,25 +143,8 @@ export function ListView({
       )}
       {bands.map((band) => (
         <div key={band.key} className="flex flex-col">
-          <div className={BAND}>
-            {band.head}
-            {shown.length > 0 && (
-              <>
-                <span className="min-w-0 flex-1" />
-                {shown.map((f, n) => (
-                  <span key={f.id} className={`${column(n)} truncate`}>
-                    {f.name}
-                  </span>
-                ))}
-                <span className="hidden w-32 shrink-0 @[26rem]:block" />
-              </>
-            )}
-          </div>
-          {band.rows.map((r) => (
-            <div key={r.id} className="contents">
-              {row(r)}
-            </div>
-          ))}
+          <div className={BAND}>{band.head}</div>
+          {band.rows.map(row)}
         </div>
       ))}
     </div>

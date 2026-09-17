@@ -658,7 +658,7 @@ export function Body({
     <div
       ref={box}
       data-live={state}
-      className="relative min-h-24 flex-1 @lg:min-h-32"
+      className="relative min-h-12"
       onMouseDown={(e) => {
         // The room under the last line belongs to the body: a click in it
         // carries on writing rather than doing nothing.
@@ -669,7 +669,7 @@ export function Body({
     >
       {blank && (
         <p className="pointer-events-none absolute inset-x-0 top-0 text-body-regular text-text-tertiary">
-          Write something, or press / for what a line can be
+          Start writing, or type / for commands
         </p>
       )}
       <EditorContent editor={editor} />

@@ -61,12 +61,19 @@ type VerbEdge = Edge<
 const ARROW = 5;
 const LANE = 12;
 
-// The record in focus or under the pointer, and everything one link away.
-// Held beside the nodes rather than in them, so hovering redraws the chips
-// it touches and not the whole graph.
-const Attention = createContext<{ centre: string; near: Set<string> }>({
+// The record in focus or under the pointer, everything one link away, and
+// which one the pointer is on, since a verb is read on a spoke the pointer
+// touches and stays out of the way otherwise. Held beside the nodes rather
+// than in them, so hovering redraws the chips it touches and not the whole
+// graph.
+const Attention = createContext<{
+  centre: string;
+  near: Set<string>;
+  hovered: string | null;
+}>({
   centre: "",
   near: new Set(),
+  hovered: null,
 });
 
 // A handle at the chip's centre, so a line is measured from there.
@@ -113,8 +120,8 @@ const leave = (ux: number, uy: number, w: number, h: number) =>
   ) + 3;
 
 // A link as a line from one chip's edge to the other's, with an arrowhead
-// for its direction. Its verb shows when the link is named: touching the
-// record in focus or the one under the pointer.
+// for its direction, drawn plainly when it touches the record in focus or
+// the one under the pointer. Its verb shows only under the pointer.
 function VerbLine({
   source,
   target,
@@ -125,8 +132,9 @@ function VerbLine({
   data,
 }: EdgeProps<VerbEdge>) {
   const zoom = useStore((s) => s.transform[2]);
-  const { centre } = useContext(Attention);
+  const { centre, hovered } = useContext(Attention);
   const named = centre === source || centre === target;
+  const worded = hovered === source || hovered === target;
   const dx = targetX - sourceX;
   const dy = targetY - sourceY;
   const length = Math.hypot(dx, dy) || 1;
@@ -161,12 +169,14 @@ function VerbLine({
         style={{ stroke: color, strokeWidth: named ? 1.5 : 1, opacity }}
       />
       <path d={arrow} fill={color} opacity={opacity} />
-      {named && data && (
+      {worded && data && (
         <EdgeLabelRenderer>
           <div
             className="absolute rounded-md bg-background-primary-default/90 px-1 text-caption-2-regular text-text-secondary"
             style={{
-              transform: `translate(-50%, -50%) translate(${(x1 + x2) / 2}px, ${(y1 + y2) / 2}px) scale(${1 / zoom})`,
+              // Read at its own size however far out the map is zoomed,
+              // but never blown up past the chips it sits between.
+              transform: `translate(-50%, -50%) translate(${(x1 + x2) / 2}px, ${(y1 + y2) / 2}px) scale(${Math.min(1 / zoom, 1.25)})`,
             }}
           >
             {verbText(data.verb)}
@@ -254,10 +264,13 @@ function toEdges(graph: Graph): VerbEdge[] {
 function Canvas({
   graph,
   focus,
+  hrefs,
   onHover,
 }: {
   graph: Graph;
   focus: string;
+  // Where a click on each record goes.
+  hrefs: Record<string, string>;
   onHover: (id: string | null) => void;
 }) {
   const router = useRouter();
@@ -337,7 +350,8 @@ function Canvas({
       nodesFocusable={false}
       elementsSelectable={false}
       onNodeClick={(_, node) => {
-        if (node.type === "record") router.push(recordHref(node.id));
+        if (node.type === "record")
+          router.push(hrefs[node.id] ?? recordHref(node.id));
       }}
       onNodeMouseEnter={(_, node) => {
         if (node.type === "record") onHover(node.id);
@@ -356,9 +370,20 @@ function Canvas({
 }
 
 // A record drawn as a map: that record in the middle, everything it links
-// to on a ring, the verb on each spoke. Two fingers pan, a pinch zooms, a
-// drag moves a chip, a click opens a record.
-export function BrainGraph({ graph, focus }: { graph: Graph; focus: string }) {
+// to on a ring, the verb on a spoke under the pointer. Two fingers pan, a
+// pinch zooms, a drag moves a chip, a click opens a record.
+export function BrainGraph({
+  graph,
+  focus,
+  hrefs,
+}: {
+  graph: Graph;
+  focus: string;
+  // Where a click on each record goes: beside a list, the same list with
+  // that record open; on a page, that record's page with the same way
+  // back.
+  hrefs: Record<string, string>;
+}) {
   const [hovered, setHovered] = useState<string | null>(null);
   const attention = useMemo(() => {
     const centre = hovered ?? focus;
@@ -367,13 +392,18 @@ export function BrainGraph({ graph, focus }: { graph: Graph; focus: string }) {
       if (e.fromId === centre) near.add(e.toId);
       if (e.toId === centre) near.add(e.fromId);
     }
-    return { centre, near };
+    return { centre, near, hovered };
   }, [hovered, focus, graph.edges]);
 
   return (
     <ReactFlowProvider>
       <Attention.Provider value={attention}>
-        <Canvas graph={graph} focus={focus} onHover={setHovered} />
+        <Canvas
+          graph={graph}
+          focus={focus}
+          hrefs={hrefs}
+          onHover={setHovered}
+        />
       </Attention.Provider>
     </ReactFlowProvider>
   );

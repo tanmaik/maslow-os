@@ -78,9 +78,7 @@ export function OtherRecord({ not, name }: { not: string; name: string }) {
           aria-label="The other record"
         />
         <ComboboxContent>
-          <ComboboxEmpty>
-            {asking ? "Looking…" : "Nothing matches."}
-          </ComboboxEmpty>
+          <ComboboxEmpty>{asking ? "Searching…" : "No results."}</ComboboxEmpty>
           <ComboboxList>
             {(c: Candidate) => (
               <ComboboxItem key={c.id} value={c}>

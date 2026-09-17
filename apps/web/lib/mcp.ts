@@ -79,7 +79,7 @@ Types are this person's own vocabulary, and it starts empty. Reuse a name before
 
 A record from an app carries the app as source and the app's own id as sourceRef, and the same pair written twice is one record; a record written without them is filed as source brain with a fresh ref. Ids are ten characters; carry them exactly.
 
-Answers are lines, not JSON. A record: id type written "title" src=source:ref, then shared:level, removed or merged→id when so, then its props as JSON; its body sits beneath, indented. A link from a record: → verb id "title" or ← for one made to it. A change in the log: #seq when subject id action by=who: field before→after; by=you is the person, by=colleague is theirs, any other name is an app's.`;
+Answers are lines, not JSON. A record: id type modified "title" src=source:ref, then shared:level, removed or merged→id when so, then its props as JSON; its body sits beneath, indented. A link from a record: → verb id "title" or ← for one made to it. A change in the log: #seq when subject id action by=who: field before→after; by=you is the person, by=colleague is theirs, any other name is an app's.`;
 }
 
 const ref = z.union([
@@ -302,7 +302,7 @@ export function brainServer(
     "list",
     {
       description:
-        "Records of the brain, newest written first, one per line with the first line of the body beneath: the structured way to read. Name a type, then filter on any field it declares with where and order by any field with orderBy, or take a window of when records were written with since and until; page with cursor. Fields and their kinds are in catalog. Filter by type, a window of when they were written, a person record they link to, and conditions on the type's declared fields; search finds records by their words or their meaning. A type matches by name across everyone the person may see; owner narrows to one person's. where and orderBy need a type and read one person's records by their declared fields: the owner's, or the person's own. Pages by cursor. detail full gives whole bodies.",
+        "Records of the brain, most recently modified first, one per line with the first line of the body beneath: the structured way to read. Name a type, then filter on any field it declares with where and order by any field with orderBy, or take a window of when records were last modified with since and until; page with cursor. Fields and their kinds are in catalog. Filter by type, a window of when they were last modified, a person record they link to, and conditions on the type's declared fields; search finds records by their words or their meaning. A type matches by name across everyone the person may see; owner narrows to one person's. where and orderBy need a type and read one person's records by their declared fields: the owner's, or the person's own. Pages by cursor. detail full gives whole bodies.",
       inputSchema: {
         scope: z
           .enum(["mine", "shared", "all"])

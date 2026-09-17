@@ -1,5 +1,6 @@
 import {
   Invalid,
+  isId,
   list,
   opened,
   requestsOf,
@@ -18,18 +19,20 @@ import { redirect } from "next/navigation";
 import { userAgent } from "next/server";
 
 import { principal } from "@/lib/session";
+import { cx } from "@/utils/cx";
 
 import { Asks } from "./asks";
 import { Cut, Ways } from "./cut";
 import { vocabulary } from "./catalog";
-import { opening } from "./format";
+import { opening, recordPageHref, typeText } from "./format";
 import { LinkButton } from "./link-button";
 import { NewRecord } from "./new-record";
+import { RecordPane, readRecord } from "./records/[id]/pane";
 import { Search } from "./search";
 import { BoardView, type Lane } from "./views/board";
 import { CalendarView } from "./views/calendar";
 import { Filters } from "./views/filters";
-import { KEPT, subjectOf } from "./views/kept";
+import { KEPT, saidOutright, subjectOf } from "./views/kept";
 import { ListView } from "./views/list";
 import { monthOf, monthWindow, dayValue } from "./views/month";
 import {
@@ -48,7 +51,7 @@ import { TableView } from "./views/table";
 // How the list is cut into runs: by what a record is, or by the day it
 // happened, falling back to the day it turned up. The List view's own, as
 // the other views cut themselves.
-const BY = { type: "By type", recent: "Recent" } as const;
+const BY = { type: "Type", recent: "Date" } as const;
 type By = keyof typeof BY;
 const isBy = (v: string | undefined): v is By => !!v && Object.hasOwn(BY, v);
 
@@ -100,6 +103,7 @@ export default async function Page({
       if (type) to.set("type", type.name);
       if (type && !type.own) to.set("from", type.ownerId);
       if (one("q")) to.set("q", one("q")!);
+      if (one("open")) to.set("open", one("open")!);
       redirect(`/brain?${to}${to.size ? "&" : ""}${saved}`);
     }
   }
@@ -137,17 +141,20 @@ export default async function Page({
   const wanted = isView(one("view")) ? (one("view") as View) : "list";
   const view: View = ways.includes(wanted) ? wanted : "list";
 
-  // The same view with one thing changed.
+  // The same view with one thing changed. A page cursor belongs to one
+  // query, so it goes with any change to the query and stays for a change
+  // to which record is open beside it.
   const href = (changes: Record<string, string | undefined>) => {
     const next = new URLSearchParams();
+    const sameQuery = Object.keys(changes).every((k) => k === "open");
     for (const [k, v] of Object.entries(raw)) {
-      if (k === "cursor" || k in changes) continue;
+      if ((k === "cursor" && !sameQuery) || k in changes) continue;
       for (const had of Array.isArray(v) ? v : v ? [v] : [])
         next.append(k, had);
     }
     for (const [k, v] of Object.entries(changes)) if (v) next.set(k, v);
-    const s = next.toString();
-    return `/brain${s ? `?${s}` : ""}`;
+    saidOutright(next);
+    return `/brain?${next}`;
   };
 
   const span =
@@ -242,7 +249,8 @@ export default async function Page({
     ));
   } catch (err) {
     // A cursor from another query, or none at all: the first page.
-    if (err instanceof Invalid && one("cursor")) redirect(href({}));
+    if (err instanceof Invalid && one("cursor"))
+      redirect(href({ cursor: undefined }));
     throw err;
   }
 
@@ -253,7 +261,7 @@ export default async function Page({
     type: r.type,
     title: r.title,
     line: r.body ? opening(r.body) : "",
-    at: r.createdAt.toISOString(),
+    at: r.updatedAt.toISOString(),
     owner: r.ownerId === p.userId ? null : (people.get(r.ownerId) ?? "someone"),
     props: r.props,
   });
@@ -265,18 +273,33 @@ export default async function Page({
     label: VIEWS[k],
     // List is written out like any other, since an address that says
     // nothing about how to look opens the view the person kept.
-    href: href({ view: k, cursor: undefined }),
+    href: href({ view: k, cursor: undefined, open: undefined }),
   }));
   const listCuts = (Object.keys(BY) as By[]).map((k) => ({
     key: k,
     label: BY[k],
-    href: href({ by: k === "type" ? undefined : k }),
+    href: href({ by: k }),
   }));
   const nothing =
     view === "board" && group
       ? lanes.every((l) => l.held === 0)
       : records.length === 0;
   const mineAlone = !type || type.own;
+
+  // The list reads one record beside it: the one the address names, or
+  // its first. A record named is the one the person chose, which a narrow
+  // window shows in the list's place; the first is a default, which it
+  // does not.
+  const chosen = isId(one("open") ?? "") ? one("open") : undefined;
+  const opened_ =
+    view === "list" && !nothing ? (chosen ?? records[0]?.id) : undefined;
+  const found = opened_ ? await readRecord(p, opened_) : null;
+  const hrefOf = (id: string) => href({ open: id });
+  // The record as a whole page, which comes back to this list with it open.
+  const fullOf = (id: string) => recordPageHref(id, hrefOf(id));
+  // The split lies in two columns when the sheet is wide enough, which it
+  // asks of the sheet's own container, since a box cannot ask itself; what
+  // is inside asks the split.
 
   return (
     <div className="page-sheet @container overflow-visible rounded-3xl border border-border-button-default bg-background-primary-default">
@@ -302,23 +325,27 @@ export default async function Page({
           <Search
             name="q"
             defaultValue={one("q") ?? ""}
-            placeholder={type ? `Search ${type.name}s` : "Search"}
+            placeholder={type ? `Search ${typeText(type.name)}` : "Search"}
           />
         </form>
         <Cut
-          label="How to look at it"
+          label="View"
+          marked
           className="max-sm:hidden"
           current={view}
           options={viewCuts}
         />
-        {view === "list" && !type && (
-          <Cut
-            label="Cut the list"
-            className="max-sm:hidden"
-            current={by}
-            options={listCuts}
-          />
-        )}
+        <Filters
+          properties={properties}
+          people={members}
+          offerWhose={!type && types.some((t) => !t.own)}
+          sortsItself={view === "table"}
+          grouping={
+            view === "list" && !type
+              ? { current: by, options: listCuts }
+              : undefined
+          }
+        />
         {mineAlone && (
           <div className="shrink-0 max-sm:order-3">
             <NewRecord types={mine} type={type} />
@@ -326,17 +353,11 @@ export default async function Page({
         )}
         <Ways
           cuts={[
-            { label: "How to look at it", current: view, options: viewCuts },
+            { label: "View", current: view, options: viewCuts },
             ...(view === "list" && !type
-              ? [{ label: "Cut the list", current: by, options: listCuts }]
+              ? [{ label: "Group by", current: by, options: listCuts }]
               : []),
           ]}
-        />
-        <Filters
-          properties={properties}
-          people={members}
-          offerWhose={!type && types.some((t) => !t.own)}
-          sortsItself={view === "table"}
         />
       </div>
       {/* A search is a question about the records; what waits on the person
@@ -352,26 +373,26 @@ export default async function Page({
       )}
       {type && !type.own && (
         <p className="px-3 pb-3 text-body-regular text-text-secondary">
-          {people.get(type.ownerId) ?? "someone"}&apos;s {type.name}s, shared
-          with you.
+          {people.get(type.ownerId) ?? "someone"}&apos;s {typeText(type.name)},
+          shared with you.
         </p>
       )}
       {nothing ? (
         <div className="flex flex-col items-center gap-3 px-3 py-8 text-center">
           <p className="text-body-regular text-text-secondary">
             {one("q")
-              ? `Nothing matches “${one("q")}”.`
+              ? `No results for “${one("q")}”.`
               : terms.length
-                ? "Nothing is left once those conditions are met."
+                ? "No results match these filters."
                 : type
-                  ? `No ${type.name}s yet.`
+                  ? "No records yet."
                   : "This brain is empty. Write a note, or let your agent start."}
           </p>
           {(one("q") || terms.length > 0) && (
             <LinkButton
               href={href({ q: undefined, f: undefined, cursor: undefined })}
             >
-              {one("q") ? "Clear the search" : "Clear the conditions"}
+              {one("q") ? "Clear search" : "Clear filters"}
             </LinkButton>
           )}
         </div>
@@ -390,7 +411,6 @@ export default async function Page({
           lanes={lanes.map((l) => ({ ...l, rows: l.rows.map(rowOf) }))}
           group={group}
           choices={choices.map((f) => f.name)}
-          properties={properties}
           canWrite={mineAlone}
         />
       ) : view === "calendar" ? (
@@ -401,19 +421,59 @@ export default async function Page({
           capped={records.length >= IN_A_MONTH}
         />
       ) : (
-        <ListView
-          records={records as BrainRecord[]}
-          properties={properties}
-          by={type ? "type" : by}
-          me={p.userId}
-          people={people}
-          showFields={!!type}
-        />
+        <div className="brain-split @container/split grid @[40rem]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
+          <div
+            className={cx(
+              "flex min-w-0 flex-col @[40rem]/split:border-r @[40rem]/split:border-separator-border",
+              chosen && "@max-[40rem]/split:hidden",
+            )}
+          >
+            <ListView
+              records={records as BrainRecord[]}
+              by={type ? "type" : by}
+              me={p.userId}
+              people={people}
+              open={opened_}
+              hrefOf={hrefOf}
+              fullOf={fullOf}
+            />
+            {cursor && (
+              <div className="p-3">
+                <LinkButton href={href({ cursor })}>Load more</LinkButton>
+              </div>
+            )}
+          </div>
+          <div
+            className={cx(
+              "min-w-0 px-4 pt-3 pb-4 sm:px-5 sm:pb-5",
+              !chosen && "@max-[40rem]/split:hidden",
+            )}
+          >
+            {found ? (
+              <RecordPane
+                p={p}
+                found={found}
+                back={{
+                  href: href({ open: undefined }),
+                  label: "All",
+                  className: "@[40rem]/split:hidden",
+                }}
+                here={hrefOf(found.record.id)}
+                expand={fullOf(found.record.id)}
+                hrefOf={hrefOf}
+              />
+            ) : (
+              <p className="py-8 text-center text-body-regular text-text-secondary">
+                That record is not in this list.
+              </p>
+            )}
+          </div>
+        </div>
       )}
       {/* The table view keeps its own footer, on the pagination block. */}
-      {view !== "table" && cursor && !nothing && (
+      {view !== "table" && view !== "list" && cursor && !nothing && (
         <div className="border-t border-separator-border p-3">
-          <LinkButton href={href({ cursor })}>More</LinkButton>
+          <LinkButton href={href({ cursor })}>Load more</LinkButton>
         </div>
       )}
     </div>
