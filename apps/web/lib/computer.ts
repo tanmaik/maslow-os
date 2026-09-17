@@ -7,6 +7,7 @@ import {
   clearMachine,
   clearVolume,
   clearModelKey,
+  addKey,
   computerByMachine,
   computerOf,
   holdComputer,
@@ -1635,16 +1636,46 @@ async function readUsage(p: Principal): Promise<Usage | null> {
 export async function sshOf(
   p: Principal,
   site: string,
-): Promise<{ name: string; command: string; keys: boolean } | null> {
+): Promise<{ name: string; command: string } | null> {
   const c = await ready(p);
   if (!c) return null;
   const { org } = await asOrg(p.orgId, (q) => whoOf(q, c));
   const link = `${site}/ssh/setup?o=${c.orgId}&c=${c.machineId}&t=${ticket(c, 3600)}`;
-  return {
-    name: org,
-    command: `curl -fsSL "${link}" | sh`,
-    keys: c.authorizedKeys !== "",
-  };
+  return { name: org, command: `curl -fsSL "${link}" | sh` };
+}
+
+// One public key per line, as ssh-keygen writes it: the kind, the key,
+// and a comment if any.
+export const SSH_KEY =
+  /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+=*( [^\r\n]*)?$/;
+
+// Adds a Mac's public key to the ones that open the computer, on the same
+// link its setup script was fetched with, and gives the machine the keys
+// as the database now holds them. A key already there is left as it is.
+// Says what went wrong when the key is not on the machine: a machine that
+// did not answer keeps the key in Settings and takes it the next time
+// keys are pushed, at its next start or on the next run of the script.
+export async function addSshKey(
+  orgId: string,
+  machineId: string,
+  t: string,
+  key: string,
+): Promise<"added" | "stale" | "invalid" | "full" | "unreached"> {
+  const d = deployment.computers;
+  if (d.kind === "none" || !/^[0-9a-f-]{36}$/.test(orgId)) return "stale";
+  const c = await asOrg(orgId, (q) => computerByMachine(q, machineId));
+  if (!c || !honours(c, t)) return "stale";
+  const line = key.trim();
+  if (!SSH_KEY.test(line)) return "invalid";
+  const keys = await asOrg(orgId, (q) => addKey(q, c.id, line));
+  if (!keys.includes(line.split(" ").slice(0, 2).join(" "))) return "full";
+  try {
+    await fly.pushKeys(c.machineId!, ticket(c, 60), keys);
+  } catch (err) {
+    console.error(`keys: ${(err as Error).message}`);
+    return "unreached";
+  }
+  return "added";
 }
 
 // The computer a setup link names, as the script it serves needs it: its

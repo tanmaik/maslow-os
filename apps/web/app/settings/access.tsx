@@ -101,7 +101,8 @@ export async function AccessPane({
         >
           <Head>SSH</Head>
           <p className="px-3 text-body-regular text-text-secondary">
-            Run once on your Mac, then <code>ssh {ssh.name}</code>.
+            Run once on your Mac, then <code>ssh {ssh.name}</code>. It gives
+            your computer the Mac's key, listed below with any you add.
           </p>
           <Command text={ssh.command} />
           <Textarea

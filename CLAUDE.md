@@ -460,8 +460,10 @@ the person carries the answer back by pasting the address that would not
 load. SSH is a third road in, carried over a
 WebSocket through the same door with no ticket, opened by the public key
 a person sets in settings, set up on a Mac by the one command the
-Computer pane shows, which installs the Python script the app serves as
-ssh's ProxyCommand and writes a `Host` named after the computer, and
+Access pane shows, which installs the Python script the app serves as
+ssh's ProxyCommand, makes the Mac a key if it has none and registers its
+public half, and writes a `Host` named after the computer that uses that
+key and no agent, and
 landing in the same tmux session the Terminal page shows, as a grouped
 session of its own; a command given to `ssh` runs plain. Every model
 call goes through us: the agent on the machine sends it to this

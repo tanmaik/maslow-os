@@ -136,6 +136,26 @@ export async function setKeys(q: Query, id: string, keys: string) {
   ]);
 }
 
+// One public key added to the ones that open SSH, in one statement, so two
+// added at once both land and the twenty-key ceiling holds; a key already
+// there, by its kind and bytes, is left as it is. Answers the keys as they
+// now stand, which hold the key unless the ceiling refused it.
+export async function addKey(q: Query, id: string, key: string) {
+  const kind = key.split(" ").slice(0, 2).join(" ");
+  return (
+    await q.query<{ keys: string }>(
+      `update computers set authorized_keys = case
+         when authorized_keys = '' then $2
+         when position($3 in authorized_keys) > 0 then authorized_keys
+         when array_length(string_to_array(authorized_keys, E'\n'), 1) >= 20
+           then authorized_keys
+         else authorized_keys || E'\n' || $2 end
+       where id = $1 returning authorized_keys as keys`,
+      [id, key, kind],
+    )
+  ).rows[0]!.keys;
+}
+
 // Whose a computer is, as its machine names them: the member's first name
 // and their org's slug.
 export async function ownerOf(
