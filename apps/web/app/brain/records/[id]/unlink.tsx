@@ -20,14 +20,16 @@ import { CloseButton } from "@/components/base/buttons/close-button";
 export function Unlink({
   action,
   back,
-  edge,
+  edges,
   title,
   verb,
 }: {
   action: string;
   // Where the page comes back to once the link is gone.
   back: string;
-  edge: string;
+  // Every link the chip stands for, since two with the same verb to the
+  // same record are one chip and go together.
+  edges: string[];
   title: string;
   verb: string;
 }) {
@@ -46,7 +48,9 @@ export function Unlink({
       <AlertDialogContent>
         <form action={action} method="post" className="contents">
           <input type="hidden" name="intent" value="unlink" />
-          <input type="hidden" name="edge" value={edge} />
+          {edges.map((edge) => (
+            <input key={edge} type="hidden" name="edge" value={edge} />
+          ))}
           <input type="hidden" name="back" value={back} />
           <AlertDialogHeader>
             <AlertDialogTitle>Unlink {title}?</AlertDialogTitle>
@@ -56,7 +60,7 @@ export function Unlink({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Keep the link</AlertDialogCancel>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction type="submit">Unlink</AlertDialogAction>
           </AlertDialogFooter>
         </form>

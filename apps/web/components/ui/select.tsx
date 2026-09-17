@@ -78,13 +78,13 @@ function SelectContent({
         align={align}
         alignOffset={alignOffset}
         alignItemWithTrigger={alignItemWithTrigger}
-        className="isolate z-50"
+        className="isolate z-[100]"
       >
         <SelectPrimitive.Popup
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "glass-solid relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-2xl !border-0 bg-popover p-1 text-popover-foreground shadow-dropdown p-2 transition-[opacity,scale,filter] duration-fast ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-95 data-starting-style:blur-[2px] data-ending-style:duration-instant data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-95 data-ending-style:blur-[2px] data-[align-trigger=true]:transition-none",
+            "glass-solid relative isolate z-[100] max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-2xl !border-0 bg-popover p-1 text-popover-foreground shadow-dropdown p-2 transition-[opacity,scale,filter] duration-fast ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-95 data-starting-style:blur-[2px] data-ending-style:duration-instant data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-95 data-ending-style:blur-[2px] data-[align-trigger=true]:transition-none",
             className,
           )}
           {...props}

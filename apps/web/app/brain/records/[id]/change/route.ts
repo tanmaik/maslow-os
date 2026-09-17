@@ -66,10 +66,15 @@ export async function POST(
       if (intent === "restore") return restore(db, id);
       if (intent === "unmerge") return unmerge(db, id);
       if (intent === "unlink") {
-        const edge = String(form.get("edge") ?? "");
-        if (!isId(edge))
-          throw new NotFound(`edge ${edge} is not in this brain`);
-        return unlink(db, edge);
+        // A chip may stand for several links, and they go together.
+        const edges = form.getAll("edge").map(String);
+        for (const edge of edges) {
+          if (!isId(edge))
+            throw new NotFound(`edge ${edge} is not in this brain`);
+        }
+        let seen;
+        for (const edge of edges) seen = await unlink(db, edge);
+        return seen;
       }
       const [current] = await get(db, [id]);
       if (!current) throw new NotFound(`record ${id} is not in this brain`);

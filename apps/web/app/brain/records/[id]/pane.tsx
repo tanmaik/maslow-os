@@ -28,8 +28,8 @@ import { Document } from "./document";
 import { Expand } from "./expand";
 import { LinkForm } from "./link-form";
 import { BrainGraph } from "./lazy";
+import { LinkGroups, type LinkGroup } from "./links";
 import { Properties } from "./properties";
-import { Unlink } from "./unlink";
 import { Whole, type Act } from "./whole";
 
 // A record with links, up to this many, has a map of them; one with more
@@ -260,10 +260,10 @@ const Heading = ({ children }: { children: React.ReactNode }) => (
   <h2 className="text-caption-1-semibold text-text-secondary">{children}</h2>
 );
 
-// The records this one is linked to, or anything merged into it is: one
-// chip per link, named after the other record, with whose it is when it is
-// a colleague's, and a way to add or take away a link. The map, when there
-// is one, sits beneath.
+// The records this one is linked to, or anything merged into it is,
+// grouped under their verbs: one chip per record under each, named after
+// it, with whose it is when it is a colleague's, and a way to add or take
+// away a link. The map, when there is one, sits beneath.
 function Links({
   record,
   aliases,
@@ -292,52 +292,49 @@ function Links({
     !r || r.ownerId === me
       ? null
       : `${people.get(r.ownerId) ?? "someone no longer here"}'s`;
+  const groups = new Map<string, LinkGroup>();
+  for (const e of edges) {
+    const outward = aliases.has(e.fromId);
+    const otherId = outward ? e.toId : e.fromId;
+    const key = `${outward ? "out" : "in"}:${e.verb}`;
+    const group = groups.get(key) ?? {
+      key,
+      verb: verbText(e.verb),
+      incoming: !outward,
+      chips: [],
+    };
+    groups.set(key, group);
+    const chip = group.chips.find((c) => c.id === otherId);
+    if (chip) chip.edges.push(e.id);
+    else {
+      const other = others.get(otherId);
+      group.chips.push({
+        id: otherId,
+        href: hrefOf(otherId),
+        title: aliases.has(otherId)
+          ? "this record"
+          : other?.title || "(untitled)",
+        whose: whose(other),
+        edges: [e.id],
+      });
+    }
+  }
+  const grouped = [...groups.values()].sort(
+    (a, b) => b.chips.length - a.chips.length,
+  );
   return (
     <section className="flex flex-col gap-2">
       {(edges.length > 0 || canEdit) && <Heading>Links</Heading>}
-      <ul className="flex flex-wrap items-center gap-2">
-        {edges.map((e) => {
-          const otherId = aliases.has(e.fromId) ? e.toId : e.fromId;
-          const other = others.get(otherId);
-          const title = aliases.has(otherId)
-            ? "this record"
-            : other?.title || "(untitled)";
-          return (
-            <li
-              key={e.id}
-              className="group flex h-8 items-center gap-1.5 rounded-full bg-background-secondary-default pr-1.5 pl-3"
-            >
-              <Link
-                href={hrefOf(otherId)}
-                className="max-w-64 truncate text-body-medium text-text-primary hover:underline"
-              >
-                {title}
-              </Link>
-              {whose(other) && (
-                <span className="text-caption-2-regular text-text-secondary">
-                  {whose(other)}
-                </span>
-              )}
-              {canEdit ? (
-                <Unlink
-                  action={action}
-                  back={back}
-                  edge={e.id}
-                  title={title}
-                  verb={verbText(e.verb)}
-                />
-              ) : (
-                <span className="w-1" />
-              )}
-            </li>
-          );
-        })}
-        {canEdit && (
-          <li>
-            <LinkForm id={record.id} type={record.type} back={back} />
-          </li>
-        )}
-      </ul>
+      {grouped.length > 0 && (
+        <LinkGroups
+          key={record.id}
+          groups={grouped}
+          action={action}
+          back={back}
+          canEdit={canEdit}
+        />
+      )}
+      {canEdit && <LinkForm id={record.id} type={record.type} back={back} />}
     </section>
   );
 }

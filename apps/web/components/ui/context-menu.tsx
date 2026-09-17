@@ -47,7 +47,7 @@ function ContextMenuContent({
       <ContextMenuPrimitive.Backdrop className="fixed inset-0 z-40 max-sm:bg-black/20" />
       <ContextMenuPrimitive.Positioner
         data-phone-sheet
-        className="isolate z-50 outline-none"
+        className="isolate z-[100] outline-none"
         align={align}
         alignOffset={alignOffset}
         side={side}
@@ -56,7 +56,7 @@ function ContextMenuContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
           className={cn(
-            "glass-solid z-50 max-h-(--available-height) min-w-44 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-2xl !border-0 bg-popover p-1 text-popover-foreground shadow-dropdown outline-none transition-[opacity,scale,filter] duration-fast ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-95 data-starting-style:blur-[2px] data-ending-style:duration-instant data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-95 data-ending-style:blur-[2px]",
+            "glass-solid z-[100] max-h-(--available-height) min-w-44 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-2xl !border-0 bg-popover p-1 text-popover-foreground shadow-dropdown outline-none transition-[opacity,scale,filter] duration-fast ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-95 data-starting-style:blur-[2px] data-ending-style:duration-instant data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-95 data-ending-style:blur-[2px]",
             PHONE_SHEET,
             className,
           )}

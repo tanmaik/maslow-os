@@ -49,12 +49,12 @@ function TooltipContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="isolate z-50"
+        className="isolate z-[100]"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "glass-solid z-50 inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-lg bg-popover px-2.5 py-1.5 text-caption-1-medium text-text-primary shadow-dropdown has-data-[slot=kbd]:pr-1.5 transition-[opacity,scale,filter] duration-base ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-90 data-starting-style:blur-[4px] data-ending-style:duration-fast data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-90 data-ending-style:blur-[4px]",
+            "glass-solid z-[100] inline-flex w-fit max-w-xs origin-(--transform-origin) items-center gap-1.5 rounded-lg bg-popover px-2.5 py-1.5 text-caption-1-medium text-text-primary shadow-dropdown has-data-[slot=kbd]:pr-1.5 transition-[opacity,scale,filter] duration-base ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-90 data-starting-style:blur-[4px] data-ending-style:duration-fast data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-90 data-ending-style:blur-[4px]",
             className,
           )}
           {...props}

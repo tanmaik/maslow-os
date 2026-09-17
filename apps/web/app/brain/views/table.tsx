@@ -68,14 +68,19 @@ function value(kind: Column["kind"], v: unknown, p?: Property): ReactNode {
       </Chip>
     );
   }
+  // A list keeps to one line like every other value: its first two items
+  // and how many more, the whole of it under the pointer.
   if (kind === "list" && Array.isArray(v)) {
+    const items = v.map(String);
+    const first = items.slice(0, 2);
     return (
-      <span className="flex flex-wrap gap-1">
-        {v.map((x) => (
-          <Chip key={String(x)} variant="caption" color="soft">
-            {String(x)}
-          </Chip>
-        ))}
+      <span className="flex items-baseline gap-1" title={items.join(", ")}>
+        <span className="truncate">{first.join(", ")}</span>
+        {items.length > first.length && (
+          <span className="shrink-0 text-text-tertiary">
+            +{items.length - first.length}
+          </span>
+        )}
       </span>
     );
   }
