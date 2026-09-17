@@ -55,7 +55,38 @@ export type Entry = {
   kind: "dir" | "file" | "link" | "other";
   size: number;
   modified: string;
+  // The id it is shared by, when it is.
+  id?: string;
 };
+
+// A shared thing as its door finds it: at its path, missing for now, or
+// gone for good.
+export type SharedStat =
+  | {
+      name: string;
+      kind: "file" | "dir";
+      size: number;
+      modified: string;
+    }
+  | { missing: true }
+  | { gone: true };
+
+// Thrown when the door says a shared thing is gone from the disk for
+// good: deleted, and its share with it.
+export class Gone extends Error {}
+
+// One file under a shared thing, by its path there.
+export type SharedEntry = { path: string; size: number; modified: string };
+
+// Thrown when a save fell behind: the file changed since it was opened,
+// at this time.
+export class Changed extends Error {
+  modified: string;
+  constructor(modified: string) {
+    super("the file changed since it was opened");
+    this.modified = modified;
+  }
+}
 
 // What a machine says of itself: CPU percent over the last moment, memory
 // used and total, the bytes the person holds, the disk's size, and the
@@ -221,6 +252,34 @@ async function made(
   if (!res.ok)
     throw new Error((await res.text()) || `the door answered ${res.status}`);
   return res;
+}
+
+// The address of one shared thing's door, and what to do with it.
+const shared = (id: string, what: string) =>
+  `https://${config().app}.fly.dev/maslow/files/shared/${encodeURIComponent(id)}${what}`;
+
+// A file written whole through a door, answering its size and when it now
+// says it changed; a save that fell behind is thrown as Changed.
+async function written(
+  url: string,
+  machineId: string,
+  ticket: string,
+  body: string | Uint8Array,
+): Promise<{ size: number; modified: string }> {
+  const res = await fetch(url, {
+    method: "PUT",
+    headers: {
+      "fly-force-instance-id": machineId,
+      "x-maslow-ticket": ticket,
+    },
+    body: typeof body === "string" ? body : Buffer.from(body),
+    signal: AbortSignal.timeout(30_000),
+  });
+  if (res.status === 409)
+    throw new Changed(((await res.json()) as { modified: string }).modified);
+  if (!res.ok)
+    throw new Error((await res.text()) || `the door answered ${res.status}`);
+  return (await res.json()) as { size: number; modified: string };
 }
 
 export const fly = {
@@ -580,22 +639,54 @@ export const fly = {
     ): Promise<Response> {
       return made(machineId, ticket, at, "pdf");
     },
+    // Written whole, or added to the end. A save that names when the file
+    // was last changed as it was opened is refused with Changed if the
+    // file changed meanwhile.
     async write(
       machineId: string,
       ticket: string,
       at: string,
-      body: string,
+      body: string | Uint8Array,
       append = false,
-    ): Promise<number> {
+      opened?: string,
+    ): Promise<{ size: number; modified: string }> {
+      return written(
+        `https://${config().app}.fly.dev/maslow/files/write?path=${encodeURIComponent(at)}${append ? "&append=1" : ""}${opened ? `&opened=${encodeURIComponent(opened)}` : ""}`,
+        machineId,
+        ticket,
+        body,
+      );
+    },
+  },
+
+  // What the person shared, by id, through their door: marked, followed,
+  // listed, read, written and copied out. Every path is under the thing
+  // shared.
+  shared: {
+    // Marks a thing at a path with this id, or answers the id it already
+    // has.
+    async share(
+      machineId: string,
+      ticket: string,
+      at: string,
+      id: string,
+    ): Promise<{
+      id: string;
+      name: string;
+      kind: "file" | "dir";
+      // Whether the path was shared already, under the id answered.
+      had: boolean;
+    }> {
       const res = await fetch(
-        `https://${config().app}.fly.dev/maslow/files/write?path=${encodeURIComponent(at)}${append ? "&append=1" : ""}`,
+        `https://${config().app}.fly.dev/maslow/files/shared?path=${encodeURIComponent(at)}`,
         {
-          method: "PUT",
+          method: "POST",
           headers: {
             "fly-force-instance-id": machineId,
             "x-maslow-ticket": ticket,
+            "content-type": "application/json",
           },
-          body,
+          body: JSON.stringify({ id }),
           signal: AbortSignal.timeout(30_000),
         },
       );
@@ -603,7 +694,218 @@ export const fly = {
         throw new Error(
           (await res.text()) || `the door answered ${res.status}`,
         );
-      return ((await res.json()) as { size: number }).size;
+      return (await res.json()) as {
+        id: string;
+        name: string;
+        kind: "file" | "dir";
+        had: boolean;
+      };
+    },
+    async forget(machineId: string, ticket: string, id: string) {
+      const res = await fetch(shared(id, ""), {
+        method: "DELETE",
+        headers: {
+          "fly-force-instance-id": machineId,
+          "x-maslow-ticket": ticket,
+        },
+        signal: AbortSignal.timeout(8_000),
+      });
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+    },
+    async stat(
+      machineId: string,
+      ticket: string,
+      id: string,
+      at = "",
+    ): Promise<SharedStat | null> {
+      const res = await fetch(
+        `${shared(id, "")}?path=${encodeURIComponent(at)}`,
+        {
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+          },
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      // Only the door's own "nothing by that id" is nothing; any other
+      // 404 is the road to the machine, and says nothing of the share.
+      const text = res.ok ? null : await res.text();
+      if (res.status === 404 && text?.startsWith("Nothing is shared"))
+        return null;
+      if (!res.ok) throw new Error(text || `the door answered ${res.status}`);
+      return (await res.json()) as SharedStat;
+    },
+    // Every file under the thing, for the copy of it; `more` when a
+    // folder was too big to walk whole.
+    async files(
+      machineId: string,
+      ticket: string,
+      id: string,
+    ): Promise<
+      | { files: SharedEntry[]; more: boolean }
+      | { missing: true }
+      | { gone: true }
+    > {
+      const res = await fetch(shared(id, "/files"), {
+        headers: {
+          "fly-force-instance-id": machineId,
+          "x-maslow-ticket": ticket,
+        },
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return (await res.json()) as { files: SharedEntry[]; more: boolean };
+    },
+    async list(
+      machineId: string,
+      ticket: string,
+      id: string,
+      at: string,
+    ): Promise<Entry[]> {
+      const res = await fetch(
+        `${shared(id, "/list")}?path=${encodeURIComponent(at)}`,
+        {
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+          },
+          signal: AbortSignal.timeout(30_000),
+        },
+      );
+      if (res.status === 410) throw new Gone(await res.text());
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return (await res.json()) as Entry[];
+    },
+    async read(
+      machineId: string,
+      ticket: string,
+      id: string,
+      at: string,
+      range?: string,
+    ): Promise<Response> {
+      const res = await fetch(
+        `${shared(id, "/read")}?path=${encodeURIComponent(at)}`,
+        {
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+            ...(range ? { range } : {}),
+          },
+        },
+      );
+      if (res.status === 410) throw new Gone(await res.text());
+      if (!res.ok && res.status !== 416)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return res;
+    },
+    async pdf(
+      machineId: string,
+      ticket: string,
+      id: string,
+      at: string,
+    ): Promise<Response> {
+      const res = await fetch(
+        `${shared(id, "/pdf")}?path=${encodeURIComponent(at)}`,
+        {
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+          },
+          signal: AbortSignal.timeout(150_000),
+        },
+      );
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return res;
+    },
+    async write(
+      machineId: string,
+      ticket: string,
+      id: string,
+      at: string,
+      body: string | Uint8Array,
+      opened?: string,
+    ): Promise<{ size: number; modified: string }> {
+      return written(
+        `${shared(id, "/write")}?path=${encodeURIComponent(at)}${opened ? `&opened=${encodeURIComponent(opened)}` : ""}`,
+        machineId,
+        ticket,
+        body,
+      );
+    },
+    // A colleague's save fetched onto the disk from an address signed for
+    // it; answers when the file now says it changed.
+    async take(
+      machineId: string,
+      ticket: string,
+      id: string,
+      at: string,
+      url: string,
+      modified: string,
+    ): Promise<{ size: number; modified: string }> {
+      const res = await fetch(
+        `${shared(id, "/take")}?path=${encodeURIComponent(at)}`,
+        {
+          method: "POST",
+          headers: {
+            "fly-force-instance-id": machineId,
+            "x-maslow-ticket": ticket,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ url, modified }),
+          signal: AbortSignal.timeout(150_000),
+        },
+      );
+      if (res.status === 409)
+        throw new Changed(
+          ((await res.json()) as { modified: string }).modified,
+        );
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return (await res.json()) as { size: number; modified: string };
+    },
+    // Files of the thing sent to addresses signed for each; answers which
+    // landed.
+    async mirror(
+      machineId: string,
+      ticket: string,
+      id: string,
+      puts: { path: string; url: string }[],
+    ): Promise<{ done: string[]; failed: { path: string; error: string }[] }> {
+      const res = await fetch(shared(id, "/mirror"), {
+        method: "POST",
+        headers: {
+          "fly-force-instance-id": machineId,
+          "x-maslow-ticket": ticket,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ puts }),
+        signal: AbortSignal.timeout(150_000),
+      });
+      if (!res.ok)
+        throw new Error(
+          (await res.text()) || `the door answered ${res.status}`,
+        );
+      return (await res.json()) as {
+        done: string[];
+        failed: { path: string; error: string }[];
+      };
     },
   },
 

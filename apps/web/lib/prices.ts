@@ -30,4 +30,8 @@ export const CEILINGS = {
   vectors: 50_000_000,
   wallpapers: 40,
   wallpaperBytes: 500 * 1024 * 1024,
+  // How much one shared file or folder may weigh, and how many files a
+  // shared folder may hold, since every one is copied into the bucket.
+  shareBytes: 2 * 1024 * 1024 * 1024,
+  shareFiles: 10_000,
 };

@@ -1,10 +1,11 @@
 import { Forbidden, Invalid, isId, NotFound } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
+import { Refused, told } from "@/lib/shares";
 
 import { refused } from "../refuse";
 
@@ -25,12 +26,14 @@ export async function POST(request: Request) {
     return refused(request, "/brain", "An ask is accepted or declined.");
   }
   try {
-    await asPerson(p, (db) => answerShareAsk(db, p.userId, id, intent));
+    const made = await asPerson(p, (db) => answerShareAsk(db, p, id, intent));
+    after(() => told(p, made.files));
   } catch (err) {
     if (
       err instanceof Invalid ||
       err instanceof NotFound ||
-      err instanceof Forbidden
+      err instanceof Forbidden ||
+      err instanceof Refused
     ) {
       return refused(request, "/brain", err.message);
     }

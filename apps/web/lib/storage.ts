@@ -135,6 +135,59 @@ const bucket = (
   url: (k) => `/uploads/${k}`,
 });
 
+// Where a bucket signs addresses for the browser and the machines: one
+// object read or written straight from either, for so many seconds, and
+// for exactly so many bytes when a size is given. Null where there is no
+// bucket, and what would go through an address comes through us or not at
+// all.
+export function signed(
+  method: "PUT" | "GET",
+  key: string,
+  seconds: number,
+  bytes?: number,
+  contentType?: string,
+): string | null {
+  const st = deployment.storage;
+  if (st.kind !== "s3") return null;
+  return presign(st, method, st.prefix + key, seconds, bytes, contentType);
+}
+
+// Whether anything is ever kept in a bucket here.
+export const bucketed = () => deployment.storage.kind === "s3";
+
+// Bytes put into the bucket under a key by us, for what is small enough to
+// pass through: a text file a colleague saved.
+export async function putBytes(
+  key: string,
+  bytes: Uint8Array,
+  contentType: string,
+): Promise<void> {
+  const st = deployment.storage;
+  if (st.kind !== "s3") throw new Error("There is no bucket here.");
+  const r = await s3(st, "PUT", st.prefix + key, bytes, contentType);
+  if (!r.ok)
+    throw new Error(
+      `storage put → ${r.status}: ${(await r.text()).slice(0, 200)}`,
+    );
+}
+
+// How many bytes an object in the bucket holds, or null when there is no
+// such object.
+export async function bytesOf(key: string): Promise<number | null> {
+  const st = deployment.storage;
+  if (st.kind !== "s3") return null;
+  const r = await s3(st, "HEAD", st.prefix + key);
+  if (!r.ok) return null;
+  return Number(r.headers.get("content-length") ?? 0);
+}
+
+// Forgets a key's object, wherever it is kept; already gone is fine.
+export async function deleteKey(key: string): Promise<void> {
+  const st = deployment.storage;
+  if (st.kind === "s3") return remove(st, st.prefix + key);
+  if (st.kind === "local") await fs.rm(path.join(st.dir, key), { force: true });
+}
+
 export const storage: Storage =
   deployment.storage.kind === "s3"
     ? bucket(deployment.storage)

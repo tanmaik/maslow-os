@@ -869,6 +869,21 @@ export async function smokeMcp(stack, signIn) {
     ) && notYet.text === "no records",
     `${asked.lines[0]} / ${notYet.text}`,
   );
+  // A file on the person's computer is asked for the same way, at view or
+  // edit, and only with a computer to share it from.
+  const askedFile = await call(grant.access_token, "share", {
+    files: ["/home/me/plans/roadmap.md"],
+    to: [orgs[0].users[1].email],
+    level: "edit",
+    reason: "Road Runner is drafting the roadmap too.",
+  });
+  check(
+    "share asks for a file, or says there is no computer",
+    /^asked \S+ as notification \S+: 1 item to 1 party at edit; the person decides$/.test(
+      askedFile.lines[0] ?? "",
+    ) || /no computer ready/.test(askedFile.text),
+    askedFile.lines[0] ?? askedFile.text,
+  );
   // The desktop is the agent's to arrange, and a widget is an app on a port
   // of the person's computer: put down, listed, moved by its id alone,
   // and taken off. A colleague's desktop is their own.

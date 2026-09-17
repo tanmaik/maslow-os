@@ -217,11 +217,17 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 const MAY = { view: "see", edit: "change", owner: "own" } as const;
 
 // What an ask to share names, in the words of the thing itself.
-const asked = (a: { records?: string[]; types?: string[]; ports?: number[] }) =>
+const asked = (a: {
+  records?: string[];
+  types?: string[];
+  ports?: number[];
+  files?: string[];
+}) =>
   [
     a.records?.length ? plural(a.records.length, "record") : null,
     ...(a.types ?? []).map((t) => `every record of type ${t}`),
     ...(a.ports ?? []).map((p) => `port ${p} on your computer`),
+    ...(a.files ?? []).map((f) => `${f} on your computer`),
   ]
     .filter(Boolean)
     .join(", ");
@@ -516,7 +522,7 @@ export function brainServer(
     "share",
     {
       description:
-        "Asks the person to share records or types of theirs, or ports on their computer, with colleagues: what, with whom (everyone, a colleague's email, or a group's name), at what level, and why. Nothing is shared until the person accepts the ask on their pages; they see the reason. One ask carries many items to many people. A port is only ever looked at, so it is asked for at view.",
+        "Asks the person to share records or types of theirs, or ports, files or folders on their computer, with colleagues: what, with whom (everyone, a colleague's email, or a group's name), at what level, and why. Nothing is shared until the person accepts the ask on their pages; they see the reason. One ask carries many items to many people. A port is only ever looked at, so it is asked for at view; a file or folder is asked for at view or edit.",
       inputSchema: {
         records: ids.optional(),
         types: z
@@ -529,6 +535,13 @@ export function brainServer(
           .max(20)
           .optional()
           .describe("ports listening on the person's computer, by number"),
+        files: z
+          .array(z.string().max(4096))
+          .max(20)
+          .optional()
+          .describe(
+            "files or folders on the person's computer, by path as you see them, such as /home/me/notes/plan.md",
+          ),
         to: z
           .array(z.string())
           .min(1)
@@ -544,11 +557,11 @@ export function brainServer(
       },
     },
     door(async (q, a) => {
-      if (a.ports?.length) {
+      if (a.ports?.length || a.files?.length) {
         const c = await computerOf(q, s.userId);
         if (!c?.readyAt)
           throw new brain.Invalid(
-            "the person has no computer ready to share a port of",
+            "the person has no computer ready to share anything of",
           );
       }
       const ask = await brain.askToShare(q, a);

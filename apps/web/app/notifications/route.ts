@@ -9,10 +9,11 @@ import {
   notificationsOf,
   Unanswerable,
 } from "@maslow/db/notifications";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
 import { principal } from "@/lib/session";
+import { Refused, told } from "@/lib/shares";
 
 // What the panel behind the clock reads and answers through: the person's
 // own notifications, how many wait on them, and the one answer a notification takes.
@@ -53,7 +54,7 @@ export async function POST(request: Request) {
   } | null;
   if (!said) return new Response(null, { status: 400 });
   try {
-    await asPerson(p, async (q) => {
+    const files = await asPerson(p, async (q) => {
       if (said.read) await markRead(q);
       if (said.clear) await clearRead(q);
       if (said.id && said.answer !== undefined) {
@@ -64,21 +65,26 @@ export async function POST(request: Request) {
         if (notification.request) {
           if (said.answer !== "Accept" && said.answer !== "Decline")
             throw new Unanswerable("answer with Accept or Decline");
-          await answerShareAsk(
-            q,
-            p.userId,
-            notification.request,
-            said.answer === "Accept" ? "accept" : "decline",
-          );
+          return (
+            await answerShareAsk(
+              q,
+              p,
+              notification.request,
+              said.answer === "Accept" ? "accept" : "decline",
+            )
+          ).files;
         } else await answerNotification(q, said.id, said.answer);
       }
+      return [];
     });
+    after(() => told(p, files));
   } catch (err) {
     if (
       err instanceof Unanswerable ||
       err instanceof Invalid ||
       err instanceof NotFound ||
-      err instanceof Forbidden
+      err instanceof Forbidden ||
+      err instanceof Refused
     ) {
       return NextResponse.json({ said: err.message }, { status: 400 });
     }

@@ -52,6 +52,7 @@ import {
   type Restore,
   type Stats,
 } from "./fly.ts";
+import { ownerPrincipal, refreshShares } from "./shares.ts";
 import { openrouter } from "./openrouter.ts";
 import { isRegion, regionName, type Region } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
@@ -61,7 +62,7 @@ import { above, sameSize, SIZES, type SizeKey } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-41";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-48";
 
 // An image whose label ends in -security does not wait on the person for
 // a week: it takes the idle rule from the day it is ready.
@@ -1040,6 +1041,13 @@ async function reconcileOrg(
           return;
         }
         await backUp(q, c);
+        // Every copy of what they shared brought up to the disk, and a
+        // colleague's save waiting on the machine taken onto it.
+        try {
+          await refreshShares(await ownerPrincipal(c), c);
+        } catch (err) {
+          console.error(`computer ${c.id}: shares: ${(err as Error).message}`);
+        }
         // The keys again every hour, so a machine remade or reset has them.
         if (c.authorizedKeys)
           await fly
@@ -1261,14 +1269,14 @@ async function extend(q: Query, c: Computer, why: string): Promise<void> {
 // server and that machine hold. Named a port, it opens that port alone, so
 // what somebody was given a port for does not become the whole computer.
 // Named nothing, it opens everything, and is minted only for the owner.
-function ticket(c: Computer, seconds: number, port?: number): string {
+export function ticket(c: Computer, seconds: number, port?: number): string {
   const exp = String(Math.floor(Date.now() / 1000) + seconds);
   const said = port === undefined ? exp : `${exp}.${port}`;
   return `${said}.${createHmac("sha256", c.secret).update(said).digest("hex")}`;
 }
 
 // The member's ready computer, or null.
-async function ready(p: Principal): Promise<Computer | null> {
+export async function ready(p: Principal): Promise<Computer | null> {
   if (deployment.computers.kind === "none") return null;
   const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   return c?.readyAt && c.machineId ? c : null;
@@ -1394,8 +1402,14 @@ export async function files(p: Principal): Promise<{
   preview(at: string): Promise<Response>;
   pdf(at: string): Promise<Response>;
   // Written whole, or added to the end, which keeps what anyone wrote
-  // to it meanwhile.
-  write(at: string, body: string, append?: boolean): Promise<number>;
+  // to it meanwhile. Told when the file was last changed as it was
+  // opened, a save of a file changed since is refused with Changed.
+  write(
+    at: string,
+    body: string,
+    append?: boolean,
+    opened?: string,
+  ): Promise<{ size: number; modified: string }>;
 } | null> {
   const c = await ready(p);
   if (!c) return null;
@@ -1406,7 +1420,8 @@ export async function files(p: Principal): Promise<{
     read: (at, range) => fly.files.read(m, t(), at, range),
     preview: (at) => fly.files.preview(m, t(), at),
     pdf: (at) => fly.files.pdf(m, t(), at),
-    write: (at, body, append) => fly.files.write(m, t(), at, body, append),
+    write: (at, body, append, opened) =>
+      fly.files.write(m, t(), at, body, append, opened),
   };
 }
 

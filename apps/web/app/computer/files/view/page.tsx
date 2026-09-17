@@ -8,14 +8,16 @@ import { principal } from "@/lib/session";
 export default async function ViewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ path?: string }>;
+  searchParams: Promise<{ path?: string; share?: string }>;
 }) {
   const p = await principal();
   if (!p) redirect("/");
-  const { path } = await searchParams;
-  const href = path
-    ? `/computer/files/view?path=${encodeURIComponent(path)}`
-    : undefined;
+  const { path, share } = await searchParams;
+  const href = share
+    ? `/computer/files/view?share=${encodeURIComponent(share)}&path=${encodeURIComponent(path ?? "")}`
+    : path
+      ? `/computer/files/view?path=${encodeURIComponent(path)}`
+      : undefined;
   return (
     <main className="-mx-6 -mt-6 -mb-28 flex h-dvh min-h-0 flex-col">
       <h1 className="sr-only">{path?.split("/").at(-1) ?? "Preview"}</h1>

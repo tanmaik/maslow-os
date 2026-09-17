@@ -1,7 +1,7 @@
 import { share } from "@/lib/computer";
 import { principal } from "@/lib/session";
 
-// Sets what one port of the person's own computer reaches. The form sends
+// Sets what one port of the person's own computer reaches. The sheet sends
 // everything it ticked, so what comes back is the whole list and whoever
 // was left off is taken off in the same act.
 export async function POST(request: Request) {
@@ -18,8 +18,5 @@ export async function POST(request: Request) {
   };
   if (!(await share(p, port, to)))
     return new Response("Your computer is not ready.", { status: 409 });
-  return new Response(null, {
-    status: 303,
-    headers: { location: "/settings?pane=computer" },
-  });
+  return new Response(null, { status: 204 });
 }

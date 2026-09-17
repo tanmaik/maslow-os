@@ -6,9 +6,10 @@ import type { Access, Query, Subject, Target } from "./types.ts";
 // whom, at what level and why, and waits for the owner to accept or decline
 // it. Accepting makes the shares in the owner's name.
 
-// What an ask may name: a record or a type of the brain's, or a port on the
-// person's computer, which is only ever looked at.
-type Asked = Target | { port: number };
+// What an ask may name: a record or a type of the brain's, a port on the
+// person's computer, which is only ever looked at, or a file or folder on
+// it, by its path as the agent sees it.
+type Asked = Target | { port: number } | { file: string };
 
 export type ShareRequest = {
   id: string;
@@ -18,9 +19,15 @@ export type ShareRequest = {
   reason: string;
 };
 
-// Gives one port of the caller's computer to one subject; the computer is
-// not the brain's to reach, so whoever accepts an ask hands this in.
+// Gives one port of the caller's computer to one subject, or one file or
+// folder on it at a level; the computer is not the brain's to reach, so
+// whoever accepts an ask hands these in.
 type GivePort = (port: number, subject: Subject) => Promise<void>;
+type GiveFile = (
+  path: string,
+  subject: Subject,
+  level: "view" | "edit",
+) => Promise<void>;
 
 // Whom to share with, as an asker names them: "everyone", a colleague's
 // email (it has an @), or a group's name (it does not).
@@ -85,6 +92,7 @@ export async function askToShare(
     records?: string[];
     types?: string[];
     ports?: number[];
+    files?: string[];
     to: Whom[];
     level: Access;
     reason: string;
@@ -108,8 +116,15 @@ export async function askToShare(
       throw new Invalid("a port is only ever looked at; ask at view");
     items.push({ port });
   }
+  for (const file of new Set(ask.files ?? [])) {
+    if (typeof file !== "string" || !file.trim() || file.includes("\0"))
+      throw new Invalid("a file is named by its path");
+    if (ask.level === "owner")
+      throw new Invalid("a file is looked at or changed; ask at view or edit");
+    items.push({ file: file.trim() });
+  }
   if (items.length === 0)
-    throw new Invalid("an ask names a record, a type or a port");
+    throw new Invalid("an ask names a record, a type, a port or a file");
   const subjects = await whom(q, ask.to);
   if (subjects.some((s) => s.who === "everyone") && ask.level !== "view") {
     throw new Invalid("everyone can only be given view");
@@ -153,8 +168,8 @@ async function take(q: Query, id: string): Promise<Row> {
 }
 
 // What an ask still names: a record or a type removed since the ask was
-// written is left out, since nobody could see it anyway. A port stays: the
-// door decides what listens there.
+// written is left out, since nobody could see it anyway. A port or a file
+// stays: the door decides what is there.
 async function stillThere(q: Query, items: Asked[]): Promise<Asked[]> {
   const records = items.flatMap((it) => ("record" in it ? [it.record] : []));
   const types = items.flatMap((it) => ("type" in it ? [it.type] : []));
@@ -166,7 +181,10 @@ async function stillThere(q: Query, items: Asked[]): Promise<Asked[]> {
   );
   const live = new Set(rows.map((r) => r.id));
   return items.filter(
-    (it) => "port" in it || live.has("record" in it ? it.record : it.type),
+    (it) =>
+      "port" in it ||
+      "file" in it ||
+      live.has("record" in it ? it.record : it.type),
   );
 }
 
@@ -186,13 +204,14 @@ async function stillHere(q: Query, subjects: Subject[]): Promise<Subject[]> {
 }
 
 // Accepts an ask: everything it still names, to everyone it still names, at
-// its level, in the caller's name; then the ask is gone. A port named is
-// given through the hand passed in, since the computer is not the brain's.
-// Answers with the records and types it shared, and with whom.
+// its level, in the caller's name; then the ask is gone. A port or a file
+// named is given through the hands passed in, since the computer is not
+// the brain's. Answers with the records and types it shared, and with whom.
 export async function acceptRequest(
   q: Query,
   id: string,
   givePort?: GivePort,
+  giveFile?: GiveFile,
 ): Promise<{ shared: Target[]; subjects: Subject[] }> {
   const ask = await take(q, id);
   const shared: Target[] = [];
@@ -202,9 +221,13 @@ export async function acceptRequest(
       if ("port" in item) {
         if (!givePort) throw new Invalid("nothing here gives a port away");
         await givePort(item.port, subject);
+      } else if ("file" in item) {
+        if (!giveFile) throw new Invalid("nothing here gives a file away");
+        if (ask.level === "owner") throw new Invalid("a file is never owned");
+        await giveFile(item.file, subject, ask.level);
       } else await share(q, item, subject, ask.level);
     }
-    if (!("port" in item)) shared.push(item);
+    if (!("port" in item) && !("file" in item)) shared.push(item);
   }
   return { shared, subjects };
 }

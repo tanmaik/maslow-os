@@ -35,11 +35,16 @@ const look = EditorView.theme({
       "oklch(from var(--color-accent-500) var(--cm-lightness) c calc(h + 250))",
     "--cm-type":
       "oklch(from var(--color-accent-500) var(--cm-lightness) c calc(h + 310))",
-    "--cm-picked": "var(--color-accent-200)",
+    // What a selection is painted with: enough of the accent to be seen
+    // at a glance on either ground, and never so much that the words in
+    // it are lost.
+    "--cm-picked":
+      "color-mix(in oklch, var(--color-accent-500) 30%, transparent)",
   },
   ".dark &": {
     "--cm-lightness": "0.8",
-    "--cm-picked": "var(--color-accent-900)",
+    "--cm-picked":
+      "color-mix(in oklch, var(--color-accent-500) 40%, transparent)",
   },
   ".cm-scroller": {
     fontFamily: "ui-monospace, monospace",
@@ -54,13 +59,22 @@ const look = EditorView.theme({
     color: "var(--color-text-secondary)",
   },
   ".cm-lineNumbers .cm-gutterElement": { paddingLeft: "12px" },
+  // The line the caret is on is painted over the selection, so its wash
+  // is faint and see-through: a selection still shows on it.
   ".cm-activeLine": {
-    backgroundColor: "var(--color-background-secondary-default)",
+    backgroundColor:
+      "color-mix(in oklch, var(--color-text-primary) 6%, transparent)",
   },
   ".cm-activeLineGutter": {
-    backgroundColor: "var(--color-background-secondary-default)",
+    backgroundColor:
+      "color-mix(in oklch, var(--color-text-primary) 6%, transparent)",
   },
   ".cm-content": { caretColor: "var(--color-text-primary)" },
+  // The caret is drawn by the editor itself when focused: two pixels of
+  // ink, so it is found on a dark ground too.
+  ".cm-cursor, .cm-dropCursor": {
+    borderLeft: "2px solid var(--color-text-primary)",
+  },
   // The shipped theme paints a focused selection through a long
   // descendant chain; ours has to be as particular to be seen at all.
   ".cm-selectionBackground": { background: "var(--cm-picked)" },
@@ -109,10 +123,13 @@ export function Editor({
   name,
   value,
   onChange,
+  readOnly = false,
 }: {
   name: string;
   value: string;
   onChange: (text: string) => void;
+  // A file the person may only look at: the text is read, never typed in.
+  readOnly?: boolean;
 }) {
   const box = useRef<HTMLDivElement>(null);
   const latest = useRef({ value, onChange });
@@ -131,6 +148,8 @@ export function Editor({
           look,
           EditorView.lineWrapping,
           language.of([]),
+          EditorState.readOnly.of(readOnly),
+          EditorView.editable.of(!readOnly),
           EditorView.updateListener.of((u) => {
             if (u.docChanged) latest.current.onChange(u.state.doc.toString());
           }),

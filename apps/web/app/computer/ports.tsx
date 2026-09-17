@@ -1,28 +1,18 @@
 "use client";
 
-import { RiCheckLine, RiFileCopyLine } from "@remixicon/react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { ShareSheet, type Reach } from "@/app/computer/share-sheet";
+import { Row, Rows } from "@/app/settings/row";
 import { StatusDot } from "@/components/base/badges/status-dot";
 import { Button, ButtonLink } from "@/components/base/buttons/button";
-import { Checkbox } from "@/components/base/checkbox/checkbox";
-import { Divider } from "@/components/base/divider/divider";
 import {
   ContextMenu,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Row, Rows } from "@/app/settings/row";
 
 export type Port = { port: number; name: string; ran?: string };
 type Share = {
@@ -64,6 +54,7 @@ export function Ports({
 }) {
   // The port whose sheet is open, if any.
   const [sharingPort, setSharingPort] = useState<number | null>(null);
+  const router = useRouter();
   if (ports.length === 0) return null;
   const on = (port: number) =>
     sharing?.shares.filter((s) => s.port === port) ?? [];
@@ -147,119 +138,42 @@ export function Ports({
         })}
       </Rows>
       {sharing && (
-        <Sheet
-          port={sharingPort}
+        <ShareSheet
+          open={sharingPort !== null}
+          title={`Share port ${sharingPort ?? ""}`}
+          description="Whoever you pick opens the link below while signed in to Maslow. For everybody else the address is not there at all."
+          link={
+            sharingPort === null
+              ? ""
+              : `${window.location.origin}/port/${sharing.machineId}/${sharingPort}`
+          }
+          parties={sharing}
+          on={reachOf(sharingPort === null ? [] : on(sharingPort))}
+          onSave={async (to) => {
+            const form = new FormData();
+            form.set("port", String(sharingPort));
+            if (to.everyone) form.set("everyone", "on");
+            for (const g of to.groupIds) form.append("group", g);
+            for (const m of to.memberIds) form.append("member", m);
+            const res = await fetch("/computer/share", {
+              method: "POST",
+              body: form,
+            });
+            if (!res.ok) return (await res.text()) || "That was not saved.";
+            router.refresh();
+            return null;
+          }}
           onClose={() => setSharingPort(null)}
-          sharing={sharing}
-          on={sharingPort === null ? [] : on(sharingPort)}
         />
       )}
     </div>
   );
 }
 
-// Who one port reaches: everyone in the org, or the groups and people
-// ticked. Everything ticked is sent, so whatever is unticked is taken away
-// in the same act. There is no level to choose: the address opens for them,
-// or it is not there.
-function Sheet({
-  port,
-  on,
-  sharing,
-  onClose,
-}: {
-  port: number | null;
-  on: Share[];
-  sharing: Sharing;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const everyone = on.some((s) => s.subject === "everyone");
-  const has = (field: "groupId" | "memberId", id: string) =>
-    on.some((s) => s[field] === id);
-  const link =
-    port === null
-      ? ""
-      : `${typeof window === "undefined" ? "" : window.location.origin}/port/${sharing.machineId}/${port}`;
-  return (
-    <Dialog open={port !== null} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent>
-        <form action="/computer/share" method="post" className="contents">
-          <input type="hidden" name="port" value={port ?? ""} />
-          <DialogHeader>
-            <DialogTitle>Share port {port}</DialogTitle>
-            <DialogDescription>
-              Whoever you pick opens the link below while signed in to Maslow.
-              For everybody else the address is not there at all.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex items-center gap-2">
-            <p className="min-w-0 flex-1 truncate rounded-2lg bg-background-tertiary-default px-3 py-2 font-mono text-caption-1-regular text-text-secondary">
-              {link}
-            </p>
-            <Button
-              variant="secondary"
-              size="small"
-              type="button"
-              leadingIcon={copied ? RiCheckLine : RiFileCopyLine}
-              onClick={() => {
-                void navigator.clipboard.writeText(link);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-              }}
-            >
-              {copied ? "Copied" : "Copy"}
-            </Button>
-          </div>
-          <div className="flex max-h-72 flex-col gap-3 overflow-y-auto py-2">
-            <Checkbox size="sm" name="everyone" defaultSelected={everyone}>
-              Everyone in the org
-            </Checkbox>
-            {sharing.groups.length > 0 && (
-              <>
-                <Divider />
-                {sharing.groups.map((g) => (
-                  <Checkbox
-                    size="sm"
-                    key={g.id}
-                    name="group"
-                    value={g.id}
-                    defaultSelected={has("groupId", g.id)}
-                  >
-                    {g.name}
-                  </Checkbox>
-                ))}
-              </>
-            )}
-            {sharing.members.length > 0 && (
-              <>
-                <Divider />
-                {sharing.members.map((m) => (
-                  <Checkbox
-                    size="sm"
-                    key={m.id}
-                    name="member"
-                    value={m.id}
-                    defaultSelected={has("memberId", m.id)}
-                  >
-                    {m.name}
-                  </Checkbox>
-                ))}
-              </>
-            )}
-          </div>
-          <DialogFooter>
-            <DialogClose
-              render={<Button variant="secondary" size="small" type="button" />}
-            >
-              Cancel
-            </DialogClose>
-            <Button type="submit" size="small">
-              Save
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
+// The rows a port's shares are, as the sheet takes them.
+const reachOf = (on: Share[]): Reach => ({
+  everyone: on.some((s) => s.subject === "everyone"),
+  groupIds: on.flatMap((s) => (s.groupId ? [s.groupId] : [])),
+  memberIds: on.flatMap((s) => (s.memberId ? [s.memberId] : [])),
+  level: "view",
+});

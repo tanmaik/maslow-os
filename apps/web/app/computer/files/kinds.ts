@@ -2,12 +2,24 @@
 // lists and the Preview window shows, and the addresses a file is read
 // and pictured at.
 
-// One thing in a folder, as the door lists it.
+// One thing in a folder, as the door lists it, with the id it is shared
+// by when it is.
 export type Entry = {
   name: string;
   kind: "dir" | "file" | "link" | "other";
   size: number;
   modified: string;
+  id?: string;
+};
+
+// A thing a colleague shared, as Files opens it: by its id, with whose it
+// is and how much the person may do with it.
+export type Shared = {
+  id: string;
+  name: string;
+  kind: "file" | "dir";
+  owner: string;
+  level: "view" | "edit" | "owner";
 };
 
 // The most text the editor takes into the tab. Past this a file is opened
@@ -104,3 +116,14 @@ export const previewHref = (path: string, modified: string) =>
   `/computer/files/preview?path=${encodeURIComponent(path)}&v=${encodeURIComponent(modified)}`;
 export const pdfHref = (path: string, modified: string) =>
   `/computer/files/pdf?path=${encodeURIComponent(path)}&v=${encodeURIComponent(modified)}`;
+
+// The addresses of one file of a shared thing, by the thing's id and the
+// file's path under it.
+export const sharedHref = (
+  id: string,
+  what: "list" | "stat" | "read" | "write" | "upload" | "pdf",
+  path: string,
+) => `/file/${encodeURIComponent(id)}/${what}?path=${encodeURIComponent(path)}`;
+// Where a shared thing opens as a link, the one its owner hands out.
+export const shareLink = (id: string) =>
+  `${typeof window === "undefined" ? "" : window.location.origin}/file/${id}`;

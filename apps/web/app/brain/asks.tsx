@@ -79,6 +79,13 @@ export function Asks({
                     </Link>
                   );
                 }
+                if ("file" in it) {
+                  return (
+                    <span key={i} className="text-text-primary">
+                      {it.file} on your computer
+                    </span>
+                  );
+                }
                 // A whole type, said so it cannot be read as a person: not
                 // "every person" but every record of the type `person`.
                 const name = types.find((t) => t.id === it.type)?.name;

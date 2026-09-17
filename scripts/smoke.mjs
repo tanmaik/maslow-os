@@ -208,6 +208,22 @@ try {
     (await settingsPage(wile)).includes("hire@acme-rockets.test"),
     "listed",
   );
+  // A shared file's link is nothing to whoever it does not reach, and
+  // nothing is shared with anyone here, where computers are off.
+  const noSuchFile = await fetch(`${stack.url}/file/nope`, {
+    headers: { cookie: wile },
+    redirect: "manual",
+  });
+  const nothingShared = await fetch(`${stack.url}/computer/files/shared`, {
+    headers: { cookie: wile },
+  });
+  check(
+    "a file link leaks nothing",
+    noSuchFile.status === 404 &&
+      nothingShared.ok &&
+      JSON.stringify(await nothingShared.json()) === "[]",
+    `${noSuchFile.status}, shared with me: none`,
+  );
   const anonymous = await fetch(`${stack.url}/invite`, {
     method: "POST",
     body: new URLSearchParams({ email: "x@y.test" }),

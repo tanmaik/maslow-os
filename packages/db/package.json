@@ -17,6 +17,7 @@
     "./brain-views": "./src/brain-views.ts",
     "./notifications": "./src/notifications.ts",
     "./wallpapers": "./src/wallpapers.ts",
+    "./shared-files": "./src/shared-files.ts",
     "./oauth": "./src/oauth.ts"
   },
   "scripts": {

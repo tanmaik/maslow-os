@@ -3,7 +3,7 @@ import { pictureInUse } from "@maslow/db/settings";
 
 import { destroy } from "./computer.ts";
 import { connections } from "./connections.ts";
-import { storage } from "./storage.ts";
+import { deleteKey, storage } from "./storage.ts";
 
 // Pays what removals and purges owe the vendors: deletes pictures from
 // the store, deletes an ended membership's accounts at Composio, destroys
@@ -13,7 +13,7 @@ import { storage } from "./storage.ts";
 type Orphan = { id: string; kind: string; ref: string };
 
 // Every debt this pays; the database refuses any other kind.
-export const KINDS = ["accounts", "picture", "computer"] as const;
+export const KINDS = ["accounts", "picture", "computer", "copy"] as const;
 
 export async function settle(orgId: string): Promise<number> {
   const owed = await asOrg(
@@ -65,6 +65,9 @@ async function pay(orgId: string, o: Orphan): Promise<void> {
       return;
     case "computer":
       await destroy(orgId, o.ref);
+      return;
+    case "copy":
+      await deleteKey(o.ref);
       return;
   }
 }

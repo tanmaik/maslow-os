@@ -22,6 +22,7 @@ import pty from "node-pty";
 
 import { backup } from "./backup.mjs";
 import * as files from "./files.mjs";
+import * as shares from "./shares.mjs";
 import { stats } from "./stats.mjs";
 
 const SECRET = process.env.DOOR_SECRET;
@@ -492,7 +493,11 @@ const server = http.createServer(async (req, res) => {
     }
     if (!ours(req.headers["x-maslow-ticket"]) && !ours(cookieOf(req)))
       return say(res, 401, "That ticket is not good here.");
-    return files.serve(req, res, url);
+    // What they shared, by id: marked, followed, listed, read, written,
+    // sent to the bucket and taken from it, all at our server's asking.
+    if (url.pathname.startsWith("/maslow/files/shared"))
+      return shares.serve(req, res, url);
+    return files.serve(req, res, url, shares.idAt, shares.carrier);
   }
   // The person's location, read once a minute by their own browser and
   // sent straight here: a line appended to their own log, never through

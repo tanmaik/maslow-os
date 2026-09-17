@@ -61,6 +61,20 @@ export async function leaveNotification(
   return rows[0]!;
 }
 
+// Leaves a note for another member of the org, in the name given: what a
+// share landing says to the person it reached.
+export async function tellNotification(
+  q: Query,
+  personId: string,
+  n: { title: string; body?: string; from: string },
+): Promise<void> {
+  await q.query(
+    `insert into notifications (person_id, kind, title, body, author)
+     values ($1, 'note', $2, $3, $4)`,
+    [personId, n.title.trim(), n.body?.trim() ?? "", n.from],
+  );
+}
+
 // The person's notifications, newest first.
 export async function notificationsOf(
   q: Query,

@@ -1,8 +1,8 @@
 "use client";
 
-import { RiExternalLinkLine } from "@remixicon/react";
+import { RiExternalLinkLine, RiUploadLine } from "@remixicon/react";
 import { AnimatePresence, motion } from "motion/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Editor } from "@/app/computer/files/editor";
 import {
@@ -20,8 +20,10 @@ import {
   pdfHref,
   previewHref,
   readHref,
+  sharedHref,
   size,
 } from "@/app/computer/files/kinds";
+import { putShared } from "@/app/computer/files/shared-upload";
 import { InBar, useBeforeClose } from "@/app/desktop/panel";
 import {
   ButtonGroup,
@@ -40,82 +42,194 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-// One file of the person's, in a window of its own: a picture or a video
-// as it is, text in an editor with a save, and anything else named with
-// the way to save it down. The window's name is the file's; its bar holds
-// the size, Save and Open. Opened from Files, from the command bar, or by
-// `open` on the machine.
+// How often a page with a colleague's file open asks whether it changed,
+// while the person is only reading it.
+const RECHECK_MS = 5000;
+
+// What a colleague's file says of itself: the file, whose it is, how much
+// the person may do, and whether the answer came from the machine.
+type Stat = Entry & {
+  owner: string;
+  level: "view" | "edit" | "owner";
+  live: boolean;
+};
+
+// One file, in a window of its own: a picture or a video as it is, text
+// in an editor with a save, and anything else named with the way to save
+// it down. The file is the person's own, or one a colleague shared, by
+// its id and a path under it. The window's name is the file's; its bar
+// holds the size, Save and Open. Opened from Files, from the command bar,
+// by `open` on the machine, or by a shared file's link.
 export function Look({ href }: { href?: string }) {
-  const path = href ? new URL(href, "http://x").searchParams.get("path") : null;
+  const asked = href ? new URL(href, "http://x").searchParams : null;
+  const share = asked?.get("share") || null;
+  const path = asked?.get("path") ?? null;
+  // Where the file is read, written and pictured: on the person's own
+  // computer, or through the share it was opened by.
+  const at = (what: "read" | "write" | "pdf" | "stat" | "upload") =>
+    share ? sharedHref(share, what, path ?? "") : readHref(path ?? "");
   const [entry, setEntry] = useState<Entry | null>(null);
+  const [about, setAbout] = useState<Stat | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [text, setText] = useState<string | null>(null);
+  // When the file was last changed as it was opened, which a save names,
+  // so one that fell behind is said before it lands.
+  const [opened, setOpened] = useState<string | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
+  // A save that fell behind: the file changed since it was opened, at
+  // this time. The person's text stays where it is, in reach, until they
+  // save it over theirs or take theirs.
+  const [behind, setBehind] = useState<string | null>(null);
   // Whether the person is being asked about words not saved.
   const [asking, setAsking] = useState<null | {
     go: () => void;
     stop: () => void;
   }>(null);
-  const name = path?.split("/").filter(Boolean).at(-1) ?? "";
+  const [replacing, setReplacing] = useState(false);
+  // Which text the editor opened with: a colleague's save taken in is a
+  // new one, so the editor opens it fresh.
+  const [taken, setTaken] = useState(0);
+  const picker = useRef<HTMLInputElement>(null);
+  const name =
+    path?.split("/").filter(Boolean).at(-1) ?? about?.name ?? entry?.name ?? "";
   const folder = path?.split("/").filter(Boolean).slice(0, -1).join("/") ?? "";
   const heavy =
     entry !== null &&
     (isText(entry) || isUnknown(entry)) &&
     entry.size > MOST_TEXT;
+  // Whether the person may change it: their own, or shared at edit.
+  const mayEdit = !share || (about !== null && about.level !== "view");
+  // Whether the person has typed since the text was taken in, for a look
+  // already under way to leave their words alone.
+  const typing = useRef(false);
+  typing.current = dirty;
   // Whether the file is edited here: text by name, or found to be text.
-  const editable =
+  // Whether the file is read as text here: text by name, or found to be
+  // text; and whether it is edited here, which also takes the right to.
+  const readable =
     entry !== null &&
     !heavy &&
     (isText(entry) || (isUnknown(entry) && text !== null));
+  const editable = readable && mayEdit;
 
-  // The file as its folder lists it, then its text where it is text.
-  useEffect(() => {
-    if (!path) return;
-    let gone = false;
-    (async () => {
+  // The file as its folder lists it, or as the share says it is, then
+  // its text where it is text.
+  const look = async (gone: () => boolean) => {
+    let found: Entry | undefined;
+    if (share) {
+      const res = await fetch(at("stat"));
+      if (res.status === 404) {
+        setFailed("That file is not there any more.");
+        return;
+      }
+      if (!res.ok) throw new Error(await res.text());
+      const s = (await res.json()) as Stat;
+      if (gone()) return;
+      setAbout(s);
+      found = s;
+    } else {
       const res = await fetch(
         `/computer/files/list?path=${encodeURIComponent(folder || ".")}`,
       );
       if (!res.ok) throw new Error(await res.text());
-      const found = ((await res.json()) as Entry[]).find(
-        (e) => e.name === name,
-      );
-      if (gone) return;
-      if (!found) {
-        setFailed("That file is not there any more.");
-        return;
-      }
-      setEntry(found);
-      // Text by name, or a file of no known kind that turns out to be
-      // text once read.
-      if ((isText(found) || isUnknown(found)) && found.size <= MOST_TEXT) {
-        const r = await fetch(readHref(path));
-        const got = r.ok ? await r.text() : "";
-        if (!gone) setText(isText(found) || looksLikeText(got) ? got : null);
-      }
-    })().catch((e) => !gone && setFailed(e.message));
+      found = ((await res.json()) as Entry[]).find((e) => e.name === name);
+    }
+    if (gone()) return;
+    if (!found) {
+      setFailed("That file is not there any more.");
+      return;
+    }
+    setEntry(found);
+    setOpened(found.modified);
+    // Text by name, or a file of no known kind that turns out to be
+    // text once read.
+    if ((isText(found) || isUnknown(found)) && found.size <= MOST_TEXT) {
+      const r = await fetch(at("read"));
+      const got = r.ok ? await r.text() : "";
+      if (gone()) return;
+      setText(isText(found) || looksLikeText(got) ? got : null);
+      setTaken((n) => n + 1);
+    }
+  };
+  useEffect(() => {
+    if (!path && !share) return;
+    let gone = false;
+    look(() => gone).catch((e) => !gone && setFailed(e.message));
     return () => {
       gone = true;
     };
-  }, [path, folder, name]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path, share, folder, name]);
 
-  const save = async () => {
-    if (!path || text === null) return false;
+  // A colleague's file is asked after every few seconds while it is only
+  // being read, and taken in again when it changed, so a reader is never
+  // more than a moment behind whoever saved.
+  useEffect(() => {
+    if (!share || dirty || !entry) return;
+    const timer = setInterval(() => {
+      void (async () => {
+        const res = await fetch(at("stat"));
+        if (!res.ok) return;
+        const s = (await res.json()) as Stat;
+        if (s.modified !== opened) await look(() => typing.current);
+      })().catch(() => {});
+    }, RECHECK_MS);
+    return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [share, dirty, entry, opened]);
+
+  // Saves the text, naming when the file was opened; a file changed since
+  // is not written over but asked about, unless the person said so.
+  const save = async (anyway = false) => {
+    if ((!path && !share) || text === null) return false;
     setSaving(true);
     setRefused(null);
     const res = await fetch(
-      `/computer/files/write?path=${encodeURIComponent(path)}`,
-      { method: "PUT", body: text },
+      share
+        ? at("write")
+        : `/computer/files/write?path=${encodeURIComponent(path!)}`,
+      {
+        method: "PUT",
+        headers: opened && !anyway ? { "x-maslow-opened": opened } : {},
+        body: text,
+      },
     );
     setSaving(false);
+    if (res.status === 409) {
+      const said = (await res.json().catch(() => null)) as {
+        modified?: string;
+      } | null;
+      if (said?.modified) {
+        setBehind(said.modified);
+        return false;
+      }
+    }
     if (!res.ok) {
       setRefused((await res.text()) || "The machine would not take it.");
       return false;
     }
+    const wrote = (await res.json()) as { modified?: string };
+    if (wrote.modified) setOpened(wrote.modified);
     setDirty(false);
     return true;
+  };
+
+  // A colleague at edit replaces a picture, a PDF or anything else that
+  // is not edited in place: an upload over it.
+  const replace = async (file: File) => {
+    if (!share) return;
+    setReplacing(true);
+    setRefused(null);
+    try {
+      await putShared(share, path ?? "", file, () => {});
+      await look(() => false);
+    } catch (err) {
+      setRefused((err as Error).message);
+    } finally {
+      setReplacing(false);
+    }
   };
 
   // Nothing typed is thrown away without asking: the room asks here
@@ -134,12 +248,25 @@ export function Look({ href }: { href?: string }) {
     return () => window.removeEventListener("beforeunload", hold);
   }, [dirty]);
 
-  if (!path)
+  if (!path && !share)
     return (
       <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
         Nothing to look at.
       </p>
     );
+  // Where a picture or a PDF is drawn from: the person's own is pictured
+  // on their machine; a colleague's is shown as it is, at an address that
+  // changes with the file so a replacement is drawn afresh.
+  const fresh = (href: string) =>
+    `${href}&v=${encodeURIComponent(entry?.modified ?? "")}`;
+  const picture = share
+    ? fresh(at("read"))
+    : ending(name) === "svg"
+      ? readHref(path!)
+      : previewHref(path!, entry?.modified ?? "");
+  const paper = share
+    ? fresh(entry && isDocument(entry) ? at("pdf") : at("read"))
+    : pdfHref(path!, entry?.modified ?? "");
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <InBar
@@ -150,6 +277,12 @@ export function Look({ href }: { href?: string }) {
         )}
       >
         <span className="ml-auto flex items-center gap-2">
+          {about && (
+            <span className="shrink-0 truncate text-caption-1-medium text-text-secondary">
+              {about.owner}&rsquo;s
+              {about.level === "view" ? ", view only" : ""}
+            </span>
+          )}
           {dirty && (
             <span
               className="size-1.5 shrink-0 rounded-full bg-accent-500"
@@ -184,14 +317,34 @@ export function Look({ href }: { href?: string }) {
                 </AnimatePresence>
               </ButtonGroupItem>
             )}
+            {share && mayEdit && entry && !editable && (
+              <ButtonGroupItem
+                size="small"
+                leadingIcon={RiUploadLine}
+                disabled={replacing}
+                onClick={() => picker.current?.click()}
+              >
+                {replacing ? "Replacing…" : "Replace"}
+              </ButtonGroupItem>
+            )}
             <ButtonGroupItem
               size="small"
               leadingIcon={RiExternalLinkLine}
-              onClick={() => window.open(readHref(path), "_blank", "noopener")}
+              onClick={() => window.open(at("read"), "_blank", "noopener")}
             >
               Open
             </ButtonGroupItem>
           </ButtonGroup>
+          <input
+            ref={picker}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void replace(f);
+              e.target.value = "";
+            }}
+          />
         </span>
       </InBar>
       {refused && (
@@ -202,6 +355,40 @@ export function Look({ href }: { href?: string }) {
             description={refused}
             dismissible
             onDismiss={() => setRefused(null)}
+          />
+        </div>
+      )}
+      {/* A save that fell behind is said here, over the person's own
+          text, which stays exactly as they typed it and in reach, so
+          they can keep what they need before saving over theirs or
+          taking theirs. */}
+      {behind !== null && (
+        <div className="shrink-0 border-b border-separator-border p-3">
+          <Notification
+            status="information"
+            title="It changed since you opened it"
+            description={`Someone saved ${name} while you had it open. What you typed is still here and not saved: save it over theirs, or take theirs and lose it.`}
+            dismissible
+            onDismiss={() => setBehind(null)}
+            actions={[
+              {
+                label: "Save anyway",
+                variant: "secondary",
+                onClick: () => {
+                  setBehind(null);
+                  void save(true);
+                },
+              },
+              {
+                label: "Take theirs",
+                variant: "secondary",
+                onClick: () => {
+                  setBehind(null);
+                  setDirty(false);
+                  void look(() => false).catch((e) => setFailed(e.message));
+                },
+              },
+            ]}
           />
         </div>
       )}
@@ -217,7 +404,7 @@ export function Look({ href }: { href?: string }) {
         ) : isAudio(entry) ? (
           <div className="grid h-full place-items-center bg-background-full p-6">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-            <audio controls preload="metadata" src={readHref(path)} />
+            <audio controls preload="metadata" src={at("read")} />
           </div>
         ) : isVideo(entry) ? (
           <div className="grid h-full place-items-center bg-background-full">
@@ -226,40 +413,37 @@ export function Look({ href }: { href?: string }) {
               controls
               playsInline
               preload="metadata"
-              poster={previewHref(path, entry.modified)}
-              src={readHref(path)}
+              poster={share ? undefined : previewHref(path!, entry.modified)}
+              src={at("read")}
               className="h-full w-full object-contain"
             />
           </div>
         ) : isPdf(entry) || isDocument(entry) ? (
           <iframe
             title={name}
-            src={pdfHref(path, entry.modified)}
+            src={paper}
             className="h-full w-full border-0 bg-background-secondary-default"
           />
         ) : isImage(entry) ? (
           <div className="grid h-full place-items-center overflow-auto bg-background-secondary-default p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              // A picture is made on the machine; a small SVG is shown as is.
-              src={
-                ending(name) === "svg"
-                  ? readHref(path)
-                  : previewHref(path, entry.modified)
-              }
+              src={picture}
               alt={name}
               className="max-h-full max-w-full object-contain shadow-card"
             />
           </div>
-        ) : editable || (isText(entry) && !heavy) ? (
+        ) : readable ? (
           text === null ? (
             <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
               Looking…
             </p>
           ) : (
             <Editor
+              key={taken}
               name={name}
               value={text}
+              readOnly={!mayEdit}
               onChange={(next) => {
                 setText(next);
                 setDirty(true);

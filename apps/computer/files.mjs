@@ -17,8 +17,8 @@ import sharp from "sharp";
 const run = promisify(execFile);
 
 // Where the home is from outside the person's Linux, and whose it is.
-const HOME = process.env.HOME_DIR ?? "/data/home";
-const OWNER = 1000;
+export const HOME = process.env.HOME_DIR ?? "/data/home";
+export const OWNER = 1000;
 
 // Where pictures of files are kept once made: on the machine, not the
 // disk, so they cost the person nothing and are made again after a
@@ -99,11 +99,11 @@ export function within(abs) {
   return rel === null || inside(rel) === null ? null : rel;
 }
 
-const json = (res, status, body) => {
+export const json = (res, status, body) => {
   res.writeHead(status, { "content-type": "application/json" });
   res.end(JSON.stringify(body));
 };
-const say = (res, status, text) => {
+export const say = (res, status, text) => {
   res.writeHead(status, { "content-type": "text/plain" });
   res.end(text);
 };
@@ -118,8 +118,9 @@ const kindOf = (d) =>
         ? "link"
         : "other";
 
-// The folder's entries, folders first, then by name.
-async function list(res, at) {
+// The folder's entries, folders first, then by name, each that is shared
+// carrying the id it is shared by.
+export async function list(res, at, idAt = () => null) {
   let entries;
   try {
     entries = await fsp.readdir(at, { withFileTypes: true });
@@ -130,11 +131,13 @@ async function list(res, at) {
   for (const d of entries) {
     const s = await fsp.lstat(path.join(at, d.name)).catch(() => null);
     if (!s) continue;
+    const id = idAt(path.relative(HOME, path.join(at, d.name)));
     out.push({
       name: d.name,
       kind: kindOf(d),
       size: s.size,
       modified: s.mtime.toISOString(),
+      ...(id ? { id } : {}),
     });
   }
   out.sort((a, b) =>
@@ -153,7 +156,7 @@ async function list(res, at) {
 // or show it and a phone can stop early.
 // A file's bytes, whole, or the part a Range asks for so a video can be
 // played from the middle.
-async function read(req, res, at) {
+export async function read(req, res, at) {
   let s;
   try {
     s = await fsp.stat(at);
@@ -239,7 +242,7 @@ async function pdfOf(at, key) {
 
 // A file as a PDF the browser's own viewer reads whole, every page: a PDF
 // as it is, a document through LibreOffice. Anything else has none.
-async function pdf(res, at) {
+export async function pdf(res, at) {
   let s;
   try {
     s = await fsp.stat(at);
@@ -272,7 +275,7 @@ async function pdf(res, at) {
 // way its camera held it, the frame a second into a video, the first page
 // of a PDF. Made once per version of the file and kept on the machine.
 // Anything else has no picture.
-async function preview(res, at) {
+export async function preview(res, at) {
   let s;
   try {
     s = await fsp.stat(at);
@@ -396,11 +399,31 @@ async function fresh(tmp, mode) {
 
 // Writes a whole file: to a file beside it first, then into place, so a
 // write cut short leaves the old file whole. A file that was there keeps
-// its mode, so an editable script stays executable.
-async function write(req, res, at, append = false) {
+// its mode, so an editable script stays executable. A save that says when
+// the file was last changed as it was opened is refused, with when it
+// changed since, if the file has changed meanwhile: said before it lands,
+// never written over.
+export async function write(
+  req,
+  res,
+  at,
+  append = false,
+  opened = null,
+  carry = null,
+) {
   try {
     await folderFor(at);
     const was = await fsp.lstat(at).catch(() => null);
+    // A save of a file that changed since it was opened is said, and one
+    // of a file that is gone since is refused rather than made anew.
+    if (opened && !was) {
+      req.resume();
+      return say(res, 404, "That file is not there any more.");
+    }
+    if (opened && was && was.mtime.toISOString() !== opened) {
+      req.resume();
+      return json(res, 409, { modified: was.mtime.toISOString() });
+    }
     const mode = was?.isFile() ? was.mode & 0o7777 : 0o644;
     // Added to the end, the file keeps whatever anyone wrote to it
     // meanwhile; written whole, it is made beside and moved into place.
@@ -435,9 +458,23 @@ async function write(req, res, at, append = false) {
       const fd = await fresh(tmp, mode);
       await pipeline(req, fd.createWriteStream());
       await fsp.chown(tmp, OWNER, OWNER).catch(() => {});
+      // A shared file keeps its mark on the file put in its place.
+      if (carry) await carry(tmp);
+      // Looked at once more as the body has landed: a save that arrived
+      // while this one was streaming is not written over either.
+      if (opened) {
+        const now = await fsp.lstat(at).catch(() => null);
+        if (!now || now.mtime.toISOString() !== opened) {
+          await fsp.rm(tmp, { force: true });
+          return now
+            ? json(res, 409, { modified: now.mtime.toISOString() })
+            : say(res, 404, "That file is not there any more.");
+        }
+      }
       await fsp.rename(tmp, at);
     }
-    json(res, 200, { size: (await fsp.stat(at)).size });
+    const s = await fsp.stat(at);
+    json(res, 200, { size: s.size, modified: s.mtime.toISOString() });
   } catch (err) {
     say(res, 500, `Could not write: ${err.code ?? err.message}`);
   }
@@ -524,16 +561,23 @@ async function upload(req, res, at, url) {
 
 // Answers one ask about the home. The path is the query's `path`, relative
 // to the home; the door has already checked the ticket.
-export async function serve(req, res, url) {
+export async function serve(req, res, url, idAt, carrier) {
   const at = inside(url.searchParams.get("path") ?? "");
   if (!at) return say(res, 403, "That is not in your home.");
   const what = url.pathname.slice("/maslow/files".length);
-  if (what === "" && req.method === "GET") return list(res, at);
+  if (what === "" && req.method === "GET") return list(res, at, idAt);
   if (what === "/read" && req.method === "GET") return read(req, res, at);
   if (what === "/preview" && req.method === "GET") return preview(res, at);
   if (what === "/pdf" && req.method === "GET") return pdf(res, at);
   if (what === "/write" && req.method === "PUT")
-    return write(req, res, at, url.searchParams.get("append") === "1");
+    return write(
+      req,
+      res,
+      at,
+      url.searchParams.get("append") === "1",
+      url.searchParams.get("opened"),
+      carrier?.(path.relative(HOME, at)) ?? null,
+    );
   if (what === "/upload" && req.method === "GET") return have(res, at, url);
   if (what === "/upload" && req.method === "PUT")
     return upload(req, res, at, url);

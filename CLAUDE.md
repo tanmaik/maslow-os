@@ -379,7 +379,34 @@ numbers, size, where, SSH and reset in the open; About This Computer
 in the Maslow menu is its face on the desktop. A port is the person's until they share it
 with a person, a group or everyone in the org, and it opens or is a 404;
 the agent asks for a port through the same share tool it asks for a
-record with, and never shares one itself. The door is the one way in, and
+record with, and never shares one itself. A file or a folder in their
+home is shared the same way, at view or edit, from a right-click in
+Files or through that share tool, and it is the one thing on the machine
+that carries a mark: an extended attribute holding the id the share is
+by, kept by the door with the path it sits at, so a move or a rename
+keeps the share and the link, a copy behaves as an unshared file, a file
+remade in its place by a program's save is the same file, since the door
+watches the folder it stands in, and one gone from its place for longer
+than a moment and found nowhere else is deleted, its share ending the
+moment anyone next looks.
+What is shared with a person stands in their Files under the sharer's
+name, opens in the Preview window as their own would, and has a link on
+our domain by its id that opens for whoever is allowed and is a 404 for
+anyone else. A colleague reads it from the owner's machine while that is
+up and from a copy in the bucket while it is not; the app keeps the copy
+current from the machine, on the share, after every save a colleague
+makes, whenever a read finds it behind, and every hour, and a save a
+colleague makes while the machine is off waits in the copy and lands on
+the disk the next time it is up. Text is edited and the last save wins,
+said before it does: a save names when the file was last changed as it
+was opened, and one that fell behind is not written over but asked
+about, save anyway or take theirs. Everything else is read, and at edit
+replaced by an upload; an editor may add a file to a shared folder, and
+moving, renaming and deleting stay the owner's. A share landing leaves a
+notification for each person it reached. Every copy has a row and is
+owed its deletion when the row goes; a shared thing has a ceiling on its
+size and its files. The settled design is
+`docs/decisions/2026-09-16-files-are-shared.md`. The door is the one way in, and
 ready means the door answers. Three sockets go straight from the person's
 browser to it, each on a ticket from our sign-in and never through our
 server: Talk, a terminal joined to a `tmux` session on the machine, a

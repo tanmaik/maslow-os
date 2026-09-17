@@ -11,6 +11,13 @@ import {
   Gone,
 } from "../packages/db/src/index.ts";
 import { portsReaching, sharePort } from "../packages/db/src/computers.ts";
+import {
+  copyAt,
+  filesReaching,
+  giveFile,
+  setCopy,
+  shareFile,
+} from "../packages/db/src/shared-files.ts";
 import { orgs } from "../packages/db/src/seed.ts";
 
 const pg = createRequire(
@@ -373,6 +380,160 @@ export async function smokeDb({ pgPort }) {
           1,
         );
         await asPerson(mine, (q) => q.query("delete from port_shares"));
+      },
+    );
+    await check(
+      "a file is shared by its computer's owner, at a level, and its copy goes with it",
+      async () => {
+        const [wile, road] = acme.users;
+        const marge = bakery.users[0];
+        const mine = {
+          orgId: acme.id,
+          personId: wile.personId,
+          userId: wile.id,
+        };
+        const theirs = {
+          orgId: acme.id,
+          personId: road.personId,
+          userId: road.id,
+        };
+        const others = {
+          orgId: bakery.id,
+          personId: marge.personId,
+          userId: marge.id,
+        };
+        const computer = await asPerson(
+          mine,
+          async (q) => (await q.query("select id from computers")).rows[0].id,
+        );
+        const plan = {
+          id: "plan000001",
+          computerId: computer,
+          name: "plan.md",
+          kind: "file",
+        };
+        // The owner shares it at edit with one person; only they see it,
+        // and only at that level. Nobody else can share what is not theirs.
+        await asPerson(mine, (q) =>
+          shareFile(q, plan, {
+            everyone: false,
+            groupIds: [],
+            memberIds: [road.id],
+            level: "edit",
+          }),
+        );
+        await assert.rejects(
+          asPerson(theirs, (q) =>
+            shareFile(q, plan, {
+              everyone: false,
+              groupIds: [],
+              memberIds: [road.id],
+              level: "view",
+            }),
+          ),
+          /row-level security/,
+        );
+        const level = (who) =>
+          asPerson(
+            who,
+            async (q) =>
+              (await q.query("select file_level($1) as level", [plan.id]))
+                .rows[0].level,
+          );
+        assert.equal(await level(mine), "owner");
+        assert.equal(await level(theirs), "edit");
+        assert.equal(await level(others), null);
+        // What reaches a person is listed for them with whose it is, and
+        // the owner's own are not among theirs.
+        assert.deepEqual(
+          await asPerson(theirs, async (q) =>
+            (await filesReaching(q)).map(
+              (f) => `${f.name}:${f.level}:${f.owner}`,
+            ),
+          ),
+          ["plan.md:edit:Wile Coyote"],
+        );
+        assert.deepEqual(await asPerson(mine, filesReaching), []);
+        assert.deepEqual(await asPerson(others, filesReaching), []);
+        // Everyone can only be given view, and a copy an editor writes is
+        // seen by the owner, while a viewer cannot write one.
+        await assert.rejects(
+          asPerson(mine, (q) =>
+            q.query(
+              "insert into file_shares (computer_id, file_id, subject, level) values ($1, $2, 'everyone', 'edit')",
+              [computer, plan.id],
+            ),
+          ),
+          /everyone_only_views/,
+        );
+        await asPerson(theirs, (q) =>
+          setCopy(q, {
+            fileId: plan.id,
+            path: "",
+            key: "shares/plan000001/plan.md",
+            bytes: 12,
+            modified: new Date("2026-09-16T00:00:00Z"),
+            pending: true,
+          }),
+        );
+        assert.equal(
+          (await asPerson(mine, (q) => copyAt(q, plan.id, "")))?.pending,
+          true,
+        );
+        await asPerson(mine, (q) =>
+          shareFile(q, plan, {
+            everyone: true,
+            groupIds: [],
+            memberIds: [],
+            level: "view",
+          }),
+        );
+        assert.equal(await level(theirs), "view");
+        await assert.rejects(
+          asPerson(theirs, (q) =>
+            setCopy(q, {
+              fileId: plan.id,
+              path: "",
+              key: "shares/plan000001/plan.md",
+              bytes: 13,
+              modified: new Date(),
+              pending: true,
+            }),
+          ),
+          /row-level security/,
+        );
+        // Accepting an ask gives one more party without taking any away.
+        await asPerson(mine, (q) =>
+          giveFile(q, plan, { who: "member", id: road.id }, "edit"),
+        );
+        assert.equal(await level(theirs), "edit");
+        // Sharing it with nobody takes the thing away, and its copy's
+        // object is owed its deletion.
+        assert.equal(
+          await asPerson(mine, (q) =>
+            shareFile(q, plan, {
+              everyone: false,
+              groupIds: [],
+              memberIds: [],
+              level: "view",
+            }),
+          ),
+          false,
+        );
+        assert.equal(await level(theirs), null);
+        assert.equal(
+          (
+            await asPerson(mine, (q) =>
+              q.query(
+                "select 1 from orphans where kind = 'copy' and ref = 'shares/plan000001/plan.md'",
+              ),
+            )
+          ).rowCount,
+          1,
+        );
+        await asPerson(mine, (q) =>
+          q.query("delete from orphans where kind = 'copy'"),
+        );
       },
     );
   } finally {

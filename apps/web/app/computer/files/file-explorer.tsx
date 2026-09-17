@@ -5,10 +5,12 @@ import {
   RiFileLine,
   RiFileTextLine,
   RiFolderLine,
+  RiGroupLine,
   RiHomeLine,
   RiImageLine,
   RiLinkM,
   RiSearchLine,
+  RiShareForwardLine,
   RiSideBarLine,
   RiUploadLine,
   RiVideoLine,
@@ -26,11 +28,20 @@ import type { SortDescriptor } from "react-aria-components";
 
 import {
   type Entry,
+  type Shared,
   isImage,
   isText,
   isVideo,
+  shareLink,
+  sharedHref,
   size,
 } from "@/app/computer/files/kinds";
+import { putShared } from "@/app/computer/files/shared-upload";
+import {
+  ShareSheet,
+  type Parties,
+  type Reach,
+} from "@/app/computer/share-sheet";
 import { BarButton, InBar, useFolded } from "@/app/desktop/panel";
 import {
   Breadcrumb,
@@ -54,6 +65,8 @@ import {
   ContextMenu,
   ContextMenuCheckboxItem,
   ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import { Progress } from "@/components/ui/progress";
@@ -89,6 +102,33 @@ const PLACES = new Set([
 
 // An upload in flight: how far it has got, and what stopped it if anything.
 type Upload = { done: number; total: number; error?: string };
+
+// What colleagues shared with the person, by whom.
+type Colleague = { owner: string; ownerId: string; files: Shared[] };
+
+// What the sheet on a file or folder of the person's own needs: who it
+// can be given to, and everything they have shared with who each reaches.
+type Sharing = Parties & {
+  files: { id: string; name: string; kind: "file" | "dir" }[];
+  shares: {
+    fileId: string;
+    subject: "everyone" | "group" | "member";
+    memberId: string | null;
+    groupId: string | null;
+    level: "view" | "edit";
+  }[];
+};
+
+// What one shared thing reaches, as the sheet takes it.
+const reachOf = (sharing: Sharing | null, id: string | undefined): Reach => {
+  const on = id ? (sharing?.shares.filter((s) => s.fileId === id) ?? []) : [];
+  return {
+    everyone: on.some((s) => s.subject === "everyone"),
+    groupIds: on.flatMap((s) => (s.groupId ? [s.groupId] : [])),
+    memberIds: on.flatMap((s) => (s.memberId ? [s.memberId] : [])),
+    level: on.some((s) => s.level === "edit") ? "edit" : "view",
+  };
+};
 
 // A file goes up in pieces this big, so a dropped connection loses at most
 // one piece and picks up from the last the door kept.
@@ -299,10 +339,13 @@ function Place({
 
 export function FileExplorer({
   initialPath,
+  initialShare,
   href,
   standalone = false,
 }: {
   initialPath?: string;
+  // A folder a colleague shared, by its id, opened as its link is.
+  initialShare?: string;
   href?: string;
   // On a page of its own, with no desktop to ask, a file opens in a tab.
   standalone?: boolean;
@@ -311,16 +354,29 @@ export function FileExplorer({
   const folded = useFolded();
   // The folder asked for: by the page's address, or by the window's on the
   // desktop.
-  const asked = (
-    initialPath ??
-    (href ? new URL(href, "http://x").searchParams.get("path") : null) ??
-    ""
-  )
+  const params = href ? new URL(href, "http://x").searchParams : null;
+  const asked = (initialPath ?? params?.get("path") ?? "")
     .split("/")
     .filter(Boolean);
-  const [path, setPath] = useState<string[]>(asked.slice(0, -1));
+  const askedShare = initialShare ?? params?.get("share") ?? null;
+  const [path, setPath] = useState<string[]>(
+    askedShare ? asked : asked.slice(0, -1),
+  );
+  // Whose things are in view: the person's own home, a colleague's list
+  // of what they shared, or a folder a colleague shared and a path under
+  // it.
+  const [colleague, setColleague] = useState<Colleague | null>(null);
+  const [share, setShare] = useState<Shared | null>(null);
+  const [shared, setShared] = useState<Colleague[]>([]);
+  // The row last right-clicked, the thing whose sheet is open, and what
+  // the sheet needs.
+  const [target, setTarget] = useState<Entry | null>(null);
+  const [sharingEntry, setSharingEntry] = useState<Entry | null>(null);
+  const [sharing, setSharing] = useState<Sharing | null>(null);
   // A file asked for by name, opened once its folder has loaded.
-  const opening = useRef<string | null>(asked.at(-1) ?? null);
+  const opening = useRef<string | null>(
+    askedShare ? null : (asked.at(-1) ?? null),
+  );
   const [entries, setEntries] = useState<Entry[] | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   // A text file too big to take into the tab: shown as a file, not read.
@@ -382,11 +438,27 @@ export function FileExplorer({
   const dir = path.join("/");
   const at = (name: string) => (dir ? `${dir}/${name}` : name);
 
+  // What is listed: the folder in the home, the folder under a colleague's
+  // share, or what one colleague shared, as rows.
   const load = useCallback(async () => {
     setFailed(null);
     try {
+      if (colleague && !share) {
+        setEntries(
+          colleague.files.map((f) => ({
+            name: f.name,
+            kind: f.kind,
+            size: 0,
+            modified: "",
+            id: f.id,
+          })),
+        );
+        return;
+      }
       const res = await fetch(
-        `/computer/files/list?path=${encodeURIComponent(dir || ".")}`,
+        share
+          ? sharedHref(share.id, "list", dir)
+          : `/computer/files/list?path=${encodeURIComponent(dir || ".")}`,
       );
       if (!res.ok) throw new Error(await res.text());
       setEntries((await res.json()) as Entry[]);
@@ -394,7 +466,7 @@ export function FileExplorer({
       setEntries([]);
       setFailed((err as Error).message);
     }
-  }, [dir]);
+  }, [dir, share, colleague]);
 
   useEffect(() => {
     setEntries(null);
@@ -403,12 +475,65 @@ export function FileExplorer({
     void load();
   }, [load]);
 
+  // What colleagues shared, for the rail; read once, and again whenever
+  // the window comes back into view, so a share that landed meanwhile is
+  // there.
+  const loadShared = useCallback(async () => {
+    try {
+      const res = await fetch("/computer/files/shared");
+      if (res.ok) setShared((await res.json()) as Colleague[]);
+    } catch {
+      // The rail stays as it was.
+    }
+  }, []);
+  useEffect(() => {
+    void loadShared();
+    const back = () => {
+      if (document.visibilityState === "visible") void loadShared();
+    };
+    document.addEventListener("visibilitychange", back);
+    window.addEventListener("focus", back);
+    return () => {
+      document.removeEventListener("visibilitychange", back);
+      window.removeEventListener("focus", back);
+    };
+  }, [loadShared]);
+  // A colleague named by a linked folder alone is filled in from the rail
+  // once that has been read, so their list is one crumb away.
+  useEffect(() => {
+    if (!colleague || colleague.files.length > 0) return;
+    const found = shared.find((c) => c.ownerId === colleague.ownerId);
+    if (found) setColleague(found);
+  }, [shared, colleague]);
+
+  // A shared folder opened by its link: what it is, then its top.
+  useEffect(() => {
+    if (!askedShare) return;
+    let stopped = false;
+    void fetch(sharedHref(askedShare, "stat", ""))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(r.statusText))))
+      .then((s: Shared & { ownerId: string; shared: Shared }) => {
+        if (stopped) return;
+        setColleague({ owner: s.owner, ownerId: s.ownerId, files: [] });
+        setShare({ ...s.shared, owner: s.owner, level: s.level });
+      })
+      .catch(() => !stopped && setFailed("That is not shared with you."));
+    return () => {
+      stopped = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askedShare]);
+
   // The list follows the disk: the folder shown is watched through the
   // machine's door, and a change in it reads the list again a moment
   // later, once a burst of changes has settled.
   const sock = useRef<WebSocket | null>(null);
-  const latest = useRef({ dir, load });
-  latest.current = { dir, load };
+  const latest = useRef({
+    dir,
+    load,
+    away: share !== null || colleague !== null,
+  });
+  latest.current = { dir, load, away: share !== null || colleague !== null };
   useEffect(() => {
     let stopped = false;
     let ws: WebSocket | null = null;
@@ -424,6 +549,8 @@ export function FileExplorer({
         next.onmessage = (m) => {
           if (typeof m.data !== "string") return;
           if (!("changed" in JSON.parse(m.data))) return;
+          // A change in the home means nothing to a colleague's list.
+          if (latest.current.away) return;
           clearTimeout(soon);
           soon = setTimeout(() => void latest.current.load(), 300);
         };
@@ -446,9 +573,10 @@ export function FileExplorer({
     };
   }, []);
   useEffect(() => {
+    if (share || colleague) return;
     if (sock.current?.readyState === WebSocket.OPEN)
       sock.current.send(JSON.stringify({ watch: dir || "." }));
-  }, [dir]);
+  }, [dir, share, colleague]);
 
   useEffect(() => {
     let stopped = false;
@@ -470,22 +598,41 @@ export function FileExplorer({
   const leaving = (go: () => void) => go();
 
   // A file opens in the Preview window: the desktop is asked, and on a page
-  // of its own the address is followed.
-  const openPath = (file: string) => {
-    if (standalone)
-      window.open(
-        `/computer/files/view?path=${encodeURIComponent(file)}`,
-        "_blank",
+  // of its own the address is followed. A colleague's opens by the share
+  // it came through.
+  const openPath = (file: string, through?: Shared) => {
+    const address = through
+      ? `/computer/files/view?share=${encodeURIComponent(through.id)}&path=${encodeURIComponent(file)}`
+      : `/computer/files/view?path=${encodeURIComponent(file)}`;
+    if (standalone) window.open(address, "_blank");
+    else
+      window.postMessage(
+        {
+          maslow: "open",
+          view: file,
+          ...(through ? { share: { id: through.id, name: through.name } } : {}),
+        },
+        location.origin,
       );
-    else window.postMessage({ maslow: "open", view: file }, location.origin);
   };
   const open = (e: Entry) =>
     leaving(() => {
+      // One of a colleague's shared things: a folder to go into, or a
+      // file to look at, each through its own share.
+      if (colleague && !share) {
+        const it = colleague.files.find((f) => f.id === e.id);
+        if (!it) return;
+        if (it.kind === "dir") {
+          setShare(it);
+          setPath([]);
+        } else openPath("", it);
+        return;
+      }
       if (e.kind === "dir") {
         setPath([...path, e.name]);
         return;
       }
-      openPath(at(e.name));
+      openPath(at(e.name), share ?? undefined);
     });
 
   // The file asked for by name, once its folder has answered.
@@ -499,7 +646,8 @@ export function FileExplorer({
 
   // Sends one file to the machine's door in pieces. A piece that fails is
   // not retried blindly: the door is asked how far it got, and the next
-  // piece starts there.
+  // piece starts there. A file dropped into a colleague's folder goes to
+  // its copy, and onto their disk from there.
   const upload = async (file: File) => {
     const key = at(file.name);
     sending.current[key] = file;
@@ -509,6 +657,16 @@ export function FileExplorer({
         return { ...was, [key]: { ...so_far, ...u, error: u.error } };
       });
     mark({});
+    if (share) {
+      try {
+        await putShared(share.id, key, file, (done) => mark({ done }));
+        forget(key);
+        void load();
+      } catch (err) {
+        mark({ error: (err as Error).message });
+      }
+      return;
+    }
     try {
       const target = await fetch("/computer/files/upload", { method: "POST" });
       if (!target.ok) throw new Error(await target.text());
@@ -572,9 +730,44 @@ export function FileExplorer({
     });
   };
 
+  // Whether a file can be put here: the person's own home, or a
+  // colleague's folder they may change.
+  const takes = !colleague || (share !== null && share.level !== "view");
   const take = (list: FileList | null) => {
-    if (!list) return;
+    if (!list || !takes) return;
     for (const f of Array.from(list)) void upload(f);
+  };
+
+  // Sets what one thing of the person's own reaches, and shows the mark
+  // the moment it lands.
+  const setReach = async (entry: Entry, to: Reach) => {
+    const res = await fetch("/computer/files/share", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        path: at(entry.name),
+        everyone: to.everyone,
+        groups: to.groupIds,
+        members: to.memberIds,
+        level: to.level,
+      }),
+    });
+    if (!res.ok) return (await res.text()) || "That was not saved.";
+    void load();
+    void loadSharing();
+    return null;
+  };
+  const loadSharing = async () => {
+    const res = await fetch("/computer/files/share");
+    setSharing(res.ok ? ((await res.json()) as Sharing) : null);
+    return res.ok;
+  };
+  const openSheet = async (entry: Entry) => {
+    if (!(await loadSharing())) {
+      setFailed("Your computer is not ready.");
+      return;
+    }
+    setSharingEntry(entry);
   };
 
   // Folders first, then by the column the list is sorted on, narrowed to
@@ -643,14 +836,31 @@ export function FileExplorer({
             >
               <BreadcrumbItem
                 onClick={
-                  path.length === 0
+                  path.length === 0 && !share
                     ? undefined
-                    : () => leaving(() => setPath([]))
+                    : () =>
+                        leaving(() => {
+                          setShare(null);
+                          setPath([]);
+                        })
                 }
-                current={path.length === 0}
+                current={path.length === 0 && !share}
               >
-                Home
+                {colleague ? colleague.owner : "Home"}
               </BreadcrumbItem>
+              {share && (
+                <BreadcrumbItem
+                  onClick={
+                    path.length === 0
+                      ? undefined
+                      : () => leaving(() => setPath([]))
+                  }
+                  current={path.length === 0}
+                  className="truncate"
+                >
+                  {share.name}
+                </BreadcrumbItem>
+              )}
               {path.map((name, i) =>
                 i === path.length - 1 ? (
                   <BreadcrumbItem key={i} current className="truncate">
@@ -696,12 +906,14 @@ export function FileExplorer({
             e.target.value = "";
           }}
         />
-        <BarButton
-          icon={RiUploadLine}
-          label="Upload"
-          title="Upload a file, or drop one anywhere here"
-          onClick={() => input.current?.click()}
-        />
+        {takes && (
+          <BarButton
+            icon={RiUploadLine}
+            label="Upload"
+            title="Upload a file, or drop one anywhere here"
+            onClick={() => input.current?.click()}
+          />
+        )}
       </Toolbar>
 
       {Object.keys(uploads).length > 0 && (
@@ -780,9 +992,11 @@ export function FileExplorer({
             <>
               <Place
                 mark={RiHomeLine}
-                on={path.length === 0}
+                on={path.length === 0 && !colleague}
                 onClick={() =>
                   leaving(() => {
+                    setColleague(null);
+                    setShare(null);
                     setPath([]);
                     if (!wide) setSheet(false);
                   })
@@ -796,9 +1010,11 @@ export function FileExplorer({
                   <Place
                     key={e.name}
                     mark={RiFolderLine}
-                    on={path[0] === e.name}
+                    on={!colleague && path[0] === e.name}
                     onClick={() =>
                       leaving(() => {
+                        setColleague(null);
+                        setShare(null);
                         setPath([e.name]);
                         if (!wide) setSheet(false);
                       })
@@ -823,6 +1039,30 @@ export function FileExplorer({
                   onRemove={() => keep(pins.filter((x) => x.path !== pin.path))}
                 >
                   {pin.path.split("/").filter(Boolean).at(-1) ?? pin.path}
+                </Place>
+              ))}
+              {/* What colleagues shared, one row each, holding what they
+                  shared and nothing of the rest of their home. */}
+              {shared.length > 0 && (
+                <p className="mt-2 px-2 pb-1 text-caption-1-medium text-text-tertiary">
+                  Shared with me
+                </p>
+              )}
+              {shared.map((c) => (
+                <Place
+                  key={c.ownerId}
+                  mark={RiGroupLine}
+                  on={colleague?.ownerId === c.ownerId}
+                  onClick={() =>
+                    leaving(() => {
+                      setColleague(c);
+                      setShare(null);
+                      setPath([]);
+                      if (!wide) setSheet(false);
+                    })
+                  }
+                >
+                  {c.owner}
                 </Place>
               ))}
             </>
@@ -879,6 +1119,11 @@ export function FileExplorer({
         <ContextMenu>
           <ContextMenuTrigger
             className={cx("@container/list flex min-h-0 flex-col", "flex-1")}
+            onContextMenu={(e) => {
+              // A right-click on the space between rows is about the
+              // folder, not a row.
+              if (!(e.target as HTMLElement).closest("tr")) setTarget(null);
+            }}
           >
             <ScrollArea className="min-h-0 flex-1">
               {shown === undefined ? (
@@ -975,6 +1220,7 @@ export function FileExplorer({
                           key={e.name}
                           id={e.name}
                           aria-current={on ? "true" : undefined}
+                          onContextMenu={() => setTarget(e)}
                           className={cx(
                             "cursor-pointer",
                             on
@@ -1003,10 +1249,16 @@ export function FileExplorer({
                               />
                               <span className="flex min-w-0 flex-1 flex-col">
                                 <span
-                                  className="truncate text-body-medium"
+                                  className="flex items-center gap-1.5 truncate text-body-medium"
                                   title={e.name}
                                 >
-                                  {e.name}
+                                  <span className="truncate">{e.name}</span>
+                                  {e.id && !colleague && (
+                                    <RiShareForwardLine
+                                      className="size-3.5 shrink-0 text-foreground-icon-tertiary"
+                                      aria-label="Shared"
+                                    />
+                                  )}
                                 </span>
                                 {/* What the columns had to give up, kept
                                     where there is no room for them. */}
@@ -1028,7 +1280,9 @@ export function FileExplorer({
                             )}
                           >
                             <span className="text-text-secondary tabular-nums">
-                              {e.kind === "dir" ? "" : size(e.size)}
+                              {e.kind === "dir" || !e.modified
+                                ? ""
+                                : size(e.size)}
                             </span>
                           </TableCell>
                           <TableCell
@@ -1064,6 +1318,29 @@ export function FileExplorer({
             )}
           </ContextMenuTrigger>
           <ContextMenuContent>
+            {target && (
+              <>
+                <ContextMenuItem onClick={() => open(target)}>
+                  Open
+                </ContextMenuItem>
+                {!colleague &&
+                  (target.kind === "dir" || target.kind === "file") && (
+                    <ContextMenuItem onClick={() => void openSheet(target)}>
+                      Share…
+                    </ContextMenuItem>
+                  )}
+                {target.id && (
+                  <ContextMenuItem
+                    onClick={() =>
+                      void navigator.clipboard.writeText(shareLink(target.id!))
+                    }
+                  >
+                    Copy link
+                  </ContextMenuItem>
+                )}
+                <ContextMenuSeparator />
+              </>
+            )}
             <ContextMenuCheckboxItem
               checked={dotfiles}
               onCheckedChange={(on) => setDotfiles(on)}
@@ -1073,6 +1350,24 @@ export function FileExplorer({
           </ContextMenuContent>
         </ContextMenu>
       </div>
+
+      {/* The sheet a file or folder of the person's own is shared from:
+          the one every shared thing has. */}
+      {sharing && (
+        <ShareSheet
+          open={sharingEntry !== null}
+          title={`Share ${sharingEntry?.name ?? ""}`}
+          description="Whoever you pick finds it in Files under your name and opens the link below. For everybody else the link is not there at all."
+          link={sharingEntry?.id ? shareLink(sharingEntry.id) : ""}
+          parties={sharing}
+          on={reachOf(sharing, sharingEntry?.id)}
+          levels
+          onSave={(to) =>
+            sharingEntry ? setReach(sharingEntry, to) : Promise.resolve(null)
+          }
+          onClose={() => setSharingEntry(null)}
+        />
+      )}
 
       <AnimatePresence>
         {dragging && (

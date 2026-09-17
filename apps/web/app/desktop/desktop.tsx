@@ -797,12 +797,15 @@ export function Desktop({
       box: boxOf({ kind: "page", href: "/browser" }),
     });
   };
-  // A file of theirs: the Preview window, named for the file.
-  const openView = (path: string) =>
+  // A file of theirs, or one a colleague shared: the Preview window,
+  // named for the file.
+  const openView = (path: string, share?: { id: string; name: string }) =>
     pick({
       kind: "page",
-      title: path.split("/").filter(Boolean).at(-1) ?? "Preview",
-      href: `/computer/files/view?path=${encodeURIComponent(path)}`,
+      title: path.split("/").filter(Boolean).at(-1) ?? share?.name ?? "Preview",
+      href: share
+        ? `/computer/files/view?share=${encodeURIComponent(share.id)}&path=${encodeURIComponent(path)}`
+        : `/computer/files/view?path=${encodeURIComponent(path)}`,
       box: { w: 0.46, h: 0.62 },
     });
 
@@ -911,6 +914,7 @@ export function Desktop({
         port?: unknown;
         path?: unknown;
         view?: unknown;
+        share?: unknown;
         file?: unknown;
         url?: unknown;
       };
@@ -931,7 +935,15 @@ export function Desktop({
       // is Files at its folder.
       if (asked?.maslow === "open") {
         if (typeof asked.port === "number") openPort(asked.port);
-        else if (typeof asked.view === "string") openView(asked.view);
+        else if (typeof asked.view === "string")
+          openView(
+            asked.view,
+            asked.share &&
+              typeof asked.share === "object" &&
+              "id" in asked.share
+              ? (asked.share as { id: string; name: string })
+              : undefined,
+          );
         else if (typeof asked.path === "string")
           (asked.file ? openView : openFile)(asked.path);
         else if (typeof asked.url === "string") openBrowser(asked.url);

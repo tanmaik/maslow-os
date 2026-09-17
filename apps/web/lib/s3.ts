@@ -109,6 +109,8 @@ export function presign(
   key: string,
   seconds: number,
   bytes?: number,
+  // What a read answers as its type, for a store that kept none.
+  contentType?: string,
 ): string {
   const url = objectUrl(cfg, key);
   const { date, day } = stamp();
@@ -118,12 +120,13 @@ export function presign(
       ? { host: url.host }
       : { "content-length": String(bytes), host: url.host };
   const signed = Object.keys(headers).sort();
-  const query = {
+  const query: Record<string, string> = {
     "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
     "X-Amz-Credential": `${cfg.accessKey}/${scope}`,
     "X-Amz-Date": date,
     "X-Amz-Expires": String(seconds),
     "X-Amz-SignedHeaders": signed.join(";"),
+    ...(contentType ? { "response-content-type": contentType } : {}),
   };
   const canonical = [
     method,
