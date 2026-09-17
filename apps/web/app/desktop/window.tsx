@@ -29,7 +29,7 @@ const colors: Record<TrafficLightColor, { fill: string; sign: string }> = {
   green: { fill: "#28c840", sign: "rgba(0, 66, 0, 0.85)" },
 };
 
-// One of a window's three lights: close, put away, fill the screen. A
+// One of a window's three lights: close, minimized, fill the screen. A
 // plain dot, grey on a window that is not in front; its sign shows once
 // a hand is over the three of them.
 export function TrafficLightButton({
@@ -82,7 +82,7 @@ export function TrafficLightButton({
   );
 }
 
-// How a window leaves: put away, it shrinks into its mark in the dock;
+// How a window leaves: minimized, it shrinks into its mark in the dock;
 // taken down, it fades where it stands. The mark is measured only as the
 // window goes, since it moves as the dock makes room and may not exist
 // when the window is first drawn. Under reduced motion it fades where it

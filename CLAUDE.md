@@ -570,9 +570,9 @@ anywhere, at any size the person drags it to, overlapping if they like,
 coming to the front when touched; nothing lays windows out for them and
 nothing resizes one because another changed. A click on an icon in
 the dock brings that app's window forward, back from the dock if it was
-put away, or opens its first, at the block's own size; New window in the
+minimized, or opens its first, at the block's own size; New window in the
 icon's menu opens another, and every window after the first is
-numbered, on the bar, in the menu and on its icon when put away. The dock and the window's frame are ryOS's
+numbered, on the bar, in the menu and on its icon when minimized. The dock and the window's frame are ryOS's
 (github.com/ryokun6/ryos), carried over as code under its licence, which
 is now ours too: AGPL-3.0, in `LICENSE`, with `NOTICE` saying what came
 from where. What the desktop lies on is ours: nine photographs that ship with
@@ -601,7 +601,7 @@ the right, as a right-click on the dock says (a phone's
 along the bottom), and an icon's right-click carries the dock's settings
 under its own; it stays in view unless told to hide, and then its edge
 brings it back. A window arrives out of its icon, shrinks
-back into the dock when put away, and wears three plain lights and its
+back into the dock when minimized, and wears three plain lights and its
 name in a bar; the one in front casts the deep shadow. A menu bar runs along the top: the Maslow menu at its left holds
 About This Computer (the machine, where it is, its size and image, and
 what it is using, laid out as ryOS's is), Settings, your other orgs and
@@ -625,7 +625,7 @@ on a port, of the person's own computer, which the agent builds and runs
 there, or of a colleague's opened to them, and nothing else, since a
 record's page on a desktop is a document and not a widget. The windows the
 person has open are theirs and the agent never sees or touches them. A
-widget the agent placed is an ordinary one, dragged, resized, put away
+widget the agent placed is an ordinary one, dragged, resized, minimized
 or made a window like any other. The desktop is kept on the server with a count of how many times it
 was kept: a save from the page names the count it saw and one that fell
 behind is refused and takes the newer desktop in, its own changes kept over
@@ -639,7 +639,7 @@ there on Return; a letter
 typed with nothing focused opens it with that letter. Control and
 Option with a key act on the window in front, since the keys a browser
 or a Mac owns are never taken: N opens another of its app, W closes it,
-M puts it away, Tab and Shift-Tab go to the next and the previous,
+M minimizes it, Tab and Shift-Tab go to the next and the previous,
 comma opens Settings, and the arrows, U, I, J, K and Return put it on a
 side, a corner or the whole desktop; the Window menu lists every one
 beside its key. Tab reaches the dock as one stop and the arrows walk

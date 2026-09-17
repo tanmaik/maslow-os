@@ -43,13 +43,13 @@ export function clamp<T extends Box & { x: number; y: number }>(c: T): T {
 // Where a new window goes when nobody said: a little down and to the
 // right of the last, like a desktop of paper, back towards the corner when
 // it would run off, half a step over so it does not land on the first.
-// Only the windows on the desktop count: one put away pushes nothing.
+// Only the windows on the desktop count: one minimized pushes nothing.
 export function cascade(cards: Card[], box: Box): { x: number; y: number } {
   // A display is wider than it is tall, so the same share is a longer
   // step across than down; these two are about the same distance.
   const across = 0.02;
   const down = 0.03;
-  const n = cards.filter((c) => !c.stowed && !c.pinned).length;
+  const n = cards.filter((c) => !c.minimized && !c.pinned).length;
   const x = 0.04 + across * n;
   const y = 0.04 + down * n;
   if (x + box.w > 1 || y + box.h > 1) {

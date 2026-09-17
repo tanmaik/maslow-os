@@ -180,7 +180,7 @@ function wellFormed(layout: unknown): layout is Screen | null {
       c.h >= MIN.h &&
       c.x + c.w <= 1.0001 &&
       c.y + c.h <= 1.0001 &&
-      (c.stowed === undefined || typeof c.stowed === "boolean") &&
+      (c.minimized === undefined || typeof c.minimized === "boolean") &&
       (c.pinned === undefined || typeof c.pinned === "boolean") &&
       !seen.has(c.id);
     if (!ok) return false;
@@ -248,7 +248,7 @@ export async function widgetsOf(
   q: Query,
 ): Promise<{ widgets: Widget[]; shared: SharedPort[] }> {
   const widgets = cardsOf((await desktopsOf(q))[0] ?? null)
-    .filter((c) => c.pinned && !c.stowed)
+    .filter((c) => c.pinned && !c.minimized)
     .map(widgetOf);
   return { widgets, shared: await portsReaching(q) };
 }

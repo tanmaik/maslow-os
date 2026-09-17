@@ -18,8 +18,8 @@ export type Card = {
   y: number;
   w: number;
   h: number;
-  // Put away in the dock, keeping the place it will come back to.
-  stowed?: boolean;
+  // Minimize in the dock, keeping the place it will come back to.
+  minimized?: boolean;
   // On the desktop itself, behind every window and with no bar: a widget.
   pinned?: boolean;
 };

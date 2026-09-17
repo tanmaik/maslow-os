@@ -33,7 +33,7 @@ desktop."
   what they opened, and a widget under a window is a widget under a
   window.
 - **An ordinary card.** What the agent places is the same card a person
-  makes from the dock's "Put on the desktop": dragged, resized, put away,
+  makes from the dock's "Put on the desktop": dragged, resized, minimized,
   taken off or made a window from its grip. Nothing is marked as the
   agent's and nothing is reserved for it.
 - **Position and size, not slots.** The most important thing goes at the

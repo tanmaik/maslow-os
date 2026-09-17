@@ -300,9 +300,9 @@ export function CommandBar({
                 >
                   <RiWindowLine aria-hidden />
                   {w.card.title}
-                  {w.card.stowed && (
+                  {w.card.minimized && (
                     <span className="text-caption-1-regular text-text-tertiary">
-                      put away
+                      minimized
                     </span>
                   )}
                 </CommandItem>

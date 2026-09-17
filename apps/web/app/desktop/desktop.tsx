@@ -432,18 +432,18 @@ export function Desktop({
     return () => window.removeEventListener("keydown", key);
   }, []);
 
-  // Every window, open or put away.
+  // Every window, open or minimized.
   const held: Held[] = screen.cards.map((card) => ({
     screen: desktop.id,
     card,
   }));
 
   // The windows, as the dock and the menu bar list them: a widget is
-  // neither open nor put away, it is part of the desktop.
+  // neither open nor minimized, it is part of the desktop.
   const windows = held.filter((w) => !w.card.pinned);
   const page: Page = { key: desktop.id, cards: screen.cards };
 
-  // A window brought to the front, out of the dock if it was put away.
+  // A window brought to the front, out of the dock if it was minimized.
   const raise = (w: Held) => {
     if (w.card.pinned) return;
     setScreen((l) => {
@@ -452,7 +452,7 @@ export function Desktop({
       return {
         cards: [
           ...l.cards.filter((x) => x.id !== w.card.id),
-          { ...c, stowed: false },
+          { ...c, minimized: false },
         ],
       };
     });
@@ -847,9 +847,9 @@ export function Desktop({
   // The next window forward, or the front one to the back.
   const cycle = (back: boolean) =>
     setScreen((l) => {
-      const up = l.cards.filter((c) => !c.stowed && !c.pinned);
+      const up = l.cards.filter((c) => !c.minimized && !c.pinned);
       if (up.length < 2) return null;
-      const rest = l.cards.filter((c) => c.stowed || c.pinned);
+      const rest = l.cards.filter((c) => c.minimized || c.pinned);
       const order = back
         ? [...up.slice(-1), ...up.slice(0, -1)]
         : [...up.slice(1), up[0]!];
@@ -857,13 +857,13 @@ export function Desktop({
         cards: [
           ...rest.filter((c) => c.pinned),
           ...order,
-          ...rest.filter((c) => c.stowed),
+          ...rest.filter((c) => c.minimized),
         ],
       };
     });
 
   // The window in front.
-  const top = page.cards.filter((c) => !c.stowed && !c.pinned).at(-1);
+  const top = page.cards.filter((c) => !c.minimized && !c.pinned).at(-1);
   const atFront: Held | null = top ? { screen: desktop.id, card: top } : null;
   // What the desktop answers to. Command-K opens the bar from anywhere in
   // the desktop; a plain letter typed with nothing focused opens it with
@@ -907,7 +907,7 @@ export function Desktop({
           void close(front.id);
         } else if (k === "KeyM" && front) {
           e.preventDefault();
-          shape(front.id, { stowed: true }, true);
+          shape(front.id, { minimized: true }, true);
         } else if (k === "Tab") {
           e.preventDefault();
           cycle(e.shiftKey);
@@ -1042,7 +1042,7 @@ export function Desktop({
         open={windows}
         onPick={pick}
         onFront={raise}
-        onStow={(w) => shape(w.card.id, { stowed: true }, true)}
+        onMinimize={(w) => shape(w.card.id, { minimized: true }, true)}
         onFill={(w) => setExpanded(w.card.id)}
         onClose={(w) => void close(w.card.id)}
         onSearch={() => setBar({ open: true, initial: "" })}
@@ -1424,7 +1424,7 @@ function DesktopPage({
   // front: what a swipe on a phone's bar does (ryOS useAppStore's
   // navigateToNextInstance, cycling the instance order).
   const flip = (id: string, dir: 1 | -1) => {
-    const order = page.cards.filter((c) => !c.stowed && !c.pinned);
+    const order = page.cards.filter((c) => !c.minimized && !c.pinned);
     const i = order.findIndex((c) => c.id === id);
     const next = order[(i + dir + order.length) % order.length];
     if (!next || next.id === id) return;
@@ -1522,7 +1522,7 @@ function DesktopPage({
                 return (
                   <motion.div
                     key={c.id}
-                    inert={c.stowed}
+                    inert={c.minimized}
                     className="pointer-events-none absolute"
                     initial={false}
                     animate={box}
@@ -1539,10 +1539,11 @@ function DesktopPage({
                       full={full}
                       front={
                         c.id ===
-                        page.cards.filter((x) => !x.stowed && !x.pinned).at(-1)
-                          ?.id
+                        page.cards
+                          .filter((x) => !x.minimized && !x.pinned)
+                          .at(-1)?.id
                       }
-                      stowed={!!c.stowed}
+                      minimized={!!c.minimized}
                       born={born.has(c.id)}
                       onArrived={() => born.delete(c.id)}
                       middle={() => middle(c)}
@@ -1550,7 +1551,9 @@ function DesktopPage({
                       at={pointAt}
                       onClose={() => onClose(c.id)}
                       onGuard={onGuard}
-                      onStow={() => onShape(c.id, { stowed: true }, true)}
+                      onMinimize={() =>
+                        onShape(c.id, { minimized: true }, true)
+                      }
                       onShape={(to, save) => onShape(c.id, to, save)}
                       onLanding={setZone}
                       afresh={afresh[c.id] ?? 0}
@@ -1588,14 +1591,14 @@ function Frame({
   full,
   front,
   born,
-  stowed,
+  minimized,
   onArrived,
   middle,
   desktop,
   at,
   onClose,
   onGuard,
-  onStow,
+  onMinimize,
   onShape,
   onLanding,
   afresh,
@@ -1616,8 +1619,8 @@ function Frame({
   // Whether it was just opened from the dock, and the word that it has
   // arrived and is so no longer.
   born: boolean;
-  // Put away in the dock: shrunk into its mark there, still alive.
-  stowed: boolean;
+  // Minimized in the dock: shrunk into its mark there, still alive.
+  minimized: boolean;
   onArrived: () => void;
   // Where its middle is on the screen.
   middle: () => { x: number; y: number } | null;
@@ -1625,7 +1628,7 @@ function Frame({
   at: (clientX: number, clientY: number) => { x: number; y: number } | null;
   onClose: () => void;
   onGuard: (key: string, ask: (() => Promise<boolean>) | null) => void;
-  onStow: () => void;
+  onMinimize: () => void;
   onShape: (to: Partial<Card>, save: boolean) => void;
   onLanding: (zone: { at: Box & Point; bounds: Bounds } | null) => void;
   afresh: number;
@@ -1841,7 +1844,7 @@ function Frame({
   };
   const own = () =>
     document.querySelector(`[data-dock-icon="${CSS.escape(card.id)}"]`);
-  // How it arrives: out of its own mark in the dock when it was put away,
+  // How it arrives: out of its own mark in the dock when it was minimized,
   // out of its block's when just opened from there, and with a breath of
   // scale otherwise. Measured once, as it is first drawn, which is also
   // the one time being just opened counts. Where travel would be the
@@ -1868,23 +1871,23 @@ function Frame({
       : { scale: 0.95, opacity: 0 };
   });
 
-  // Put away, the window shrinks into its mark in the dock and stays
+  // Minimized, the window shrinks into its mark in the dock and stays
   // there, mounted, so what it holds is not lost; measured a frame later,
   // once the dock has made room for the mark.
   const [away, setAway] = useState<TargetAndTransition | null>(null);
   useEffect(() => {
-    if (!stowed) return setAway(null);
+    if (!minimized) return setAway(null);
     const frame = requestAnimationFrame(() =>
       setAway(getExitAnimation(() => flight(own()), !!still)),
     );
     return () => cancelAnimationFrame(frame);
-  }, [stowed]);
+  }, [minimized]);
 
   return (
     <motion.div
       initial={arrival}
       animate={
-        (stowed && away) || {
+        (minimized && away) || {
           scale: 1,
           opacity: 1,
           x: 0,
@@ -1901,7 +1904,7 @@ function Frame({
         data-front={front ? "" : undefined}
         onPointerDownCapture={onFront}
         className={`glass-pane @container relative flex h-full flex-col overflow-hidden rounded-[12px] ${
-          stowed ? "pointer-events-none" : "pointer-events-auto"
+          minimized ? "pointer-events-none" : "pointer-events-auto"
         }`}
         style={
           {
@@ -1961,9 +1964,9 @@ function Frame({
               />
               <TrafficLightButton
                 color="yellow"
-                onClick={onStow}
+                onClick={onMinimize}
                 isForeground={front}
-                ariaLabel="Put away"
+                ariaLabel="Minimize"
               />
               <TrafficLightButton
                 color="green"

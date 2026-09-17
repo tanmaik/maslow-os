@@ -223,7 +223,7 @@ export function MenuBar({
   open,
   onPick,
   onFront,
-  onStow,
+  onMinimize,
   onFill,
   onClose,
   onSearch,
@@ -241,7 +241,7 @@ export function MenuBar({
   open: Held[];
   onPick: (b: Dragged) => void;
   onFront: (w: Held) => void;
-  onStow: (w: Held) => void;
+  onMinimize: (w: Held) => void;
   onFill: (w: Held) => void;
   onClose: (w: Held) => void;
   onSearch: () => void;
@@ -361,8 +361,8 @@ export function MenuBar({
                   New window
                 </MenubarItem>
                 <MenubarSeparator />
-                <MenubarItem className={item} onClick={() => onStow(front)}>
-                  Put away
+                <MenubarItem className={item} onClick={() => onMinimize(front)}>
+                  Minimize
                 </MenubarItem>
                 <MenubarItem className={item} onClick={() => onFill(front)}>
                   Fill the screen
@@ -393,8 +393,8 @@ export function MenuBar({
                   onClick={() => onFront(w)}
                 >
                   <span className="min-w-0 flex-1 truncate">
-                    {w.card.stowed
-                      ? `${w.card.title} (put away)`
+                    {w.card.minimized
+                      ? `${w.card.title} (minimized)`
                       : w.card.title}
                   </span>
                   <button
@@ -440,9 +440,9 @@ export function MenuBar({
               <MenubarItem
                 className={item}
                 disabled={!front}
-                onClick={() => front && onStow(front)}
+                onClick={() => front && onMinimize(front)}
               >
-                Put away
+                Minimize
                 <Keys>⌃⌥M</Keys>
               </MenubarItem>
               <MenubarItem

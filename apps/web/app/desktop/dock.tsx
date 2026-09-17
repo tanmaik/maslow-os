@@ -2,7 +2,7 @@
 
 // The dock, ryOS's (github.com/ryokun6/ryos, AGPL-3.0) made ours: every
 // block as its icon on a glass shelf along the bottom, the icons swelling
-// under the pointer, a window put away flying into it, and the shelf
+// under the pointer, a window minimized flying into it, and the shelf
 // sliding out of sight when it is let hide. The look and the motion are
 // theirs; what it holds and what a click does are the desktop's.
 
@@ -60,7 +60,7 @@ export type Dragged = {
 // Which edge the dock lies along.
 export type Side = "bottom" | "left" | "right";
 
-// A window on some desktop, open or put away.
+// A window on some desktop, open or minimized.
 export type Held = { screen: string; card: Card };
 
 // An icon's size at rest, how much bigger it grows under the pointer, and
@@ -126,10 +126,10 @@ const AUTO_HIDE_COOLDOWN = 500;
 const DIVIDER = 21;
 
 // Where each run of the shelf begins: the apps, then the ports, then the
-// windows put away. A run is arranged inside its own stretch and never
+// windows minimized. A run is arranged inside its own stretch and never
 // past the divider that ends it.
 const PORTS = 100;
-const STOWED = 200;
+const MINIMIZED = 200;
 
 // The order the person put the shelf in, as addresses, kept on this
 // device beside the dock's other settings.
@@ -231,7 +231,7 @@ const DockIconButton = memo(function DockIconButton({
   menu,
   onMenuOpen,
   side,
-  stowed = false,
+  minimized = false,
   place,
   carried = false,
   iconSize,
@@ -247,8 +247,8 @@ const DockIconButton = memo(function DockIconButton({
   // to say and never where it stands in the page, so an icon being
   // carried is never moved under the hand, which would end the carrying.
   place: number;
-  // Whether the icon stands for a window put away rather than an app.
-  stowed?: boolean;
+  // Whether the icon stands for a window minimized rather than an app.
+  minimized?: boolean;
   // Whether the hand is carrying it: its place stays, drawn empty.
   carried?: boolean;
   showIndicator?: boolean;
@@ -360,9 +360,9 @@ const DockIconButton = memo(function DockIconButton({
           draggable={false}
           className={cn(
             "pointer-events-none size-full select-none",
-            // A window put away is a picture of that window, not the app
+            // A window minimized is a picture of that window, not the app
             // beside it: smaller, under a hairline.
-            stowed && "scale-90 rounded-[22%] ring-1 ring-white/30",
+            minimized && "scale-90 rounded-[22%] ring-1 ring-white/30",
           )}
           style={{ imageRendering: "-webkit-optimize-contrast" }}
         />
@@ -547,14 +547,14 @@ export function Dock({
   onMagnify: (to: boolean) => void;
   onSide: (to: Side) => void;
   ports: Port[];
-  // Every window on every desktop, open or put away.
+  // Every window on every desktop, open or minimized.
   held: Held[];
   onBegin: (item: Dragged) => (e: DragEvent) => void;
   onEnd: () => void;
   onPick: (b: Dragged) => void;
   // A port put on the desktop as a widget.
   onPin: (b: Dragged) => void;
-  // A window brought to the front, back from the dock if it was put away.
+  // A window brought to the front, back from the dock if it was minimized.
   onFront: (w: Held) => void;
   onClose: (w: Held) => void;
 }) {
@@ -691,7 +691,7 @@ export function Dock({
     };
   }, [phone, hiding, isDockVisible, restartAutoHideTimer, SHELF]);
 
-  const stowed = held.filter((w) => w.card.stowed);
+  const minimized = held.filter((w) => w.card.minimized);
 
   // The shelf in the order the person put it in: the apps among the apps
   // and the ports among the ports, neither crossing the divider between
@@ -889,7 +889,7 @@ export function Dock({
     ports.find((p) => p.href === c.href)?.face ?? faceOf(c);
 
   // One block or one port as an icon: a click brings its window forward,
-  // back from the dock if it was put away, or opens the first; a drag
+  // back from the dock if it was minimized, or opens the first; a drag
   // opens one where it is dropped; a right-click lists its windows and
   // opens another.
   const icon = (b: Dragged & { face: string }, place: number) => {
@@ -939,8 +939,8 @@ export function Dock({
                 <ContextMenuSeparator />
                 {mine.map((w) => (
                   <ContextMenuItem key={w.card.id} onClick={() => onFront(w)}>
-                    {w.card.stowed
-                      ? `${w.card.title} (put away)`
+                    {w.card.minimized
+                      ? `${w.card.title} (minimized)`
                       : w.card.title}
                   </ContextMenuItem>
                 ))}
@@ -1116,25 +1116,25 @@ export function Dock({
                       ),
                     )}
 
-                    {stowed.length > 0 && (
+                    {minimized.length > 0 && (
                       <DockDivider
-                        key="divider-stowed"
-                        idKey="stowed"
-                        place={STOWED}
+                        key="divider-minimized"
+                        idKey="minimized"
+                        place={MINIMIZED}
                         height={iconSize}
                         vertical={vertical}
                       />
                     )}
 
-                    {stowed.map((w, i) => (
+                    {minimized.map((w, i) => (
                       <DockIconButton
                         iconSize={iconSize}
                         key={w.card.id}
                         idKey={w.card.id}
-                        place={STOWED + 1 + i}
-                        label={`Bring back ${w.card.title}`}
+                        place={MINIMIZED + 1 + i}
+                        label={`Restore ${w.card.title}`}
                         icon={face(w.card)}
-                        stowed
+                        minimized
                         onClick={() => onFront(w)}
                         badge={
                           // Which window of its app this is — a name, not
@@ -1159,7 +1159,7 @@ export function Dock({
                         menu={
                           <>
                             <ContextMenuItem onClick={() => onFront(w)}>
-                              Bring back
+                              Restore
                             </ContextMenuItem>
                             <ContextMenuSeparator />
                             <ContextMenuItem
