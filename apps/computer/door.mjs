@@ -1996,7 +1996,7 @@ const agentHello = (clear) => ({
 // socket when a conversation is opened and each time a prompt ends.
 const WINDOW = 1_000_000;
 const record = (id) =>
-  `${FIND_HOME}/.claude/projects/${HOME.replaceAll("/", "-")}/${id}.jsonl`;
+  `${FIND_HOME}/.maslow/claude/projects/${HOME.replaceAll("/", "-")}/${id}.jsonl`;
 async function contextOf(id) {
   let text;
   try {

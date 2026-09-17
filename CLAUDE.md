@@ -473,8 +473,10 @@ them in dollars, in the Agent window and on the Agent pane; OpenRouter
 holds the record, the sweep copies it, and reaching the cap stops the
 calls and nothing else. Where a machine cannot dial the deployment, as
 on a laptop, the call goes to its own door and up the line the laptop's
-stack holds open for the brain. Two Claude Codes run on the machine and
-they never share credentials. The Agent window's is ours: started with
+stack holds open for the brain. Two Claude Codes run on the machine and they never share credentials or
+settings: ours keeps its configuration in a directory of its own,
+`~/.maslow/claude`, seeded at boot with the same servers, so what it
+writes down there never reaches the person's own `~/.claude`. The Agent window's is ours: started with
 `MASLOW_AUTH=managed`, it runs through the gateway, on GLM 5.3 Flash on
 whichever of its providers is fastest and nothing else — the gateway puts
 that model on every call whatever name was asked for, so no Claude model

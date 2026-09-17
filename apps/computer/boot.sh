@@ -132,6 +132,7 @@ fi
 # can hold the boot.
 timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" mcp || echo "mcp: could not be seeded; left alone"
 timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" settings || echo "settings: could not be seeded; left alone"
+timeout 30 node /opt/maslow/seed.mjs "$HOME_DIR" ours || echo "ours: could not be seeded; the Agent may start without its servers"
 # And it knows the skin Maslow wears: BoardUI's skill, ours in the image,
 # is a link among the person's skills, so it follows the image and what
 # Claude Code builds for them looks like Maslow. Made as the person, so a

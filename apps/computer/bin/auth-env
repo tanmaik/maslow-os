@@ -12,8 +12,13 @@
 # the gateway and nothing else, so there is no choice and no switch. Sourced, never run: by `claude`, by `claude-code-acp`, and by every
 # login shell, so any way of starting Claude Code finds the same rule.
 # This file answers in maslow_auth, managed or own.
+# A session of ours keeps its configuration in a directory of its own,
+# ~/.maslow/claude, seeded at boot: what Claude Code writes down there,
+# the model it settled on, a theme, an "always allow", never reaches the
+# person's own ~/.claude, and theirs never reaches ours.
 if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_TOKEN:-}" ]; then
   maslow_auth=managed
+  export CLAUDE_CONFIG_DIR="$HOME/.maslow/claude"
   export ANTHROPIC_BASE_URL="$MASLOW_MODEL_URL"
   export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_TOKEN"
   export ANTHROPIC_API_KEY=""
@@ -30,6 +35,10 @@ if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_TOKEN:-}" ]; then
   # the gateway, which takes a few megabytes at most: a quarter of a
   # million tokens stays under it.
   export CLAUDE_CODE_MAX_CONTEXT_TOKENS=250000
+  # Claude Code does not know the gateway's model by name and would hold
+  # the conversation to 200k tokens until it did; the window above is the
+  # one to keep.
+  export CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1
 else
   maslow_auth=own
   if [ -n "${MASLOW_MODEL_URL:-}" ] && [ "${ANTHROPIC_BASE_URL:-}" = "$MASLOW_MODEL_URL" ]; then
@@ -37,7 +46,8 @@ else
       ANTHROPIC_DEFAULT_FABLE_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL \
       ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
       CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK \
-      CLAUDE_CODE_MAX_CONTEXT_TOKENS
+      CLAUDE_CODE_MAX_CONTEXT_TOKENS \
+      CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT CLAUDE_CONFIG_DIR
   fi
 fi
 
