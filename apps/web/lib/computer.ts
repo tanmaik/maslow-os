@@ -60,7 +60,7 @@ import { SIZES } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-57";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-60";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -1269,6 +1269,12 @@ export async function files(p: Principal): Promise<{
     append?: boolean,
     opened?: string,
   ): Promise<{ size: number; modified: string }>;
+  // A new name, or a new place when the name is a path.
+  rename(at: string, to: string): Promise<Entry>;
+  // Into the Trash of the person's Linux.
+  trash(at: string): Promise<{ name: string }>;
+  // A folder in a folder, named as asked or as the Finder would.
+  mkdir(at: string, name?: string): Promise<Entry>;
 } | null> {
   const c = await ready(p);
   if (!c) return null;
@@ -1281,6 +1287,9 @@ export async function files(p: Principal): Promise<{
     pdf: (at) => fly.files.pdf(m, t(), at),
     write: (at, body, append, opened) =>
       fly.files.write(m, t(), at, body, append, opened),
+    rename: (at, to) => fly.files.rename(m, t(), at, to),
+    trash: (at) => fly.files.trash(m, t(), at),
+    mkdir: (at, name) => fly.files.mkdir(m, t(), at, name),
   };
 }
 

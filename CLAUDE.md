@@ -391,7 +391,10 @@ keeps the share and the link, a copy behaves as an unshared file, a file
 remade in its place by a program's save is the same file, since the door
 watches the folder it stands in, and one gone from its place for longer
 than a moment and found nowhere else is deleted, its share ending the
-moment anyone next looks.
+moment anyone next looks. A right-click on a row in Files renames it or
+moves it to the Trash, a right-click on the space between rows makes a
+folder, and deleting is always moving to the Trash of their Linux, never
+erasing.
 What is shared with a person stands in their Files under the sharer's
 name, opens in the Preview window as their own would, and has a link on
 our domain by its id that opens for whoever is allowed and is a 404 for
@@ -447,8 +450,8 @@ a tab: the tab is a view onto state on the machine, and the machine's
 browser never idles away. What a program on the machine opens goes to whoever is at the terminal:
 a port of theirs opens that port's window on the desktop, a folder of theirs opens Files there, a
 file of theirs opens in the Preview window, and any other address is
-offered to open on their own device (Files lists Home and the usual
-places beside it, not every folder; the Preview window is one file in a
+offered to open on their own device (Files lists Home, the folders the
+person pinned beside it and what was shared with them, not every folder; the Preview window is one file in a
 window of its own named for it, a picture or a video shown as it is, a
 PDF or an Office document read whole by the browser's own viewer, every
 page, the document made into a PDF once on the machine and kept there,

@@ -480,7 +480,7 @@ const server = http.createServer(async (req, res) => {
     const from = req.headers.origin;
     if (from) {
       res.setHeader("access-control-allow-origin", from);
-      res.setHeader("access-control-allow-methods", "GET, PUT, OPTIONS");
+      res.setHeader("access-control-allow-methods", "GET, PUT, POST, OPTIONS");
       res.setHeader(
         "access-control-allow-headers",
         "x-maslow-ticket, content-type",

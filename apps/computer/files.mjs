@@ -559,6 +559,201 @@ async function upload(req, res, at, url) {
   }
 }
 
+// One entry as the list describes it, for what an action made or moved.
+async function entryOf(at, idAt = () => null) {
+  const s = await fsp.lstat(at);
+  const id = idAt(path.relative(HOME, at));
+  return {
+    name: path.basename(at),
+    kind: s.isDirectory()
+      ? "dir"
+      : s.isFile()
+        ? "file"
+        : s.isSymbolicLink()
+          ? "link"
+          : "other",
+    size: s.size,
+    modified: s.mtime.toISOString(),
+    ...(id ? { id } : {}),
+  };
+}
+
+// The JSON a request carries, or null.
+async function bodyOf(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8") || "null");
+  } catch {
+    return null;
+  }
+}
+
+// A name a file or folder may take: one word of a path, nothing else.
+const plainName = (name) =>
+  typeof name === "string" &&
+  name.length > 0 &&
+  name.length <= 255 &&
+  !name.includes("/") &&
+  !name.includes("\0") &&
+  name !== "." &&
+  name !== "..";
+
+// Renames a file or folder, or moves it to another folder of the home when
+// the new name is a path. A rename keeps a shared file's mark, since the
+// attribute that carries the share id moves with the file. Nothing is
+// written over: a name already taken is refused.
+export async function rename(req, res, at, idAt) {
+  const said = await bodyOf(req);
+  const to = said?.to;
+  if (at === HOME) return say(res, 400, "The home keeps its name.");
+  const target =
+    typeof to === "string" && to.includes("/")
+      ? inside(to)
+      : plainName(to)
+        ? path.join(path.dirname(at), to)
+        : null;
+  if (!target) return say(res, 400, "A new name is one word, with no slash.");
+  if (target === at) return json(res, 200, await entryOf(at, idAt));
+  try {
+    if (await fsp.lstat(target).catch(() => null))
+      return say(res, 409, "Something is already called that.");
+    await fsp.rename(at, target);
+    json(res, 200, await entryOf(target, idAt));
+  } catch (err) {
+    say(
+      res,
+      err.code === "ENOENT" ? 404 : 500,
+      err.code === "ENOENT"
+        ? "That is not there any more."
+        : `Could not rename: ${err.code ?? err.message}`,
+    );
+  }
+}
+
+// Where the person's Linux keeps what was thrown away, as the freedesktop
+// Trash does: the thing under files/, and beside it, under info/, where it
+// came from and when.
+const TRASH = path.join(HOME, ".local", "share", "Trash");
+
+// A name not yet taken in the Trash, by its file or its note: the name
+// itself, then "name 2", "name 3", the number before any extension.
+async function spare(files, name) {
+  const info = path.join(path.dirname(files), "info");
+  const ext = path.extname(name);
+  const stem = ext ? name.slice(0, -ext.length) : name;
+  const taken = (at) =>
+    fsp.lstat(at).then(
+      () => true,
+      () => false,
+    );
+  for (let n = 1; n < 10_000; n++) {
+    const candidate = n === 1 ? name : `${stem} ${n}${ext}`;
+    if (
+      !(await taken(path.join(files, candidate))) &&
+      !(await taken(path.join(info, `${candidate}.trashinfo`)))
+    )
+      return candidate;
+  }
+  throw new Error("no free name");
+}
+
+// Moves a file or folder to the Trash rather than erasing it, with a note
+// of where it stood, so it can be put back by hand or by a program that
+// reads the Trash. Nothing in the Trash is written over.
+export async function trash(res, at) {
+  if (at === HOME) return say(res, 400, "The home cannot go to the Trash.");
+  if (at === TRASH || at.startsWith(`${TRASH}/`))
+    return say(res, 400, "That is in the Trash already.");
+  try {
+    if (!(await fsp.lstat(at).catch(() => null)))
+      return say(res, 404, "That is not there any more.");
+    const files = path.join(TRASH, "files");
+    const info = path.join(TRASH, "info");
+    for (const dir of [files, info]) {
+      await fsp.mkdir(dir, { recursive: true, mode: 0o700 });
+      await fsp.chown(dir, OWNER, OWNER).catch(() => {});
+    }
+    await fsp.chown(TRASH, OWNER, OWNER).catch(() => {});
+    // The path as the person's Linux names it, percent-encoded as the
+    // spec asks, and the moment, to the second.
+    const where = path.join(THEIRS, path.relative(HOME, at));
+    const note = [
+      "[Trash Info]",
+      `Path=${encodeURI(where)}`,
+      `DeletionDate=${new Date().toISOString().slice(0, 19)}`,
+      "",
+    ].join("\n");
+    // Making the note, and refusing to make one that exists, is what
+    // reserves the name: two moves at once get two names.
+    let name;
+    let noteAt;
+    for (;;) {
+      name = await spare(files, path.basename(at));
+      noteAt = path.join(info, `${name}.trashinfo`);
+      try {
+        await fsp.writeFile(noteAt, note, { mode: 0o600, flag: "wx" });
+        break;
+      } catch (err) {
+        if (err.code !== "EEXIST") throw err;
+      }
+    }
+    await fsp.chown(noteAt, OWNER, OWNER).catch(() => {});
+    try {
+      await fsp.rename(at, path.join(files, name));
+    } catch (err) {
+      // A move that fails leaves no note of a thing that is not there.
+      await fsp.unlink(noteAt).catch(() => {});
+      throw err;
+    }
+    json(res, 200, { name });
+  } catch (err) {
+    say(
+      res,
+      500,
+      `Could not move that to the Trash: ${err.code ?? err.message}`,
+    );
+  }
+}
+
+// "untitled folder", "untitled folder 2": the first not yet in a folder.
+async function untitled(folder) {
+  for (let n = 1; n < 10_000; n++) {
+    const candidate = n === 1 ? "untitled folder" : `untitled folder ${n}`;
+    if (!(await fsp.lstat(path.join(folder, candidate)).catch(() => null)))
+      return candidate;
+  }
+  throw new Error("no free name");
+}
+
+// Makes a folder in a folder: named as asked, or "untitled folder",
+// "untitled folder 2", as the Finder names one.
+export async function mkdir(req, res, at, idAt) {
+  const said = await bodyOf(req);
+  const asked = said?.name;
+  if (
+    asked !== undefined &&
+    asked !== null &&
+    asked !== "" &&
+    !plainName(asked)
+  )
+    return say(res, 400, "A folder's name is one word, with no slash.");
+  try {
+    const parent = await fsp.lstat(at).catch(() => null);
+    if (!parent?.isDirectory())
+      return say(res, 404, "That folder is not there.");
+    const name = asked ? asked : await untitled(at);
+    const made = path.join(at, name);
+    if (await fsp.lstat(made).catch(() => null))
+      return say(res, 409, "Something is already called that.");
+    await fsp.mkdir(made, { mode: 0o755 });
+    await fsp.chown(made, OWNER, OWNER).catch(() => {});
+    json(res, 200, await entryOf(made, idAt));
+  } catch (err) {
+    say(res, 500, `Could not make the folder: ${err.code ?? err.message}`);
+  }
+}
+
 // Answers one ask about the home. The path is the query's `path`, relative
 // to the home; the door has already checked the ticket.
 export async function serve(req, res, url, idAt, carrier) {
@@ -566,6 +761,11 @@ export async function serve(req, res, url, idAt, carrier) {
   if (!at) return say(res, 403, "That is not in your home.");
   const what = url.pathname.slice("/maslow/files".length);
   if (what === "" && req.method === "GET") return list(res, at, idAt);
+  if (what === "/rename" && req.method === "POST")
+    return rename(req, res, at, idAt);
+  if (what === "/delete" && req.method === "POST") return trash(res, at);
+  if (what === "/mkdir" && req.method === "POST")
+    return mkdir(req, res, at, idAt);
   if (what === "/read" && req.method === "GET") return read(req, res, at);
   if (what === "/preview" && req.method === "GET") return preview(res, at);
   if (what === "/pdf" && req.method === "GET") return pdf(res, at);

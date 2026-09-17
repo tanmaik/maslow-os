@@ -82,27 +82,9 @@ import { cx } from "@/utils/cx";
 // person dropped on it to keep there.
 const RAIL = "files-rail";
 const PINS = "files-pins";
-// The places the person took off the rail, by name, kept on this device.
-const HIDDEN = "files-hidden";
 // One of the person's own things, carried by a drag.
 const CARRIED = "application/x-maslow-entry";
 type Pin = { path: string; kind: "dir" | "file" };
-
-// The folders the rail offers beside Home, where they exist: the places a
-// Mac's sidebar keeps, not every folder at the top of the home.
-const PLACES = new Set([
-  "Desktop",
-  "Documents",
-  "Downloads",
-  "Pictures",
-  "Movies",
-  "Music",
-  "Projects",
-  "Code",
-  "code",
-  "src",
-  "work",
-]);
 
 // An upload in flight: how far it has got, and what stopped it if anything.
 type Upload = { done: number; total: number; error?: string };
@@ -303,14 +285,14 @@ function Toolbar({
   );
   if (!folded)
     return (
-      <InBar as={row}>
+      <InBar as={row} name={false}>
         {where}
         {children}
       </InBar>
     );
   return (
     <>
-      <InBar phone="strip" as={row}>
+      <InBar phone="strip" as={row} name={false}>
         {where}
       </InBar>
       <InBar as={row}>{children}</InBar>
@@ -444,6 +426,12 @@ export function FileExplorer({
   // The rows taken hold of: one by a press, more with the shift or the
   // command key, all with command-A, none again with Escape.
   const [selected, setSelected] = useState<Selection>(new Set());
+  // The row whose name is a field, and what the field says.
+  const [renaming, setRenaming] = useState<{ of: string; to: string } | null>(
+    null,
+  );
+  // A rename ends once, whether by Return, by a click elsewhere or by both.
+  const renamed = useRef(false);
   // Where the person has been in their home, so the bar's arrows go back
   // and forward through it as a browser's do. A step taken by the arrows
   // is not written down again.
@@ -489,21 +477,12 @@ export function FileExplorer({
     setPins(next);
     localStorage.setItem(PINS, JSON.stringify(next));
   };
-  // The places taken off the rail: a hover shows the way off, and one
-  // row puts them all back.
-  const [hidden, setHidden] = useState<string[]>([]);
-  const hide = (next: string[]) => {
-    setHidden(next);
-    localStorage.setItem(HIDDEN, JSON.stringify(next));
-  };
   useEffect(() => {
     setRail(localStorage.getItem(RAIL) !== "hidden");
     try {
       setPins(JSON.parse(localStorage.getItem(PINS) ?? "[]") as Pin[]);
-      setHidden(JSON.parse(localStorage.getItem(HIDDEN) ?? "[]") as string[]);
     } catch {
       setPins([]);
-      setHidden([]);
     }
     const q = matchMedia("(min-width: 640px)");
     const read = () => setWide(q.matches);
@@ -519,9 +498,6 @@ export function FileExplorer({
     });
   };
   const railShown = wide ? rail : sheet;
-  // What stands at the top of home, whatever folder is in view: the rail's
-  // rows, read once and again whenever home itself is looked at.
-  const [top, setTop] = useState<Entry[]>([]);
   const input = useRef<HTMLInputElement>(null);
   // The files an upload was given, so a failed one can be tried again.
   const sending = useRef<Record<string, File>>({});
@@ -670,22 +646,6 @@ export function FileExplorer({
       sock.current.send(JSON.stringify({ watch: dir || "." }));
   }, [dir, share, colleague]);
 
-  useEffect(() => {
-    let stopped = false;
-    void fetch("/computer/files/list?path=.")
-      .then((r) => (r.ok ? (r.json() as Promise<Entry[]>) : []))
-      .then((got) => {
-        if (!stopped) setTop(got);
-      })
-      .catch(() => {});
-    return () => {
-      stopped = true;
-    };
-  }, []);
-  useEffect(() => {
-    if (dir === "" && entries) setTop(entries);
-  }, [dir, entries]);
-
   // Nothing in Files holds an edit any more, so leaving is leaving.
   const leaving = (go: () => void) => go();
 
@@ -726,6 +686,85 @@ export function FileExplorer({
       }
       openPath(at(e.name), share ?? undefined);
     });
+
+  // Renaming, moving to the Trash and making a folder are the owner's:
+  // in a colleague's share they are not offered.
+  const mine = !colleague && !share;
+
+  // The rows the selection names, as they are listed.
+  const held = () => {
+    const names =
+      selected === "all" ? rows.map((r) => r.name) : [...selected].map(String);
+    return names.flatMap((n) => rows.filter((r) => r.name === n));
+  };
+
+  // One action on the person's own files through the door, in JSON.
+  const act = async <T,>(what: string, file: string, body?: unknown) => {
+    const res = await fetch(
+      `/computer/files/${what}?path=${encodeURIComponent(file)}`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body ?? {}),
+      },
+    );
+    if (!res.ok) throw new Error(await res.text());
+    return (await res.json()) as T;
+  };
+
+  // The row's name becomes a field, prefilled, with the name and not the
+  // extension selected.
+  const startRename = (e: Entry) => {
+    if (!mine) return;
+    renamed.current = false;
+    setSelected(new Set([e.name]));
+    setRenaming({ of: e.name, to: e.name });
+  };
+
+  // The field's word becomes the row's name; the same word, or none,
+  // changes nothing.
+  const finishRename = async (keep: boolean) => {
+    if (!renaming || renamed.current) return;
+    renamed.current = true;
+    setRenaming(null);
+    const to = renaming.to.trim();
+    if (!keep || !to || to === renaming.of) return;
+    try {
+      const made = await act<Entry>("rename", at(renaming.of), { to });
+      await load();
+      setSelected(new Set([made.name]));
+    } catch (err) {
+      setFailed((err as Error).message);
+    }
+  };
+
+  // What is selected goes to the Trash of the person's Linux, each thing
+  // on its own, so one refused leaves the rest moved.
+  const toTrash = async () => {
+    const going = held();
+    if (!mine || going.length === 0) return;
+    let refused: string | null = null;
+    for (const e of going)
+      await act("delete", at(e.name)).catch((err) => {
+        refused ??= (err as Error).message;
+      });
+    await load();
+    if (refused) setFailed(refused);
+  };
+
+  // A folder made in the one in view, named as the Finder names one, and
+  // its name a field at once.
+  const newFolder = async () => {
+    if (!mine) return;
+    try {
+      const made = await act<Entry>("mkdir", dir || ".");
+      await load();
+      setQuery("");
+      startRename(made);
+    } catch (err) {
+      setFailed((err as Error).message);
+    }
+  };
 
   // The file asked for by name, once its folder has answered.
   useEffect(() => {
@@ -1088,7 +1127,7 @@ export function FileExplorer({
       )}
 
       <div className="flex min-h-0 flex-1 flex-col bg-background-full @md:flex-row">
-        {/* Home and what stands at the top of it, so any folder is one
+        {/* Home and what the person put beside it, so any folder is one
             press from any other: down the side on a wide window, where the
             list has room to stand beside it; from a sheet on a phone,
             where it would otherwise cost the list its height. */}
@@ -1110,31 +1149,6 @@ export function FileExplorer({
               >
                 Home
               </Place>
-              {top
-                .filter(
-                  (e) =>
-                    e.kind === "dir" &&
-                    PLACES.has(e.name) &&
-                    !hidden.includes(e.name),
-                )
-                .map((e) => (
-                  <Place
-                    key={e.name}
-                    mark={RiFolderLine}
-                    on={!colleague && path[0] === e.name}
-                    onClick={() =>
-                      leaving(() => {
-                        setColleague(null);
-                        setShare(null);
-                        setPath([e.name]);
-                        if (!wide) setSheet(false);
-                      })
-                    }
-                    onRemove={() => hide([...hidden, e.name])}
-                  >
-                    {e.name}
-                  </Place>
-                ))}
               {pins.map((pin) => (
                 <Place
                   key={pin.path}
@@ -1153,15 +1167,6 @@ export function FileExplorer({
                   {pin.path.split("/").filter(Boolean).at(-1) ?? pin.path}
                 </Place>
               ))}
-              {hidden.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => hide([])}
-                  className="h-7 w-full cursor-pointer rounded-lg px-2 text-left text-caption-1-medium text-text-tertiary outline-none transition-colors duration-fast ease-plain hover:bg-background-secondary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring"
-                >
-                  Put back {hidden.length === 1 ? hidden[0] : "the places"}
-                </button>
-              )}
               {/* What colleagues shared, one row each, holding what they
                   shared and nothing of the rest of their home. */}
               {shared.length > 0 && <Section>Shared</Section>}
@@ -1241,11 +1246,29 @@ export function FileExplorer({
               // folder, not a row.
               if (!(e.target as HTMLElement).closest("tr")) setTarget(null);
             }}
-            onKeyDown={(e) => {
-              // Backspace goes up a folder, as a Mac's Finder does; the
-              // rest of the keys are the list's own.
-              if (e.key !== "Backspace" || e.metaKey || e.ctrlKey) return;
+            onKeyDownCapture={(e) => {
+              // Return with one row held renames it, before the list can
+              // take it as an open; opening stays a double-click.
               if ((e.target as HTMLElement).closest("input, textarea")) return;
+              if (e.key !== "Enter" || e.metaKey || e.ctrlKey || e.altKey)
+                return;
+              const one = held();
+              if (!mine || one.length !== 1) return;
+              e.preventDefault();
+              e.stopPropagation();
+              startRename(one[0]);
+            }}
+            onKeyDown={(e) => {
+              // Backspace goes up a folder, as a Mac's Finder does, and
+              // with Command moves what is held to the Trash; the rest of
+              // the keys are the list's own.
+              if ((e.target as HTMLElement).closest("input, textarea")) return;
+              if (mine && e.key === "Backspace" && e.metaKey) {
+                e.preventDefault();
+                void toTrash();
+                return;
+              }
+              if (e.key !== "Backspace" || e.metaKey || e.ctrlKey) return;
               if (colleague && !share) return;
               e.preventDefault();
               if (path.length > 0) leaving(() => setPath(path.slice(0, -1)));
@@ -1378,7 +1401,10 @@ export function FileExplorer({
                           <TableCell>
                             <span
                               className="flex items-center gap-2 @max-[400px]/list:min-h-8"
-                              draggable={e.kind === "dir" || e.kind === "file"}
+                              draggable={
+                                (e.kind === "dir" || e.kind === "file") &&
+                                renaming?.of !== e.name
+                              }
                               onDragStart={(ev) => {
                                 ev.dataTransfer.setData(
                                   CARRIED,
@@ -1400,28 +1426,75 @@ export function FileExplorer({
                                 aria-hidden
                               />
                               <span className="flex min-w-0 flex-1 flex-col">
-                                <span
-                                  className={cx(
-                                    "flex items-center gap-1.5 truncate text-body-regular",
-                                    on
-                                      ? "text-text-white"
-                                      : "text-text-primary",
-                                  )}
-                                  title={e.name}
-                                >
-                                  <span className="truncate">{e.name}</span>
-                                  {e.id && !colleague && (
-                                    <RiShareForwardLine
-                                      className={cx(
-                                        "size-3.5 shrink-0",
-                                        on
-                                          ? "text-text-white"
-                                          : "text-foreground-icon-tertiary",
-                                      )}
-                                      aria-label="Shared"
-                                    />
-                                  )}
-                                </span>
+                                {renaming?.of === e.name ? (
+                                  <InputBase
+                                    aria-label="Name"
+                                    size="small"
+                                    value={renaming.to}
+                                    ref={(el) => {
+                                      // Focused as it appears, with the name
+                                      // and not the extension selected.
+                                      if (!el || document.activeElement === el)
+                                        return;
+                                      el.focus();
+                                      const dot = e.name.lastIndexOf(".");
+                                      el.setSelectionRange(
+                                        0,
+                                        e.kind === "file" && dot > 0
+                                          ? dot
+                                          : e.name.length,
+                                      );
+                                    }}
+                                    onChange={(ev) =>
+                                      setRenaming({
+                                        of: e.name,
+                                        to: ev.target.value,
+                                      })
+                                    }
+                                    onBlur={() => void finishRename(true)}
+                                    onKeyDown={(ev) => {
+                                      // The keys are the field's, not the
+                                      // list's: Return keeps the name and
+                                      // Escape leaves it.
+                                      ev.stopPropagation();
+                                      if (ev.key === "Enter") {
+                                        ev.preventDefault();
+                                        void finishRename(true);
+                                      } else if (ev.key === "Escape") {
+                                        ev.preventDefault();
+                                        void finishRename(false);
+                                      }
+                                    }}
+                                    onPointerDown={(ev) => ev.stopPropagation()}
+                                    onClick={(ev) => ev.stopPropagation()}
+                                    onDoubleClick={(ev) => ev.stopPropagation()}
+                                    fieldClassName="h-6 flex-1 bg-background-primary-default text-text-primary"
+                                    className="text-body-regular text-text-primary"
+                                  />
+                                ) : (
+                                  <span
+                                    className={cx(
+                                      "flex items-center gap-1.5 truncate text-body-regular",
+                                      on
+                                        ? "text-text-white"
+                                        : "text-text-primary",
+                                    )}
+                                    title={e.name}
+                                  >
+                                    <span className="truncate">{e.name}</span>
+                                    {e.id && !colleague && (
+                                      <RiShareForwardLine
+                                        className={cx(
+                                          "size-3.5 shrink-0",
+                                          on
+                                            ? "text-text-white"
+                                            : "text-foreground-icon-tertiary",
+                                        )}
+                                        aria-label="Shared"
+                                      />
+                                    )}
+                                  </span>
+                                )}
                                 {/* What the columns had to give up, kept
                                     where there is no room for them. */}
                                 <span
@@ -1508,12 +1581,26 @@ export function FileExplorer({
               </div>
             )}
           </ContextMenuTrigger>
-          <ContextMenuContent>
+          <ContextMenuContent
+            // A rename begun from the menu keeps the field's focus.
+            finalFocus={() => !renaming}
+          >
             {target && (
               <>
                 <ContextMenuItem onClick={() => open(target)}>
                   Open
                 </ContextMenuItem>
+                {mine && (
+                  <>
+                    <ContextMenuItem onClick={() => startRename(target)}>
+                      Rename
+                    </ContextMenuItem>
+                    <ContextMenuItem onClick={() => void toTrash()}>
+                      Move to Trash
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                  </>
+                )}
                 {!colleague &&
                   (target.kind === "dir" || target.kind === "file") && (
                     <ContextMenuItem onClick={() => void openSheet(target)}>
@@ -1529,6 +1616,14 @@ export function FileExplorer({
                     Copy link
                   </ContextMenuItem>
                 )}
+                <ContextMenuSeparator />
+              </>
+            )}
+            {!target && mine && (
+              <>
+                <ContextMenuItem onClick={() => void newFolder()}>
+                  New Folder
+                </ContextMenuItem>
                 <ContextMenuSeparator />
               </>
             )}

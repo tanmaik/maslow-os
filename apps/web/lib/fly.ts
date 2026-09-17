@@ -282,6 +282,29 @@ async function written(
   return (await res.json()) as { size: number; modified: string };
 }
 
+// An action on a file or folder through the door, told in JSON, answered
+// in JSON: what the action made or moved.
+async function acted<T>(
+  url: string,
+  machineId: string,
+  ticket: string,
+  body: unknown,
+): Promise<T> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      "fly-force-instance-id": machineId,
+      "x-maslow-ticket": ticket,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify(body ?? {}),
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!res.ok)
+    throw new Error((await res.text()) || `the door answered ${res.status}`);
+  return (await res.json()) as T;
+}
+
 export const fly = {
   createVolume(
     name: string,
@@ -676,6 +699,47 @@ export const fly = {
         machineId,
         ticket,
         body,
+      );
+    },
+    // A new name, or a new place in the home when the name is a path.
+    async rename(
+      machineId: string,
+      ticket: string,
+      at: string,
+      to: string,
+    ): Promise<Entry> {
+      return acted(
+        `https://${config().app}.fly.dev/maslow/files/rename?path=${encodeURIComponent(at)}`,
+        machineId,
+        ticket,
+        { to },
+      );
+    },
+    // Into the Trash of the person's Linux, never erased.
+    async trash(
+      machineId: string,
+      ticket: string,
+      at: string,
+    ): Promise<{ name: string }> {
+      return acted(
+        `https://${config().app}.fly.dev/maslow/files/delete?path=${encodeURIComponent(at)}`,
+        machineId,
+        ticket,
+        {},
+      );
+    },
+    // A folder in a folder, named as asked or as the Finder would.
+    async mkdir(
+      machineId: string,
+      ticket: string,
+      at: string,
+      name?: string,
+    ): Promise<Entry> {
+      return acted(
+        `https://${config().app}.fly.dev/maslow/files/mkdir?path=${encodeURIComponent(at)}`,
+        machineId,
+        ticket,
+        name ? { name } : {},
       );
     },
   },
