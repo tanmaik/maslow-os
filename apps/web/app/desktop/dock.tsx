@@ -104,6 +104,21 @@ export function useDockIconSize() {
 }
 
 const AUTO_HIDE_DELAY_DESKTOP = 6000;
+// On a phone the dock goes sooner, and a swipe up from the bottom brings
+// it back (ryOS MacDock.tsx:171,307).
+const AUTO_HIDE_DELAY_PHONE = 4000;
+// A swipe up of at least this much, more up than sideways, from the zone
+// along the bottom edge, reveals the dock; less than the second is a tap
+// (ryOS dockRevealGesture.ts).
+const DOCK_SWIPE_UP_THRESHOLD_PX = 48;
+const DOCK_SWIPE_MOVE_THRESHOLD_PX = 12;
+const revealsDock = (dx: number, dy: number) => {
+  const ax = Math.abs(dx);
+  const ay = Math.abs(dy);
+  if (ax < DOCK_SWIPE_MOVE_THRESHOLD_PX && ay < DOCK_SWIPE_MOVE_THRESHOLD_PX)
+    return false;
+  return dy < -DOCK_SWIPE_UP_THRESHOLD_PX && ay > ax;
+};
 const AUTO_HIDE_COOLDOWN = 500;
 
 // One icon's stretch along the shelf, and the width of a divider between
@@ -502,6 +517,7 @@ function DockDivider({
 }
 
 export function Dock({
+  phone,
   hiding,
   magnify,
   side,
@@ -517,6 +533,9 @@ export function Dock({
   onFront,
   onClose,
 }: {
+  // On a phone: along the bottom, scrolling sideways when it overflows,
+  // hiding on its own and back on a swipe up.
+  phone: boolean;
   // Whether the dock hides when the hand leaves it, and whether its
   // icons swell under the pointer; a right-click on the shelf turns
   // either.
@@ -556,7 +575,7 @@ export function Dock({
 
   // Whether the dock is out, and what keeps it out: the hand over it, or a
   // timer since it was last shown.
-  const [isDockVisible, setIsDockVisible] = useState(!hiding);
+  const [isDockVisible, setIsDockVisible] = useState(!hiding || phone);
   const isMouseInZoneRef = useRef(false);
   const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutoHideTimeRef = useRef<number>(0);
@@ -568,7 +587,7 @@ export function Dock({
         clearTimeout(autoHideTimerRef.current);
         autoHideTimerRef.current = null;
       }
-    } else if (!isMouseInZoneRef.current) {
+    } else if (!isMouseInZoneRef.current && !phone) {
       setIsDockVisible(false);
     }
   }, [hiding]);
@@ -587,17 +606,20 @@ export function Dock({
       autoHideTimerRef.current = null;
     }
     if (busy) return;
-    autoHideTimerRef.current = setTimeout(() => {
-      if (!isMouseInZoneRef.current) {
-        setIsDockVisible(false);
-        autoHideTimerRef.current = null;
-        lastAutoHideTimeRef.current = Date.now();
-      } else {
-        autoHideTimerRef.current = null;
-        restartAutoHideTimer();
-      }
-    }, AUTO_HIDE_DELAY_DESKTOP);
-  }, [hiding, busy]);
+    autoHideTimerRef.current = setTimeout(
+      () => {
+        if (!isMouseInZoneRef.current) {
+          setIsDockVisible(false);
+          autoHideTimerRef.current = null;
+          lastAutoHideTimeRef.current = Date.now();
+        } else {
+          autoHideTimerRef.current = null;
+          restartAutoHideTimer();
+        }
+      },
+      phone ? AUTO_HIDE_DELAY_PHONE : AUTO_HIDE_DELAY_DESKTOP,
+    );
+  }, [hiding, busy, phone]);
 
   useEffect(() => {
     if (hiding && isDockVisible && !busy) restartAutoHideTimer();
@@ -622,6 +644,52 @@ export function Dock({
     }
     setIsDockVisible(false);
   }, [hiding, busy]);
+
+  // On a phone a hidden dock comes back on a swipe up that starts in the
+  // zone along the bottom edge, the dock's height plus the safe area, and
+  // goes up by 48 or more, more up than sideways (ryOS MacDock.tsx:369-430,
+  // dockRevealGesture.ts).
+  useEffect(() => {
+    if (!phone || !hiding || isDockVisible) return;
+    // Touch events rather than pointer events: the browser takes a touch
+    // that pans as its own and cancels the pointer at once, while the
+    // touch's own end still says where the finger lifted.
+    let held: { id: number; x: number; y: number } | null = null;
+    const zone = () => {
+      const safe = parseInt(
+        getComputedStyle(document.documentElement).getPropertyValue(
+          "--safe-area-bottom",
+        ),
+        10,
+      );
+      return SHELF + (Number.isFinite(safe) ? safe : 0);
+    };
+    const start = (e: TouchEvent) => {
+      const t = e.changedTouches[0];
+      if (!t || t.clientY < window.innerHeight - zone()) return;
+      held = { id: t.identifier, x: t.clientX, y: t.clientY };
+    };
+    const end = (e: TouchEvent) => {
+      if (!held) return;
+      const t = [...e.changedTouches].find((x) => x.identifier === held!.id);
+      if (!t) return;
+      const dx = t.clientX - held.x;
+      const dy = t.clientY - held.y;
+      held = null;
+      if (e.type === "touchend" && revealsDock(dx, dy)) {
+        setIsDockVisible(true);
+        restartAutoHideTimer();
+      }
+    };
+    window.addEventListener("touchstart", start, { passive: true });
+    window.addEventListener("touchend", end, { passive: true });
+    window.addEventListener("touchcancel", end, { passive: true });
+    return () => {
+      window.removeEventListener("touchstart", start);
+      window.removeEventListener("touchend", end);
+      window.removeEventListener("touchcancel", end);
+    };
+  }, [phone, hiding, isDockVisible, restartAutoHideTimer, SHELF]);
 
   const stowed = held.filter((w) => w.card.stowed);
 
@@ -917,7 +985,10 @@ export function Dock({
                   paddingLeft: "env(safe-area-inset-left, 0px)",
                   paddingRight: "env(safe-area-inset-right, 0px)",
                 }
-              : { paddingBottom: "env(safe-area-inset-bottom, 0px)" }
+              : {
+                  paddingBottom:
+                    "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+                }
           }
         >
           {/* The shelf's own menu; an icon's menu, further in, takes the
@@ -967,6 +1038,14 @@ export function Dock({
                         padding: `${EDGE_PADDING}px ${PADDING}px`,
                         maxWidth: "min(92vw, 980px)",
                         transformOrigin: "center bottom",
+                        // The dock scrolls sideways on a phone when its
+                        // icons overflow (ryOS MacDock.tsx:799-802).
+                        ...(phone && {
+                          overflowX: "auto",
+                          overscrollBehaviorX: "contain",
+                          WebkitOverflowScrolling: "touch",
+                          scrollbarWidth: "none",
+                        }),
                       }),
                 }}
                 transition={{

@@ -6,7 +6,7 @@
 // clock at its right.
 
 import { RiCloseLine, RiSearchLine } from "@remixicon/react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import type { Dragged, Held } from "@/app/desktop/dock";
 import { anotherOf } from "@/app/desktop/apps";
@@ -41,6 +41,104 @@ export type Me = {
 // wide screen, the time alone on a narrow one. No seconds, as a Mac shows
 // none, and a width held from the first paint so nothing beside it moves
 // when the clock arrives.
+// On a phone the menus stand in a strip that scrolls sideways, with a
+// fade at whichever end can still scroll, and a tap that follows a scroll
+// is not a tap (ryOS ScrollableMenuWrapper.tsx:100-215: 24px fades, 3px of
+// movement counts as a scroll, taps held off for 100ms after it). On a
+// wide screen the menus stand as they are.
+function MenuStrip({ children }: { children: ReactNode }) {
+  const [phone, setPhone] = useState(false);
+  useEffect(() => {
+    const q = matchMedia("(max-width: 639px)");
+    const read = () => setPhone(q.matches);
+    read();
+    q.addEventListener("change", read);
+    return () => q.removeEventListener("change", read);
+  }, []);
+  const strip = useRef<HTMLDivElement>(null);
+  const [scroll, setScroll] = useState({ left: 0, width: 0, room: 0 });
+  useEffect(() => {
+    const el = strip.current;
+    if (!phone || !el) return;
+    const read = () =>
+      setScroll({
+        left: el.scrollLeft,
+        width: el.scrollWidth,
+        room: el.clientWidth,
+      });
+    read();
+    el.addEventListener("scroll", read, { passive: true });
+    const watch = new ResizeObserver(read);
+    watch.observe(el);
+    return () => {
+      el.removeEventListener("scroll", read);
+      watch.disconnect();
+    };
+  }, [phone]);
+  const touch = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const scrolled = useRef(false);
+  if (!phone) return <>{children}</>;
+  const fade = 24;
+  const canLeft = scroll.left > 0;
+  const canRight = scroll.left < scroll.width - scroll.room - 1;
+  const mask =
+    scroll.width <= scroll.room
+      ? undefined
+      : canLeft && canRight
+        ? `linear-gradient(to right, transparent 0%, black ${fade}px, black calc(100% - ${fade}px), transparent 100%)`
+        : canLeft
+          ? `linear-gradient(to right, transparent 0%, black ${fade}px, black 100%)`
+          : canRight
+            ? `linear-gradient(to right, black 0%, black calc(100% - ${fade}px), transparent 100%)`
+            : undefined;
+  return (
+    <div
+      ref={strip}
+      className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      style={{
+        WebkitOverflowScrolling: "touch",
+        overscrollBehaviorX: "contain",
+        maskImage: mask,
+        WebkitMaskImage: mask,
+        touchAction: "pan-x",
+      }}
+      onTouchStart={(e) => {
+        const t = e.touches[0];
+        touch.current = { x: t.clientX, y: t.clientY, moved: false };
+      }}
+      onTouchMove={(e) => {
+        const t = e.touches[0];
+        const at = touch.current;
+        if (!at) return;
+        if (Math.abs(t.clientX - at.x) > 3 || Math.abs(t.clientY - at.y) > 3)
+          at.moved = true;
+      }}
+      onTouchEnd={() => {
+        const moved = touch.current?.moved;
+        touch.current = null;
+        if (moved) {
+          scrolled.current = true;
+          setTimeout(() => (scrolled.current = false), 100);
+        }
+      }}
+      onPointerDownCapture={(e) => {
+        if (scrolled.current) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+      onClickCapture={(e) => {
+        if (scrolled.current) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
+      }}
+    >
+      <div className="flex h-full min-w-max items-stretch">{children}</div>
+    </div>
+  );
+}
+
 function Clock() {
   const [now, setNow] = useState<Date | null>(null);
   const [wide, setWide] = useState(true);
@@ -69,7 +167,7 @@ function Clock() {
     .replace(",", "");
   return (
     // Every digit the same width, so a minute turning moves nothing.
-    <span className="mr-1 min-w-28 text-right whitespace-nowrap tabular-nums sm:mr-2">
+    <span className="mr-1 text-right whitespace-nowrap tabular-nums sm:mr-2 sm:min-w-28">
       {now ? (wide ? `${day} ${time}` : time) : " "}
     </span>
   );
@@ -165,240 +263,242 @@ export function MenuBar({
   const waiting = notifications.waiting + (update ? 1 : 0);
   return (
     <div className="mac-top-menubar text-caption-1-medium text-text-white fixed top-0 right-0 left-0 z-[60] flex items-center pt-[env(safe-area-inset-top)] pr-[calc(0.5rem+env(safe-area-inset-right))] pl-[calc(0.5rem+env(safe-area-inset-left))]">
-      <Menubar className="flex h-full shrink-0 items-stretch gap-0 rounded-none border-none bg-transparent p-0 whitespace-nowrap">
-        <MenubarMenu>
-          <MenubarTrigger className={`text-caption-1-semibold ${name}`}>
-            Maslow
-          </MenubarTrigger>
-          <MenubarContent align="start" alignOffset={0} sideOffset={1}>
-            <MenubarItem className={item} onClick={() => setAbout(true)}>
-              About This Computer
-            </MenubarItem>
-            {update && (
-              <MenubarItem
-                className={item}
-                onClick={() => onSettings("computer")}
-              >
-                An update is ready…
+      <MenuStrip>
+        <Menubar className="flex h-full shrink-0 items-stretch gap-0 rounded-none border-none bg-transparent p-0 whitespace-nowrap">
+          <MenubarMenu>
+            <MenubarTrigger className={`text-caption-1-medium ${name}`}>
+              Maslow
+            </MenubarTrigger>
+            <MenubarContent align="start" alignOffset={0} sideOffset={1}>
+              <MenubarItem className={item} onClick={() => setAbout(true)}>
+                About This Computer
               </MenubarItem>
-            )}
-            <MenubarSeparator />
-            <MenubarItem className={item} onClick={onSearch}>
-              Find…
-              <Keys>⌘K</Keys>
-            </MenubarItem>
-            <MenubarItem className={item} onClick={() => onSettings()}>
-              Settings…
-              <Keys>⌃⌥,</Keys>
-            </MenubarItem>
-            {you && (
-              <>
-                <MenubarSeparator />
-                {/* A phone's bar has room for Maslow, the search and the
+              {update && (
+                <MenubarItem
+                  className={item}
+                  onClick={() => onSettings("computer")}
+                >
+                  An update is ready…
+                </MenubarItem>
+              )}
+              <MenubarSeparator />
+              <MenubarItem className={item} onClick={onSearch}>
+                Find…
+                <Keys>⌘K</Keys>
+              </MenubarItem>
+              <MenubarItem className={item} onClick={() => onSettings()}>
+                Settings…
+                <Keys>⌃⌥,</Keys>
+              </MenubarItem>
+              {you && (
+                <>
+                  <MenubarSeparator />
+                  {/* A phone's bar has room for Maslow, the search and the
                     clock and no more, so the person's own pane folds in
                     here; a wide bar keeps it under their name. Their other
                     orgs and the way out are the Maslow menu's at every
                     width. */}
-                <div className="sm:hidden">
+                  <div className="sm:hidden">
+                    <MenubarItem
+                      className={item}
+                      onClick={() => onSettings("you")}
+                    >
+                      You…
+                    </MenubarItem>
+                  </div>
+                  {you.others.length > 0 && (
+                    <form action="/auth/switch" method="post">
+                      {you.others.map((m) => (
+                        <MenubarItem
+                          key={m.userId}
+                          className={item}
+                          nativeButton
+                          render={
+                            <button
+                              type="submit"
+                              name="membership"
+                              value={m.userId}
+                            />
+                          }
+                        >
+                          Switch to {m.orgName}
+                        </MenubarItem>
+                      ))}
+                    </form>
+                  )}
                   <MenubarItem
                     className={item}
-                    onClick={() => onSettings("you")}
+                    onClick={() => setMakingOrg(true)}
                   >
-                    You…
+                    New org…
                   </MenubarItem>
-                </div>
-                {you.others.length > 0 && (
-                  <form action="/auth/switch" method="post">
-                    {you.others.map((m) => (
-                      <MenubarItem
-                        key={m.userId}
-                        className={item}
-                        nativeButton
-                        render={
-                          <button
-                            type="submit"
-                            name="membership"
-                            value={m.userId}
-                          />
-                        }
-                      >
-                        Switch to {m.orgName}
-                      </MenubarItem>
-                    ))}
+                  <MenubarSeparator />
+                  <form action="/auth/sign-out" method="post">
+                    <MenubarItem
+                      className={item}
+                      nativeButton
+                      render={<button type="submit" />}
+                    >
+                      Sign out
+                    </MenubarItem>
                   </form>
-                )}
-                <MenubarItem
-                  className={item}
-                  onClick={() => setMakingOrg(true)}
-                >
-                  New org…
-                </MenubarItem>
-                <MenubarSeparator />
-                <form action="/auth/sign-out" method="post">
-                  <MenubarItem
-                    className={item}
-                    nativeButton
-                    render={<button type="submit" />}
-                  >
-                    Sign out
-                  </MenubarItem>
-                </form>
-              </>
-            )}
-          </MenubarContent>
-        </MenubarMenu>
-        {front && (
-          <MenubarMenu>
-            <MenubarTrigger
-              className={`text-caption-1-medium ${name} max-sm:hidden max-sm:max-w-[8ch] max-sm:truncate`}
-            >
-              {front.card.title}
-            </MenubarTrigger>
-            <MenubarContent align="start" alignOffset={0} sideOffset={1}>
-              <MenubarItem
-                className={item}
-                onClick={() => onPick(anotherOf(front.card))}
-              >
-                New window
-              </MenubarItem>
-              <MenubarSeparator />
-              <MenubarItem className={item} onClick={() => onStow(front)}>
-                Put away
-              </MenubarItem>
-              <MenubarItem className={item} onClick={() => onFill(front)}>
-                Fill the screen
-              </MenubarItem>
-              <MenubarSeparator />
-              <MenubarItem className={item} onClick={() => onClose(front)}>
-                Close
-              </MenubarItem>
+                </>
+              )}
             </MenubarContent>
           </MenubarMenu>
-        )}
-        <MenubarMenu>
-          <MenubarTrigger
-            className={`text-caption-1-medium ${name} max-sm:hidden`}
-          >
-            Window
-          </MenubarTrigger>
-          <MenubarContent align="start" alignOffset={0} sideOffset={1}>
-            {open.length === 0 && (
-              <MenubarItem className={item} disabled>
-                Nothing is open
-              </MenubarItem>
-            )}
-            {/* Every window, each closed from its row without leaving the
-                menu, and all of them at once. */}
-            {open.map((w) => (
-              <MenubarItem
-                key={w.card.id}
-                className={`${item} group/w`}
-                onClick={() => onFront(w)}
+          {front && (
+            <MenubarMenu>
+              <MenubarTrigger
+                className={`text-caption-1-medium ${name} max-sm:text-caption-1-semibold`}
               >
-                <span className="min-w-0 flex-1 truncate">
-                  {w.card.stowed ? `${w.card.title} (put away)` : w.card.title}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Close ${w.card.title}`}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onClose(w);
-                  }}
-                  className="ml-2 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-foreground-icon-tertiary opacity-0 transition-opacity duration-instant ease-plain group-hover/w:opacity-100 hover:bg-background-tertiary-hover hover:text-text-primary focus-visible:opacity-100"
+                {front.card.title}
+              </MenubarTrigger>
+              <MenubarContent align="start" alignOffset={0} sideOffset={1}>
+                <MenubarItem
+                  className={item}
+                  onClick={() => onPick(anotherOf(front.card))}
                 >
-                  <RiCloseLine className="size-3.5" aria-hidden />
-                </button>
-              </MenubarItem>
-            ))}
-            {open.length > 1 && (
+                  New window
+                </MenubarItem>
+                <MenubarSeparator />
+                <MenubarItem className={item} onClick={() => onStow(front)}>
+                  Put away
+                </MenubarItem>
+                <MenubarItem className={item} onClick={() => onFill(front)}>
+                  Fill the screen
+                </MenubarItem>
+                <MenubarSeparator />
+                <MenubarItem className={item} onClick={() => onClose(front)}>
+                  Close
+                </MenubarItem>
+              </MenubarContent>
+            </MenubarMenu>
+          )}
+          <MenubarMenu>
+            <MenubarTrigger className={`text-caption-1-medium ${name}`}>
+              Window
+            </MenubarTrigger>
+            <MenubarContent align="start" alignOffset={0} sideOffset={1}>
+              {open.length === 0 && (
+                <MenubarItem className={item} disabled>
+                  Nothing is open
+                </MenubarItem>
+              )}
+              {/* Every window, each closed from its row without leaving the
+                menu, and all of them at once. */}
+              {open.map((w) => (
+                <MenubarItem
+                  key={w.card.id}
+                  className={`${item} group/w`}
+                  onClick={() => onFront(w)}
+                >
+                  <span className="min-w-0 flex-1 truncate">
+                    {w.card.stowed
+                      ? `${w.card.title} (put away)`
+                      : w.card.title}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label={`Close ${w.card.title}`}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onClose(w);
+                    }}
+                    className="ml-2 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md text-foreground-icon-tertiary opacity-0 transition-opacity duration-instant ease-plain group-hover/w:opacity-100 hover:bg-background-tertiary-hover hover:text-text-primary focus-visible:opacity-100"
+                  >
+                    <RiCloseLine className="size-3.5" aria-hidden />
+                  </button>
+                </MenubarItem>
+              ))}
+              {open.length > 1 && (
+                <MenubarItem
+                  className={item}
+                  onClick={() => open.forEach((w) => onClose(w))}
+                >
+                  Close all windows
+                </MenubarItem>
+              )}
+              <MenubarSeparator />
+              {/* What the keys do to the window in front, each with its key. */}
               <MenubarItem
-                className={item}
-                onClick={() => open.forEach((w) => onClose(w))}
-              >
-                Close all windows
-              </MenubarItem>
-            )}
-            <MenubarSeparator />
-            {/* What the keys do to the window in front, each with its key. */}
-            <MenubarItem
-              className={item}
-              disabled={!front}
-              onClick={() => front && onPick(anotherOf(front.card))}
-            >
-              New window
-              <Keys>⌃⌥N</Keys>
-            </MenubarItem>
-            <MenubarItem
-              className={item}
-              disabled={!front}
-              onClick={() => front && onClose(front)}
-            >
-              Close
-              <Keys>⌃⌥W</Keys>
-            </MenubarItem>
-            <MenubarItem
-              className={item}
-              disabled={!front}
-              onClick={() => front && onStow(front)}
-            >
-              Put away
-              <Keys>⌃⌥M</Keys>
-            </MenubarItem>
-            <MenubarItem
-              className={item}
-              disabled={open.length < 2}
-              onClick={() => onCycle(false)}
-            >
-              Next window
-              <Keys>⌃⌥⇥</Keys>
-            </MenubarItem>
-            <MenubarItem
-              className={item}
-              disabled={open.length < 2}
-              onClick={() => onCycle(true)}
-            >
-              Previous window
-              <Keys>⌃⌥⇧⇥</Keys>
-            </MenubarItem>
-            <MenubarSeparator />
-            {/* Filling the screen is the green light's act, under the
-                green light's words, and not a place of its own. */}
-            <MenubarItem
-              className={item}
-              disabled={!front}
-              onClick={() => front && onFill(front)}
-            >
-              Fill the screen
-              <Keys>⌃⌥↩</Keys>
-            </MenubarItem>
-            {(
-              [
-                ["Left half", "left", "⌃⌥←"],
-                ["Right half", "right", "⌃⌥→"],
-                ["Top half", "top", "⌃⌥↑"],
-                ["Bottom half", "bottom", "⌃⌥↓"],
-                ["Top left", "top left", "⌃⌥U"],
-                ["Top right", "top right", "⌃⌥I"],
-                ["Bottom left", "bottom left", "⌃⌥J"],
-                ["Bottom right", "bottom right", "⌃⌥K"],
-              ] as const
-            ).map(([label, place, keys]) => (
-              <MenubarItem
-                key={place}
                 className={item}
                 disabled={!front}
-                onClick={() => onSnap(place)}
+                onClick={() => front && onPick(anotherOf(front.card))}
               >
-                {label}
-                <Keys>{keys}</Keys>
+                New window
+                <Keys>⌃⌥N</Keys>
               </MenubarItem>
-            ))}
-          </MenubarContent>
-        </MenubarMenu>
-      </Menubar>
-      <div className="ml-auto flex h-full items-center gap-1.5">
+              <MenubarItem
+                className={item}
+                disabled={!front}
+                onClick={() => front && onClose(front)}
+              >
+                Close
+                <Keys>⌃⌥W</Keys>
+              </MenubarItem>
+              <MenubarItem
+                className={item}
+                disabled={!front}
+                onClick={() => front && onStow(front)}
+              >
+                Put away
+                <Keys>⌃⌥M</Keys>
+              </MenubarItem>
+              <MenubarItem
+                className={item}
+                disabled={open.length < 2}
+                onClick={() => onCycle(false)}
+              >
+                Next window
+                <Keys>⌃⌥⇥</Keys>
+              </MenubarItem>
+              <MenubarItem
+                className={item}
+                disabled={open.length < 2}
+                onClick={() => onCycle(true)}
+              >
+                Previous window
+                <Keys>⌃⌥⇧⇥</Keys>
+              </MenubarItem>
+              <MenubarSeparator />
+              {/* Filling the screen is the green light's act, under the
+                green light's words, and not a place of its own. */}
+              <MenubarItem
+                className={item}
+                disabled={!front}
+                onClick={() => front && onFill(front)}
+              >
+                Fill the screen
+                <Keys>⌃⌥↩</Keys>
+              </MenubarItem>
+              {(
+                [
+                  ["Left half", "left", "⌃⌥←"],
+                  ["Right half", "right", "⌃⌥→"],
+                  ["Top half", "top", "⌃⌥↑"],
+                  ["Bottom half", "bottom", "⌃⌥↓"],
+                  ["Top left", "top left", "⌃⌥U"],
+                  ["Top right", "top right", "⌃⌥I"],
+                  ["Bottom left", "bottom left", "⌃⌥J"],
+                  ["Bottom right", "bottom right", "⌃⌥K"],
+                ] as const
+              ).map(([label, place, keys]) => (
+                <MenubarItem
+                  key={place}
+                  className={item}
+                  disabled={!front}
+                  onClick={() => onSnap(place)}
+                >
+                  {label}
+                  <Keys>{keys}</Keys>
+                </MenubarItem>
+              ))}
+            </MenubarContent>
+          </MenubarMenu>
+        </Menubar>
+      </MenuStrip>
+      <div className="ml-auto flex h-full shrink-0 items-center gap-1.5">
         {/* Who is at the desktop, and their own pane of Settings. Their other
             orgs and the way out are the Maslow menu's. */}
         {you && (
@@ -451,7 +551,7 @@ export function MenuBar({
           className="focus-visible:outline-border-focus-ring duration-fast ease-plain flex items-center gap-1.5 rounded-lg px-1 outline-none transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1 aria-expanded:bg-white/15"
         >
           {waiting > 0 ? (
-            <span className="text-caption-2-semibold bg-accent-500 text-text-white flex h-4 min-w-4 items-center justify-center rounded-full px-1 leading-none tabular-nums">
+            <span className="text-caption-2-semibold bg-accent-500 text-text-white flex h-4 min-w-4 items-center justify-center rounded-full px-1 tabular-nums">
               {waiting}
             </span>
           ) : notifications.unread > 0 ? (

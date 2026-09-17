@@ -163,7 +163,7 @@ function Face({ who }: { who: Known | null }) {
       <Avatar
         // The ladder's next step up: the lock screen is the whole page, and
         // the face is what it is about.
-        className="size-24 text-[28px] leading-9 font-semibold"
+        className="size-24 text-title-1-medium"
         src={who?.picture ?? undefined}
         alt={who?.name}
         initials={who ? initials(who.name) : undefined}
@@ -248,7 +248,7 @@ function Made({ made, next }: { made: Made[]; next?: string }) {
         >
           {made.map((org) => (
             <div key={org.org} className="flex flex-col gap-2">
-              <p className="text-caption-1-semibold text-text-secondary">
+              <p className="text-caption-1-medium text-text-secondary">
                 {org.org}
               </p>
               {org.people.map((p) => (

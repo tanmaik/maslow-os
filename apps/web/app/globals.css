@@ -13,12 +13,6 @@
    from the hue and chroma the person picked under Look in Settings, so
    every button, ring, switch and selection follows the pick. */
 @theme {
-  /* One knob for the whole rhythm: every padding, gap, margin and
-     spacing-unit size tightens by a fifth in proportion. What must keep
-     a physical measure regardless — the dock's icon and pitch, a
-     window's lights and bar height, tap targets on a phone, a terminal
-     cell — is pinned in px or rem where it lives, not here. */
-  --spacing: 0.2rem;
   /* The motion of the product: four curves and four clocks, and nothing
      between them. Everything arriving or settling decelerates hard and
      never overshoots; something already on screen moving from A to B
@@ -610,18 +604,72 @@ html[data-accent="graphite"] {
 .glass-sheet.glass-airy {
   background: color-mix(in srgb, var(--popover) 58%, transparent);
 }
-/* A window's frame: the same solid glass without the bend, since the
-   bend is drawn on the CPU over the whole backdrop and a window is most
-   of the screen; frost alone the GPU does for nothing. */
+/* A window's frame, as ryOS's Aqua Glass draws one (aqua-glass.css:
+   190-227): one frosted pane from title bar to foot, its tint a little
+   thinner at the top so the desktop reads through, a shine along its top
+   edge, and a window behind the front one thinner and less vivid. No
+   bend: the bend is drawn on the CPU over the whole backdrop and a window
+   is most of the screen. */
 .glass-pane {
-  background: color-mix(in srgb, var(--popover) 78%, transparent);
-  -webkit-backdrop-filter: blur(22px) saturate(185%);
-  backdrop-filter: blur(22px) saturate(185%);
+  /* The title's own shadow: light on light glass, dark on dark. */
+  --title-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+  border: 0;
+  background-color: transparent;
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--popover) 62%, transparent),
+    color-mix(in srgb, var(--popover) 80%, transparent)
+  );
+  -webkit-backdrop-filter: blur(26px) saturate(185%);
+  backdrop-filter: blur(26px) saturate(185%);
+  box-shadow:
+    var(--pane-cast, var(--glass-cast)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+}
+.dark .glass-pane {
+  --title-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
+  box-shadow:
+    var(--pane-cast, var(--glass-cast)),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.glass-pane:not([data-front]) {
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--popover) 46%, transparent),
+    color-mix(in srgb, var(--popover) 60%, transparent)
+  );
+  -webkit-backdrop-filter: blur(26px) saturate(80%);
+  backdrop-filter: blur(26px) saturate(80%);
 }
 
 /* The dock's shelf: clear glass, lifted a little off the edge. */
 .mac-dock-surface {
   border-radius: 16px;
+}
+
+/* The page is the screen, as ryOS's is: the body is pinned to the
+   viewport and never scrolls, so a phone's browser has no page beyond it
+   to paint under its own bars and nothing to rubber-band; the ground
+   under it all is the wallpaper's dark warmth in either scheme. What
+   scrolls, scrolls inside a window or a screen of its own. */
+html {
+  background-color: oklch(0.15 0.008 58);
+  overscroll-behavior: none;
+  /* The phone's own inset under the screen, readable from a script. */
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+/* On a phone every size in rem grows by an eighth, so words read at arm's
+   length; what is set in px, a window's title bar, the dock, stays. */
+@media (max-width: 639px) {
+  html {
+    font-size: 18px;
+  }
+}
+body {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* The menu bar: clear, the wallpaper showing through, the words plain. */
@@ -632,15 +680,15 @@ html[data-accent="graphite"] {
   -webkit-user-select: none;
   font-weight: 500;
 }
-/* On a phone with a window open the bar and the handle lie on the window's
-   paper rather than the wallpaper, and read in the text's own colour. */
-html[data-paper] .mac-top-menubar {
-  color: var(--color-text-primary);
-}
-html[data-paper] .phone-handle {
-  background: var(--color-text-primary);
-  opacity: 0.55;
-  box-shadow: none;
+/* On a phone the bar and the status bar over it are one frosted band: the
+   phone frosts what runs under its status bar anyway, and a band that
+   owns that frost reads on any wallpaper. */
+@media (max-width: 639px) {
+  .mac-top-menubar {
+    background: rgb(0 0 0 / 0.18);
+    -webkit-backdrop-filter: blur(22px) saturate(185%);
+    backdrop-filter: blur(22px) saturate(185%);
+  }
 }
 
 /* Settings, as a Mac lays out System Settings: a rail of panes down the

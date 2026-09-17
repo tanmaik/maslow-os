@@ -31,7 +31,7 @@ export default async function Page() {
   return (
     <div className="brain-inset flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <h1 className="page-title text-title-1-medium text-text-primary">
+        <h1 className="page-title text-title-3-medium text-text-primary">
           Types and fields
         </h1>
         <p className="text-body-regular text-text-secondary">

@@ -97,7 +97,7 @@ export default async function Page({
       </form>
       {others.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-caption-1-semibold text-text-secondary">
+          <p className="text-caption-1-medium text-text-secondary">
             Or connect it to another of your orgs
           </p>
           <div className="flex flex-wrap gap-2">

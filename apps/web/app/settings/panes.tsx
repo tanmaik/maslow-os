@@ -123,7 +123,7 @@ export function Panes({
           />
         </div>
         {shown.length === 0 ? (
-          <p className="px-2 py-1 text-body-2-regular text-text-secondary">
+          <p className="px-2 py-1 text-body-regular text-text-secondary">
             Nothing is called that.
           </p>
         ) : (
@@ -148,19 +148,13 @@ export function Panes({
                       }}
                       className={cx(
                         "prefs-item text-body-medium",
+                        "text-text-primary",
                         on
-                          ? "bg-accent-600 text-text-white"
-                          : "text-text-primary hover:bg-background-secondary-hover",
+                          ? "bg-background-tertiary-default"
+                          : "hover:bg-background-secondary-hover",
                       )}
                     >
-                      <span
-                        className={cx(
-                          "prefs-item-mark",
-                          on
-                            ? "bg-white/20 text-text-white"
-                            : "bg-background-secondary-default text-foreground-icon-primary",
-                        )}
-                      >
+                      <span className="prefs-item-mark bg-background-secondary-default text-foreground-icon-primary">
                         <Icon className="size-4" aria-hidden />
                       </span>
                       <span className="truncate">{p.title}</span>

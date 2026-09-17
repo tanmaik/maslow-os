@@ -153,7 +153,7 @@ export function ShareSheet({
         </div>
         {levels && (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-body-2-medium text-text-secondary">
+            <span className="text-body-medium text-text-secondary">
               They may
             </span>
             <Select

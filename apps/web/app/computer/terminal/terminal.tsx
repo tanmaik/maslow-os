@@ -772,32 +772,29 @@ export function Terminal({
                                 title="Double-click to rename"
                                 onDoubleClick={() => name(w)}
                                 className={cx(
-                                  "flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-2lg p-2 text-left outline-none",
+                                  "flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-lg px-2 text-left outline-none",
                                   "focus-visible:ring-2 focus-visible:ring-border-focus-ring",
-                                  !wide && "min-h-11",
+                                  wide ? "h-7" : "min-h-11",
                                   windows.length > 1 && "pr-8",
                                   // The mark is a choice, not a hover: it lands the
                                   // moment it is made. Hover alone takes its time.
                                   on
-                                    ? "bg-accent-600"
+                                    ? "bg-background-tertiary-default"
                                     : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover",
                                 )}
                               />
                             }
                           >
                             <RiTerminalBoxLine
-                              className={cx(
-                                "size-5 shrink-0",
-                                on
-                                  ? "text-text-white"
-                                  : "text-foreground-icon-secondary",
-                              )}
+                              className="size-4 shrink-0 text-accent-500"
                               aria-hidden
                             />
                             <span
                               className={cx(
-                                "truncate text-body-medium",
-                                on ? "text-text-white" : "text-text-secondary",
+                                "truncate text-body-regular",
+                                on
+                                  ? "text-text-primary"
+                                  : "text-text-secondary",
                               )}
                             >
                               {shellName(w.name)}
@@ -805,7 +802,7 @@ export function Terminal({
                             <span
                               className={cx(
                                 "ml-auto shrink-0 text-caption-1-medium tabular-nums",
-                                on ? "text-text-white" : "text-text-secondary",
+                                "text-text-secondary",
                               )}
                             >
                               {w.index}
@@ -909,7 +906,7 @@ export function Terminal({
           strip along the bottom, over the keyboard, each key sent as the
           terminal would send it. */}
       {folded && (
-        <div className="flex shrink-0 items-stretch gap-1 overflow-x-auto border-t border-separator-border bg-background-secondary-default px-1.5 pt-1 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:h-9">
+        <div className="flex shrink-0 items-stretch gap-1 overflow-x-auto border-t border-separator-border bg-background-secondary-default px-1.5 pt-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:h-9">
           {KEYS.map((k) => (
             <button
               key={k.label}
@@ -933,7 +930,7 @@ export function Terminal({
                 term.current?.focus();
               }}
               className={cx(
-                "min-w-11 shrink-0 rounded-lg px-2.5 font-mono text-body-2-regular text-text-primary transition-colors duration-fast ease-plain active:bg-background-tertiary-default",
+                "min-w-11 shrink-0 rounded-lg px-2.5 font-mono text-body-regular text-text-primary transition-colors duration-fast ease-plain active:bg-background-tertiary-default",
                 k.label === "Ctrl" && ctrl
                   ? "bg-accent-500 text-white"
                   : "bg-background-primary-default shadow-xs",

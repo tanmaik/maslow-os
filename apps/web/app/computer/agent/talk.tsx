@@ -3,6 +3,7 @@
 import { RiKeyboardLine } from "@remixicon/react";
 import { motion, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
+import { VoiceBeam } from "voice-glow";
 
 import type { Chat } from "@/app/computer/agent/chats";
 import type { Ear } from "@/app/computer/agent/ear";
@@ -54,6 +55,8 @@ export function Talk({
     .reverse()
     .find((i) => i.kind === "tool");
   const running = chat?.running ?? false;
+  const level = useRef(0);
+  level.current = ear.level;
 
   const down = (e: React.PointerEvent<HTMLButtonElement>) => {
     e.preventDefault();
@@ -133,21 +136,16 @@ export function Talk({
           along its top edge, its words fading up into it as the screen
           settles. Under the thumb it darkens a step and a glow breathes
           with the voice; off the edge it greys. */}
-      <div className="flex items-center gap-3 px-5 pt-2 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
-        <div className="relative min-w-0 flex-1">
-          {ear.on && !still && (
-            <motion.span
-              aria-hidden
-              className="absolute inset-0 rounded-[26px] bg-accent-500"
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: 0.18 + ear.level * 0.5,
-                scale: 1.02 + ear.level * 0.06,
-              }}
-              transition={{ type: "spring", stiffness: 260, damping: 22 }}
-              style={{ filter: "blur(14px)" }}
-            />
-          )}
+      <div className="flex items-center gap-3 px-5 pt-2 pb-5">
+        <VoiceBeam
+          type="default"
+          level={() => level.current}
+          processing={running}
+          active={!still && (ear.on || running)}
+          colorVariant="sunset"
+          theme="dark"
+          className="min-w-0 flex-1"
+        >
           <button
             ref={button}
             type="button"
@@ -182,7 +180,7 @@ export function Talk({
               initial={still ? false : { opacity: 0, y: 6 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.55, ease: "easeOut" }}
-              className="flex items-center gap-2.5 text-title-3-medium tracking-[-0.01em]"
+              className="flex items-center gap-2.5 text-title-3-medium"
               aria-live="polite"
             >
               {(ear.why ?? note) ? (
@@ -213,7 +211,7 @@ export function Talk({
               )}
             </motion.span>
           </button>
-        </div>
+        </VoiceBeam>
         <button
           type="button"
           aria-label="Type instead"

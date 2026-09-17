@@ -114,13 +114,13 @@ export function ImageInput({
         initials={fallback}
         alt=""
         className={cx(
-          "size-16 text-title-3-semibold peer-focus-visible:ring-2 peer-focus-visible:ring-border-focus-ring peer-focus-visible:ring-offset-2",
+          "size-16 text-title-3-medium peer-focus-visible:ring-2 peer-focus-visible:ring-border-focus-ring peer-focus-visible:ring-offset-2",
           className,
         )}
       />
       <span
         className={cx(
-          "absolute inset-0 flex items-center justify-center rounded-full bg-background-primary-default/80 text-caption-1-semibold text-text-primary opacity-0 transition-opacity duration-fast ease-plain group-hover:opacity-100 peer-focus-visible:opacity-100",
+          "absolute inset-0 flex items-center justify-center rounded-full bg-background-primary-default/80 text-caption-1-medium text-text-primary opacity-0 transition-opacity duration-fast ease-plain group-hover:opacity-100 peer-focus-visible:opacity-100",
           className,
         )}
       >

@@ -38,7 +38,7 @@ export function Said({
       <p
         aria-live="polite"
         className={cx(
-          "flex items-center gap-1.5 text-body-2-regular",
+          "flex items-center gap-1.5 text-caption-1-regular",
           tone === "wrong" ? "text-text-error-primary" : "text-text-secondary",
           className,
         )}
@@ -70,7 +70,7 @@ export function Said({
         className="size-4 shrink-0 text-notification-success-foreground"
         aria-hidden
       />
-      <span className="text-body-2-medium whitespace-nowrap text-text-primary">
+      <span className="text-caption-1-medium whitespace-nowrap text-text-primary">
         {text.replace(/\.$/, "")}
       </span>
     </div>

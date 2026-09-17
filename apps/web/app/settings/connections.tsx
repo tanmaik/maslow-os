@@ -37,14 +37,14 @@ export function Connections({
   return (
     <Section id="apps" title="Connected apps">
       {!enabled ? (
-        <p className="text-body-2-regular text-text-secondary">
+        <p className="text-body-regular text-text-secondary">
           Connections are not set up on this deployment.
         </p>
       ) : (
         <>
           <Said {...said} />
           {connections === null ? (
-            <p className="text-body-2-regular text-text-secondary">
+            <p className="text-body-regular text-text-secondary">
               Composio didn&apos;t answer, so your connections can&apos;t be
               shown right now. Reload to try again.
             </p>
@@ -70,7 +70,7 @@ export function Connections({
                           initials={initials(accounts[0]!.appName)}
                         />
                       )}
-                      <p className="text-body-2-medium text-text-secondary">
+                      <p className="text-body-medium text-text-secondary">
                         {accounts[0]!.appName}
                       </p>
                     </div>

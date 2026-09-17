@@ -6,6 +6,7 @@ import {
   useReducedMotion,
   type TargetAndTransition,
 } from "motion/react";
+import { RiMoreLine } from "@remixicon/react";
 import {
   useCallback,
   useEffect,
@@ -42,8 +43,8 @@ import {
 } from "@/app/desktop/dock";
 import { MenuBar, type Me } from "@/app/desktop/menubar";
 import { srcOf } from "@/app/desktop/wallpapers";
-import { BarSlot } from "@/app/desktop/panel";
-import { Phone } from "@/app/desktop/phone";
+import { BarButton, BarSlot } from "@/app/desktop/panel";
+import { PhoneSheet } from "@/app/desktop/sheet";
 import { remember, rememberPaper, type Known } from "@/components/lock-screen";
 import { Kbd } from "@/components/base/kbd/kbd";
 import { Notification } from "@/components/base/notification/notification";
@@ -188,6 +189,17 @@ type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 // Each strip straddles the frame, half in and half out, so a hand aiming
 // at the edge from the desktop catches it as readily as one aiming from
 // inside the window.
+// How far in from either side a phone's window stands (ryOS
+// WindowFrame.tsx:268, `p-2 md:p-0`).
+const INSET = 8;
+
+// On a phone a window is resized from its top and its bottom only, each
+// handle a 12px strip a thumb can find.
+const PHONE_EDGES: [Edge, string][] = [
+  ["n", "-top-1.5 right-4 left-4 h-3 cursor-ns-resize"],
+  ["s", "-bottom-1.5 right-4 left-4 h-3 cursor-ns-resize"],
+];
+
 const EDGES: [Edge, string][] = [
   ["n", "-top-1 right-4 left-4 h-2 cursor-ns-resize"],
   ["s", "-bottom-1 right-4 left-4 h-2 cursor-ns-resize"],
@@ -373,17 +385,42 @@ export function Desktop({
   // their block's icon.
   const born = useRef(new Set<string>());
 
+  // Two widths matter, as in ryOS: under 640 it is a phone (useIsPhone.ts),
+  // with the dock hiding along the bottom and the menus in a strip; under
+  // 768 (useWindowManager.ts:39, WindowFrame.tsx:277) every window is the
+  // full width and moves up and down only, so a phone turned sideways
+  // keeps its windows whole. Above both it is a desktop.
   const [wide, setWide] = useState(true);
+  const [medium, setMedium] = useState(true);
   useEffect(() => {
-    const q = matchMedia("(min-width: 640px)");
-    const read = () => setWide(q.matches);
+    const phone = matchMedia("(min-width: 640px)");
+    const tablet = matchMedia("(min-width: 768px)");
+    const read = () => {
+      setWide(phone.matches);
+      setMedium(tablet.matches);
+    };
     read();
-    q.addEventListener("change", read);
-    return () => q.removeEventListener("change", read);
+    phone.addEventListener("change", read);
+    tablet.addEventListener("change", read);
+    return () => {
+      phone.removeEventListener("change", read);
+      tablet.removeEventListener("change", read);
+    };
   }, []);
   // The edge the dock lies along, for the desktop to keep clear of: none
   // while it hides.
-  const away: Side | null = hiding ? null : side;
+  // On a phone the dock lies along the bottom and hides on its own, so
+  // the windows have the whole height (ryOS useWindowInsets.ts:64-66:
+  // a hiding dock takes nothing).
+  // On a phone the dock is along the bottom and stays until a window fills
+  // the screen, so the desktop keeps clear of it there too.
+  const away: Side | null = !wide
+    ? expanded !== null
+      ? null
+      : "bottom"
+    : hiding
+      ? null
+      : side;
 
   // Escape brings an expanded window back down.
   useEffect(() => {
@@ -717,13 +754,11 @@ export function Desktop({
   // A tab that left the desk to sign in to an app comes back to it with
   // the Settings window open on what came of it, and the address plain
   // again, so a reload does not open it twice.
-  const [wanted, setWanted] = useState<string | null>(null);
   useEffect(() => {
     const asked = new URLSearchParams(location.search);
     if (asked.get("maslow") !== "settings") return;
     asked.delete("maslow");
     settingsAt(`/settings?${asked}`);
-    setWanted("/settings");
     history.replaceState(null, "", location.pathname);
     // Once, on arrival.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1032,73 +1067,62 @@ export function Desktop({
         onRecord={(id, title) => brain(`/brain/records/${id}`, title)}
         onFile={(path) => openView(path)}
       />
-      {!wide && (
-        <Phone
-          widgets={screen.cards.filter((c) => c.pinned)}
-          ports={live}
-          computers={computers}
-          panels={PANELS}
-          wanted={wanted}
-        />
-      )}
-      {wide && (
-        <div
-          className={`fixed inset-0 z-10 flex ${
-            carried ? "[&_iframe]:pointer-events-none" : ""
-          }`}
-        >
-          {[page].map((p) => (
-            <DesktopPage
-              key={p.key}
-              page={p}
-              away={away}
-              computers={computers}
-              carried={carried}
-              carrying={carrying}
-              preview={preview}
-              expanded={expanded}
-              afresh={afresh}
-              born={born.current}
-              onHover={setPreview}
-              onDrop={(at) => {
-                const item = carrying.current;
-                end();
-                if (item) land(item, at);
-              }}
-              onClose={(key) => void close(key)}
-              onGuard={guard}
-              onShape={shape}
-              onFront={front}
-              onUnpin={unpin}
-              onCarry={setCarried}
-              onExpand={setExpanded}
-              onCollapse={() => setExpanded(null)}
-              onSettings={settings}
-              onSearch={() => setBar({ open: true, initial: "" })}
-              onWallpaper={() => settings("look", "wallpaper")}
-            />
-          ))}
-        </div>
-      )}
+      <div
+        className={`fixed inset-0 z-10 flex ${
+          carried ? "[&_iframe]:pointer-events-none" : ""
+        }`}
+      >
+        {[page].map((p) => (
+          <DesktopPage
+            key={p.key}
+            page={p}
+            narrow={!medium}
+            away={away}
+            computers={computers}
+            carried={carried}
+            carrying={carrying}
+            preview={preview}
+            expanded={expanded}
+            afresh={afresh}
+            born={born.current}
+            onHover={setPreview}
+            onDrop={(at) => {
+              const item = carrying.current;
+              end();
+              if (item) land(item, at);
+            }}
+            onClose={(key) => void close(key)}
+            onGuard={guard}
+            onShape={shape}
+            onFront={front}
+            onUnpin={unpin}
+            onCarry={setCarried}
+            onExpand={setExpanded}
+            onCollapse={() => setExpanded(null)}
+            onSettings={settings}
+            onSearch={() => setBar({ open: true, initial: "" })}
+            onWallpaper={() => settings("look", "wallpaper")}
+          />
+        ))}
+      </div>
 
-      {wide && (
-        <Dock
-          hiding={hiding}
-          magnify={magnify}
-          side={side}
-          onHiding={hide}
-          onMagnify={swell}
-          onSide={place}
-          ports={live}
-          held={windows}
-          onPin={pin}
-          onBegin={begin}
-          onEnd={end}
-          onPick={pick}
-          onFront={raise}
-          onClose={(w) => void close(w.card.id)}
-        />
-      )}
+      <Dock
+        phone={!wide}
+        hiding={wide ? hiding : expanded !== null}
+        magnify={wide && magnify}
+        side={wide ? side : "bottom"}
+        onHiding={hide}
+        onMagnify={swell}
+        onSide={place}
+        ports={live}
+        held={windows}
+        onPin={pin}
+        onBegin={begin}
+        onEnd={end}
+        onPick={pick}
+        onFront={raise}
+        onClose={(w) => void close(w.card.id)}
+      />
     </>
   );
 }
@@ -1113,6 +1137,9 @@ const FADE = 300;
 // darkened so the menu bar's words read against it whatever the picture
 // is; the darkening is the wallpaper's, not the bar's: the bar itself is
 // nothing but its words.
+// The ground's colour, for the browser's bars when no picture is shown.
+const GROUND = "#1c1815";
+
 function Wallpaper({ choice }: { choice: string | null }) {
   const still = useReducedMotion();
   // A picture that would not load is not asked for again.
@@ -1123,6 +1150,72 @@ function Wallpaper({ choice }: { choice: string | null }) {
   // The one arriving over it, while it arrives; nothing at rest.
   const [arriving, setArriving] = useState<{ src: string | null } | null>(null);
   const [lit, setLit] = useState(false);
+  // The browser's own bars, the status bar above all, take the colour of
+  // the wallpaper's top edge, read from the picture once it is shown;
+  // with no picture, the ground.
+  useEffect(() => {
+    let gone = false;
+    const set = (color: string) => {
+      let meta = document.querySelector<HTMLMetaElement>(
+        'meta[name="theme-color"]',
+      );
+      if (!meta) {
+        meta = document.createElement("meta");
+        meta.name = "theme-color";
+        document.head.appendChild(meta);
+      }
+      meta.content = color;
+    };
+    if (!shown) {
+      set(GROUND);
+      return;
+    }
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      if (gone) return;
+      try {
+        const c = document.createElement("canvas");
+        c.width = 16;
+        c.height = 4;
+        const g = c.getContext("2d");
+        if (!g) return;
+        // The top slice of the picture, scaled down: its average is the
+        // colour under the status bar.
+        g.drawImage(
+          img,
+          0,
+          0,
+          img.naturalWidth,
+          Math.max(1, img.naturalHeight * 0.06),
+          0,
+          0,
+          16,
+          4,
+        );
+        const d = g.getImageData(0, 0, 16, 4).data;
+        let r = 0,
+          gg = 0,
+          b = 0;
+        for (let i = 0; i < d.length; i += 4) {
+          r += d[i]!;
+          gg += d[i + 1]!;
+          b += d[i + 2]!;
+        }
+        const n = d.length / 4;
+        set(
+          `rgb(${Math.round(r / n)} ${Math.round(gg / n)} ${Math.round(b / n)})`,
+        );
+      } catch {
+        set(GROUND);
+      }
+    };
+    img.onerror = () => !gone && set(GROUND);
+    img.src = shown;
+    return () => {
+      gone = true;
+    };
+  }, [shown]);
 
   useEffect(() => {
     if (want === shown) {
@@ -1178,6 +1271,7 @@ function Wallpaper({ choice }: { choice: string | null }) {
 // a right-click or a long press.
 function DesktopPage({
   page,
+  narrow,
   away,
   computers,
   carried,
@@ -1201,6 +1295,9 @@ function DesktopPage({
   onWallpaper,
 }: {
   page: Page;
+  // Whether this is a phone: every window the full width, moved and
+  // resized up and down only, switched by a swipe on its title bar.
+  narrow: boolean;
   // Whether the desktop keeps clear of the dock.
   away: Side | null;
   computers: boolean;
@@ -1242,6 +1339,27 @@ function DesktopPage({
     watch.observe(el);
     return () => watch.disconnect();
   }, []);
+  // On a phone the desktop ends where the keyboard begins, so what lies
+  // along a window's bottom, the terminal's keys, the composer, rises with
+  // it. ryOS leaves this to the browser; Safari does not shrink a pinned
+  // page for its keyboard, so the visual viewport is read instead.
+  const [room, setRoom] = useState<number | null>(null);
+  useEffect(() => {
+    if (!narrow) return setRoom(null);
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const measure = () => {
+      const short = window.innerHeight - vv.height - vv.offsetTop > 80;
+      setRoom(short ? vv.height + vv.offsetTop : null);
+    };
+    vv.addEventListener("resize", measure);
+    vv.addEventListener("scroll", measure);
+    measure();
+    return () => {
+      vv.removeEventListener("resize", measure);
+      vv.removeEventListener("scroll", measure);
+    };
+  }, [narrow]);
   // A point on the desktop under a point on the screen.
   const pointAt = (clientX: number, clientY: number): Point | null => {
     const el = box.current;
@@ -1257,6 +1375,21 @@ function DesktopPage({
   // Where something sits on the desktop, in pixels: its share of the desktop,
   // held to the sizes its surface is worth being.
   const rectOf = (c: Box & Point, bounds?: Bounds) => {
+    if (narrow) {
+      // The full width, 8 in from either side (ryOS WindowFrame.tsx:268,277);
+      // never above the top, at least 80 of it on screen
+      // (useWindowManager.ts:298-306), and no taller than the app is worth
+      // or the desktop has; the top stays where it is put.
+      const least = Math.min(bounds?.min?.h ?? 0, size.h);
+      const most = Math.min(bounds?.max?.h ?? Infinity, size.h);
+      const top = between(c.y * size.h, 0, Math.max(0, size.h - 80));
+      return {
+        left: INSET,
+        top,
+        width: size.w - INSET * 2,
+        height: Math.min(between(c.h * size.h, least, most), size.h - top),
+      };
+    }
     const it = fit(c, size, bounds);
     return {
       left: it.x * size.w,
@@ -1297,6 +1430,19 @@ function DesktopPage({
           height: ghost.height,
         }
       : null;
+  };
+  // The window before or after this one in the stack, brought to the
+  // front: what a swipe on a phone's bar does (ryOS useAppStore's
+  // navigateToNextInstance, cycling the instance order).
+  const flip = (id: string, dir: 1 | -1) => {
+    const order = page.cards.filter((c) => !c.stowed && !c.pinned);
+    const i = order.findIndex((c) => c.id === id);
+    const next = order[(i + dir + order.length) % order.length];
+    if (!next || next.id === id) return;
+    // A filled window stands over everything; it comes back to its place
+    // so the next one can be seen.
+    if (expanded === id) onCollapse();
+    onFront(next.id);
   };
   // Where a window's middle is on the screen, for its flight to the dock
   // and back.
@@ -1353,8 +1499,12 @@ function DesktopPage({
           ...(away && {
             [away]:
               away === "bottom"
-                ? `calc(env(safe-area-inset-bottom) + ${clear}px)`
+                ? `calc(env(safe-area-inset-bottom) + ${clear + (narrow ? 12 : 0)}px)`
                 : `${clear}px`,
+          }),
+          ...(room !== null && {
+            bottom: "auto",
+            height: `calc(${room}px - 25px - env(safe-area-inset-top))`,
           }),
         }}
       >
@@ -1394,6 +1544,8 @@ function DesktopPage({
                   >
                     <Frame
                       card={c}
+                      narrow={narrow}
+                      onSwitch={(dir) => flip(c.id, dir)}
                       computers={computers}
                       full={full}
                       front={
@@ -1428,6 +1580,11 @@ function DesktopPage({
   );
 }
 
+// What in a bar is a control of its own, and not a place to take hold of
+// the window by.
+const CONTROL =
+  "button, a, input, textarea, select, [role=button], [role=textbox], [contenteditable=true]";
+
 // One window's frame, drawn as ryOS draws one: three lights and its name
 // in a bar to drag it by, every edge and corner to resize it by, and the
 // surface itself. Touching it brings it to the front; it arrives from the
@@ -1436,6 +1593,8 @@ function DesktopPage({
 // session.
 function Frame({
   card,
+  narrow,
+  onSwitch,
   computers,
   full,
   front,
@@ -1458,6 +1617,9 @@ function Frame({
   onCollapse,
 }: {
   card: Card;
+  narrow: boolean;
+  // The window before or after this one, brought to the front.
+  onSwitch: (dir: 1 | -1) => void;
   computers: boolean;
   full: boolean;
   // Whether it is the window in front on its desktop.
@@ -1496,6 +1658,12 @@ function Frame({
   // Where the panel's own controls go, in the bar after the name.
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const [lead, setLead] = useState<HTMLDivElement | null>(null);
+  // On a phone the title bar is narrow: a panel's toolbar controls fold
+  // into a strip under it and into a sheet the title bar's last button
+  // opens.
+  const [strip, setStrip] = useState<HTMLDivElement | null>(null);
+  const [sheet, setSheet] = useState(false);
+  const [sheetSlot, setSheetSlot] = useState<HTMLDivElement | null>(null);
   const frame = useRef<HTMLIFrameElement>(null);
   // The panel's own way to hold this window open while it asks something.
   const beforeClose = useCallback(
@@ -1541,6 +1709,15 @@ function Frame({
     const to = (m: globalThis.PointerEvent): Partial<Card> => {
       const dx = (m.clientX - from.x) / desktop.w;
       const dy = (m.clientY - from.y) / desktop.h;
+      // On a phone a window moves up and down only, never above the top,
+      // never so far down that less than 80 of it shows
+      // (ryOS useWindowManager.ts:298-306).
+      if (what === "move" && narrow)
+        return {
+          ...was,
+          x: 0,
+          y: between(was.y + dy, 0, Math.max(0, 1 - 80 / desktop.h)),
+        };
       if (what === "move") return { ...was, x: was.x + dx, y: was.y + dy };
       // The side being pulled goes where the hand is, as far as the desktop,
       // the window's own most, and no further; the side across from it does
@@ -1569,7 +1746,8 @@ function Frame({
       return held;
     };
     const where = (m: globalThis.PointerEvent) => {
-      if (what !== "move") return null;
+      // No snapping on a phone (useWindowManager.ts:301).
+      if (what !== "move" || narrow) return null;
       const p = at(m.clientX, m.clientY);
       return p ? landing(p.x, p.y) : null;
     };
@@ -1599,6 +1777,71 @@ function Frame({
     el.addEventListener("pointerup", onUp);
     el.addEventListener("pointercancel", onUp);
   };
+  // The bar hears a press on the element itself rather than through React:
+  // a panel's controls are portaled into the bar, so in React's tree their
+  // presses never reach it, and the path a Files window shows would cover
+  // the whole bar. A press on a control is the control's own; any other
+  // press on the bar takes hold of the window.
+  const move = useRef(drag);
+  move.current = drag;
+  const toggle = useRef(full ? onCollapse : onExpand);
+  toggle.current = full ? onCollapse : onExpand;
+  const turn = useRef(onSwitch);
+  turn.current = onSwitch;
+  const [nudge, setNudge] = useState(0);
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!bar) return;
+    // A second tap within 300ms fills or restores, as ryOS's title bar
+    // does (useWindowFrameMaximize.ts:233-269).
+    let lastTap = 0;
+    // A swipe across the title bar of more than 100px brings the next or
+    // the previous window, nudging the window 10px the way the finger
+    // went meanwhile (ryOS useSwipeNavigation.ts:80-118, windowFrameUtils.ts:10-25).
+    let swipe: { id: number; x: number } | null = null;
+    const down = (e: globalThis.PointerEvent) => {
+      if ((e.target as Element | null)?.closest(CONTROL)) return;
+      if (e.pointerType === "touch") {
+        const now = Date.now();
+        if (now - lastTap < 300) {
+          lastTap = 0;
+          toggle.current();
+          return;
+        }
+        lastTap = now;
+        swipe = { id: e.pointerId, x: e.clientX };
+      }
+      move.current("move")(e as unknown as PointerEvent<HTMLDivElement>);
+    };
+    const across = (e: globalThis.PointerEvent) => {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      const dx = e.clientX - swipe.x;
+      setNudge(Math.abs(dx) > 20 ? (dx > 0 ? 10 : -10) : 0);
+    };
+    const up = (e: globalThis.PointerEvent) => {
+      if (!swipe || e.pointerId !== swipe.id) return;
+      const dx = e.clientX - swipe.x;
+      swipe = null;
+      setNudge(0);
+      if (Math.abs(dx) > 100) turn.current(dx < 0 ? 1 : -1);
+    };
+    const twice = (e: MouseEvent) => {
+      if ((e.target as Element | null)?.closest(CONTROL)) return;
+      toggle.current();
+    };
+    bar.addEventListener("pointerdown", down);
+    bar.addEventListener("pointermove", across);
+    bar.addEventListener("pointerup", up);
+    bar.addEventListener("pointercancel", up);
+    bar.addEventListener("dblclick", twice);
+    return () => {
+      bar.removeEventListener("pointerdown", down);
+      bar.removeEventListener("pointermove", across);
+      bar.removeEventListener("pointerup", up);
+      bar.removeEventListener("pointercancel", up);
+      bar.removeEventListener("dblclick", twice);
+    };
+  }, [bar]);
 
   // The way from this window's middle to a mark in the dock.
   const flight = (el: Element | null) => {
@@ -1664,29 +1907,22 @@ function Frame({
       className="relative size-full"
       style={{ transformOrigin: "center" }}
     >
-      {/* The deeper shadow the window in front casts, its own layer over
-          the shallow one every window has, so coming to the front is a
-          cross-fade and never a shadow being redrawn. */}
-      {!widget && (
-        <div
-          aria-hidden
-          className={`ease-plain duration-fast pointer-events-none absolute inset-0 rounded-3xl transition-opacity ${
-            front ? "opacity-100" : "opacity-0"
-          }`}
-          style={{ boxShadow: "0 12px 35px rgb(0 0 0 / 0.6)" }}
-        />
-      )}
       <div
         data-window
+        data-front={front ? "" : undefined}
         onPointerDownCapture={onFront}
-        className={`glass-pane @container relative flex h-full flex-col overflow-hidden rounded-3xl ${
+        className={`glass-pane @container relative flex h-full flex-col overflow-hidden rounded-[12px] ${
           stowed ? "pointer-events-none" : "pointer-events-auto"
         }`}
         style={
           {
             // A widget lies on the desktop and casts nothing; a window casts
-            // the shallow shadow, with the front one's layer over it.
-            "--pane-cast": widget ? "none" : "0 4px 15px rgb(0 0 0 / 0.2)",
+            // the one shadow every window has (ryOS tokens.css:204).
+            "--pane-cast": widget ? "none" : "0 3px 10px rgba(0, 0, 0, 0.3)",
+            ...(nudge && {
+              transform: `translateX(${nudge}px)`,
+              transition: "transform 0.1s ease",
+            }),
           } as React.CSSProperties
         }
       >
@@ -1719,14 +1955,13 @@ function Frame({
           </ContextMenu>
         ) : (
           <div
-            onPointerDown={free ? drag("move") : undefined}
-            onDoubleClick={full ? onCollapse : onExpand}
-            className={`border-separator-border relative flex h-8 shrink-0 items-center border-b select-none [&:has([data-nameless])_[data-name]]:hidden ${
+            ref={setBar}
+            className={`relative flex h-6 shrink-0 items-center select-none [&:has([data-nameless])_[data-name]]:hidden ${
               free ? "cursor-move touch-none" : ""
             }`}
           >
             <div
-              className="group/traffic relative ml-2.5 flex items-center gap-2 max-sm:gap-3"
+              className="group/traffic relative ml-1.5 flex items-center gap-2"
               data-titlebar-controls
             >
               <TrafficLightButton
@@ -1754,24 +1989,25 @@ function Frame({
                 The name shortens; it is never taken away, since for the
                 second window of an app the number in it is all there is
                 to tell them apart. */}
-            {Panel && (
+            {Panel && !narrow && (
               <div
                 ref={setLead}
                 data-controls
-                className="ml-2 flex shrink-0 items-center gap-1 empty:hidden"
+                className="ml-2 flex min-w-0 shrink items-center gap-1 empty:hidden"
               />
             )}
             {/* The name in the middle of the bar, as a Mac's is, over
                 nothing: the panel's controls keep to the right of it. */}
             <span
               data-name
-              className={`text-body-medium pointer-events-none absolute left-1/2 max-w-[40%] -translate-x-1/2 truncate ${
+              className={`pointer-events-none absolute left-1/2 max-w-[calc(100%-140px)] -translate-x-1/2 truncate text-body-2-medium ${
                 front ? "text-text-primary" : "text-text-secondary"
               }`}
+              style={{ textShadow: "var(--title-shadow)" }}
             >
               {card.title}
             </span>
-            {Panel && (
+            {Panel && !narrow && (
               // The last control ends 14 from the edge: its 10 corner sits
               // inside the window's 24 as one curve, and clear of it.
               <div
@@ -1780,7 +2016,27 @@ function Frame({
                 className="mr-3.5 ml-3 flex min-w-0 flex-1 items-center justify-end gap-2"
               />
             )}
+            {Panel && narrow && (
+              // On a phone the panel's controls are behind one button, as a
+              // sheet of rows a thumb can hit.
+              <BarButton
+                icon={RiMoreLine}
+                label="More"
+                pressed={sheet}
+                onClick={() => setSheet(true)}
+                className="mr-1.5 ml-auto"
+              />
+            )}
           </div>
+        )}
+        {Panel && narrow && !widget && (
+          // What a panel keeps in view on a phone, a path or an address,
+          // in a strip of its own under the title bar.
+          <div
+            ref={setStrip}
+            data-controls
+            className="flex h-[34px] shrink-0 items-center gap-2 overflow-x-auto border-b border-separator-border px-3 [scrollbar-width:none] empty:hidden [&::-webkit-scrollbar]:hidden"
+          />
         )}
         {Panel && !computers ? (
           <div className="p-3">
@@ -1798,10 +2054,10 @@ function Frame({
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden [&>*]:rounded-none [&>*]:border-0">
             <BarSlot
               value={{
-                controls: slot,
+                controls: narrow ? sheetSlot : slot,
                 leading: lead,
-                strip: null,
-                phone: false,
+                strip: narrow ? strip : null,
+                phone: narrow,
                 beforeClose,
               }}
             >
@@ -1831,10 +2087,12 @@ function Frame({
           />
         )}
       </div>
-      {/* Outside the pane, which clips what it holds, so each strip
-          straddles the frame it takes hold of. */}
+      {/* Outside the pane, which clips what it holds, so each resize
+          handle straddles the frame. On a phone only the top and bottom
+          handles, thicker for a thumb (ryOS WindowFrameResizeHandles.tsx:
+          44-72: the side and corner handles are hidden below md). */}
       {free &&
-        EDGES.map(([edge, where]) => (
+        (narrow ? PHONE_EDGES : EDGES).map(([edge, where]) => (
           <div
             key={edge}
             aria-hidden
@@ -1842,6 +2100,15 @@ function Frame({
             className={`pointer-events-auto absolute z-10 touch-none ${where}`}
           />
         ))}
+      {Panel && narrow && (
+        <PhoneSheet
+          open={sheet}
+          onClose={() => setSheet(false)}
+          label={card.title}
+          bodyRef={setSheetSlot}
+          controls
+        />
+      )}
     </motion.div>
   );
 }

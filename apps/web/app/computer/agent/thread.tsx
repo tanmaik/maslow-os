@@ -326,7 +326,7 @@ function Log({
           type="button"
           aria-expanded={shown}
           onClick={() => setOpen(!open)}
-          className="flex min-h-11 cursor-pointer items-center gap-1 rounded-md text-body-2-medium text-text-tertiary transition-colors duration-fast ease-plain outline-none hover:text-text-secondary focus-visible:ring-2 focus-visible:ring-border-focus-ring sm:min-h-0"
+          className="flex min-h-11 cursor-pointer items-center gap-1 rounded-md text-caption-1-medium text-text-tertiary transition-colors duration-fast ease-plain outline-none hover:text-text-secondary focus-visible:ring-2 focus-visible:ring-border-focus-ring sm:min-h-0"
         >
           {did ? did.charAt(0).toUpperCase() + did.slice(1) : "Worked"}
           <RiArrowDownSLine

@@ -247,7 +247,7 @@ function Line({
 }) {
   return (
     <div className="flex min-h-8 w-full items-center gap-3">
-      <dt className="flex w-36 shrink-0 items-center gap-1.5 text-body-2-regular text-text-tertiary">
+      <dt className="flex w-36 shrink-0 items-center gap-1.5 text-caption-1-medium text-text-tertiary">
         <Mark className="size-4 shrink-0" aria-hidden />
         <span className="truncate">{typeText(label)}</span>
       </dt>
@@ -269,7 +269,7 @@ function Line({
             type="button"
             onClick={onOpen}
             className={cx(
-              "-ml-1.5 min-w-0 max-w-full cursor-pointer truncate rounded-lg px-1.5 py-1 text-left text-body-2-regular outline-none",
+              "-ml-1.5 min-w-0 max-w-full cursor-pointer truncate rounded-lg px-1.5 py-1 text-left text-body-regular outline-none",
               "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover active:bg-background-secondary-active focus-visible:ring-2 focus-visible:ring-border-focus-ring",
               shown ? "text-text-primary" : "text-text-tertiary",
             )}
@@ -279,7 +279,7 @@ function Line({
         ) : (
           <span
             className={cx(
-              "truncate py-1 text-body-2-regular",
+              "truncate py-1 text-body-regular",
               shown ? "text-text-primary" : "text-text-tertiary",
             )}
           >

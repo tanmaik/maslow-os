@@ -497,7 +497,8 @@ into the running turn: at once while the agent is thinking, and once the
 tool it is running has answered if one is, the turn stopped where it
 stands and prompted on with the word, as Claude Code's own terminal does;
 and under
-it how the agent acts, the week's spend and how full the conversation is.
+it how the agent acts and how full the conversation is, with the week's
+spend behind that ring; the spend is said in the open on the Agent pane.
 One conversation is in view at a time and the rest stand open behind it,
 each with its own Claude Code process, running on; a new one is handed
 over at once, since the door keeps one warm; one quiet for three minutes
@@ -638,8 +639,7 @@ M puts it away, Tab and Shift-Tab go to the next and the previous,
 comma opens Settings, and the arrows, U, I, J, K and Return put it on a
 side, a corner or the whole desktop; the Window menu lists every one
 beside its key. Tab reaches the dock as one stop and the arrows walk
-its icons. A framed page keeps every key of its own but Command-K. A
-phone is its own shell over the same windows, laid out as a phone is.
+its icons. A framed page keeps every key of its own but Command-K.
 On a phone the Agent is voice first: a chat opens in voice mode, the
 thread as a caption of the last thing said with the work under way in
 a small line above it, and under them one big button. Hold it and the
@@ -652,33 +652,50 @@ minute and the phone streams its microphone to Deepgram directly,
 never through us. Without the key the button says this copy cannot
 hear, and production refuses to start. The settled design is
 `docs/decisions/2026-09-16-you-hold-and-you-talk.md`.
-Home is a grid of tiles: the apps, the ports opened, and the widgets. A
-tap opens one as the whole screen under the menu bar's strip, with
-nothing to drag and nothing to resize, and one control at the right of
-its bar holds everything the window itself offers as a sheet of rows:
-another of its app, close, and the other windows. Under the screen is a
-handle: a tap on it goes home, a swipe up from it opens the recents, a
-deck of the open windows to go to or flick away. Never the system's own
-gestures, which the browser owns. Going to a window brings it to the
-front of that deck. The dock and the rail are not drawn. Every window's bar on a phone is a close at the left, the name and one
-control at the right that holds the rest as a sheet; the handle under
-the screen and the menu bar read on whatever they lie on, the wallpaper
-at home or a window's paper. Every page's
-toolbar folds to one row — the path or the address stays in a strip
-that scrolls sideways, the rest goes to the sheet; the brain keeps its
-search and one Filter button, with its conditions and sort as a sheet
-and its view switch under one more control, and its table drags
-sideways with the title column held. Every menu — a window's, the
-desktop's, a row's — opens as a sheet from the bottom edge, on a long press
-where a right-click goes, with rows a thumb can hit. The command bar
-opens from the menu bar's search icon or a two-finger tap, and stands
-full width. Nothing but the window's own content scrolls. A tap acts at
-once, with no wait for a second and no highlight, and a row pressed is
-one step darker.
+A phone is the same desktop, as ryOS's is: the wallpaper, the menu bar,
+the windows and the dock, with no home screen, no handle and no recents.
+Every window is the full width of the screen, 8px in from either side; it
+opens at its app's own height under the menu bar, moves up and down only
+by its title bar, resizes from its top and bottom edges only, fills the
+screen on a double-tap of its title bar and comes back on the next, and
+a swipe across its title bar brings the next or the previous window to
+the front. A phone turned sideways keeps its windows whole. With the
+keyboard up the desktop ends where the keyboard begins, so what lies
+along a window's bottom, the terminal's keys, the composer, rises with
+it. The dock lies along the bottom, scrolls sideways when it overflows,
+stays while windows stand at their own heights, goes when a window fills
+the screen, and comes back on a swipe up from the bottom edge. The menus stand in a strip that scrolls sideways, the
+front app's name in bold, and the clock shows the time alone beside the
+search. Never the system's own gestures, which the browser owns. Every
+window's title bar on a phone is the three lights at the left, the name,
+and one control at the right that holds the panel's toolbar as a sheet
+of rows; a path or an address the panel keeps in view stays in a strip
+under the title bar. The brain keeps its search and one Filter button,
+with its conditions and sort as a sheet and its view switch under one
+more control, and its table drags sideways with the title column held.
+Every menu — a window's, the desktop's, a row's — opens as a sheet from
+the bottom edge, on a long press where a right-click goes, with rows a
+thumb can hit. The command bar opens from the menu bar's search icon or
+a two-finger tap, and stands full width. Nothing but a window's own
+content scrolls. A tap acts at once, with no wait for a second and no
+highlight, and a row pressed is one step darker. Every window, at every
+size, is drawn as ryOS's Aqua Glass draws one: a 24px title bar with the
+name at 13, the three traffic lights, plain, that go grey on a
+window behind, a 12px radius, and one frosted pane from title bar to
+foot. The settled design is
+`docs/decisions/2026-09-17-the-phone-is-the-desktop.md`.
 Nothing else animates. The look is one colour on pure grey: no hue in any neutral, an
 orange unless the person picks another under Look in Settings, kept
-on their device, spent only on what they are meant to look at; the body stays
-at 14, a label in a bar drops to 12 and a title climbs. Settings is laid out
+on their device, spent only on what they are meant to look at. Type has
+three sizes and each has one job: the body at 14 is what is read, regular
+for prose and a value and medium for a name; the caption at 12 is what
+stands beside or under it, regular for a description, a date, a size or a
+path and medium for a label on its own, a section head, a column head, a
+chip or a bar; the headline at 16 names a pane, a sheet, a dialog or an
+empty state, and only a page's own title climbs past it. Nothing is set at
+13, nothing is bolder than medium below the headline but a count in a
+pill, and no size, weight, leading or tracking is ever written by hand.
+Settings is laid out
 as a Mac's System Settings: a rail of panes down the left in two
 groups, yours and the org's, with a search over it that leaves only
 what matches, and one pane at a time on the right, its parts lying on

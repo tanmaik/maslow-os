@@ -104,26 +104,18 @@ export function Status({
       </div>
       <Popover>
         <PopoverTrigger
-          aria-label="This week's spend and how full the conversation is"
+          aria-label="How full the conversation is, and this week's spend"
           className="flex cursor-pointer items-center gap-2 rounded-[40px] bg-background-tertiary-default py-1 pr-2 pl-2.5 outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
         >
-          {usage && (
-            <span
-              className={
-                reached
-                  ? "text-body-2-medium whitespace-nowrap text-text-error-primary"
-                  : "text-body-2-medium whitespace-nowrap text-text-secondary"
-              }
-            >
-              {reached
-                ? "Weekly limit reached"
-                : `${dollars(usage.spentUsd)} of ${dollars(usage.capUsd)}`}
+          {reached && (
+            <span className="text-caption-1-medium whitespace-nowrap text-text-error-primary">
+              Weekly limit reached
             </span>
           )}
           {pct !== null && (
             <span className="flex items-center gap-1">
               <ContextRing pct={pct} />
-              <span className="text-body-2-medium whitespace-nowrap text-text-secondary">
+              <span className="text-caption-1-medium whitespace-nowrap text-text-secondary">
                 {pct}%
               </span>
             </span>
@@ -138,7 +130,7 @@ export function Status({
               usage
                 ? [
                     {
-                      label: "Weekly · Maslow's key",
+                      label: `Weekly · ${dollars(usage.spentUsd)} of ${dollars(usage.capUsd)}`,
                       used:
                         usage.capUsd === 0
                           ? 0

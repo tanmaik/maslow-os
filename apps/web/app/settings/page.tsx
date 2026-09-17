@@ -180,7 +180,7 @@ const WRONG = new Set([
 
 // A line under a form, in BoardUI's supporting voice.
 const Note = ({ children }: { children: ReactNode }) => (
-  <p className="text-body-2-regular text-text-secondary">{children}</p>
+  <p className="text-caption-1-regular text-text-secondary">{children}</p>
 );
 
 // A person's picture, or their initials.
@@ -364,7 +364,7 @@ export default async function Settings({
               <p className="truncate text-title-3-medium text-text-primary">
                 {me.name}
               </p>
-              <p className="truncate text-body-2-regular text-text-secondary">
+              <p className="truncate text-caption-1-regular text-text-secondary">
                 {me.email} · {holder ? `principal of ${org.name}` : role(me)}
               </p>
             </div>
@@ -571,7 +571,7 @@ export default async function Settings({
                         <span className="text-text-tertiary"> · you</span>
                       )}
                     </span>
-                    <span className="truncate text-body-2-regular text-text-secondary">
+                    <span className="truncate text-caption-1-regular text-text-secondary">
                       {m.email}
                     </span>
                   </span>
@@ -689,7 +689,7 @@ export default async function Settings({
                           <span className="truncate text-body-medium text-text-primary">
                             {m.name}
                           </span>
-                          <span className="truncate text-body-2-regular text-text-secondary">
+                          <span className="truncate text-caption-1-regular text-text-secondary">
                             {m.email} · left {on(m.removedAt)}
                           </span>
                         </span>

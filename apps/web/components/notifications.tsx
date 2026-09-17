@@ -253,7 +253,7 @@ export function NotificationsPanel({
                 }
               />
               {notifications.said && (
-                <p className="text-body-2-regular text-text-error-primary px-4 pb-3">
+                <p className="text-caption-1-regular text-text-error-primary px-4 pb-3">
                   {notifications.said}
                 </p>
               )}
@@ -311,7 +311,7 @@ function row(
     content: (
       <>
         {n.records.length > 0 && (
-          <p className="text-body-2-regular text-text-tertiary mt-1.5">
+          <p className="text-caption-1-regular text-text-tertiary mt-1.5">
             About{" "}
             {n.records.map((id, i) => (
               <Fragment key={id}>
@@ -327,7 +327,7 @@ function row(
           </p>
         )}
         {answered && (
-          <p className="text-body-2-medium text-text-tertiary mt-1.5">
+          <p className="text-caption-1-regular text-text-tertiary mt-1.5">
             You said {n.answer}.
           </p>
         )}

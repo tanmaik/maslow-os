@@ -436,13 +436,80 @@ export function LiveBrowser({ href }: { href?: string }) {
         // bar for the window's name, and on a phone keeps the strip under
         // the bar, the width of the screen.
         name={false}
+        leading
         phone="strip"
         as={(controls) => (
-          <div className="flex h-8 shrink-0 items-center border-b border-separator-border px-2">
+          <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-separator-border px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {controls}
           </div>
         )}
       >
+        {/* The browser's tabs stand in the bar beside the lights, as a
+            browser's do: the one shown is raised, any can be closed, and
+            there is always room for one more. Words picked on the page
+            are carried from here, where they cannot be read as the
+            address. */}
+        <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <PillTabList aria-label="Tabs">
+            <AnimatePresence initial={false}>
+              {tabs.map((t) => (
+                <motion.span
+                  key={t.id}
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.9, transition: LEAVE }}
+                  transition={FAST}
+                  // A tab is 180 at its widest, and the pill shrinks to it:
+                  // the title takes what is left after the close's 28, cut
+                  // with an ellipsis, so the two never meet at any length.
+                  className="flex max-w-[180px] min-w-0 items-center"
+                >
+                  <PillTab
+                    variant="blue"
+                    isSelected={t.id === current}
+                    onSelect={() => tell({ tab: t.id })}
+                    // The pill's own label box may shrink, so the title is
+                    // cut rather than run under the close.
+                    className="min-w-0 shrink pr-7 [&>span]:min-w-0"
+                  >
+                    <span className="block truncate">
+                      {t.title ||
+                        (t.url === "about:blank" ? "" : t.url) ||
+                        "New tab"}
+                    </span>
+                  </PillTab>
+                  <CloseButton
+                    size="xs"
+                    aria-label={`Close ${t.title || "tab"}`}
+                    onClick={() => tell({ closeTab: t.id })}
+                    // 20 of glyph in a 24 target, carrying no fill of its own
+                    // so it reads the same on the raised tab and beside it.
+                    className="z-20 -ml-7 shrink-0 bg-transparent before:absolute before:-inset-0.5 before:content-[''] hover:bg-background-tertiary-hover"
+                  />
+                </motion.span>
+              ))}
+            </AnimatePresence>
+          </PillTabList>
+          <BarButton
+            icon={RiAddLine}
+            label="Open a new tab"
+            onClick={() => tell({ newTab: true })}
+          />
+        </div>
+        {selected && (
+          <Button
+            variant="ghost"
+            size="xs"
+            className="ml-auto shrink-0"
+            onClick={copy}
+          >
+            Copy selection
+          </Button>
+        )}
+      </InBar>
+      {/* The way around, one row under the tabs: back, forward, reload
+          and the address, in a field shaped as a browser's is. */}
+      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-separator-border px-2">
         <form
           className="flex min-w-0 flex-1 items-center gap-2"
           onSubmit={(e) => {
@@ -477,7 +544,7 @@ export function LiveBrowser({ href }: { href?: string }) {
             placeholder="An address"
             autoComplete="off"
             spellCheck={false}
-            fieldClassName="min-w-0 flex-1 focus-within:ring-border-focus-ring"
+            fieldClassName="h-6 min-w-0 flex-1 rounded-full bg-background-secondary-default focus-within:ring-border-focus-ring"
           />
           {elsewhere && (
             // One radius across the row: the group, the field and this.
@@ -485,73 +552,12 @@ export function LiveBrowser({ href }: { href?: string }) {
               type="submit"
               variant="secondary"
               size="small"
-              className="rounded-2lg"
+              className="rounded-full"
             >
               Go
             </Button>
           )}
         </form>
-      </InBar>
-      {/* The browser's tabs, one thin row under the bar: the one shown is
-          raised, any can be closed, and there is always room for one more.
-          Words picked on the page are carried from here, where they cannot
-          be read as the address. */}
-      <div className="flex h-[32px] shrink-0 items-center gap-1 overflow-x-auto border-b border-separator-border px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <PillTabList aria-label="Tabs">
-          <AnimatePresence initial={false}>
-            {tabs.map((t) => (
-              <motion.span
-                key={t.id}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9, transition: LEAVE }}
-                transition={FAST}
-                // A tab is 180 at its widest, and the pill shrinks to it:
-                // the title takes what is left after the close's 28, cut
-                // with an ellipsis, so the two never meet at any length.
-                className="relative flex max-w-[180px] min-w-0 items-center"
-              >
-                <PillTab
-                  variant="gray"
-                  isSelected={t.id === current}
-                  onSelect={() => tell({ tab: t.id })}
-                  // The pill's own label box may shrink, so the title is
-                  // cut rather than run under the close.
-                  className="min-w-0 shrink pr-7 [&>span]:min-w-0"
-                >
-                  <span className="block truncate">
-                    {t.title ||
-                      (t.url === "about:blank" ? "" : t.url) ||
-                      "New tab"}
-                  </span>
-                </PillTab>
-                <CloseButton
-                  size="xs"
-                  aria-label={`Close ${t.title || "tab"}`}
-                  onClick={() => tell({ closeTab: t.id })}
-                  // 20 of glyph in a 24 target, carrying no fill of its own
-                  // so it reads the same on the raised tab and beside it.
-                  className="absolute top-1/2 right-0.5 z-20 -translate-y-1/2 bg-transparent before:absolute before:-inset-0.5 before:content-[''] hover:bg-background-tertiary-hover"
-                />
-              </motion.span>
-            ))}
-          </AnimatePresence>
-        </PillTabList>
-        <BarButton
-          icon={RiAddLine}
-          label="Open a new tab"
-          onClick={() => tell({ newTab: true })}
-        />
-        {selected && (
-          <Button
-            variant="ghost"
-            size="xs"
-            className="ml-auto shrink-0"
-            onClick={copy}
-          >
-            Copy selection
-          </Button>
-        )}
       </div>
       {/* The page itself, on paper, edge to edge: the picture keeps the
           machine browser's own shape and nothing shows through behind it. */}
@@ -665,7 +671,7 @@ export function LiveBrowser({ href }: { href?: string }) {
               transition={FAST}
               className="absolute inset-0 overflow-y-auto bg-background-primary-default p-4"
             >
-              <h2 className="text-title-3-semibold text-text-primary">
+              <h2 className="text-headline-medium text-text-primary">
                 {decodes
                   ? "Cannot reach your computer's browser"
                   : "This browser cannot show the picture"}

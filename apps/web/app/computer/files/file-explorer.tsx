@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  RiArrowLeftSLine,
+  RiArrowRightSLine,
   RiCloseLine,
   RiFileLine,
   RiFileTextLine,
@@ -24,11 +26,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { SortDescriptor } from "react-aria-components";
+import type { Selection, SortDescriptor } from "react-aria-components";
 
 import {
   type Entry,
   type Shared,
+  ending,
   isImage,
   isText,
   isVideo,
@@ -49,7 +52,6 @@ import {
 } from "@/components/base/breadcrumb/breadcrumb";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
-import { IconButton } from "@/components/base/buttons/icon-button";
 import { InputBase } from "@/components/base/input/input";
 import { Pagination } from "@/components/base/pagination/pagination";
 import {
@@ -80,6 +82,8 @@ import { cx } from "@/utils/cx";
 // person dropped on it to keep there.
 const RAIL = "files-rail";
 const PINS = "files-pins";
+// The places the person took off the rail, by name, kept on this device.
+const HIDDEN = "files-hidden";
 // One of the person's own things, carried by a drag.
 const CARRIED = "application/x-maslow-entry";
 type Pin = { path: string; kind: "dir" | "file" };
@@ -152,6 +156,54 @@ const markOf = (e: Entry) =>
             ? RiFileTextLine
             : RiFileLine;
 
+// What a thing is, as the Kind column says it: a folder, a link, or a
+// file named by its ending.
+const KINDS: Record<string, string> = {
+  md: "Markdown",
+  txt: "Text",
+  sh: "Shell script",
+  json: "JSON",
+  yml: "YAML",
+  yaml: "YAML",
+  toml: "TOML",
+  csv: "CSV",
+  log: "Log",
+  png: "PNG image",
+  jpg: "JPEG image",
+  jpeg: "JPEG image",
+  gif: "GIF image",
+  svg: "SVG image",
+  webp: "WebP image",
+  heic: "HEIC image",
+  pdf: "PDF",
+  docx: "Word document",
+  xlsx: "Excel workbook",
+  pptx: "PowerPoint",
+  zip: "ZIP archive",
+  tar: "Archive",
+  gz: "Archive",
+  mp4: "Video",
+  mov: "Video",
+  webm: "Video",
+  mp3: "Audio",
+  m4a: "Audio",
+  wav: "Audio",
+  ts: "TypeScript",
+  tsx: "TypeScript",
+  js: "JavaScript",
+  mjs: "JavaScript",
+  py: "Python",
+  html: "HTML",
+  css: "CSS",
+};
+const kindOf = (e: Entry) => {
+  if (e.kind === "dir") return "Folder";
+  if (e.kind === "link") return "Link";
+  const end = ending(e.name);
+  if (!end) return "File";
+  return KINDS[end] ?? `${end.toUpperCase()} file`;
+};
+
 // A moment as a short date, or the time if it is today.
 const when = (iso: string) => {
   const d = new Date(iso);
@@ -190,21 +242,24 @@ const sendPiece = (
   );
 
 // The columns a folder is listed in; any of them sorts it. As the list
-// narrows, Size goes before Changed, and what goes moves under the name.
-type Column = "name" | "size" | "modified";
+// narrows, Size and Kind go before Changed, and what goes moves under
+// the name.
+type Column = "name" | "size" | "kind" | "modified";
 
 const NARROW = {
   size: "@max-[520px]/list:hidden",
+  kind: "@max-[520px]/list:hidden",
   modified: "@max-[400px]/list:hidden",
 };
 
 const COLUMNS: { id: Column; label: string; className: string }[] = [
   { id: "name", label: "Name", className: "" },
-  { id: "size", label: "Size", className: `w-24 text-right ${NARROW.size}` },
+  { id: "size", label: "Size", className: `w-20 text-right ${NARROW.size}` },
+  { id: "kind", label: "Kind", className: `w-28 ${NARROW.kind}` },
   {
     id: "modified",
     label: "Changed",
-    className: `w-24 text-right ${NARROW.modified}`,
+    className: `w-32 text-right ${NARROW.modified}`,
   },
 ];
 
@@ -285,26 +340,15 @@ function Place({
       aria-current={on ? "true" : undefined}
       onClick={onClick}
       className={cx(
-        "group/place flex w-full min-h-11 shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-2lg p-2 text-left outline-none",
-        "focus-visible:ring-2 focus-visible:ring-border-focus-ring sm:min-h-8",
+        "group/place flex h-11 w-full shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-lg px-2 text-left outline-none sm:h-7",
+        "focus-visible:ring-2 focus-visible:ring-border-focus-ring",
         on
-          ? "bg-accent-600"
-          : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover",
+          ? "bg-background-tertiary-default"
+          : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover active:bg-background-tertiary-default",
       )}
     >
-      <Mark
-        className={cx(
-          "size-5 shrink-0",
-          on ? "text-text-white" : "text-foreground-icon-secondary",
-        )}
-        aria-hidden
-      />
-      <span
-        className={cx(
-          "truncate text-body-medium",
-          on ? "text-text-white" : "text-text-secondary",
-        )}
-      >
+      <Mark className="size-4 shrink-0 text-accent-500" aria-hidden />
+      <span className="truncate text-body-regular text-text-primary">
         {children}
       </span>
       {onRemove && (
@@ -323,17 +367,21 @@ function Place({
               onRemove();
             }
           }}
-          className={cx(
-            "ml-auto flex size-5 shrink-0 items-center justify-center rounded-md opacity-0 transition-opacity duration-instant ease-plain group-hover/place:opacity-100 focus-visible:opacity-100",
-            on
-              ? "text-text-white hover:bg-accent-700"
-              : "text-foreground-icon-tertiary hover:bg-background-tertiary-hover",
-          )}
+          className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-md text-foreground-icon-tertiary opacity-0 transition-opacity duration-instant ease-plain group-hover/place:opacity-100 hover:bg-background-tertiary-hover focus-visible:opacity-100"
         >
           <RiCloseLine className="size-3.5" aria-hidden />
         </span>
       )}
     </button>
+  );
+}
+
+// The name over a group of the rail's rows.
+function Section({ children }: { children: ReactNode }) {
+  return (
+    <p className="mt-3 px-2 pb-1 text-caption-1-medium text-text-tertiary first:mt-0">
+      {children}
+    </p>
   );
 }
 
@@ -393,6 +441,40 @@ export function FileExplorer({
     column: "name",
     direction: "ascending",
   });
+  // The rows taken hold of: one by a press, more with the shift or the
+  // command key, all with command-A, none again with Escape.
+  const [selected, setSelected] = useState<Selection>(new Set());
+  // Where the person has been in their home, so the bar's arrows go back
+  // and forward through it as a browser's do. A step taken by the arrows
+  // is not written down again.
+  const [trail, setTrail] = useState<{ list: string[][]; at: number }>({
+    list: [path],
+    at: 0,
+  });
+  const stepping = useRef(false);
+  useEffect(() => {
+    if (stepping.current) {
+      stepping.current = false;
+      return;
+    }
+    setTrail((t) => {
+      const here = t.list[t.at];
+      if (here && here.join("/") === path.join("/")) return t;
+      const list = [...t.list.slice(0, t.at + 1), path];
+      return { list, at: list.length - 1 };
+    });
+  }, [path]);
+  const step = (by: -1 | 1) => {
+    const to = trail.list[trail.at + by];
+    if (!to) return;
+    stepping.current = true;
+    setTrail({ ...trail, at: trail.at + by });
+    leaving(() => {
+      setColleague(null);
+      setShare(null);
+      setPath(to);
+    });
+  };
   // Whether the folders rail is shown, as the person last left it. On a
   // phone the rail has nowhere to stand beside the list, so it opens as a
   // sheet instead, and starts closed rather than remembered.
@@ -407,12 +489,21 @@ export function FileExplorer({
     setPins(next);
     localStorage.setItem(PINS, JSON.stringify(next));
   };
+  // The places taken off the rail: a hover shows the way off, and one
+  // row puts them all back.
+  const [hidden, setHidden] = useState<string[]>([]);
+  const hide = (next: string[]) => {
+    setHidden(next);
+    localStorage.setItem(HIDDEN, JSON.stringify(next));
+  };
   useEffect(() => {
     setRail(localStorage.getItem(RAIL) !== "hidden");
     try {
       setPins(JSON.parse(localStorage.getItem(PINS) ?? "[]") as Pin[]);
+      setHidden(JSON.parse(localStorage.getItem(HIDDEN) ?? "[]") as string[]);
     } catch {
       setPins([]);
+      setHidden([]);
     }
     const q = matchMedia("(min-width: 640px)");
     const read = () => setWide(q.matches);
@@ -472,6 +563,7 @@ export function FileExplorer({
     setEntries(null);
     setQuery("");
     setPage(1);
+    setSelected(new Set());
     void load();
   }, [load]);
 
@@ -781,6 +873,8 @@ export function FileExplorer({
         return a.kind === "dir" ? -1 : 1;
       const flip = sort.direction === "descending" ? -1 : 1;
       if (sort.column === "size") return (a.size - b.size) * flip;
+      if (sort.column === "kind")
+        return kindOf(a).localeCompare(kindOf(b)) * flip;
       if (sort.column === "modified")
         return a.modified.localeCompare(b.modified) * flip;
       return a.name.localeCompare(b.name, undefined, { numeric: true }) * flip;
@@ -822,13 +916,24 @@ export function FileExplorer({
                 keeps the same control; on a phone it folds into the sheet
                 the bar opens, as every other control does. */}
             <InBar leading as={(c) => <>{c}</>}>
-              <IconButton
-                size="small"
+              <BarButton
                 icon={RiSideBarLine}
-                aria-label={railShown ? "Hide the folders" : "Show the folders"}
-                aria-pressed={railShown}
+                label={railShown ? "Hide the folders" : "Show the folders"}
+                pressed={railShown}
                 onClick={toggleRail}
                 className={cx(!railShown && "text-foreground-icon-tertiary")}
+              />
+              <BarButton
+                icon={RiArrowLeftSLine}
+                label="Back"
+                disabled={trail.at === 0}
+                onClick={() => step(-1)}
+              />
+              <BarButton
+                icon={RiArrowRightSLine}
+                label="Forward"
+                disabled={trail.at >= trail.list.length - 1}
+                onClick={() => step(1)}
               />
             </InBar>
             <Breadcrumb
@@ -892,7 +997,7 @@ export function FileExplorer({
           // A faint ring at rest, so the field reads as one before a hand
           // reaches it; hover and focus keep their own.
           fieldClassName={cx(
-            "h-7 not-data-hovered:not-data-focus-within:ring-border-button-default",
+            "h-6 not-data-hovered:not-data-focus-within:ring-border-button-default",
             folded ? "w-full" : "w-36 shrink-0",
           )}
         />
@@ -990,6 +1095,7 @@ export function FileExplorer({
         {(() => {
           const places = (
             <>
+              <Section>Favorites</Section>
               <Place
                 mark={RiHomeLine}
                 on={path.length === 0 && !colleague}
@@ -1005,7 +1111,12 @@ export function FileExplorer({
                 Home
               </Place>
               {top
-                .filter((e) => e.kind === "dir" && PLACES.has(e.name))
+                .filter(
+                  (e) =>
+                    e.kind === "dir" &&
+                    PLACES.has(e.name) &&
+                    !hidden.includes(e.name),
+                )
                 .map((e) => (
                   <Place
                     key={e.name}
@@ -1019,6 +1130,7 @@ export function FileExplorer({
                         if (!wide) setSheet(false);
                       })
                     }
+                    onRemove={() => hide([...hidden, e.name])}
                   >
                     {e.name}
                   </Place>
@@ -1041,13 +1153,18 @@ export function FileExplorer({
                   {pin.path.split("/").filter(Boolean).at(-1) ?? pin.path}
                 </Place>
               ))}
+              {hidden.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => hide([])}
+                  className="h-7 w-full cursor-pointer rounded-lg px-2 text-left text-caption-1-medium text-text-tertiary outline-none transition-colors duration-fast ease-plain hover:bg-background-secondary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+                >
+                  Put back {hidden.length === 1 ? hidden[0] : "the places"}
+                </button>
+              )}
               {/* What colleagues shared, one row each, holding what they
                   shared and nothing of the rest of their home. */}
-              {shared.length > 0 && (
-                <p className="mt-2 px-2 pb-1 text-caption-1-medium text-text-tertiary">
-                  Shared with me
-                </p>
-              )}
+              {shared.length > 0 && <Section>Shared</Section>}
               {shared.map((c) => (
                 <Place
                   key={c.ownerId}
@@ -1092,7 +1209,7 @@ export function FileExplorer({
                 aria-label="Folders"
                 {...takes}
                 className={cx(
-                  "flex w-48 shrink-0 flex-col gap-1 overflow-y-auto border-r border-separator-border bg-background-secondary-default/55 p-2 transition-colors duration-fast ease-plain",
+                  "flex w-52 shrink-0 flex-col gap-px overflow-y-auto border-r border-separator-border bg-background-secondary-default/55 p-2.5 transition-colors duration-fast ease-plain",
                   over && "bg-accent-50",
                 )}
               >
@@ -1108,7 +1225,7 @@ export function FileExplorer({
                 <SheetTitle className="sr-only">Folders</SheetTitle>
                 <nav
                   aria-label="Folders"
-                  className="flex flex-col gap-1 overflow-y-auto"
+                  className="flex flex-col gap-px overflow-y-auto"
                 >
                   {places}
                 </nav>
@@ -1123,6 +1240,20 @@ export function FileExplorer({
               // A right-click on the space between rows is about the
               // folder, not a row.
               if (!(e.target as HTMLElement).closest("tr")) setTarget(null);
+            }}
+            onKeyDown={(e) => {
+              // Backspace goes up a folder, as a Mac's Finder does; the
+              // rest of the keys are the list's own.
+              if (e.key !== "Backspace" || e.metaKey || e.ctrlKey) return;
+              if ((e.target as HTMLElement).closest("input, textarea")) return;
+              if (colleague && !share) return;
+              e.preventDefault();
+              if (path.length > 0) leaving(() => setPath(path.slice(0, -1)));
+              else if (share)
+                leaving(() => {
+                  setShare(null);
+                  setPath([]);
+                });
             }}
           >
             <ScrollArea className="min-h-0 flex-1">
@@ -1179,7 +1310,10 @@ export function FileExplorer({
                 <Table
                   aria-label="Files"
                   size="sm"
-                  selectionMode="none"
+                  selectionMode="multiple"
+                  selectionBehavior="replace"
+                  selectedKeys={selected}
+                  onSelectionChange={setSelected}
                   sortDescriptor={sort}
                   onSortChange={(next) => {
                     setSort(next);
@@ -1190,7 +1324,7 @@ export function FileExplorer({
                     if (e) open(e);
                   }}
                   containerClassName="overflow-x-visible"
-                  className="table-fixed [&_td]:px-3! [&_th]:px-3! [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:border-t-0!"
+                  className="table-fixed [&_tbody_tr]:border-b-0! [&_td]:h-7 [&_td]:px-3! [&_td]:py-0! @max-[520px]/list:[&_td]:py-1.5! [&_td]:text-body-regular! [&_th]:px-3! [&_th]:py-1! [&_th]:text-caption-1-medium! [&_th]:text-text-tertiary! [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:border-t-0!"
                 >
                   <TableHeader>
                     {COLUMNS.map((c) => (
@@ -1223,18 +1357,22 @@ export function FileExplorer({
                   <TableBody>
                     {rows.map((e) => {
                       const Mark = markOf(e);
-                      const on = false;
+                      const on = selected === "all" || selected.has(e.name);
                       return (
                         <TableRow
                           key={e.name}
                           id={e.name}
-                          aria-current={on ? "true" : undefined}
-                          onContextMenu={() => setTarget(e)}
+                          onContextMenu={() => {
+                            setTarget(e);
+                            // The row under the right-click is the one the
+                            // menu is about, unless it is among those held.
+                            if (!on) setSelected(new Set([e.name]));
+                          }}
                           className={cx(
-                            "cursor-pointer",
+                            "cursor-default",
                             on
-                              ? "bg-background-secondary-default"
-                              : "hover:bg-background-primary-hover",
+                              ? "bg-accent-600 text-text-white"
+                              : "even:bg-background-secondary-default/60 hover:bg-background-primary-hover",
                           )}
                         >
                           <TableCell>
@@ -1253,25 +1391,47 @@ export function FileExplorer({
                               }}
                             >
                               <Mark
-                                className="size-5 shrink-0 text-foreground-icon-secondary"
+                                className={cx(
+                                  "size-4 shrink-0",
+                                  on
+                                    ? "text-text-white"
+                                    : "text-foreground-icon-secondary",
+                                )}
                                 aria-hidden
                               />
                               <span className="flex min-w-0 flex-1 flex-col">
                                 <span
-                                  className="flex items-center gap-1.5 truncate text-body-medium"
+                                  className={cx(
+                                    "flex items-center gap-1.5 truncate text-body-regular",
+                                    on
+                                      ? "text-text-white"
+                                      : "text-text-primary",
+                                  )}
                                   title={e.name}
                                 >
                                   <span className="truncate">{e.name}</span>
                                   {e.id && !colleague && (
                                     <RiShareForwardLine
-                                      className="size-3.5 shrink-0 text-foreground-icon-tertiary"
+                                      className={cx(
+                                        "size-3.5 shrink-0",
+                                        on
+                                          ? "text-text-white"
+                                          : "text-foreground-icon-tertiary",
+                                      )}
                                       aria-label="Shared"
                                     />
                                   )}
                                 </span>
                                 {/* What the columns had to give up, kept
                                     where there is no room for them. */}
-                                <span className="hidden truncate text-caption-1-medium text-text-secondary tabular-nums @max-[520px]/list:block">
+                                <span
+                                  className={cx(
+                                    "hidden truncate text-caption-1-regular tabular-nums @max-[520px]/list:block",
+                                    on
+                                      ? "text-text-white"
+                                      : "text-text-secondary",
+                                  )}
+                                >
                                   {e.kind === "dir" ? "" : size(e.size)}
                                   <span className="hidden @max-[400px]/list:inline">
                                     {e.kind === "dir"
@@ -1288,10 +1448,27 @@ export function FileExplorer({
                               NARROW.size,
                             )}
                           >
-                            <span className="text-text-secondary tabular-nums">
+                            <span
+                              className={cx(
+                                "tabular-nums",
+                                on ? "text-text-white" : "text-text-secondary",
+                              )}
+                            >
                               {e.kind === "dir" || !e.modified
-                                ? ""
+                                ? "--"
                                 : size(e.size)}
+                            </span>
+                          </TableCell>
+                          <TableCell
+                            className={cx("whitespace-nowrap", NARROW.kind)}
+                          >
+                            <span
+                              className={cx(
+                                "truncate",
+                                on ? "text-text-white" : "text-text-secondary",
+                              )}
+                            >
+                              {kindOf(e)}
                             </span>
                           </TableCell>
                           <TableCell
@@ -1300,7 +1477,12 @@ export function FileExplorer({
                               NARROW.modified,
                             )}
                           >
-                            <span className="text-text-secondary tabular-nums">
+                            <span
+                              className={cx(
+                                "tabular-nums",
+                                on ? "text-text-white" : "text-text-secondary",
+                              )}
+                            >
                               {when(e.modified)}
                             </span>
                           </TableCell>

@@ -103,7 +103,7 @@ export function Numbers({
 }) {
   if (!now)
     return (
-      <p className="px-3 text-body-2-regular text-text-secondary">
+      <p className="px-3 text-body-regular text-text-secondary">
         {failed
           ? `Could not read the numbers: ${failed}. Trying again.`
           : "Reading the numbers…"}

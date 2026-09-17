@@ -136,7 +136,7 @@ export function BoardView({
   return (
     <div className="flex flex-col gap-3 px-3 pb-3">
       <div className="flex items-center gap-2">
-        <span className="text-caption-1-semibold text-text-secondary">
+        <span className="text-caption-1-medium text-text-secondary">
           Group by
         </span>
         {choices.length > 1 ? (
@@ -162,7 +162,7 @@ export function BoardView({
             </DropdownPopover>
           </Dropdown>
         ) : (
-          <span className="text-caption-1-semibold text-text-secondary">
+          <span className="text-caption-1-medium text-text-secondary">
             {group}
           </span>
         )}
@@ -180,7 +180,7 @@ export function BoardView({
               )}
             >
               <div className="flex items-center justify-between gap-2 px-1 py-1">
-                <span className="truncate text-body-2-medium text-text-primary">
+                <span className="truncate text-caption-1-medium text-text-primary">
                   {lane.label}
                 </span>
                 <span className="text-caption-1-regular text-text-secondary tabular-nums">

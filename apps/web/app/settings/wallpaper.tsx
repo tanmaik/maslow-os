@@ -167,7 +167,7 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
           />
         ))}
       </div>
-      <h4 className="pt-2 text-caption-1-semibold text-text-tertiary">Yours</h4>
+      <h4 className="pt-2 text-caption-1-medium text-text-tertiary">Yours</h4>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <label
           onDragOver={(e) => {
@@ -214,7 +214,7 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
         ))}
       </div>
       {said && (
-        <p className="text-body-2-regular text-text-error-primary">{said}</p>
+        <p className="text-caption-1-regular text-text-error-primary">{said}</p>
       )}
     </div>
   );

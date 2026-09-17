@@ -135,12 +135,12 @@ export function AboutComputer({
           <div className="flex w-28 shrink-0 flex-col items-center gap-1 text-center">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/dock/computer.png" alt="" className="size-20" />
-            <div className="text-title-2-medium text-text-primary">Maslow</div>
+            <div className="text-title-3-medium text-text-primary">Maslow</div>
             <div className="text-caption-1-regular text-text-secondary">
               {about?.version ?? "…"}
             </div>
           </div>
-          <div className="text-body-2-regular text-text-primary flex-1 space-y-4">
+          <div className="text-body-regular text-text-primary flex-1 space-y-4">
             <div className="space-y-0.5">
               {/* The rung of the ladder it sits on, which Settings and the
                   guide both call the size, and which says its memory. */}
@@ -167,7 +167,7 @@ export function AboutComputer({
         <hr className="border-separator-border" />
         <div className="space-y-3 px-4 py-3">
           {about && !s && (
-            <p className="text-body-2-regular text-text-secondary">
+            <p className="text-body-regular text-text-secondary">
               The computer is not answering just now.
             </p>
           )}

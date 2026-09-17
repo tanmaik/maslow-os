@@ -67,14 +67,9 @@ export function InBar({
     : null;
   if (slot)
     return createPortal(
-      // The controls are the panel's, not a handle on the window: a press
-      // on them neither drags nor fills the screen.
-      <span
-        className="contents"
-        data-nameless={name ? undefined : ""}
-        onPointerDown={(e) => e.stopPropagation()}
-        onDoubleClick={(e) => e.stopPropagation()}
-      >
+      // The controls are the panel's, not a handle on the window: the bar
+      // leaves a press, and a double-click, on a control alone.
+      <span className="contents" data-nameless={name ? undefined : ""}>
         {children}
       </span>,
       slot,
@@ -93,6 +88,7 @@ export function BarButton({
   label,
   onClick,
   pressed,
+  disabled,
   title,
   className,
   ref,
@@ -101,6 +97,7 @@ export function BarButton({
   label: string;
   onClick: () => void;
   pressed?: boolean;
+  disabled?: boolean;
   title?: string;
   className?: string;
   ref?: Ref<HTMLButtonElement>;
@@ -111,10 +108,11 @@ export function BarButton({
       type="button"
       aria-label={label}
       aria-pressed={pressed}
+      disabled={disabled}
       title={title}
       onClick={onClick}
       className={cx(
-        "flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-2lg text-foreground-icon-secondary transition-colors duration-fast ease-plain outline-none hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring",
+        "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground-icon-secondary transition-colors duration-fast ease-plain outline-none hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent",
         className,
       )}
     >

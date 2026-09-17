@@ -4,6 +4,10 @@ const config: NextConfig = {
   transpilePackages: ["@maslow/brain", "@maslow/db"],
   agentRules: false,
   devIndicators: false,
+  // A phone on the same network, or one reached through a tunnel, may look
+  // at a laptop's stack: the dev server serves its own assets to those
+  // origins as it does to localhost. Production never reads this.
+  allowedDevOrigins: ["*.trycloudflare.com", "10.*.*.*", "192.168.*.*"],
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   // A page fetched before its click is shown as fetched for this long, then
   // fetched again: fresh enough for a brain, far enough ahead to be ready.

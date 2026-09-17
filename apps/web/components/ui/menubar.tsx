@@ -214,7 +214,7 @@ function MenubarShortcut({
     <DropdownMenuShortcut
       data-slot="menubar-shortcut"
       className={cn(
-        "ml-auto text-caption-1-medium tracking-normal text-text-tertiary",
+        "ml-auto text-caption-1-medium text-text-tertiary",
         className,
       )}
       {...props}

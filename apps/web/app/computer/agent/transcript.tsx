@@ -146,7 +146,7 @@ export function Thought({
     );
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="py-1">
-      <CollapsibleTrigger className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md text-body-2-medium text-text-tertiary transition-colors duration-fast ease-plain outline-none hover:text-text-secondary focus-visible:ring-2 focus-visible:ring-border-focus-ring sm:min-h-0">
+      <CollapsibleTrigger className="flex min-h-11 cursor-pointer items-center gap-2 rounded-md text-caption-1-medium text-text-tertiary transition-colors duration-fast ease-plain outline-none hover:text-text-secondary focus-visible:ring-2 focus-visible:ring-border-focus-ring sm:min-h-0">
         Thought
         {took > 0.2 && (
           <span className="font-mono text-caption-1-regular tabular-nums">
@@ -188,7 +188,7 @@ export function Plan({ entries }: { entries: PlanEntry[] }) {
             </span>
             <span
               className={cx(
-                "text-body-2-regular",
+                "text-body-regular",
                 e.status === "completed"
                   ? "text-text-tertiary line-through"
                   : "text-text-secondary",

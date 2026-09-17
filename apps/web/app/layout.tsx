@@ -19,7 +19,7 @@ export const metadata = {
   appleWebApp: {
     capable: true,
     title: "Maslow",
-    statusBarStyle: "black-translucent",
+    statusBarStyle: "default",
     // What the phone shows while the app opens, one per screen size: the
     // desktop's dark ground with the icon on it, never a white page.
     startupImage: [
@@ -83,10 +83,7 @@ export const viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#fffdfb" },
-    { media: "(prefers-color-scheme: dark)", color: "#1c1815" },
-  ],
+  themeColor: "#1c1815",
 };
 
 // Every page sits under the one bar that floats along the bottom.

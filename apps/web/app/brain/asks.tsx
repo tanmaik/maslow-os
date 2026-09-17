@@ -35,7 +35,7 @@ export function Asks({
   if (asks.length === 0) return null;
   return (
     <div className="flex flex-col gap-2 px-3 pb-3">
-      <h2 className="text-caption-1-semibold text-text-secondary">
+      <h2 className="text-caption-1-medium text-text-secondary">
         Waiting on you
       </h2>
       {asks.map((a, i) => (

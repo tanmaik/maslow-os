@@ -68,12 +68,12 @@ export function AppSearch({ mostUsed }: { mostUsed: App[] | null }) {
         )}
       </div>
       {found === null ? (
-        <p className="text-body-2-regular text-text-secondary">
+        <p className="text-body-regular text-text-secondary">
           Composio didn&apos;t answer, so no apps can be found right now. Try
           again in a moment.
         </p>
       ) : found.length === 0 ? (
-        <p className="text-body-2-regular text-text-secondary">
+        <p className="text-body-regular text-text-secondary">
           No app matches &ldquo;{query.trim()}&rdquo;.
         </p>
       ) : (

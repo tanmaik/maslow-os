@@ -102,7 +102,7 @@ export function Door({
       <div className="flex min-h-full items-center justify-center px-4 py-6">
         <div className="flex w-full max-w-md flex-col gap-4 rounded-3xl border border-border-button-default bg-background-primary-default p-6 shadow-card">
           <div className="flex flex-col gap-1.5">
-            <h1 className="text-title-2-medium text-text-primary">{title}</h1>
+            <h1 className="text-title-3-medium text-text-primary">{title}</h1>
             <p className="text-body-regular text-text-secondary">
               {because ? <>{because} </> : null}
               {description}

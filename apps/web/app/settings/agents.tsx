@@ -24,7 +24,7 @@ export function Agents({ agents, said }: { agents: Agent[]; said: Told }) {
       }
     >
       {agents.length === 0 ? (
-        <p className="text-body-2-regular text-text-secondary">
+        <p className="text-body-regular text-text-secondary">
           Nothing connected.
         </p>
       ) : (

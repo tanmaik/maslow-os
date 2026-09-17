@@ -42,7 +42,7 @@ function Shared({ ports }: { ports: SharedPort[] }) {
   if (ports.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      <p className="px-3 text-body-2-medium text-text-secondary">
+      <p className="px-3 text-caption-1-medium text-text-secondary">
         Shared with you
       </p>
       <Rows>
@@ -100,7 +100,7 @@ export async function AccessPane({
           className="flex flex-col gap-2"
         >
           <Head>SSH</Head>
-          <p className="px-3 text-body-2-regular text-text-secondary">
+          <p className="px-3 text-body-regular text-text-secondary">
             Run once on your Mac, then <code>ssh {ssh.name}</code>.
           </p>
           <Command text={ssh.command} />

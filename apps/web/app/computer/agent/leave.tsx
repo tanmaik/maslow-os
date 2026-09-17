@@ -34,14 +34,14 @@ export function AskSheet({
           className={
             ask.asked
               ? "px-4 py-3 text-body-medium text-text-primary"
-              : "px-4 py-3 font-mono text-body-2-regular break-all text-text-secondary"
+              : "px-4 py-3 font-mono text-body-regular break-all text-text-secondary"
           }
         >
           {what}
         </p>
       )}
       {ask?.asked?.body && (
-        <p className="px-4 pb-3 text-body-2-regular whitespace-pre-line text-text-tertiary">
+        <p className="px-4 pb-3 text-body-regular whitespace-pre-line text-text-tertiary">
           {ask.asked.body.replace(/^- /gm, "")}
         </p>
       )}

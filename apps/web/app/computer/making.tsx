@@ -52,7 +52,7 @@ const MOVE_STEPS: Record<MoveStep, [number, string]> = {
 
 // A heading over one part of the pane, on the inset its rows sit on.
 export const Head = ({ children }: { children: string }) => (
-  <p className="px-3 text-body-2-medium text-text-secondary">{children}</p>
+  <p className="px-3 text-caption-1-medium text-text-secondary">{children}</p>
 );
 
 // A command to run elsewhere, with a button that copies it whole.
@@ -146,7 +146,7 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
   return (
     <div className="flex flex-col gap-2">
       <Head>Backups</Head>
-      <p className="px-3 text-body-2-regular text-text-secondary">
+      <p className="px-3 text-body-regular text-text-secondary">
         {backedUp === "off"
           ? "No backups here: this deployment has no bucket."
           : backedUp
@@ -154,7 +154,7 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
             : "Home not backed up yet; the first one comes within the hour."}
       </p>
       {restoring && (
-        <p className="px-3 text-body-2-regular text-text-secondary">
+        <p className="px-3 text-body-regular text-text-secondary">
           {restoring.error
             ? `The backup from ${restoring.name.replace("restored-", "")} did not come back: ${restoring.error}`
             : restoring.finishedAt
@@ -165,7 +165,7 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
         </p>
       )}
       {failed && (
-        <p className="px-3 text-body-2-regular text-text-error-primary">
+        <p className="px-3 text-body-regular text-text-error-primary">
           {failed}
         </p>
       )}
@@ -229,7 +229,7 @@ function Ready({
         {since ? `, since ${since}` : ""}.
       </p>
       {moveFailed && (
-        <p className="px-3 text-body-2-regular text-text-error-primary">
+        <p className="px-3 text-body-regular text-text-error-primary">
           {moveFailed}
         </p>
       )}
@@ -378,12 +378,12 @@ export function Making({
         <p className="text-body-medium text-text-primary">
           Moving your computer to {to}
         </p>
-        <p className="text-body-2-regular text-text-secondary">
+        <p className="text-body-regular text-text-secondary">
           {step.replace("_", to)}. This takes a few minutes; your files come
           with it, and nothing on the computer can be opened until it is there.
         </p>
         {failed && (
-          <p className="text-body-2-regular text-text-error-primary">
+          <p className="text-body-regular text-text-error-primary">
             Could not ask after it: {failed}. Trying again.
           </p>
         )}
@@ -394,18 +394,18 @@ export function Making({
   return (
     <div className="flex flex-col gap-3">
       <Progress aria-label={label} value={value} />
-      <p className="text-body-2-regular text-text-secondary">
+      <p className="text-body-regular text-text-secondary">
         {label}
         {state.region ? ` in ${regionName(state.region)}` : ""}. This takes a
         minute the first time.
       </p>
       {moveFailed && (
-        <p className="text-body-2-regular text-text-error-primary">
+        <p className="text-body-regular text-text-error-primary">
           {moveFailed}
         </p>
       )}
       {failed && (
-        <p className="text-body-2-regular text-text-error-primary">
+        <p className="text-body-regular text-text-error-primary">
           Could not get on: {failed}. Trying again.
         </p>
       )}

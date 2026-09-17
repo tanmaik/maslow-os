@@ -62,7 +62,9 @@ export function Ports({
     sharing ? `/port/${sharing.machineId}/${port}` : null;
   return (
     <div className="flex flex-col gap-2">
-      <p className="px-3 text-body-2-medium text-text-secondary">Open ports</p>
+      <p className="px-3 text-caption-1-medium text-text-secondary">
+        Open ports
+      </p>
       <Rows>
         {ports.map((p) => {
           const said = reach(on(p.port));
@@ -79,7 +81,7 @@ export function Ports({
                   description={p.ran || p.name}
                 >
                   {said && (
-                    <span className="text-body-2-regular text-text-secondary">
+                    <span className="text-caption-1-regular text-text-secondary">
                       {said}
                     </span>
                   )}

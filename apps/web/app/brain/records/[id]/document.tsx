@@ -250,10 +250,10 @@ export function Document({
             }
           }}
           placeholder="Untitled"
-          fieldClassName="rounded-none bg-transparent p-0 ring-0 [&_textarea]:px-0 [&_textarea]:text-title-1-semibold [&_textarea]:text-text-primary"
+          fieldClassName="rounded-none bg-transparent p-0 ring-0 [&_textarea]:px-0 [&_textarea]:text-title-3-medium [&_textarea]:text-text-primary"
         />
       ) : (
-        <h1 className="text-title-1-semibold text-text-primary">
+        <h1 className="text-title-3-medium text-text-primary">
           {title || "(untitled)"}
         </h1>
       )}

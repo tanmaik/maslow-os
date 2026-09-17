@@ -22,7 +22,7 @@ export function Section({
     >
       <h2 className="sr-only">{title}</h2>
       {description && (
-        <p className="text-body-2-regular text-text-secondary text-pretty">
+        <p className="text-body-regular text-text-secondary text-pretty">
           {description}
         </p>
       )}

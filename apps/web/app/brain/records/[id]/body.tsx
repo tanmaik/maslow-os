@@ -310,7 +310,7 @@ export function Body({
         },
         attributes: {
           class:
-            "min-h-7 text-body-regular text-text-primary focus:outline-none [&_h1]:mt-4 [&_h1]:text-title-3-semibold [&_h2]:mt-3 [&_h2]:text-headline-semibold [&_h3]:mt-3 [&_h3]:text-headline-medium [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-separator-border [&_blockquote]:pl-3 [&_blockquote]:text-text-secondary [&_hr]:my-4 [&_hr]:border-t [&_hr]:border-separator-border [&_code]:rounded-md [&_code]:bg-background-secondary-default [&_code]:px-1 [&_code]:font-mono [&_code]:text-body-2-regular [&_pre]:rounded-2lg [&_pre]:bg-background-secondary-default [&_pre]:p-3 [&>*+*]:mt-3",
+            "min-h-7 text-body-regular text-text-primary focus:outline-none [&_h1]:mt-4 [&_h1]:text-title-3-semibold [&_h2]:mt-3 [&_h2]:text-headline-semibold [&_h3]:mt-3 [&_h3]:text-headline-medium [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-separator-border [&_blockquote]:pl-3 [&_blockquote]:text-text-secondary [&_hr]:my-4 [&_hr]:border-t [&_hr]:border-separator-border [&_code]:rounded-md [&_code]:bg-background-secondary-default [&_code]:px-1 [&_code]:font-mono [&_pre]:rounded-2lg [&_pre]:bg-background-secondary-default [&_pre]:p-3 [&>*+*]:mt-3",
           "aria-label": "Body",
         },
       },
@@ -684,7 +684,7 @@ export function Body({
             "absolute left-0 z-30 flex w-60 flex-col gap-1 p-2",
           )}
         >
-          <span className="px-2 py-1 text-caption-1-semibold text-text-secondary">
+          <span className="px-2 py-1 text-caption-1-medium text-text-secondary">
             Insert
           </span>
           {shown.map((i, n) => (

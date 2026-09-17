@@ -5,9 +5,12 @@ import {
   RiAttachment2,
   RiChatNewLine,
   RiSideBarLine,
+  RiArrowDownSLine,
 } from "@remixicon/react";
 import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
+
+import { PhoneSheet, SheetRow } from "@/app/desktop/sheet";
 
 import type { Content, Past } from "@/app/computer/agent/acp";
 import { useChats } from "@/app/computer/agent/chats";
@@ -148,9 +151,6 @@ export function Agent({ href }: { href?: string } = {}) {
       setCurrent(past[0].sessionId);
     }
   }, [folded, current, ids.length, past, open]);
-  // How much of the screen the keyboard takes on a phone, so the composer
-  // sits on top of it rather than under it.
-  const [keyboard, setKeyboard] = useState(0);
   // Why a file could not be attached.
   const [failed, setFailed] = useState<string | null>(null);
   const why = failed ?? refused;
@@ -163,20 +163,6 @@ export function Agent({ href }: { href?: string } = {}) {
       pending.current = null;
     }
   }, [newest, sayTo]);
-
-  useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const measure = () =>
-      setKeyboard(Math.max(0, window.innerHeight - vv.height - vv.offsetTop));
-    vv.addEventListener("resize", measure);
-    vv.addEventListener("scroll", measure);
-    measure();
-    return () => {
-      vv.removeEventListener("resize", measure);
-      vv.removeEventListener("scroll", measure);
-    };
-  }, []);
 
   // What the person said, sent as a prompt: their words and the files
   // they attached to them, once every file has landed. With no
@@ -347,10 +333,7 @@ export function Agent({ href }: { href?: string } = {}) {
   // to end it. Under it, how the agent acts, the week's spend and how full
   // the conversation is.
   const composer = (
-    <div
-      className="flex flex-col gap-2.5"
-      style={{ paddingBottom: keyboard || undefined }}
-    >
+    <div className="flex flex-col gap-2.5">
       {offered.length > 0 && (
         <ul className="overflow-hidden rounded-2lg border border-border-button-default bg-background-primary-default">
           {offered.map((c) => (
@@ -360,7 +343,7 @@ export function Agent({ href }: { href?: string } = {}) {
                 onClick={() => setTyped(`/${c.name} `)}
                 className="flex min-h-11 w-full cursor-pointer items-baseline gap-2 px-3 py-2 text-left transition-colors duration-fast ease-plain outline-none hover:bg-background-secondary-hover focus-visible:bg-background-secondary-hover"
               >
-                <span className="text-body-2-medium text-text-primary">
+                <span className="text-body-medium text-text-primary">
                   /{c.name}
                 </span>
                 <span className="truncate text-caption-1-regular text-text-tertiary">
@@ -404,7 +387,7 @@ export function Agent({ href }: { href?: string } = {}) {
           model={
             <span
               title="The model this computer's agent runs on"
-              className="shrink-0 rounded-xl px-2 py-1 text-body-2-medium whitespace-nowrap text-text-secondary"
+              className="shrink-0 rounded-xl px-2 py-1 text-caption-1-medium whitespace-nowrap text-text-secondary"
             >
               {MODEL}
             </span>
@@ -441,6 +424,8 @@ export function Agent({ href }: { href?: string } = {}) {
 
   const title =
     chat?.title ?? past.find((p) => p.sessionId === here)?.title ?? "New chat";
+  // Whether the list of chats is open on a phone.
+  const [picking, setPicking] = useState(false);
   // On a phone the window is the conversation alone: the chats as a
   // picker under the bar, and under it either the voice mode or the
   // thread with the keyboard.
@@ -448,30 +433,62 @@ export function Agent({ href }: { href?: string } = {}) {
     return (
       <div className="flex h-full min-h-0 flex-col">
         <InBar phone="strip">
-          <select
+          <button
+            type="button"
             aria-label="Chat"
-            value={here ?? ""}
-            onChange={(e) => {
-              if (e.target.value === "") begin();
-              else if (e.target.value !== here) {
-                open(e.target.value);
-                setCurrent(e.target.value);
-              }
-            }}
-            className="min-w-0 flex-1 truncate bg-transparent text-body-2-medium text-text-primary outline-none"
+            aria-expanded={picking}
+            onClick={() => setPicking(true)}
+            className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-lg text-left text-body-medium text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
           >
-            <option value="">New chat</option>
-            {here && !past.some((p) => p.sessionId === here) && (
-              <option value={here}>{chat?.title ?? "New chat"}</option>
-            )}
-            {past.map((p) => (
-              <option key={p.sessionId} value={p.sessionId}>
-                {chats[p.sessionId]?.title ?? p.title ?? "New chat"}
-              </option>
-            ))}
-          </select>
+            <span className="truncate">{title}</span>
+            <RiArrowDownSLine
+              className="size-4 shrink-0 text-foreground-icon-secondary"
+              aria-hidden
+            />
+          </button>
           <BarButton icon={RiChatNewLine} label="New chat" onClick={begin} />
         </InBar>
+        <PhoneSheet
+          open={picking}
+          onClose={() => setPicking(false)}
+          label="Chats"
+        >
+          <SheetRow
+            onClick={() => {
+              setPicking(false);
+              begin();
+            }}
+          >
+            New chat
+          </SheetRow>
+          {here && !past.some((p) => p.sessionId === here) && (
+            <SheetRow onClick={() => setPicking(false)}>
+              <span className="text-text-primary">
+                {chat?.title ?? "New chat"}
+              </span>
+            </SheetRow>
+          )}
+          {past.map((p) => (
+            <SheetRow
+              key={p.sessionId}
+              onClick={() => {
+                setPicking(false);
+                if (p.sessionId !== here) {
+                  open(p.sessionId);
+                  setCurrent(p.sessionId);
+                }
+              }}
+            >
+              <span
+                className={
+                  p.sessionId === here ? "text-text-primary" : undefined
+                }
+              >
+                {chats[p.sessionId]?.title ?? p.title ?? "New chat"}
+              </span>
+            </SheetRow>
+          ))}
+        </PhoneSheet>
         <AskSheet
           ask={chat?.asks[0] ?? null}
           onAnswer={(a, result) => chat && answer(chat.id, a, result)}
@@ -479,9 +496,7 @@ export function Agent({ href }: { href?: string } = {}) {
         {typing ? (
           <>
             <div className="flex min-h-0 flex-1 flex-col">{transcript}</div>
-            <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
-              {composer}
-            </div>
+            <div className="shrink-0 px-3 pb-3">{composer}</div>
           </>
         ) : (
           <Talk
