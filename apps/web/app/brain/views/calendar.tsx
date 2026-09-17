@@ -17,8 +17,8 @@ import { recordHref, typeColor } from "../format";
 import { monthOf } from "./month";
 import { WHEN, type Row } from "./query";
 
-// The records of a month laid on the days they happened, or on a date field
-// the person picked instead, on the calendar block's own switcher and grid.
+// The records of a month laid on the days they were written, or on a date
+// field the person picked instead, on the calendar block's own switcher and grid.
 // A record opens from its chip.
 export function CalendarView({
   rows,
@@ -27,7 +27,7 @@ export function CalendarView({
   capped,
 }: {
   rows: Row[];
-  // The field the records are laid on: when they happened, or a date one.
+  // The field the records are laid on: when they were written, or a date one.
   on: string;
   // The date fields this type declares, which the records could be laid on.
   fields: string[];

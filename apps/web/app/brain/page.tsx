@@ -253,7 +253,7 @@ export default async function Page({
     type: r.type,
     title: r.title,
     line: r.body ? opening(r.body) : "",
-    at: (r.occurredAt ?? r.createdAt).toISOString(),
+    at: r.createdAt.toISOString(),
     owner: r.ownerId === p.userId ? null : (people.get(r.ownerId) ?? "someone"),
     props: r.props,
   });

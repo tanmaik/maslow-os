@@ -19,13 +19,16 @@ export type Notification = {
   answer: string | null;
   // The ask to share this notification carries, if it is one.
   request: string | null;
+  // The conversation on the person's computer the answer goes back to,
+  // where the ask named one.
+  replyTo: string | null;
   readAt: string | null;
   createdAt: string;
 };
 
 const columns = `id, kind, title, body,
   regexp_replace(author, '^model:', '') as "from",
-  records, options, answer, request_id as request,
+  records, options, answer, request_id as request, reply_to as "replyTo",
   read_at as "readAt", created_at as "createdAt"`;
 
 // Thrown when a notification cannot be answered as asked.
@@ -42,13 +45,15 @@ export async function leaveNotification(
     records?: string[];
     options?: string[];
     request?: string;
+    replyTo?: string;
   },
 ): Promise<Notification> {
   const title = n.title.trim();
   if (!title) throw new Unanswerable("a notification needs a title");
   const { rows } = await q.query<Notification>(
-    `insert into notifications (kind, title, body, records, options, request_id)
-     values ($1, $2, $3, $4, $5, $6) returning ${columns}`,
+    `insert into notifications
+       (kind, title, body, records, options, request_id, reply_to)
+     values ($1, $2, $3, $4, $5, $6, $7) returning ${columns}`,
     [
       n.kind,
       title,
@@ -56,6 +61,7 @@ export async function leaveNotification(
       n.records ?? [],
       n.kind === "ask" ? (n.options ?? []) : [],
       n.request ?? null,
+      n.kind === "ask" ? (n.replyTo ?? null) : null,
     ],
   );
   return rows[0]!;
@@ -120,12 +126,11 @@ export async function markRead(q: Query): Promise<void> {
   );
 }
 
-// Clears what is done with: notifications read, and asks already answered. An
-// ask still waiting stays however often it has been seen.
-export async function clearRead(q: Query): Promise<number> {
+// Clears what the person is done with: every note, and every ask they
+// have answered. An ask still waiting on them stays until it is.
+export async function clearDone(q: Query): Promise<number> {
   const { rowCount } = await q.query(
-    `delete from notifications
-     where read_at is not null and (kind = 'note' or answer is not null)`,
+    `delete from notifications where kind = 'note' or answer is not null`,
   );
   return rowCount ?? 0;
 }

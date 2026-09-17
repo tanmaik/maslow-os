@@ -452,6 +452,27 @@ export const fly = {
     throw last;
   },
 
+  // A word to a conversation on the machine, said to its door with a
+  // ticket it takes: what to say, to which conversation, and which ask
+  // it answers where it answers one.
+  async say(
+    machineId: string,
+    ticket: string,
+    word: { chat: string; text: string; answered?: string },
+  ): Promise<void> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/say`, {
+      method: "POST",
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(word),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+  },
+
   // The machine's numbers, asked of its door with a ticket it takes.
   async stats(machineId: string, ticket: string): Promise<Stats> {
     const res = await fetch(`https://${config().app}.fly.dev/maslow/stats`, {

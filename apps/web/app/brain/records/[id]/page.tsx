@@ -182,8 +182,6 @@ export default async function Page({
                 id={r.id}
                 fields={type?.properties ?? []}
                 values={r.props}
-                occurredAt={r.occurredAt?.toISOString() ?? null}
-                confidence={r.confidence}
                 canEdit={canEdit}
               />
             }

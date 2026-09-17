@@ -792,7 +792,7 @@ export function Desktop({
     }
     pick({
       kind: "page",
-      title: "Agent's browser",
+      title: "Browser View",
       href,
       box: boxOf({ kind: "page", href: "/browser" }),
     });
@@ -1034,17 +1034,10 @@ export function Desktop({
       />
       {!wide && (
         <Phone
-          cards={screen.cards}
+          widgets={screen.cards.filter((c) => c.pinned)}
           ports={live}
           computers={computers}
           panels={PANELS}
-          onOpen={open}
-          onAnother={(c) => pick(anotherOf(c))}
-          onFront={(c) => raise({ screen: desktop.id, card: c })}
-          onClose={(key) => void close(key)}
-          onGuard={guard}
-          born={born.current}
-          afresh={afresh}
           wanted={wanted}
         />
       )}
@@ -1176,19 +1169,6 @@ function Wallpaper({ choice }: { choice: string | null }) {
           {layer(arriving.src)}
         </div>
       )}
-      {/* Deep enough that the bar's white words clear 4.5:1 over anything
-          a desktop can wear, a picture the person uploaded included: at its
-          lightest the ground under the bar is a white wallpaper through
-          this scrim, which is 7.2:1 at the top of the bar and 5.0:1 at
-          the bottom of it. */}
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-[140px]"
-        style={{
-          background:
-            "linear-gradient(to bottom, rgba(0,0,0,0.68), rgba(0,0,0,0))",
-        }}
-      />
     </div>
   );
 }
@@ -1741,7 +1721,7 @@ function Frame({
           <div
             onPointerDown={free ? drag("move") : undefined}
             onDoubleClick={full ? onCollapse : onExpand}
-            className={`border-separator-border bg-background-primary-default/70 relative flex h-8 shrink-0 items-center border-b select-none [&:has([data-nameless])_[data-name]]:hidden ${
+            className={`border-separator-border relative flex h-8 shrink-0 items-center border-b select-none [&:has([data-nameless])_[data-name]]:hidden ${
               free ? "cursor-move touch-none" : ""
             }`}
           >

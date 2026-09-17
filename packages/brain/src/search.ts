@@ -2,9 +2,10 @@ import { Invalid } from "./errors.ts";
 import { recordColumns, toRecord, type RecordRow } from "./rows.ts";
 import type { BrainRecord, Query } from "./types.ts";
 
-// Finding records by meaning. The brain keeps a vector per record and
-// compares a question's vector against them; making vectors is the app's,
-// through whatever model it has, and the doors here only store and rank.
+// Finding records by meaning, the half of search that words cannot do. The
+// brain keeps a vector per record and compares a question's vector against
+// them; making vectors is the app's, through whatever model it has, and the
+// doors here only store and rank.
 
 // The text a record is embedded from: what it is, what it says, what it
 // holds. Cut so no record costs more than a page.
@@ -39,7 +40,7 @@ export async function stale(
   limit = 100,
 ): Promise<Stale[]> {
   await q.query(
-    "select pg_advisory_xact_lock(hashtext('recall'), hashtext(current_member()::text))",
+    "select pg_advisory_xact_lock(hashtext('search'), hashtext(current_member()::text))",
   );
   const { rows } = await q.query<RecordRow & { as_of: string }>(
     `select ${OF_R}, r.updated_at::text as as_of from records r
@@ -71,25 +72,25 @@ export async function remember(
   }
 }
 
-export type RecallOptions = {
+export type NearestOptions = {
   type?: string;
   since?: Date;
   until?: Date;
   limit?: number;
 };
 
-export type Recalled = { record: BrainRecord; score: number };
+export type Nearest = { record: BrainRecord; score: number };
 
 const MAX_LIMIT = 50;
 
 // The records nearest a vector, best first, with how near. Vectors are unit
 // length, so the dot product is the cosine.
-export async function recall(
+export async function nearest(
   q: Query,
   model: string,
   vector: number[],
-  opts: RecallOptions = {},
-): Promise<Recalled[]> {
+  opts: NearestOptions = {},
+): Promise<Nearest[]> {
   if (!vector.length) throw new Invalid("a question needs a vector");
   const limit = Math.min(Math.max(opts.limit ?? 10, 1), MAX_LIMIT);
   const { rows } = await q.query<RecordRow & { score: number }>(
@@ -104,8 +105,8 @@ export async function recall(
      from scored s join records r on r.id = s.record_id
      where r.deleted_at is null and r.merged_into is null
        and ($3::text is null or r.type = $3)
-       and ($4::timestamptz is null or coalesce(r.occurred_at, r.created_at) >= $4)
-       and ($5::timestamptz is null or coalesce(r.occurred_at, r.created_at) < $5)
+       and ($4::timestamptz is null or r.created_at >= $4)
+       and ($5::timestamptz is null or r.created_at < $5)
      order by s.score desc, r.id
      limit $6`,
     [

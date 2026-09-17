@@ -7,7 +7,6 @@ import { principal } from "@/lib/session";
 
 import { recordHref } from "../../../format";
 import { refused } from "../../../refuse";
-import { confidenceFrom } from "../../../props";
 
 // Links this record to another, in the direction the form chose, as a link
 // the signed-in person made. Linking the same pair the same way again
@@ -37,7 +36,6 @@ export async function POST(
             from: { id: out ? id : other },
             verb,
             to: { id: out ? other : id },
-            confidence: confidenceFrom(form.get("confidence")),
           },
         ],
       }),

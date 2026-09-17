@@ -81,7 +81,7 @@ export const APPS: App[] = [
   },
   {
     kind: "page",
-    title: "Agent's browser",
+    title: "Browser View",
     href: "/browser",
     mark: RiGlobalLine,
     face: "/dock/browser.png",

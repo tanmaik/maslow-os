@@ -17,23 +17,8 @@ export const SIZES = {
 
 export type SizeKey = keyof typeof SIZES;
 
-export const isSize = (v: unknown): v is SizeKey =>
-  typeof v === "string" && v in SIZES;
-
-export const sameSize = (a: Size, b: Size) =>
+const sameSize = (a: Size, b: Size) =>
   a.cpuKind === b.cpuKind && a.cpus === b.cpus && a.memoryMb === b.memoryMb;
-
-// The rung above a computer's: the next one up the whole ladder, so a lift
-// walks small to medium to large to dedicated and reaches the top; a
-// computer on no rung is lifted onto the first with more memory than it
-// has. Null at the top.
-export const above = (c: Size): SizeKey | null => {
-  const rungs = Object.keys(SIZES) as SizeKey[];
-  const on = rungs.findIndex((k) => sameSize(SIZES[k], c));
-  return on >= 0
-    ? (rungs[on + 1] ?? null)
-    : (rungs.find((k) => SIZES[k].memoryMb > c.memoryMb) ?? null);
-};
 
 // The rung a computer is on, or null when it is on none.
 export const sizeOf = (c: Size): SizeKey | null =>

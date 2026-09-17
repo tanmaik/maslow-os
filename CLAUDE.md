@@ -92,10 +92,9 @@ environment. A register in `docs/dependencies.md` lists every vendor, written
 when the vendor is added. Every vendor sits behind an interface of ours, so a
 second supplier is a second implementation, never a second code path.
 
-The per-PR workflow, the hourly reap and the sweep that follows every
-production deploy hold six credentials — Neon's key, Vercel's token, the
-second bucket's two keys, Fly's token and the sweep's secret — on a GitHub
-environment only `main` can use. They run main's code; a pull request's
+The per-PR workflow and the hourly reap hold five credentials — Neon's
+key, Vercel's token, the second bucket's two keys and Fly's token — on a
+GitHub environment only `main` can use. They run main's code; a pull request's
 code never sees them. The check that runs a pull request's own code holds
 one credential: a Fly token that reaches only the dev app, so the worst a
 bad pull request can do is make dev machines, which the reap kills.
@@ -142,7 +141,8 @@ every change, numbered in the order changes commit, so something reading
 past a number never misses one. The brain is a graph of a mind, not a copy of its sources:
 nothing mirrors a mailbox or a calendar into it. Whatever writes into it — a
 person today, an agent reading an app through a tool later — writes what it
-concluded, with a confidence and an edge back to what it rests on. What it
+concluded, with an edge back to what it rests on and, where its type
+declares one, how sure. What it
 rests on is a source record the writer chose to bring in: the app, the app's
 own id, and as much of the original as it judged worth keeping, from a
 citation to a copy. A question the brain cannot answer is answered outside
@@ -300,8 +300,8 @@ from starting. Nothing degrades quietly, and no error is swallowed.
 
 The hourly sweep — the meter, the orphans and the computers — runs from
 the app when an hour has passed since the last, in every environment, from
-a cron in production as the backstop, and the moment a production deploy
-goes live, so a new image reaches every computer at once.
+a cron in production as the backstop. Nothing runs on a deploy: a new
+image is noticed by the page asking after an update every few minutes.
 
 **"Download my data"** gives a person what is theirs, and today that is
 their brain: an export that imports into any brain, as the importer. It is
@@ -343,24 +343,19 @@ rename touches nothing. Home is `/home/me`,
 `sudo` needs no password, and `/opt/maslow` is ours and read-only. Reset
 throws their Linux away and keeps home; it is a button, never automatic,
 and the backups are there to restore from afterwards. A new image is an
-update, not a restart: the sweep records on the person's row that one is
-ready and to which image, and says so quietly in three places — a
-notification behind the clock with now, tonight and when idle on it, counted
-among what waits on the person until they pick one; a line in the Maslow
-menu and in About This Computer; and a row on the Computer pane offering
-the same three. Now names what it will stop
-before it stops it; tonight is three in the morning where the machine is;
-idle is half an hour with nothing typed and nothing asked of a port, and
-a port that listens is called busy, since what a program serves itself
-never passes the door. After seven days the idle rule runs on its own,
-and a security image uses it from the first day. None of it is on the
+update, not a restart: the page asks after one every few minutes, the app
+looks at the machine and writes on the person's row that one is ready and
+to which image, and says so quietly in three places — a notification
+behind the clock, counted among what waits on the person and standing
+until they take it, a newer image taking the place of an older; a line in
+the Maslow menu and in About This Computer; and a row on the Computer
+pane. Each has one button, Update, which names what it will stop before
+it stops it. Nothing takes an update on its own, and none of it is on the
 machine.
-Sizes are a ladder of CPU and memory, shown without a price, and a
-restart of a few seconds; the first rung is four shared CPUs and eight
-gigabytes, since the door, the browser and a few Claude Codes at once do
-not fit in two; the person moves a computer up or down, and the sweep moves one it
-finds with its memory nearly full up a rung on its own, never down; the
-disk grows before it fills and never shows a cap. Where it is is one of the
+Every computer is one size, four shared CPUs and eight gigabytes, since
+the door, the browser and a few Claude Codes at once do not fit in two;
+there is no ladder and nothing to pick yet. The disk grows before it
+fills and never shows a cap. Where it is is one of the
 North American regions Fly still makes disks in, seven today, since Fly
 retires regions now and then and a retired one refuses a new disk;
 it is guessed at sign-in from where the request came
@@ -482,11 +477,18 @@ its user and assistant turns, with what the agent did as its task list,
 a thought one step among the steps it came with and folded with them,
 what it asks before it acts as a notification, the kind of thing named, the
 thing itself as it would run, and the answers as buttons, which goes
-when the prompt does, and a question it asks the person, Claude Code's
-own questionnaire, standing in the thread and answered there; the pill
-composer with the one model named and dictation where the
-browser has it, live while the agent works, since a word typed then goes
-into the running turn as it does in Claude Code's own terminal, and under
+when the prompt does, and a question it asks the person, which is an
+ask of the brain's with this conversation to answer to: it stands in the
+thread and behind the clock alike, is answered in either, the answer is
+said back into the conversation as its next word, and the turn does not
+wait on it; the pill
+composer with the one model named and a mic, which is the same ear
+hold to talk uses, clicked on and off with the words landing in the
+field, live while the agent works, since a word typed then goes
+into the running turn: at once while the agent is thinking, and once the
+tool it is running has answered if one is, the turn stopped where it
+stands and prompted on with the word, as Claude Code's own terminal does;
+and under
 it how the agent acts, the week's spend and how full the conversation is.
 One conversation is in view at a time and the rest stand open behind it,
 each with its own Claude Code process, running on; a new one is handed
@@ -498,13 +500,17 @@ A conversation picked in the rail is in view at once, whole from the
 door's own record when it was open before, and Claude Code loads it
 behind. Two tools are the door's own, handed to every
 conversation as a small MCP server started beside it under a token of
-that conversation's: a wakeup, which prompts the conversation again after
-a while and is kept on the disk so a door coming back still keeps it, and
-a monitor, a command run as the person whose lines reach the
-conversation as they come, into the running turn or as a turn of its
-own, waking it if it sleeps. There is no cron and no workflow. What the
-adapter lacks for this, a word into a running turn and a close, is put
-into its installed copy when the image is built, in
+that conversation's: `wakeup`, which prompts the conversation again
+after a delay, kept on the disk so a door coming back still keeps it, or
+with what a command run as the person prints, a second's worth at a time
+and only the lines matching a pattern where one is given, into the
+running turn or as a turn of its own, waking the conversation if it
+sleeps; and `stop`, which ends one. Claude Code's own background work,
+a shell in the background and its subagents, stays its own within a
+turn. There is no cron and no workflow. Every word into a conversation,
+whoever says it, goes through one door function. What the adapter lacks
+for this, one prompt at a time, a close, and the question handed to the
+door, is put into its installed copy when the image is built, in
 `apps/computer/patch-acp.mjs`. Floating conversations on the desktop, the
 pets of 2026-09-15, were tried for a night and taken out the next
 morning: the window is the one shape. `claude` in the
@@ -567,7 +573,7 @@ picked is worn at once and follows the person to any device. Glass is the browse
 is truly behind it, frosted and bent at the edges through one SVG filter
 (`components/glass.tsx`), never a picture of the page; Chrome bends,
 Safari and Firefox frost. Glass is the chrome and paper is the content:
-the menu bar clear, the dock clear glass, and menus, dialogs, every
+the menu bar fully transparent with nothing painted, the dock clear glass, and menus, dialogs, every
 window's bar and every rail beside its content (the brain's types, the
 terminal's windows, the Agent's conversations, the Settings toolbar)
 frosted at one level, keeping
@@ -588,12 +594,11 @@ About This Computer (the machine, where it is, its size and image, and
 what it is using, laid out as ryOS's is), Settings, your other orgs and
 the way out; the
 front window's own menu stands beside it; Window lists every window on
-every desktop; the clock is at the right. Left of it, the weather shows once
-granted: a mark for the condition and the temperature, in the device's own
-unit, with a tooltip naming the condition and the place. The ask is the
-browser's own location prompt, made the moment the desktop is drawn for a
-signed-in person and never asked again on that device once it is refused,
-until Settings turns it back on. Any window fills the screen with
+every desktop; the clock is at the right. The person's location is asked
+for with the browser's own prompt the moment the desktop is drawn for a
+signed-in person, never asked again on that device once it is refused,
+and logged to their own machine and nowhere else.
+Any window fills the screen with
 one press and comes back. A snapped window fills exactly the screen
 under the menu bar and up to the dock, edge to edge. A port can be put
 on the desktop itself, from its icon's menu: a widget, with no bar, under
@@ -627,6 +632,18 @@ side, a corner or the whole desktop; the Window menu lists every one
 beside its key. Tab reaches the dock as one stop and the arrows walk
 its icons. A framed page keeps every key of its own but Command-K. A
 phone is its own shell over the same windows, laid out as a phone is.
+On a phone the Agent is voice first: a chat opens in voice mode, the
+thread as a caption of the last thing said with the work under way in
+a small line above it, and under them one big button. Hold it and the
+words appear as they are heard; let go and they go, into the running
+turn if one runs; slide the thumb off before letting go and nothing is
+sent. The keyboard is one tap away and the same thread takes both, and
+the chats are a picker under the bar. Speech becomes text at Deepgram,
+behind an interface of ours: our server mints a token good for a
+minute and the phone streams its microphone to Deepgram directly,
+never through us. Without the key the button says this copy cannot
+hear, and production refuses to start. The settled design is
+`docs/decisions/2026-09-16-you-hold-and-you-talk.md`.
 Home is a grid of tiles: the apps, the ports opened, and the widgets. A
 tap opens one as the whole screen under the menu bar's strip, with
 nothing to drag and nothing to resize, and one control at the right of
@@ -635,7 +652,10 @@ another of its app, close, and the other windows. Under the screen is a
 handle: a tap on it goes home, a swipe up from it opens the recents, a
 deck of the open windows to go to or flick away. Never the system's own
 gestures, which the browser owns. Going to a window brings it to the
-front of that deck. The dock and the rail are not drawn. Every page's
+front of that deck. The dock and the rail are not drawn. Every window's bar on a phone is a close at the left, the name and one
+control at the right that holds the rest as a sheet; the handle under
+the screen and the menu bar read on whatever they lie on, the wallpaper
+at home or a window's paper. Every page's
 toolbar folds to one row — the path or the address stays in a strip
 that scrolls sideways, the rest goes to the sheet; the brain keeps its
 search and one Filter button, with its conditions and sort as a sheet
@@ -657,7 +677,7 @@ what matches, and one pane at a time on the right, its parts lying on
 the pane one under another with a hairline between, no card and no head
 of its own; on a phone the rail is a strip along the top. Yours are six,
 each named for the question it answers: You, Look, Computer (the
-machine alone: ready, update, size, where, backups, reset), Agent (what
+machine alone: ready, update, where, backups, reset), Agent (what
 it spent this week against the cap, and nothing else), Apps, and Access
 (SSH, the ports they opened and who reaches each, the ports opened to
 them, and the agents signed in to their brain); the org's are Org, with
@@ -667,10 +687,11 @@ a panel in from the right over the desktop, closed by the clock again,
 Escape or a click outside, holding every notification newest first — a note
 read and cleared, an ask answered where it stands, by picking one of the
 options it offers or typing an answer, and marked with what you said
-once you have. A note points at records as chips that open them, "Clear
-read" at the top takes away what is done with, and one that arrives
-while you are at the desktop stands at the top right for six seconds, or
-until you point at it. The clock carries a dot while anything is unread
+once you have. A note points at records as plain links that open them; "Clear"
+at the top takes away what is done with, notes and answered asks, and an
+ask still waiting, an ask to share among them, stays until it is answered;
+and one that arrives while you are at the desktop stands at the top right
+for six seconds, or until you point at it. The clock carries a dot while anything is unread
 and the count of the asks still waiting on you; the Brain carries
 nothing. "Waiting on you" is what asks something of you and is still
 there: the agent's notes and asks, an ask to share among them, and later

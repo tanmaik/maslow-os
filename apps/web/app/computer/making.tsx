@@ -4,19 +4,18 @@ import {
   RiCheckLine,
   RiDownloadCloud2Line,
   RiFileCopyLine,
-  RiRefreshLine,
 } from "@remixicon/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Numbers, useStats } from "@/app/computer/numbers";
+import { Updating } from "@/app/computer/updating";
 import { Where, type From } from "@/app/computer/region";
-import { Sizes } from "@/app/computer/sizes";
 import { Row, Rows } from "@/app/settings/row";
 import { StatusDot } from "@/components/base/badges/status-dot";
 import { Button } from "@/components/base/buttons/button";
 import { Progress } from "@/components/ui/progress";
 import type { Kept, MoveStep, State, Update } from "@/lib/computer";
-import type { Restore, Stats } from "@/lib/fly";
+import type { Restore } from "@/lib/fly";
 import { regionName } from "@/lib/region";
 import type { SizeKey } from "@/lib/sizes";
 import {
@@ -96,133 +95,6 @@ const on = (iso: string) =>
     hour: "numeric",
     minute: "2-digit",
   });
-
-// The update waiting on this person: a new image, which is a restart, and
-// theirs to time. Restart now asks first, naming what it would stop;
-// tonight and when idle are the sweep's to keep, and the row then says
-// which they picked.
-function Updating({
-  update,
-  now,
-  onRestarting,
-}: {
-  update: Update;
-  // What the machine says it is doing, so the asking names what stops.
-  now: Stats | null;
-  onRestarting: () => void;
-}) {
-  const [when, setWhen] = useState(update.when);
-  const [failed, setFailed] = useState<string | null>(null);
-  const [asking, setAsking] = useState(false);
-  const serving = now?.ports ?? [];
-  const running = now?.running ?? [];
-  const say = async (to: "now" | "tonight" | "idle") => {
-    setFailed(null);
-    setWhen(to);
-    // A restart takes the best part of a minute to answer, and the pane
-    // turns to the bar watching it come back the moment it is asked for,
-    // not when the answer lands.
-    if (to === "now") onRestarting();
-    try {
-      const res = await fetch("/computer/update", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ when: to }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-    } catch (err) {
-      setWhen(update.when);
-      setFailed((err as Error).message);
-    }
-  };
-  // A port serving is traffic we cannot see from the door, so a computer
-  // with one never looks idle, and saying so beats waiting forever.
-  const busy = serving.length > 0;
-  // A machine on an image older than this one has a door that does not
-  // say when it was last used, so idle falls back to the week's wait.
-  const silent = now !== null && now.idleSince === undefined;
-  return (
-    <Rows>
-      <Row
-        label={
-          update.security ? "A security update is ready" : "An update is ready"
-        }
-        description={
-          when === "tonight"
-            ? "Restarting tonight at 3:00, where your computer is."
-            : when === "idle"
-              ? silent
-                ? "Your computer's door is too old to say when you last used it, so this update takes itself a week after it was ready. Restart now to get there sooner."
-                : busy
-                  ? "Restarting when idle — but a port is serving, so it never looks idle. Pick a time instead."
-                  : "Restarting once nobody has used it for half an hour."
-              : `Image ${update.image}, ready since ${on(update.readyAt)}. Your computer restarts to take it, which takes about a minute.`
-        }
-      >
-        <div className="flex shrink-0 items-center gap-2">
-          <AlertDialog open={asking} onOpenChange={setAsking}>
-            <AlertDialogTrigger
-              render={
-                <Button
-                  variant={when ? "secondary" : "primary"}
-                  size="small"
-                  leadingIcon={RiRefreshLine}
-                />
-              }
-            >
-              Restart now
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Restart to update?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  {serving.length === 0 && running.length === 0
-                    ? "Nothing is running on your computer. Your files are untouched, and it is back in about a minute."
-                    : `This stops ${[
-                        ...serving.map(
-                          (x) =>
-                            `port ${x.port}${x.name ? ` (${x.name})` : ""}`,
-                        ),
-                        ...running,
-                      ].join(
-                        ", ",
-                      )}. Your files are untouched, and your computer is back in about a minute.`}
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Not now</AlertDialogCancel>
-                <AlertDialogAction onClick={() => void say("now")}>
-                  Restart
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Button
-            variant="secondary"
-            size="small"
-            aria-pressed={when === "tonight"}
-            onClick={() => void say("tonight")}
-          >
-            Tonight
-          </Button>
-          <Button
-            variant="secondary"
-            size="small"
-            aria-pressed={when === "idle"}
-            onClick={() => void say("idle")}
-          >
-            When I&rsquo;m idle
-          </Button>
-        </div>
-      </Row>
-      {failed && (
-        <Row label="That did not happen" description={failed}>
-          <span />
-        </Row>
-      )}
-    </Rows>
-  );
-}
 
 // The backups kept of the home, newest first, each one a folder away.
 // Nothing is ever written over: a restore lands beside what is there.
@@ -362,10 +234,19 @@ function Ready({
         </p>
       )}
       {update && (
-        <Updating update={update} now={now} onRestarting={onRestarting} />
+        <Updating
+          update={update}
+          onTake={async () => {
+            // A restart takes the best part of a minute to answer, and the
+            // pane turns to the bar watching it come back the moment it is
+            // asked for, not when the answer lands.
+            onRestarting();
+            const res = await fetch("/computer/update", { method: "POST" });
+            if (!res.ok) throw new Error(await res.text());
+          }}
+        />
       )}
       <Numbers now={now} samples={samples} failed={failed} size={size} />
-      <Sizes current={size} />
       {door && region && <Where current={region} door={door} from={where} />}
       <Backups backedUp={backedUp} />
       <Rows>

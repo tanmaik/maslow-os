@@ -27,6 +27,7 @@ const faked = {
   computers: "off: no FLY_API_TOKEN, nobody gets a computer",
   connections: "faked: three pretend apps connect with a click",
   embeddings: "faked: a stand-in hashes words",
+  speech: "off: no DEEPGRAM_API_KEY, hold to talk says so",
   sync: "off: no relay, nothing is live",
 };
 for (const [name, vendor] of Object.entries(stack.vendors)) {

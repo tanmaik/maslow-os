@@ -1,182 +1,163 @@
 "use client";
 
 import { RiCloseLine, RiMoreLine, RiWindowLine } from "@remixicon/react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
+  motion,
+  useDragControls,
+  useMotionValue,
+  useReducedMotion,
+  useTransform,
+  type PanInfo,
+} from "motion/react";
+import {
+  type ComponentType,
   useCallback,
   useEffect,
   useRef,
   useState,
-  type ComponentType,
-  type PointerEvent as ReactPointerEvent,
 } from "react";
 
-import { APPS, pathOf, type App } from "@/app/desktop/apps";
-import type { Dragged } from "@/app/desktop/dock";
+import { APPS, pathOf } from "@/app/desktop/apps";
 import { BarSlot } from "@/app/desktop/panel";
-import { PhoneSheet, SheetRow } from "@/app/desktop/sheet";
+import { PhoneSheet } from "@/app/desktop/sheet";
 import type { Card, Port } from "@/app/desktop/tiles";
 import { Notification } from "@/components/base/notification/notification";
-import { FAST } from "@/lib/motion";
 import { cx } from "@/utils/cx";
 
-// The phone: the same windows the desktop has, worn the way a phone wears
-// apps. Home is a screen of icons, the dock's apps and every port beside
-// them, with the widgets laid as tiles above; a tap opens one edge to
-// edge, into the notch and down to the home bar, with nothing to drag and
-// nothing to resize; one handle of our own, a short pill above the phone's
-// own, goes home on a tap and shows the recents on a swipe up; the recents
-// are the open windows as a deck of cards, a tap to one, a flick up to
-// close it. None of it lies where the phone's own gestures do.
+// How a screen moves: pushed in from the right and popped back out, on a
+// spring that settles without a bounce; the home screen recedes behind
+// it. A press dips what it lands on the moment it lands.
+const PUSH = {
+  type: "spring",
+  stiffness: 420,
+  damping: 40,
+  mass: 0.9,
+} as const;
+const DIP = { type: "spring", stiffness: 600, damping: 30 } as const;
+// How far from the left edge a swipe back may begin.
+const EDGE = 28;
+
+// The phone: an app of its own over the same panels the desktop frames,
+// and nothing of the desktop's windows. Home is a screen of icons, the
+// apps and every port beside them, with the widgets laid as tiles above;
+// a tap opens one edge to edge, into the notch and down to the home bar,
+// with nothing to drag and nothing to resize. One is open at a time:
+// opening another puts it away, the close at the bar's left goes home
+// with it closed, and the handle under the screen goes home with it kept.
+// None of it lies where the phone's own gestures do.
 
 type Panel = ComponentType<{ fresh?: boolean; id?: string; href?: string }>;
 
-// How far a thumb travels up the handle before it means the recents.
-const LIFT = 40;
-
-// A block as the dock would hand it over.
-const drag = (b: App): Dragged => ({
-  kind: b.kind,
-  title: b.title,
-  href: b.href,
-  box: b.box,
-});
-const portDrag = (p: Port): Dragged => ({
-  kind: "port",
-  title: p.title,
-  href: p.href,
-  box: { w: 0.5, h: 0.5 },
-});
+// What is open: enough of a window to frame it.
+type Open = Pick<Card, "id" | "kind" | "title" | "href">;
 
 export function Phone({
-  cards,
+  widgets,
   ports,
   computers,
   panels,
-  onOpen,
-  onAnother,
-  onFront,
-  onClose,
-  onGuard,
-  born,
-  afresh,
-  wanted: asked,
+  wanted,
 }: {
-  cards: Card[];
+  widgets: Card[];
   ports: Port[];
   computers: boolean;
   panels: Record<string, Panel>;
-  // An app as the dock opens it: its last window forward, or a first one.
-  onOpen: (b: Dragged) => void;
-  // Another window of the one in front.
-  onAnother: (card: Card) => void;
-  onFront: (card: Card) => void;
-  onClose: (key: string) => void;
-  onGuard: (key: string, ask: (() => Promise<boolean>) | null) => void;
-  // The windows opened this moment, which start something new rather
-  // than joining what was there.
-  born: Set<string>;
-  // A count per port window of the times its port came back, each a reload.
-  afresh: Record<string, number>;
-  // The path of a window the desk was asked to open as it was drawn.
+  // The path of an app the desk was asked to open as it was drawn.
   wanted: string | null;
 }) {
   const still = useReducedMotion();
-  const windows = cards.filter((c) => !c.pinned);
-  const widgets = cards.filter((c) => c.pinned);
-  // The window in front is the last one raised: the desktop keeps them in
-  // that order.
-  const front = windows.filter((c) => !c.stowed).at(-1) ?? null;
-  const [view, setView] = useState<"home" | "app" | "recents">("home");
-  // A tap on an icon opens or raises a window, and the desk may have been
-  // asked for one as it was drawn; the app is shown the moment the front
-  // window is that app's.
-  const [wanted, setWanted] = useState<string | null>(asked);
-  useEffect(() => setWanted(asked), [asked]);
+  const [open, setOpen] = useState<Open | null>(null);
+  const [view, setView] = useState<"home" | "app">("home");
+  // The open screen's place, from the right edge (the width) to home (0):
+  // the spring drives it, and so does a finger swiping back from the left
+  // edge. Home recedes as it comes.
+  const x = useMotionValue(0);
+  const width = () => (typeof window === "undefined" ? 400 : window.innerWidth);
+  const homeScale = useTransform(x, [0, 400], [0.94, 1]);
+  const homeDim = useTransform(x, [0, 400], [0.55, 1]);
+  const drag = useDragControls();
+  // Whether the open screen stands off to the right, out of sight and
+  // out of the way, its panel kept alive behind.
+  const [parked, setParked] = useState(true);
   useEffect(() => {
-    if (!wanted || !front) return;
-    if (pathOf(front.href) === wanted) {
-      setWanted(null);
-      setView("app");
-    }
-  }, [wanted, front]);
-  // A window the desktop put in front from elsewhere, the command bar or a
-  // menu, is shown as well; not while the recents are up, where a flick
-  // away changes the front too.
-  const was = useRef(front?.id ?? null);
-  useEffect(() => {
-    if (front && front.id !== was.current && view !== "recents") setView("app");
-    was.current = front?.id ?? null;
-  }, [front?.id]);
-  // An app whose window closed under it is no longer in view.
-  useEffect(() => {
-    if (view === "app" && !front) setView("home");
-  }, [view, front]);
-
-  const open = (b: Dragged) => {
-    setWanted(pathOf(b.href));
-    onOpen(b);
+    if (view === "app") setParked(false);
+  }, [view]);
+  const onDragEnd = (_: unknown, info: PanInfo) => {
+    if (info.offset.x > width() * 0.35 || info.velocity.x > 500)
+      setView("home");
   };
-  const go = (c: Card) => {
-    onFront(c);
-    setWanted(pathOf(c.href));
-  };
-
-  // The handle: a tap goes home, a swipe up shows the recents.
-  const touch = useRef<{ y: number; id: number } | null>(null);
-  const handleDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    touch.current = { y: e.clientY, id: e.pointerId };
-    e.currentTarget.setPointerCapture(e.pointerId);
-  };
-  const handleUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
-    const t = touch.current;
-    touch.current = null;
-    if (!t) return;
-    if (t.y - e.clientY > LIFT) setView("recents");
-    else setView("home");
-  };
-  const handle = (
-    <button
-      type="button"
-      aria-label={
-        view === "app" ? "Home, or swipe up for the open windows" : "Home"
-      }
-      onPointerDown={handleDown}
-      onPointerUp={handleUp}
-      onPointerCancel={() => (touch.current = null)}
-      className="fixed bottom-[calc(env(safe-area-inset-bottom)+2px)] left-1/2 z-[60] grid h-9 w-40 -translate-x-1/2 cursor-pointer place-items-center touch-none outline-none"
-    >
-      <span
-        aria-hidden
-        className="h-1.5 w-28 rounded-full bg-white/70 shadow-[0_1px_2px_rgb(0_0_0/0.4)]"
-      />
-    </button>
+  // Whether what is open was opened this moment, and so starts something
+  // new rather than joining what was there.
+  const [fresh, setFresh] = useState(false);
+  // What the open panel wants asked before it goes, if anything.
+  const guard = useRef<(() => Promise<boolean>) | null>(null);
+  const onGuard = useCallback(
+    (ask: (() => Promise<boolean>) | null) => (guard.current = ask),
+    [],
   );
+
+  // What lies under the menu bar and the handle: the wallpaper at home,
+  // a window's paper in an app. The document says which, so both read
+  // on it.
+  useEffect(() => {
+    if (view === "app") document.documentElement.dataset.paper = "";
+    else delete document.documentElement.dataset.paper;
+    return () => {
+      delete document.documentElement.dataset.paper;
+    };
+  }, [view]);
+
+  const show = async (next: Open) => {
+    if (open && open.href === next.href) return setView("app");
+    if (open && guard.current && !(await guard.current())) return;
+    guard.current = null;
+    setOpen(next);
+    setFresh(true);
+    setView("app");
+  };
+  const close = async () => {
+    if (guard.current && !(await guard.current())) return;
+    guard.current = null;
+    setOpen(null);
+    setView("home");
+  };
+  // Asked for an app as the desk was drawn, it is opened as a tap would.
+  useEffect(() => {
+    if (!wanted) return;
+    const app = APPS.find((b) => pathOf(b.href) === pathOf(wanted));
+    if (app)
+      void show({
+        id: pathOf(app.href),
+        kind: app.kind,
+        title: app.title,
+        href: wanted,
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wanted]);
 
   return (
     <>
-      {/* Home: the widgets as tiles, then every app and every port. */}
-      <div
+      {/* Home: the widgets as tiles, then every app and every port. It
+          recedes and dims under an app as the app comes in. */}
+      <motion.div
         aria-hidden={view !== "home"}
+        style={
+          still || !open ? undefined : { scale: homeScale, opacity: homeDim }
+        }
         className={cx(
-          "fixed inset-0 z-10 overflow-y-auto overscroll-y-contain px-5 pt-[calc(env(safe-area-inset-top)+25px+1.25rem)] pb-[calc(env(safe-area-inset-bottom)+4rem)] transition-opacity duration-fast ease-plain",
-          view === "home" ? "opacity-100" : "pointer-events-none opacity-0",
+          "fixed inset-0 z-10 overflow-y-auto overscroll-y-contain px-5 pt-[calc(env(safe-area-inset-top)+25px+1.25rem)] pb-[calc(env(safe-area-inset-bottom)+4rem)] select-none",
+          view !== "home" && "pointer-events-none",
         )}
       >
         {widgets.length > 0 && (
           <div className="mb-6 grid grid-cols-2 gap-4">
             {widgets.map((w) => (
-              <button
+              <motion.button
                 key={w.id}
                 type="button"
-                onClick={() =>
-                  open({
-                    kind: w.kind,
-                    title: w.title,
-                    href: w.href,
-                    box: { w: 0.5, h: 0.5 },
-                  })
-                }
+                whileTap={still ? undefined : { scale: 0.96 }}
+                transition={DIP}
+                onClick={() => void show(w)}
                 className="glass-pane flex aspect-square flex-col justify-between rounded-3xl p-4 text-left outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
               >
                 <RiWindowLine
@@ -186,7 +167,7 @@ export function Phone({
                 <span className="text-body-medium text-text-primary">
                   {w.title}
                 </span>
-              </button>
+              </motion.button>
             ))}
           </div>
         )}
@@ -196,7 +177,15 @@ export function Phone({
               key={b.href}
               title={b.title}
               face={b.face}
-              onClick={() => open(drag(b))}
+              open={open?.href === b.href}
+              onClick={() =>
+                void show({
+                  id: pathOf(b.href),
+                  kind: b.kind,
+                  title: b.title,
+                  href: b.href,
+                })
+              }
             />
           ))}
           {ports.map((p) => (
@@ -204,101 +193,97 @@ export function Phone({
               key={p.href}
               title={p.title}
               face={p.face}
-              onClick={() => open(portDrag(p))}
+              open={open?.href === p.href}
+              onClick={() =>
+                void show({
+                  id: p.href,
+                  kind: "port",
+                  title: p.title,
+                  href: p.href,
+                })
+              }
             />
           ))}
         </div>
-      </div>
+      </motion.div>
 
-      {/* Every open window stays mounted, so nothing unsaved in one is
-          lost while another is in front or home is; the one in front is
-          the one shown, edge to edge. */}
-      {windows.map((c) => (
-        <div
-          key={c.id}
+      {/* The open app, edge to edge, pushed in from the right and kept
+          while home is shown so nothing in it is lost. A swipe from the
+          left edge carries it back out under the finger. */}
+      {open && (
+        <motion.div
+          drag={still ? false : "x"}
+          dragControls={drag}
+          dragListener={false}
+          dragConstraints={{ left: 0 }}
+          dragElastic={0}
+          dragDirectionLock
+          onDragEnd={onDragEnd}
+          onPointerDown={(e) => {
+            if (!still && e.clientX < EDGE) drag.start(e);
+          }}
+          style={{ x }}
+          initial={still ? false : { x: "100%" }}
+          animate={{ x: view === "app" ? 0 : "100%" }}
+          transition={still ? { duration: 0 } : PUSH}
+          onAnimationComplete={() => view !== "app" && setParked(true)}
           className={cx(
-            "fixed inset-0 z-30 flex-col bg-background-full pt-[calc(env(safe-area-inset-top)+25px)]",
-            view === "app" && front?.id === c.id ? "flex" : "hidden",
+            "fixed inset-0 z-30 flex flex-col bg-background-full pt-[calc(env(safe-area-inset-top)+25px)] shadow-[-12px_0_32px_-8px_rgb(0_0_0/0.35)]",
+            parked && view !== "app" && "invisible",
           )}
         >
-          <AppIcon
-            card={c}
+          <App
+            key={open.href}
+            open={open}
             computers={computers}
-            Panel={panels[pathOf(c.href)]}
-            others={windows.filter((x) => x.id !== c.id)}
-            onAnother={() => onAnother(c)}
-            onClose={() => onClose(c.id)}
-            onGo={go}
+            Panel={panels[pathOf(open.href)]}
+            fresh={fresh}
+            onArrived={() => setFresh(false)}
             onGuard={onGuard}
-            fresh={born.has(c.id)}
-            onArrived={() => born.delete(c.id)}
-            reload={afresh[c.id] ?? 0}
+            onClose={() => void close()}
           />
-        </div>
-      ))}
+        </motion.div>
+      )}
 
-      {/* The recents: every open window as a card in a deck. */}
-      <AnimatePresence>
-        {view === "recents" && (
-          <motion.div
-            key="recents"
-            initial={still ? false : { opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={FAST}
-            className="fixed inset-0 z-40 flex flex-col justify-center bg-black/30 backdrop-blur-sm"
-            onClick={() => setView("home")}
-          >
-            {windows.length === 0 ? (
-              <p className="text-center text-body-regular text-text-white/80">
-                Nothing open.
-              </p>
-            ) : (
-              <div
-                className="flex snap-x snap-mandatory gap-4 overflow-x-auto px-[14vw] pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {windows
-                  .slice()
-                  .reverse()
-                  .map((c) => (
-                    <Recent
-                      key={c.id}
-                      card={c}
-                      face={
-                        APPS.find((b) => pathOf(b.href) === pathOf(c.href))
-                          ?.face
-                      }
-                      onGo={() => go(c)}
-                      onClose={() => onClose(c.id)}
-                    />
-                  ))}
-              </div>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {view !== "home" && handle}
+      {/* The handle: a tap goes home, with the app kept behind. */}
+      {view === "app" && (
+        <button
+          type="button"
+          aria-label="Home"
+          onClick={() => setView("home")}
+          className="fixed bottom-[calc(env(safe-area-inset-bottom)+2px)] left-1/2 z-[60] grid h-9 w-40 -translate-x-1/2 cursor-pointer place-items-center touch-none outline-none"
+        >
+          <span
+            aria-hidden
+            className="phone-handle h-1.5 w-28 rounded-full bg-white/70 shadow-[0_1px_2px_rgb(0_0_0/0.4)]"
+          />
+        </button>
+      )}
     </>
   );
 }
 
-// One icon on the home screen: its face and its name.
+// One icon on the home screen: its face and its name, and a dot beside
+// the name of the one that is open.
 function Icon({
   title,
   face,
+  open,
   onClick,
 }: {
   title: string;
   face?: string;
+  open: boolean;
   onClick: () => void;
 }) {
+  const still = useReducedMotion();
   return (
-    <button
+    <motion.button
       type="button"
+      whileTap={still ? undefined : { scale: 0.92 }}
+      transition={DIP}
       onClick={onClick}
-      className="flex flex-col items-center gap-1.5 outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring rounded-2xl"
+      className="flex flex-col items-center gap-1.5 rounded-2xl outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
     >
       {face ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -313,40 +298,37 @@ function Icon({
           <RiWindowLine className="size-7 text-text-primary" aria-hidden />
         </span>
       )}
-      <span className="max-w-[76px] truncate text-caption-2-medium text-text-white drop-shadow">
-        {title}
+      <span className="flex items-center gap-1 text-caption-2-medium text-text-white drop-shadow">
+        <span className="max-w-[76px] truncate">{title}</span>
+        {open && (
+          <span
+            aria-hidden
+            className="size-1 shrink-0 rounded-full bg-white/80"
+          />
+        )}
       </span>
-    </button>
+    </motion.button>
   );
 }
 
-// The app in front: its name in a bar, its own controls behind one
-// button, and the surface itself filling the rest.
-function AppIcon({
-  card,
+// The app in front: a close at the left of its bar, its name, its own
+// controls behind one button, and the surface itself filling the rest.
+function App({
+  open,
   computers,
   Panel,
-  others,
-  onAnother,
-  onClose,
-  onGo,
-  onGuard,
   fresh,
   onArrived,
-  reload,
+  onGuard,
+  onClose,
 }: {
-  card: Card;
+  open: Open;
   computers: boolean;
-  Panel: Panel | undefined;
-  others: Card[];
-  onAnother: () => void;
-  onClose: () => void;
-  onGo: (c: Card) => void;
-  onGuard: (key: string, ask: (() => Promise<boolean>) | null) => void;
+  Panel?: Panel;
   fresh: boolean;
-  // Said once the window is up, so its first opening is not asked again.
   onArrived: () => void;
-  reload: number;
+  onGuard: (ask: (() => Promise<boolean>) | null) => void;
+  onClose: () => void;
 }) {
   useEffect(() => {
     onArrived();
@@ -354,30 +336,33 @@ function AppIcon({
   const [sheet, setSheet] = useState(false);
   const [slot, setSlot] = useState<HTMLDivElement | null>(null);
   const [strip, setStrip] = useState<HTMLDivElement | null>(null);
-  const beforeClose = useCallback(
-    (ask: (() => Promise<boolean>) | null) => onGuard(card.id, ask),
-    [card.id, onGuard],
-  );
-  const act = (fn: () => void) => {
-    setSheet(false);
-    fn();
-  };
   return (
     <>
       <header className="grid h-11 shrink-0 grid-cols-[44px_1fr_44px] items-center border-b border-separator-border">
-        <span />
-        <span className="truncate text-center text-body-medium text-text-primary">
-          {card.title}
-        </span>
         <button
           type="button"
-          aria-label="More"
-          aria-expanded={sheet}
-          onClick={() => setSheet(true)}
-          className="grid size-11 place-items-center text-foreground-icon-secondary outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring rounded-2lg"
+          aria-label="Close"
+          onClick={onClose}
+          className="grid size-11 place-items-center rounded-2lg text-foreground-icon-secondary outline-none transition-transform duration-fast ease-plain select-none focus-visible:ring-2 focus-visible:ring-border-focus-ring active:scale-90"
         >
-          <RiMoreLine className="size-5" aria-hidden />
+          <RiCloseLine className="size-5" aria-hidden />
         </button>
+        <span className="truncate text-center text-body-medium text-text-primary">
+          {open.title}
+        </span>
+        {Panel ? (
+          <button
+            type="button"
+            aria-label="More"
+            aria-expanded={sheet}
+            onClick={() => setSheet(true)}
+            className="grid size-11 place-items-center rounded-2lg text-foreground-icon-secondary outline-none transition-transform duration-fast ease-plain select-none focus-visible:ring-2 focus-visible:ring-border-focus-ring active:scale-90"
+          >
+            <RiMoreLine className="size-5" aria-hidden />
+          </button>
+        ) : (
+          <span />
+        )}
       </header>
       {Panel && (
         <div
@@ -403,104 +388,36 @@ function AppIcon({
               leading: null,
               strip,
               phone: true,
-              beforeClose,
+              beforeClose: onGuard,
             }}
           >
-            <Panel id={card.id} href={card.href} fresh={fresh} />
+            <Panel id={open.id} href={open.href} fresh={fresh} />
           </BarSlot>
         </div>
       ) : (
         <iframe
-          key={reload}
-          src={card.href}
-          title={card.title}
+          src={open.href}
+          title={open.title}
           sandbox={
-            card.kind === "port"
+            open.kind === "port"
               ? "allow-scripts allow-forms allow-same-origin allow-popups"
               : undefined
           }
           className={cx(
             "min-h-0 flex-1",
-            card.kind === "port" ? "bg-background-full" : "bg-transparent",
+            open.kind === "port" ? "bg-background-full" : "bg-transparent",
           )}
         />
       )}
-      <PhoneSheet
-        open={sheet}
-        onClose={() => setSheet(false)}
-        label={card.title}
-        bodyRef={setSlot}
-        controls
-      >
-        <div className="bg-separator-border my-1 h-px" />
-        <SheetRow onClick={() => act(onAnother)}>
-          Another {card.title.replace(/\s\d+$/, "")}
-        </SheetRow>
-        <SheetRow onClick={() => act(onClose)}>Close</SheetRow>
-        {others.length > 0 && <div className="bg-separator-border my-1 h-px" />}
-        {others.map((c) => (
-          <SheetRow key={c.id} onClick={() => act(() => onGo(c))}>
-            {c.title}
-          </SheetRow>
-        ))}
-      </PhoneSheet>
-    </>
-  );
-}
-
-// One card of the recents: the app's face and the window's name, a tap
-// to it, a flick up to close it.
-function Recent({
-  card,
-  face,
-  onGo,
-  onClose,
-}: {
-  card: Card;
-  face?: string;
-  onGo: () => void;
-  onClose: () => void;
-}) {
-  const still = useReducedMotion();
-  return (
-    <motion.div
-      layout
-      drag={still ? false : "y"}
-      dragConstraints={{ top: 0, bottom: 0 }}
-      dragElastic={{ top: 0.6, bottom: 0 }}
-      onDragEnd={(_e, info) => {
-        if (info.offset.y < -120 || info.velocity.y < -600) onClose();
-      }}
-      exit={{ opacity: 0, y: -80 }}
-      transition={FAST}
-      className="glass-pane relative flex h-[62dvh] w-[72vw] shrink-0 snap-center flex-col items-center justify-center gap-3 rounded-3xl"
-    >
-      <button
-        type="button"
-        onClick={onGo}
-        aria-label={`Open ${card.title}`}
-        className="absolute inset-0 rounded-3xl outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
-      />
-      {face ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={face} alt="" className="size-16 rounded-[20px] shadow" />
-      ) : (
-        <RiWindowLine
-          className="size-12 text-foreground-icon-secondary"
-          aria-hidden
+      {Panel && (
+        <PhoneSheet
+          open={sheet}
+          onClose={() => setSheet(false)}
+          label={open.title}
+          bodyRef={setSlot}
+          controls
         />
       )}
-      <span className="pointer-events-none text-body-medium text-text-primary">
-        {card.title}
-      </span>
-      <button
-        type="button"
-        aria-label={`Close ${card.title}`}
-        onClick={onClose}
-        className="absolute top-3 right-3 grid size-9 place-items-center rounded-full bg-background-primary-default/70 text-foreground-icon-secondary outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
-      >
-        <RiCloseLine className="size-5" aria-hidden />
-      </button>
-    </motion.div>
+    </>
   );
 }

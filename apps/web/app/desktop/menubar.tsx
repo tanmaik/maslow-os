@@ -5,27 +5,14 @@
 // window's own menu beside it, every open window under Window, and the
 // clock at its right.
 
-import {
-  RiCloseLine,
-  RiCloudLine,
-  RiCloudyLine,
-  RiDrizzleLine,
-  RiFoggyLine,
-  RiRainyLine,
-  RiSearchLine,
-  RiSnowyLine,
-  RiSunCloudyLine,
-  RiSunLine,
-  RiThunderstormsLine,
-} from "@remixicon/react";
+import { RiCloseLine, RiSearchLine } from "@remixicon/react";
 import { useEffect, useState } from "react";
 
 import type { Dragged, Held } from "@/app/desktop/dock";
-import type { Mark } from "@/app/desktop/apps";
 import { anotherOf } from "@/app/desktop/apps";
 import { Kbd } from "@/components/base/kbd/kbd";
 import { AboutComputer } from "@/components/about-computer";
-import { useWeatherClock } from "@/components/location";
+import { useLocation } from "@/components/location";
 import { NewOrgDialog } from "@/components/new-org";
 import {
   NotificationsPanel,
@@ -40,11 +27,7 @@ import {
   MenubarSeparator,
   MenubarTrigger,
 } from "@/components/ui/menubar";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import type { Update } from "@/lib/computer";
 
 // Who is at the desktop, for the Maslow menu: their name, and the other orgs
 // they are in.
@@ -92,63 +75,11 @@ function Clock() {
   );
 }
 
-// The mark for the word `useWeatherClock` answers with.
-const WEATHER_MARKS: Record<string, Mark> = {
-  clear: RiSunLine,
-  "mostly clear": RiSunLine,
-  "partly cloudy": RiSunCloudyLine,
-  overcast: RiCloudyLine,
-  fog: RiFoggyLine,
-  drizzle: RiDrizzleLine,
-  "freezing drizzle": RiDrizzleLine,
-  rain: RiRainyLine,
-  "freezing rain": RiRainyLine,
-  snow: RiSnowyLine,
-  "snow grains": RiSnowyLine,
-  showers: RiRainyLine,
-  "snow showers": RiSnowyLine,
-  thunderstorms: RiThunderstormsLine,
-};
-
-// The weather beside the clock: the mark for its condition and the
-// temperature, with a tooltip naming the condition and the place when
-// Open-Meteo gives one. Nothing while permission is refused, unanswered,
-// or this deployment makes no computers; the mark alone when the weather
-// itself did not answer.
-function Weather({ computers }: { computers: boolean }) {
-  const weather = useWeatherClock(computers);
-  if (!weather) return null;
-  const Mark = WEATHER_MARKS[weather.condition] ?? RiCloudLine;
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        data-weather
-        aria-label={`${weather.condition}${
-          weather.place ? ` in ${weather.place}` : ""
-        }${weather.temperature !== null ? `, ${weather.temperature}°` : ""}`}
-        className="text-caption-1-medium focus-visible:outline-border-focus-ring duration-fast ease-plain flex items-center gap-1 rounded-lg px-1 tabular-nums outline-none transition-colors hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-1"
-      >
-        <Mark aria-hidden className="size-4" />
-        {weather.temperature !== null && <span>{weather.temperature}°</span>}
-      </TooltipTrigger>
-      <TooltipContent>
-        {weather.condition}
-        {weather.place ? ` in ${weather.place}` : ""}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-// Whether an update is waiting on this person's computer, and when they
-// said it should be taken: asked when the desktop opens and every few
-// minutes after, since a new image arrives at most once a day. Nothing
-// where this deployment makes no computers.
+// Whether an update is waiting on this person's computer: asked when the
+// desktop opens and every few minutes after, which is how a new image is
+// noticed at all. Nothing where this deployment makes no computers.
 function useUpdate(computers: boolean) {
-  const [update, setUpdate] = useState<{
-    image: string;
-    readyAt: string;
-    when: "now" | "tonight" | "idle" | null;
-  } | null>(null);
+  const [update, setUpdate] = useState<Update | null>(null);
   useEffect(() => {
     if (!computers) return;
     let gone = false;
@@ -165,18 +96,14 @@ function useUpdate(computers: boolean) {
       clearInterval(beat);
     };
   }, [computers]);
-  // When the person says the update is taken: told to the app, and to
-  // the notification at once.
-  const schedule = async (when: "now" | "tonight" | "idle") => {
-    const res = await fetch("/computer/update", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ when }),
-    });
+  // The person taking it: told to the app, and gone from the clock at
+  // once.
+  const take = async () => {
+    const res = await fetch("/computer/update", { method: "POST" });
     if (!res.ok) throw new Error(await res.text());
-    setUpdate((u) => (u ? { ...u, when } : u));
+    setUpdate(null);
   };
-  return { update, schedule };
+  return { update, take };
 }
 
 // A menu's line: BoardUI's row, whose height, padding and highlight are
@@ -207,7 +134,7 @@ export function MenuBar({
   onSettings,
 }: {
   you: Me | undefined;
-  // Whether this deployment makes computers at all: the weather's log has
+  // Whether this deployment makes computers at all: the location's log has
   // nowhere to land without one.
   computers: boolean;
   // The window in front on the desktop being looked at, and every window
@@ -229,12 +156,13 @@ export function MenuBar({
   const [makingOrg, setMakingOrg] = useState(false);
   const [about, setAbout] = useState(false);
   const notifications = useNotifications();
-  // An update waiting is a notification behind the clock, with now, tonight
-  // and when idle on it, and a line in the Maslow menu: quiet, since
-  // nothing about it is urgent, and the notification goes the moment the person
-  // has said when.
-  const { update, schedule } = useUpdate(computers);
-  const waiting = notifications.waiting + (update && !update.when ? 1 : 0);
+  // The person's location to their own machine, once a minute they are here.
+  useLocation(Boolean(you) && computers);
+  // An update waiting is a notification behind the clock and a line in
+  // the Maslow menu: quiet, since nothing about it is urgent, and there
+  // until the person takes it.
+  const { update, take } = useUpdate(computers);
+  const waiting = notifications.waiting + (update ? 1 : 0);
   return (
     <div className="mac-top-menubar text-caption-1-medium text-text-white fixed top-0 right-0 left-0 z-[60] flex items-center pt-[env(safe-area-inset-top)] pr-[calc(0.5rem+env(safe-area-inset-right))] pl-[calc(0.5rem+env(safe-area-inset-left))]">
       <Menubar className="flex h-full shrink-0 items-stretch gap-0 rounded-none border-none bg-transparent p-0 whitespace-nowrap">
@@ -251,11 +179,7 @@ export function MenuBar({
                 className={item}
                 onClick={() => onSettings("computer")}
               >
-                {update.when === "tonight"
-                  ? "Restarting tonight at 3:00…"
-                  : update.when === "idle"
-                    ? "Restarting when idle…"
-                    : "An update is ready…"}
+                An update is ready…
               </MenubarItem>
             )}
             <MenubarSeparator />
@@ -503,7 +427,6 @@ export function MenuBar({
             </MenubarMenu>
           </Menubar>
         )}
-        {you && <Weather computers={computers} />}
         {/* The command bar, for a hand that has not learned the key yet. */}
         <button
           type="button"
@@ -539,8 +462,8 @@ export function MenuBar({
       </div>
       <NotificationsPanel
         notifications={notifications}
-        update={update && !update.when ? update : null}
-        onUpdate={schedule}
+        update={update}
+        onUpdate={take}
       />
       <NotificationToasts notifications={notifications} />
       <NewOrgDialog open={makingOrg} onOpenChange={setMakingOrg} />

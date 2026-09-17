@@ -23,21 +23,18 @@ import type {
 // record from nowhere in particular is from the brain, under a fresh id.
 const UPSERT = `
 insert into records
-  (type, source, source_ref, title, body, props, occurred_at, confidence)
-values ($1, coalesce($2, 'brain'), coalesce($3, short_id()), $4, $5,
-        $6::jsonb, $7::timestamptz, $8::real)
+  (type, source, source_ref, title, body, props)
+values ($1, coalesce($2, 'brain'), coalesce($3, short_id()), $4, $5, $6::jsonb)
 on conflict (org_id, person_id, source, source_ref) do update set
   type = excluded.type, title = excluded.title,
   body = excluded.body, props = excluded.props,
-  occurred_at = excluded.occurred_at, confidence = excluded.confidence,
   deleted_at = case when records.merged_into is null then null
     else records.deleted_at end
 where (records.type, records.title, records.body, records.props,
-       records.occurred_at, records.confidence,
        case when records.merged_into is null then records.deleted_at end)
   is distinct from
       (excluded.type, excluded.title, excluded.body, excluded.props,
-       excluded.occurred_at, excluded.confidence, null::timestamptz)
+       null::timestamptz)
 returning id`;
 
 const OWN_BY_REF =
@@ -167,8 +164,6 @@ export async function write(
       r.title ?? "",
       r.body ?? "",
       JSON.stringify(props),
-      r.occurredAt ?? null,
-      r.confidence ?? null,
     ]);
     let id = upsert.rows[0]?.id;
     if (id) changed += 1;
@@ -199,14 +194,12 @@ export async function write(
     await need(q, fromId, "edit");
     await need(q, toId, "view");
     const result = await q.query(
-      `insert into edges (from_id, verb, to_id, confidence, occurred_at)
-         values ($1, $2, $3, $4::real, $5::timestamptz)
+      `insert into edges (from_id, verb, to_id)
+         values ($1, $2, $3)
          on conflict (org_id, from_id, verb, to_id) do update set
-           confidence = excluded.confidence,
-           occurred_at = excluded.occurred_at, deleted_at = null
-         where (edges.confidence, edges.occurred_at, edges.deleted_at)
-           is distinct from (excluded.confidence, excluded.occurred_at, null)`,
-      [fromId, e.verb, toId, e.confidence ?? null, e.occurredAt ?? null],
+           deleted_at = null
+         where edges.deleted_at is not null`,
+      [fromId, e.verb, toId],
     );
     edges += result.rowCount ?? 0;
   }
@@ -246,9 +239,6 @@ export type Patch = {
   // of what is there, and a null takes that value away.
   props?: Record<string, unknown>;
   fields?: Record<string, unknown>;
-  // Null takes the time away; absent leaves it.
-  occurredAt?: Date | string | null;
-  confidence?: number | null;
   // The last change of the record the caller saw. A change since then to
   // anything this patch sets is a conflict, never overwritten.
   seen?: number;
@@ -261,8 +251,6 @@ function touched(patch: Patch): string[] {
   if (patch.title !== undefined) cols.push("title");
   if (patch.body !== undefined) cols.push("body");
   if (patch.props || patch.fields) cols.push("props");
-  if (patch.occurredAt !== undefined) cols.push("occurred_at");
-  if (patch.confidence !== undefined) cols.push("confidence");
   return cols;
 }
 
@@ -328,10 +316,7 @@ export async function edit(
        type = coalesce($2, type),
        title = coalesce($3, title),
        body = coalesce($4, body),
-       props = coalesce($5::jsonb, props),
-       occurred_at = case when $7::boolean then $6::timestamptz
-         else occurred_at end,
-       confidence = case when $9::boolean then $8::real else confidence end
+       props = coalesce($5::jsonb, props)
      where id = $1 and deleted_at is null
      returning ${recordSelect}`,
     [
@@ -340,10 +325,6 @@ export async function edit(
       patch.title ?? null,
       patch.body ?? null,
       props ? JSON.stringify(props) : null,
-      patch.occurredAt ?? null,
-      patch.occurredAt !== undefined,
-      patch.confidence ?? null,
-      patch.confidence !== undefined,
     ],
   );
   if (!rows[0]) throw new NotFound(`record ${id} is not in this brain`);

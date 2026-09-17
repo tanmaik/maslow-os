@@ -3,8 +3,8 @@ import type { BrainRecord, Edge, Event, Property, Stub } from "./types.ts";
 // Database rows and how they become the brain's types.
 
 export const recordColumns =
-  "id, type, source, source_ref, title, body, props, occurred_at, " +
-  "confidence, created_at, updated_at, deleted_at, merged_into, person_id";
+  "id, type, source, source_ref, title, body, props, " +
+  "created_at, updated_at, deleted_at, merged_into, person_id";
 
 // The columns and what the reader may do, for any select of records.
 export const recordSelect = `${recordColumns}, access_level(id) as access`;
@@ -35,8 +35,6 @@ export type RecordRow = {
   title: string;
   body: string;
   props: Record<string, unknown>;
-  occurred_at: Date | null;
-  confidence: number | null;
   created_at: Date;
   updated_at: Date;
   deleted_at: Date | null;
@@ -58,8 +56,6 @@ export const toRecord = (r: RecordRow): BrainRecord => ({
   title: r.title,
   body: r.body,
   props: r.props,
-  occurredAt: r.occurred_at,
-  confidence: r.confidence,
   createdAt: r.created_at,
   updatedAt: r.updated_at,
   deletedAt: r.deleted_at,
@@ -95,16 +91,13 @@ export const toProperty = (p: PropertyRow): Property => ({
   ownerId: p.person_id,
 });
 
-export const edgeColumns =
-  "id, from_id, verb, to_id, confidence, occurred_at, created_at";
+export const edgeColumns = "id, from_id, verb, to_id, created_at";
 
 export type EdgeRow = {
   id: string;
   from_id: string;
   verb: string;
   to_id: string;
-  confidence: number | null;
-  occurred_at: Date | null;
   created_at: Date;
 };
 
@@ -113,8 +106,6 @@ export const toEdge = (e: EdgeRow): Edge => ({
   fromId: e.from_id,
   verb: e.verb,
   toId: e.to_id,
-  confidence: e.confidence,
-  occurredAt: e.occurred_at,
   createdAt: e.created_at,
 });
 

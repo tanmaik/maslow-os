@@ -16,7 +16,6 @@ import {
 } from "@/components/base/segmented-control/segmented-control";
 import { Select, SelectItem } from "@/components/base/select/select";
 import { Textarea } from "@/components/base/textarea/textarea";
-import { DateField } from "@/components/date-field";
 import {
   Dialog,
   DialogContent,
@@ -297,10 +296,6 @@ export function NewRecord({
               </fieldset>
             )}
             {!fresh && <FieldInputs properties={picked?.properties ?? []} />}
-            <div className="flex flex-col gap-1.5">
-              <Label>When</Label>
-              <DateField id="occurred_at" name="occurred_at" time />
-            </div>
           </div>
           <DialogFooter>
             <Button size="small" type="submit">

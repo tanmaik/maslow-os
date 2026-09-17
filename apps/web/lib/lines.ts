@@ -55,8 +55,8 @@ function by(author: string, me: string): string {
   return /\s/.test(who) ? quoted(who) : who;
 }
 
-// One record on a line: id, type, when, title, then its origin, confidence,
-// standing and fields. Below it the body, whole or its first line.
+// One record on a line: id, type, when it was written, title, then its
+// origin, standing and fields. Below it the body, whole or its first line.
 export function record(
   r: BrainRecord,
   detail: "brief" | "full" = "brief",
@@ -64,11 +64,10 @@ export function record(
   const parts = [
     r.id,
     token(r.type),
-    when(r.occurredAt ?? r.createdAt),
+    when(r.createdAt),
     quoted(r.title),
     `src=${token(r.source)}:${token(r.sourceRef)}`,
   ];
-  if (r.confidence !== null) parts.push(`c=${r.confidence}`);
   if (r.access !== "owner") parts.push(`shared:${r.access}`);
   if (r.mergedInto) parts.push(`merged→${r.mergedInto}`);
   else if (r.deletedAt) parts.push("removed");
@@ -83,12 +82,9 @@ export function record(
   return `${head}\n${shown}`;
 }
 
-// An edge as a sentence: from, verb, to, how sure, since when.
+// An edge as a sentence: from, verb, to.
 export function edge(e: Edge): string {
-  const parts = [e.id, e.fromId, token(e.verb), e.toId];
-  if (e.confidence !== null) parts.push(`c=${e.confidence}`);
-  if (e.occurredAt) parts.push(when(e.occurredAt));
-  return parts.join(" ");
+  return [e.id, e.fromId, token(e.verb), e.toId].join(" ");
 }
 
 // An edge seen from one record and whatever is merged into it: which way
@@ -107,8 +103,6 @@ export function edgeFrom(
     quoted(titles.get(other) ?? ""),
     `edge=${e.id}`,
   ];
-  if (e.confidence !== null) parts.push(`c=${e.confidence}`);
-  if (e.occurredAt) parts.push(when(e.occurredAt));
   return `  ${parts.join(" ")}`;
 }
 

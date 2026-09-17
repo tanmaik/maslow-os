@@ -5,7 +5,6 @@ import {
   type Subject,
 } from "@maslow/brain";
 import { isUuid } from "@maslow/db";
-import { isValid, parseISO } from "date-fns";
 
 // Whom a share names, as a form carries it: "everyone", "group:<id>" or
 // "member:<id>".
@@ -63,29 +62,8 @@ export function propsFrom(
   return props;
 }
 
-// A posted time as an instant, or null when the field was empty. A day that
-// is not on the calendar is refused, not rolled into the next month.
-export function instantFrom(raw: FormDataEntryValue | null): Date | null {
-  const s = String(raw ?? "").trim();
-  if (!s) return null;
-  const d = parseISO(s);
-  if (!isValid(d)) throw new Invalid(`"${s}" is not a time`);
-  return d;
-}
-
-// A posted confidence as a fraction, or null when the field was empty.
-export function confidenceFrom(raw: FormDataEntryValue | null): number | null {
-  const s = String(raw ?? "").trim();
-  if (!s) return null;
-  const n = Number(s);
-  if (!(n >= 0 && n <= 100)) {
-    throw new Invalid("confidence is a percentage from 0 to 100");
-  }
-  return n / 100;
-}
-
 // What every record has before its type declares anything.
-const BUILT_IN = new Set(["title", "body", "when"]);
+const BUILT_IN = new Set(["title", "body", "written"]);
 
 // The fields a posted form declares for a type it makes up, numbered
 // f0.name, f0.datatype, f0.options and so on; one left without a name is

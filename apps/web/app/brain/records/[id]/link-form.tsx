@@ -6,7 +6,6 @@ import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { Label } from "@/components/base/input/label";
 import { Select, SelectItem } from "@/components/base/select/select";
-import { HowSure } from "@/components/how-sure";
 import {
   Dialog,
   DialogContent,
@@ -69,7 +68,6 @@ export function LinkForm({ id, type }: { id: string; type: string }) {
               <Label isRequired>The other record</Label>
               <OtherRecord not={id} name="other" />
             </div>
-            <HowSure id="link-confidence" name="confidence" />
           </div>
           <DialogFooter>
             <Button size="small" type="submit" leadingIcon={RiAddLine}>

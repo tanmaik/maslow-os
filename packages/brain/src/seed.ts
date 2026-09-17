@@ -26,7 +26,6 @@ export const vocabulary: TypeDefinition[] = [
 ];
 
 const ref = (source: string, sourceRef: string) => ({ source, sourceRef });
-const at = (iso: string) => new Date(iso);
 
 // Three brains that could never be mistaken for one another, keyed by org
 // slug, so a record under the wrong org is obvious at a glance.
@@ -56,7 +55,6 @@ export const seeds: Record<
         sourceRef: "mail:acme-1",
         title: "Rocket skates, batch 7",
         body: "Road Runner, the batch 7 rocket skates ship Friday. Do not test them on the mesa road again.",
-        occurredAt: at("2026-08-28T15:04:00Z"),
       },
       {
         type: "message",
@@ -64,7 +62,6 @@ export const seeds: Record<
         sourceRef: "mail:acme-2",
         title: "Re: Rocket skates, batch 7",
         body: "Meep meep. Friday works. Leave them by the cactus.",
-        occurredAt: at("2026-08-28T16:10:00Z"),
       },
       {
         type: "event",
@@ -72,7 +69,6 @@ export const seeds: Record<
         sourceRef: "cal:acme-1",
         title: "Rocket skate test on the mesa",
         body: "Bring the helmet.",
-        occurredAt: at("2026-09-05T09:00:00Z"),
       },
       {
         type: "commitment",
@@ -81,8 +77,6 @@ export const seeds: Record<
         title: "Ship batch 7 rocket skates by Friday",
         body: "Wile told Road Runner the batch ships Friday.",
         props: { due: "2026-09-04", status: "open" },
-        occurredAt: at("2026-09-04T00:00:00Z"),
-        confidence: 0.8,
       },
     ],
     edges: [
@@ -130,8 +124,6 @@ export const seeds: Record<
         from: ref("seed", "person:wile"),
         verb: "owes",
         to: ref("seed", "person:beep"),
-        confidence: 0.8,
-        occurredAt: at("2026-08-28T15:04:00Z"),
       },
     ],
   },
@@ -157,7 +149,6 @@ export const seeds: Record<
         sourceRef: "mail:bakery-1",
         title: "Sourdough for Saturday's market",
         body: "Otto, we need forty loaves for the farmers market stall on Saturday. Start the levain Thursday.",
-        occurredAt: at("2026-09-01T08:30:00Z"),
       },
       {
         type: "message",
@@ -165,7 +156,6 @@ export const seeds: Record<
         sourceRef: "mail:bakery-2",
         title: "Re: Sourdough for Saturday's market",
         body: "Levain is on. Forty loaves, plus rye if the oven cooperates.",
-        occurredAt: at("2026-09-01T09:12:00Z"),
       },
       {
         type: "event",
@@ -173,7 +163,6 @@ export const seeds: Record<
         sourceRef: "cal:bakery-1",
         title: "Farmers market stall",
         body: "Set up by seven.",
-        occurredAt: at("2026-09-06T07:00:00Z"),
       },
       {
         type: "commitment",
@@ -182,8 +171,6 @@ export const seeds: Record<
         title: "Bake forty sourdough loaves for Saturday's market",
         body: "Marge asked Otto for forty loaves; Otto agreed.",
         props: { due: "2026-09-06", status: "open" },
-        occurredAt: at("2026-09-06T00:00:00Z"),
-        confidence: 0.9,
       },
     ],
     edges: [
@@ -244,7 +231,6 @@ export const seeds: Record<
         sourceRef: "mail:observatory-1",
         title: "Comet observation window",
         body: "The comet is brightest between the 9th and the 12th. Requesting the big telescope both nights.",
-        occurredAt: at("2026-09-02T21:40:00Z"),
       },
       {
         type: "event",
@@ -252,7 +238,6 @@ export const seeds: Record<
         sourceRef: "cal:observatory-1",
         title: "Comet observation night",
         body: "Dome opens at ten.",
-        occurredAt: at("2026-09-10T22:00:00Z"),
       },
       {
         type: "commitment",
@@ -261,8 +246,6 @@ export const seeds: Record<
         title: "Send the comet observation log to the journal by the 15th",
         body: "Vera promised the log after the second night.",
         props: { due: "2026-09-15", status: "open" },
-        occurredAt: at("2026-09-15T00:00:00Z"),
-        confidence: 0.6,
       },
     ],
     edges: [

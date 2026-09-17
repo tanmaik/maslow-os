@@ -16,10 +16,10 @@ export type View = keyof typeof VIEWS;
 export const isView = (v: string | undefined): v is View =>
   !!v && Object.hasOwn(VIEWS, v);
 
-// When a record happened is not a declared field and never can be: every
-// record already has one. This is the name it goes by in a sort, a filter
-// and a calendar.
-export const WHEN = "when";
+// When a record was written is not a declared field and never can be:
+// every record already has one. This is the name it goes by in a sort, a
+// filter and a calendar.
+export const WHEN = "written";
 
 // One condition a person set, as the address carries it: a field or WHEN, a
 // comparison, and what was typed. `in` gathers every value given for the
@@ -184,7 +184,7 @@ export function termText(t: Term, properties: Property[]): string {
   const kind: Datatype | "when" =
     t.property === WHEN ? "when" : (p?.datatype ?? "text");
   const word = comparisonWord(kind, t.op);
-  const name = t.property === WHEN ? "when" : t.property;
+  const name = t.property === WHEN ? WHEN : t.property;
   if (t.op === "unset") return `${name} ${word}`;
   const said = t.values.map((v) =>
     p ? cell(typed(p.datatype, v), p) : cell(v, { datatype: "datetime" }),
@@ -193,7 +193,7 @@ export function termText(t: Term, properties: Property[]): string {
 }
 
 // One record as every view draws it, with the whole of nothing in it: a
-// title, the opening line, when it happened, whose it is where it is not
+// title, the opening line, when it was written, whose it is where it is not
 // the reader's, and the declared values a column or a card shows.
 export type Row = {
   id: string;

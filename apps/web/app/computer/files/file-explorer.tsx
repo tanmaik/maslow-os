@@ -1148,9 +1148,18 @@ export function FileExplorer({
                     {word
                       ? "Try another word."
                       : entries?.length
-                        ? "Right-click to show them."
+                        ? ""
                         : "Drop a file here, or Upload."}
                   </span>
+                  {!word && entries?.length ? (
+                    <Button
+                      variant="secondary"
+                      size="small"
+                      onClick={() => setDotfiles(true)}
+                    >
+                      Show hidden files
+                    </Button>
+                  ) : null}
                   {!word && !entries?.length && (
                     <Button
                       variant="secondary"

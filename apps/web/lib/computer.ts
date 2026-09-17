@@ -1,5 +1,6 @@
 import { asMeter, asOrg, asPerson, type Query } from "@maslow/db";
 import type { Principal } from "@maslow/db/auth";
+import { notificationOf } from "@maslow/db/notifications";
 import {
   allComputers,
   claimComputer,
@@ -22,21 +23,17 @@ import {
   setMove,
   setPlace,
   setReady,
-  setSize,
   setUpdate,
   setRegion,
-  setUpdateWhen,
   setVolume,
   shares,
   sharesOn,
   sharePort,
   spentByDay,
   type Computer,
-  type Size,
   type Move,
   type PortShare,
   type SharedPort,
-  type UpdateWhen,
 } from "@maslow/db/computers";
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -56,17 +53,13 @@ import { ownerPrincipal, refreshShares } from "./shares.ts";
 import { openrouter } from "./openrouter.ts";
 import { isRegion, regionName, type Region } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
-import { above, sameSize, SIZES, type SizeKey } from "./sizes.ts";
+import { SIZES } from "./sizes.ts";
 
 // Every computer starts at the ladder's first rung, with this much disk.
 const FLOOR = { ...SIZES.small, diskGb: 10 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-48";
-
-// An image whose label ends in -security does not wait on the person for
-// a week: it takes the idle rule from the day it is ready.
-const SECURITY = /-security$/.test(IMAGE);
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-52";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -595,132 +588,63 @@ async function revive(q: Query, c: Computer, why: string): Promise<void> {
 
 // --- Updates -----------------------------------------------------------
 
-// Where each region keeps time, so "tonight at three" is three in the
-// morning where the computer is and not where our server is.
-const ZONES: Record<string, string> = {
-  iad: "America/New_York",
-  atl: "America/New_York",
-  bos: "America/New_York",
-  ord: "America/Chicago",
-  dfw: "America/Chicago",
-  den: "America/Denver",
-  gdl: "America/Mexico_City",
-  lax: "America/Los_Angeles",
-  mia: "America/New_York",
-  yul: "America/Toronto",
-  ewr: "America/New_York",
-  phx: "America/Phoenix",
-  qro: "America/Mexico_City",
-  sjc: "America/Los_Angeles",
-  sea: "America/Los_Angeles",
-  yyz: "America/Toronto",
-};
-
-// The hour it is where the computer is, on the clock a person reads.
-function hourIn(region: string): number {
-  return Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: ZONES[region] ?? "America/New_York",
-      hour: "numeric",
-      hourCycle: "h23",
-    }).format(new Date()),
-  );
-}
-
-// The small hours, when a restart nobody is awake for costs nothing: from
-// three until six where the computer is. A window and not an hour, since
-// the sweep runs when an hour has passed and its clock drifts by however
-// long each pass took — on the exact hour, one drifted pass would make
-// the person who asked for tonight wait another whole day.
-const TONIGHT = 3;
-const MORNING = 6;
-
-// How long nobody must have touched the computer for it to count as idle.
-const IDLE_FOR = 30 * 60 * 1000;
-
-// How long an update waits on the person before the idle rule takes it.
-const WAITED = 7 * 24 * 3600 * 1000;
-
-// Whether nobody is using the computer: no key typed into a terminal or
-// over SSH and no request carried to a port of theirs for half an hour,
-// and nothing listening. A port that listens is treated as busy however
-// quiet it looks: what a program on the machine serves to itself never
-// passes the door, so we cannot honestly say it is idle. Unknown when the
-// door answers without saying, which a machine on an image older than
-// this one does: it is neither idle nor busy.
-function idle(s: Stats | null): boolean | null {
-  // A door that did not answer said nothing, which is not the same as
-  // saying somebody is there: unknown, so the seven days still run.
-  if (!s) return null;
-  if (s.ports.length > 0) return false;
-  if (!s.idleSince) return null;
-  return Date.now() - Date.parse(s.idleSince) > IDLE_FOR;
-}
-
-// Whether the update waiting on this computer is to be taken now: the
-// person said so, the hour they picked has come where it is, or nobody is
-// using it and it is theirs to take — which a security image is from the
-// day it is ready, and any update is after seven. A door that cannot say
-// whether it is idle waits the seven days out whatever the person picked,
-// so a machine on an older image is never stranded on it.
-function updateDue(c: Computer, quiet: boolean | null): boolean {
-  if (c.updateWhen === "now") return true;
-  if (c.updateWhen === "tonight") {
-    const hour = hourIn(c.region);
-    return hour >= TONIGHT && hour < MORNING;
-  }
-  const waited =
-    c.updateReadyAt !== null && Date.now() - c.updateReadyAt.getTime() > WAITED;
-  if (quiet === null) return waited;
-  return (c.updateWhen === "idle" || c.updateSecurity || waited) && quiet;
-}
-
-// Why a machine is being moved onto the image, in the person's own terms.
-const updateWhy = (c: Computer, quiet: boolean | null) =>
-  c.updateWhen === "now"
-    ? "the person asked to restart now"
-    : c.updateWhen === "tonight"
-      ? "the person asked for tonight"
-      : quiet === null
-        ? "the update had waited a week, and the door cannot say if it is idle"
-        : c.updateWhen === "idle"
-          ? "the person asked for when idle, and nobody is using it"
-          : c.updateSecurity
-            ? "a security image, and nobody is using it"
-            : "the update had waited a week, and nobody is using it";
-
 // The update waiting on a person, as the menu bar, About and the Computer
 // pane say it. Null when their machine is on the image of the day, and
 // when an older update was overtaken by a newer image.
-export type Update = {
-  image: string;
-  readyAt: string;
-  when: UpdateWhen | null;
-  security: boolean;
-};
+export type Update = { image: string; readyAt: string };
 
 export const updateOn = (c: Computer | null): Update | null =>
   c?.updateImage === IMAGE && c.updateReadyAt
     ? {
         image: IMAGE.split(":").at(-1) ?? IMAGE,
         readyAt: c.updateReadyAt.toISOString(),
-        when: c.updateWhen,
-        security: c.updateSecurity,
       }
     : null;
 
-export async function updateOf(p: Principal): Promise<Update | null> {
-  if (deployment.computers.kind === "none") return null;
-  return updateOn(await asOrg(p.orgId, (q) => computerOf(q, p.userId)));
+// Whether a machine runs an image other than the one of the day.
+const behindOn = (m: Machine) => m.config?.image?.split("@")[0] !== IMAGE;
+
+// A new image is an update, not a restart: written on the person's row
+// as ready and to which image, and waiting for them to take it. A newer
+// image asks again, so nothing said about the last carries an unseen
+// change on; a machine on the image of the day has nothing waiting.
+async function offer(q: Query, c: Computer, m: Machine): Promise<Computer> {
+  if (c.current && behindOn(m)) {
+    if (c.updateImage === IMAGE) return c;
+    await setUpdate(q, c.id, IMAGE);
+    await note(q, {
+      orgId: c.orgId,
+      userId: c.userId,
+      resource: "update",
+      event: "ready",
+      ref: IMAGE,
+      detail: { was: m.config?.image ?? null },
+      why: "a new image was built",
+    });
+    return { ...c, updateImage: IMAGE, updateReadyAt: new Date() };
+  }
+  if (!c.updateImage) return c;
+  await setUpdate(q, c.id, null);
+  return { ...c, updateImage: null, updateReadyAt: null };
 }
 
-// When the person's computer takes the update waiting on it. Now restarts
-// it here and then; the rest is the sweep's to keep. False when there is
-// no ready computer or nothing waiting.
-export async function schedule(
-  p: Principal,
-  when: UpdateWhen,
-): Promise<boolean> {
+// The update waiting on this person, asked for by the page every few
+// minutes: the machine is looked at each time, so a new image is offered
+// within minutes of a deploy and nothing pushes it. Fly is asked between
+// two transactions, so no pooled connection waits on the round trip.
+export async function updateOf(p: Principal): Promise<Update | null> {
+  if (deployment.computers.kind === "none") return null;
+  const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  if (!c?.readyAt || !c.machineId) return updateOn(c);
+  const m = await fly.machine(c.machineId);
+  if (!m) return updateOn(c);
+  return updateOn(await asOrg(p.orgId, (q) => offer(q, c, m)));
+}
+
+// The person taking the update waiting on their computer: remade onto
+// the image of the day here and then. False when there is no ready
+// computer or nothing waiting.
+export async function take(p: Principal): Promise<boolean> {
   return asOrg(p.orgId, async (q) => {
     const c = await computerOf(q, p.userId);
     if (
@@ -730,41 +654,25 @@ export async function schedule(
       !(await holdComputer(q, c.id))
     )
       return false;
-    await setUpdateWhen(q, c.id, when);
-    await note(q, {
-      orgId: c.orgId,
-      userId: c.userId,
-      resource: "update",
-      event: "scheduled",
-      ref: IMAGE,
-      detail: { when },
-      why: "the person asked",
-    });
-    if (when !== "now") return true;
     const m = await fly.machine(c.machineId);
     if (!m) return false;
-    const asked = { ...c, updateWhen: when };
     // Reshaped and written down, and nothing waited on after it: the page
     // is already asking after the computer every few seconds and says it
     // is starting until its door answers. A route cut off mid-wait would
-    // roll the row back and leave the person told to restart a machine
-    // that had already restarted.
-    await remake(q, asked, m, updateWhy(asked, null), true);
+    // roll the row back and leave the person told to update a machine
+    // that had already been.
+    await remake(q, c, m, "the person pressed Update");
     return true;
   });
 }
 
 // The machine remade on its disk to the image of the day at its row's
-// size, with the brain's session and the person's name. Taking says this
-// remake is the update the person scheduled coming due: only then is the
-// hour they picked spent, since a remake for another reason leaves their
-// word standing.
+// size, with the brain's session and the person's name.
 async function remake(
   q: Query,
   c: Computer,
   m: Machine,
   why: string,
-  taking = false,
 ): Promise<void> {
   await fly.reshape(m.id, {
     image: IMAGE,
@@ -781,8 +689,7 @@ async function remake(
   await setReady(q, c.id, false);
   // A machine remade is on the image of the day, whatever the reason, so
   // nothing is left waiting on the person for an update they now have.
-  if (c.updateImage)
-    await setUpdate(q, c.id, null, taking ? null : c.updateWhen);
+  if (c.updateImage) await setUpdate(q, c.id, null);
   await note(q, {
     orgId: c.orgId,
     userId: c.userId,
@@ -947,7 +854,6 @@ async function reconcileOrg(
       const modelled =
         m.config?.env?.MODEL_KEY === undefined &&
         (m.config?.env?.MODEL_URL ?? null) === (want?.url ?? null);
-      const behind = m.config?.image?.split("@")[0] !== IMAGE;
       // What the machine cannot run without is put right at once, and the
       // image of the day comes with the restart it already costs.
       if (c.current && (!sized || !named || !brained || !modelled)) {
@@ -976,33 +882,7 @@ async function reconcileOrg(
         await revive(q, c, "Fly had it stopped and the member is current");
         return;
       }
-      // A new image is an update, not a restart: it is recorded on the
-      // row and waits for the person to say when. A newer one asks again,
-      // so a choice about the last never carries an unseen change on.
-      if (c.current && behind) {
-        if (c.updateImage !== IMAGE) {
-          await setUpdate(q, c.id, { image: IMAGE, security: SECURITY });
-          await note(q, {
-            orgId: c.orgId,
-            userId: c.userId,
-            resource: "update",
-            event: "ready",
-            ref: IMAGE,
-            detail: { was: m.config?.image ?? null, security: SECURITY },
-            why: "a new image was built",
-          });
-          c = {
-            ...c,
-            updateImage: IMAGE,
-            updateReadyAt: new Date(),
-            updateWhen: null,
-            updateSecurity: SECURITY,
-          };
-        }
-      } else if (c.updateImage) {
-        await setUpdate(q, c.id, null);
-        c = { ...c, updateImage: null, updateReadyAt: null, updateWhen: null };
-      }
+      c = await offer(q, c, m);
       // A running machine not yet known to answer is probed at its door;
       // a stopped one was started above.
       if (!c.readyAt && c.current) {
@@ -1030,15 +910,6 @@ async function reconcileOrg(
           .catch(() => null);
         if (s) {
           await grow(q, c, s);
-          await lift(q, c, s);
-        }
-        // The update waiting on this computer, once the person's word and
-        // the machine's own state agree that it is time.
-        const quiet = idle(s);
-        if (behind && c.updateImage === IMAGE && updateDue(c, quiet)) {
-          await remake(q, c, m, updateWhy(c, quiet), true);
-          await reopens(q, c, m.id);
-          return;
         }
         await backUp(q, c);
         // Every copy of what they shared brought up to the disk, and a
@@ -1222,19 +1093,6 @@ async function grow(q: Query, c: Computer, s: Stats): Promise<void> {
   // alone; a machine that does not yet say is left alone.
   if (s.free == null || s.disk === null || s.free > s.disk * 0.2) return;
   await extend(q, c, "the disk was nearly full");
-}
-
-// A computer found with its memory nearly full moves up a rung on its
-// own, never down; at the top, says so to us and leaves it.
-async function lift(q: Query, c: Computer, s: Stats): Promise<void> {
-  if (!s.memory?.total || s.memory.used < s.memory.total * 0.9) return;
-  const key = above(c);
-  if (!key) {
-    console.error(`computer ${c.id}: memory nearly full at the top rung`);
-    return;
-  }
-  if (!(await holdComputer(q, c.id))) return;
-  await reshapeTo(q, c, SIZES[key], "memory was nearly full");
 }
 
 // Grows the disk by half again, up to the ceiling; at the ceiling, says
@@ -1509,64 +1367,6 @@ export async function reset(p: Principal): Promise<boolean> {
     });
   });
   return true;
-}
-
-// Moves a ready computer to a rung of the ladder: the row first, so the
-// row is always the truth the sweep restores, then the machine remade
-// into it on its own disk, a restart of a few seconds. False when there
-// is no ready computer.
-export async function resize(p: Principal, key: SizeKey): Promise<boolean> {
-  const size = SIZES[key];
-  // One transaction, holding the computer throughout: no other request
-  // talks to Fly about it meanwhile, and a remake that fails leaves the
-  // row as it was.
-  return asOrg(p.orgId, async (q) => {
-    const c = await computerOf(q, p.userId);
-    if (!c?.readyAt || !c.machineId || !(await holdComputer(q, c.id)))
-      return false;
-    if (sameSize(size, c)) return true;
-    await reshapeTo(q, c, size, "the person asked");
-    return true;
-  });
-}
-
-// Puts a held, ready computer on a size: the row first, so the row is
-// always the truth the sweep restores, then the machine remade into it on
-// its own disk.
-async function reshapeTo(
-  q: Query,
-  c: Computer,
-  size: Size,
-  why: string,
-): Promise<void> {
-  await setSize(q, c.id, size);
-  await setReady(q, c.id, false);
-  await note(q, {
-    orgId: c.orgId,
-    userId: c.userId,
-    resource: "machine",
-    event: "resized",
-    ref: c.machineId,
-    detail: {
-      cpuKind: size.cpuKind,
-      cpus: size.cpus,
-      memoryMb: size.memoryMb,
-    },
-    why,
-  });
-  const m = await fly.machine(c.machineId!);
-  await fly.reshape(c.machineId!, {
-    image: IMAGE,
-    volumeId: c.volumeId!,
-    cpuKind: size.cpuKind,
-    cpus: size.cpus,
-    memoryMb: size.memoryMb,
-    secret: c.secret,
-    brain: await brainOf(q, c),
-    who: await whoOf(q, c),
-    model: await modelOf(q, c),
-    metadata: m ? wanted(c, m) : tags(c),
-  });
 }
 
 // A move that has run this long is put back, whatever step it is on.
@@ -1873,6 +1673,25 @@ function honours(c: Computer, t: string): boolean {
     sig.length === want.length &&
     timingSafeEqual(Buffer.from(sig), Buffer.from(want))
   );
+}
+
+// An ask answered, said back into the conversation it came from on the
+// person's computer, where it named one: the question and the answer, as
+// the next word of that conversation. Nothing waits on it; a computer
+// that is not ready, or a door that does not answer, leaves the answer
+// for the agent's own notifications tool to read.
+export async function tellAnswer(p: Principal, id: string): Promise<void> {
+  const n = await asPerson(p, (q) => notificationOf(q, id));
+  if (!n?.replyTo || n.answer === null) return;
+  const c = await ready(p);
+  if (!c) return;
+  await fly
+    .say(c.machineId!, ticket(c, 60), {
+      chat: n.replyTo,
+      text: `You asked "${n.title}"; the person answered: ${n.answer}`,
+      answered: n.id,
+    })
+    .catch((err: Error) => console.error(`say ${c.id}: ${err.message}`));
 }
 
 // The computer's numbers this moment, asked of its door with a ticket

@@ -14,14 +14,8 @@ type About = {
   where: string | null;
   size: string | null;
   diskGb: number | null;
-  // The update waiting on the person, if one is, and when they said it
-  // should be taken.
-  update: {
-    image: string;
-    readyAt: string;
-    when: "now" | "tonight" | "idle" | null;
-    security: boolean;
-  } | null;
+  // The update waiting on the person, if one is.
+  update: { image: string; readyAt: string } | null;
   stats: {
     cpu: number;
     memory: { used: number; total: number };
@@ -163,11 +157,7 @@ export function AboutComputer({
               </p>
               {about?.update && (
                 <p className="text-text-primary">
-                  {about.update.when === "tonight"
-                    ? "Restarting tonight at 3:00 to update."
-                    : about.update.when === "idle"
-                      ? "Restarting to update when idle."
-                      : `${about.update.security ? "A security update" : "An update"} is ready. Settings → Computer says when.`}
+                  An update to image {about.update.image} is ready.
                 </p>
               )}
               <p>machine {about?.machine ?? "not made yet"}</p>

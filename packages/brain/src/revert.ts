@@ -62,8 +62,7 @@ export async function revert(q: Query, n: number): Promise<string> {
         .query(
           `update records
            set type = $2, title = $3, body = $4, props = $5::jsonb,
-               occurred_at = $6, confidence = $7, deleted_at = $8,
-               merged_into = $9
+               deleted_at = $6, merged_into = $7
            where id = $1 and person_id = current_member()`,
           [
             id,
@@ -71,8 +70,6 @@ export async function revert(q: Query, n: number): Promise<string> {
             text(before, "title"),
             text(before, "body"),
             JSON.stringify(props),
-            before.occurred_at ?? null,
-            before.confidence ?? null,
             before.deleted_at ?? null,
             before.merged_into ?? null,
           ],
@@ -97,14 +94,9 @@ export async function revert(q: Query, n: number): Promise<string> {
       }
       const result = await q.query(
         `update edges
-         set verb = $2, confidence = $3, occurred_at = $4
+         set verb = $2
          where id = $1 and person_id = current_member()`,
-        [
-          id,
-          text(before, "verb"),
-          before.confidence ?? null,
-          before.occurred_at ?? null,
-        ],
+        [id, text(before, "verb")],
       );
       if (!result.rowCount) throw new NotFound(`edge ${id} is not yours`);
       return `edge ${id} as before #${n}`;

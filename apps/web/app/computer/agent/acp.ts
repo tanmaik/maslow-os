@@ -45,15 +45,6 @@ export type ToolCall = {
   toolName?: string;
 };
 
-// A question the agent asks the person before it goes on, as Claude
-// Code's own tool shapes it.
-export type Question = {
-  question: string;
-  header?: string;
-  options: { label: string; description?: string }[];
-  multiSelect?: boolean;
-};
-
 export type PlanEntry = {
   content: string;
   status: "pending" | "in_progress" | "completed";
@@ -88,6 +79,15 @@ export type Update =
         toolCallId: string;
       })
   | { sessionUpdate: "plan"; entries: PlanEntry[] }
+  // A question the agent asked the person, standing until answered: the
+  // door's own word, one ask of the brain's.
+  | {
+      sessionUpdate: "_maslow/asked";
+      id: string;
+      title: string;
+      body: string;
+      options: string[];
+    }
   | { sessionUpdate: "current_mode_update"; currentModeId: string }
   | {
       sessionUpdate: "available_commands_update";
@@ -119,6 +119,8 @@ export type Word = {
     clear?: boolean;
     gone?: boolean;
     context?: Context | null;
+    // An ask answered elsewhere, by the notification's id.
+    answered?: string;
   };
   terminal?: Terminal;
   // What a socket asks of the door rather than of the agent.

@@ -21,7 +21,7 @@ const { StreamableHTTPClientTransport } = sdk(
 const TOKEN = /^[0-9a-f-]{36}\.[0-9a-f-]{36}$/;
 const DOORS = [
   "catalog",
-  "read",
+  "list",
   "get",
   "graph",
   "write",
@@ -314,7 +314,7 @@ export async function smokeMcp(stack, signIn) {
     };
   };
   const asData = { "maslow-answer": "data" };
-  const mine = await call(grant.access_token, "read", { limit: 200 });
+  const mine = await call(grant.access_token, "list", { limit: 200 });
   const acme = seeds[orgs[0].slug];
   check(
     "read is Wile's brain only, a line each",
@@ -334,7 +334,7 @@ export async function smokeMcp(stack, signIn) {
     vocabulary.lines.filter((l) => /^people|@/.test(l)).join(" | ") ||
       vocabulary.text,
   );
-  const badSince = await call(grant.access_token, "read", {
+  const badSince = await call(grant.access_token, "list", {
     since: "yesterday",
   });
   check(
@@ -347,7 +347,6 @@ export async function smokeMcp(stack, signIn) {
     source: "claude",
     sourceRef: "smoke-1",
     title: "Wile owes Road Runner an anvil",
-    confidence: 0.8,
   };
   const undefinedType = await call(grant.access_token, "write", {
     records: [claim],
@@ -374,7 +373,7 @@ export async function smokeMcp(stack, signIn) {
   const claimId = written.ids[0];
   const log = await call(grant.access_token, "history", { of: claimId });
   // The same answers as data, for a program that asked; the lines stay.
-  const dataRead = await call(grant.access_token, "read", { limit: 3 }, asData);
+  const dataRead = await call(grant.access_token, "list", { limit: 3 }, asData);
   const dataGet = await call(
     grant.access_token,
     "get",
@@ -419,7 +418,6 @@ export async function smokeMcp(stack, signIn) {
         from: { id: claimId },
         verb: "rests_on",
         to: { id: restsOn },
-        confidence: 0.9,
       },
     ],
   });
@@ -431,7 +429,7 @@ export async function smokeMcp(stack, signIn) {
       got.lines[0]?.startsWith(`${claimId} claim `) &&
       got.lines[0].includes(`"Wile owes`) &&
       link?.includes(`${restsOn} "`) &&
-      link.includes("c=0.9"),
+      /edge=\S+$/.test(link),
     link ?? got.text,
   );
   const edgeId = link?.match(/edge=(\S+)/)?.[1];
@@ -526,7 +524,7 @@ export async function smokeMcp(stack, signIn) {
     fields: [{ type: "claim", name: "strength", newName: "weight" }],
     types: [{ name: "claim", newName: "conclusion" }],
   });
-  const conclusions = await call(grant.access_token, "read", {
+  const conclusions = await call(grant.access_token, "list", {
     type: "conclusion",
   });
   check(
@@ -586,12 +584,12 @@ export async function smokeMcp(stack, signIn) {
     ],
   });
   const [scrapId, ungradedId] = scrap.ids;
-  const graded = await call(grant.access_token, "read", {
+  const graded = await call(grant.access_token, "list", {
     type: "scrap",
     orderBy: { property: "grade", direction: "desc" },
     limit: 1,
   });
-  const tail = await call(grant.access_token, "read", {
+  const tail = await call(grant.access_token, "list", {
     type: "scrap",
     orderBy: { property: "grade", direction: "desc" },
     cursor: graded.lines[0]?.match(/cursor=(\S+)/)?.[1],
@@ -777,29 +775,29 @@ export async function smokeMcp(stack, signIn) {
     `${charged} actions`,
   );
 
-  // Recall finds a record by what it is about, catching up the vectors of
-  // whatever changed since it was last asked.
+  // Search finds a record by its words first and then by what it is about,
+  // catching up the vectors of whatever changed since it was last asked.
   const wanted = mine.rows[1]?.match(/"([^"]*)"/)?.[1] ?? "";
-  const recalled = await call(grant.access_token, "recall", {
-    question: `anything about ${wanted}`,
+  const recalled = await call(grant.access_token, "search", {
+    query: `anything about ${wanted}`,
     limit: 3,
   });
   check(
-    "recall finds a record by meaning",
-    recalled.lines[0] === "3 records, nearest first" &&
+    "search finds a record by its words and its meaning",
+    recalled.lines[0] === "3 records, by words then by meaning" &&
       recalled.lines[1]?.split(" ")[1] === mine.ids[1] &&
-      /^0\.\d\d /.test(recalled.lines[1]),
+      /^(words|0\.\d\d) /.test(recalled.lines[1]),
     recalled.lines[1]?.slice(0, 60) ?? recalled.text,
   );
-  const wordless = await call(grant.access_token, "recall", { question: "?!" });
+  const wordless = await call(grant.access_token, "search", { query: "?!" });
   check(
     "a question without a word is refused",
-    wordless.refused && wordless.text === "a question needs a word",
+    wordless.refused && wordless.text === "a search needs a word",
     wordless.text,
   );
   const metered = await spent("vectors");
   check(
-    "every token recall spent is on the meter",
+    "every token search spent is on the meter",
     metered > 0,
     `${metered} tokens`,
   );
@@ -842,12 +840,12 @@ export async function smokeMcp(stack, signIn) {
     theirLog.lines.find((l) => / share /.test(l)) ?? theirLog.lines[0],
   );
   const lift = theirs.lines.find((l) => l.startsWith("lift owner="));
-  const lifts = await call(colleagueGrant.access_token, "read", {
+  const lifts = await call(colleagueGrant.access_token, "list", {
     type: "lift",
     owner: orgs[0].users[0].id,
   });
-  const shared = await call(colleagueGrant.access_token, "recall", {
-    question: "a barbell exercise",
+  const shared = await call(colleagueGrant.access_token, "search", {
+    query: "a barbell exercise",
     type: "lift",
     limit: 1,
   });
@@ -933,7 +931,7 @@ export async function smokeMcp(stack, signIn) {
       lift === `lift owner=${orgs[0].users[0].email}` &&
       !theirs.lines.some((l) => l.startsWith("person ")) &&
       lifts.lines[0] === "3 records" &&
-      shared.lines[0] === "1 record, nearest first" &&
+      shared.lines[0] === "1 record, by words then by meaning" &&
       lifts.ids.includes(shared.lines[1]?.split(" ")[1]) &&
       notTheirs.refused &&
       notTheirs.text === "lift is a colleague's type; only they change it",
@@ -1016,7 +1014,7 @@ export async function smokeMcp(stack, signIn) {
   await connect();
   const sdkTools = (await sdkClient.listTools()).tools.map((t) => t.name);
   const sdkRead = await sdkClient.callTool({
-    name: "read",
+    name: "list",
     arguments: { limit: 1 },
   });
   await sdkClient.close();
@@ -1066,7 +1064,7 @@ export async function smokeMcp(stack, signIn) {
       client_id: askDescribed.client_id,
     })
   ).json();
-  const describedRead = await call(describedGrant.access_token, "read", {
+  const describedRead = await call(describedGrant.access_token, "list", {
     limit: 1,
   });
   const misnamed = await page(

@@ -1,5 +1,7 @@
 # 2026-09-05 — recall by meaning
 
+Superseded in name on 2026-09-16 by `2026-09-16-a-record-is-its-type.md`: the tool is `search`, and it looks by words first.
+
 Full-text was deferred as enough "until a real question fails". The agent's
 questions fail in a predictable way: it does not know the words a record
 uses, only what it is about. So the brain gained one more read: `recall`,

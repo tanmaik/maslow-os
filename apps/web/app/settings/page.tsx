@@ -30,7 +30,6 @@ import { ImageInput } from "@/components/image-input";
 import { AccentPicker } from "@/app/settings/accent";
 import { ComputerPane } from "@/app/settings/computer";
 import { DockRows } from "@/app/settings/dock";
-import { LocationRow } from "@/app/settings/location";
 import { LookPicker } from "@/app/settings/look-picker";
 import { Wallpaper } from "@/app/settings/wallpaper";
 import { papersOf } from "@/lib/wallpapers";
@@ -241,7 +240,6 @@ export default async function Settings({
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
   const uploads = deployment.storage.kind !== "none";
-  const computers = deployment.computers.kind !== "none";
   const panes: Pane[] = [
     {
       id: "you",
@@ -406,11 +404,6 @@ export default async function Settings({
             </Button>
           </div>
         </form>
-        {computers && (
-          <Rows>
-            <LocationRow />
-          </Rows>
-        )}
         {holder ? (
           <Note>
             {said("leave").text ??

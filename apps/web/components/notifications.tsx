@@ -10,7 +10,7 @@ import {
 } from "@remixicon/react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import {
   NotificationCenter,
@@ -22,7 +22,9 @@ import {
   Notification as NotificationCard,
   NotificationViewport,
 } from "@/components/base/notification/notification";
+import { UpdateDialog } from "@/app/computer/updating";
 import { Markdown } from "@/components/markdown";
+import type { Update } from "@/lib/computer";
 import { BASE, LEAVE } from "@/lib/motion";
 import { cx } from "@/utils/cx";
 
@@ -157,13 +159,14 @@ export function NotificationsPanel({
   onUpdate,
 }: {
   notifications: Notifications;
-  // An update waiting on the person's computer, until they say when.
-  update?: { image: string; readyAt: string } | null;
-  onUpdate?: (when: "now" | "tonight" | "idle") => Promise<void>;
+  // An update waiting on the person's computer, until they take it.
+  update?: Update | null;
+  onUpdate?: () => Promise<void>;
 }) {
   const { open, show } = notifications;
-  // The update as a notification: what it is, what taking it means, and the
-  // three times it can be taken, level with each other.
+  const [asking, setAsking] = useState(false);
+  // The update as a notification: what it is, what taking it means, and
+  // the one button that takes it, which asks first.
   const updateRow: NotificationCenterItem | null = update
     ? {
         id: UPDATE,
@@ -172,21 +175,15 @@ export function NotificationsPanel({
         title: "An update is ready for your computer",
         description: (
           <span className="text-body-regular text-text-secondary">
-            Image {update.image}, ready since {ago(update.readyAt)}. Taking it
-            restarts your computer, which takes about a minute. Now stops
-            whatever is running; tonight is three in the morning; when idle is a
-            quiet half hour.
+            Image {update.image}, ready since {ago(update.readyAt)}. Updating
+            restarts your computer, which takes about a minute.
           </span>
         ),
         timestamp: ago(update.readyAt),
         unread: true,
         status: "information",
         icon: RiRefreshLine,
-        actions: [
-          { id: "now", label: "Now", variant: "secondary" },
-          { id: "tonight", label: "Tonight", variant: "secondary" },
-          { id: "idle", label: "When idle", variant: "secondary" },
-        ],
+        actions: [{ id: "update", label: "Update", variant: "primary" }],
       }
     : null;
   useEffect(() => {
@@ -195,61 +192,76 @@ export function NotificationsPanel({
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
   }, [open, show]);
+  // Clear takes what is done with: a note, an answered ask. An ask still
+  // waiting is not the list's to drop.
   const clearable = notifications.notifications.some(
-    (n) => n.readAt !== null && (n.kind === "note" || n.answer !== null),
+    (n) => n.kind === "note" || n.answer !== null,
   );
   return (
-    <AnimatePresence>
-      {open && (
-        <>
-          {/* A press anywhere else puts it away. */}
-          <div
-            className="fixed inset-0 z-[65]"
-            onPointerDown={() => show(false)}
-          />
-          <motion.aside
-            aria-label="Notifications"
-            initial={{ opacity: 0, x: 24, filter: "blur(4px)" }}
-            animate={{
-              opacity: 1,
-              x: 0,
-              filter: "blur(0px)",
-              transition: BASE,
-            }}
-            exit={{ opacity: 0, x: 24, filter: "blur(4px)", transition: LEAVE }}
-            className="glass-sheet glass-airy fixed top-[calc(27px+env(safe-area-inset-top))] right-2 z-[70] w-[400px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-3xl"
-          >
-            <NotificationCenter
-              tabs={false}
-              title="Notifications"
-              emptyMessage="Nothing is waiting on you."
-              className="w-full max-w-none border-none bg-transparent shadow-none"
-              clear={{
-                label: "Clear read",
-                onClear: notifications.clear,
-                disabled: !clearable,
-              }}
-              notifications={[
-                ...(updateRow ? [updateRow] : []),
-                ...notifications.notifications.map((n) =>
-                  row(n, notifications),
-                ),
-              ]}
-              onAction={(id, answer) =>
-                id === UPDATE
-                  ? void onUpdate?.(answer as "now" | "tonight" | "idle")
-                  : void notifications.answer(id, answer)
-              }
+    <>
+      <UpdateDialog
+        open={asking}
+        onOpenChange={setAsking}
+        onTake={() => void onUpdate?.()}
+      />
+      <AnimatePresence>
+        {open && (
+          <>
+            {/* A press anywhere else puts it away. */}
+            <div
+              className="fixed inset-0 z-[65]"
+              onPointerDown={() => show(false)}
             />
-            {notifications.said && (
-              <p className="text-body-2-regular text-text-error-primary px-4 pb-3">
-                {notifications.said}
-              </p>
-            )}
-          </motion.aside>
-        </>
-      )}
-    </AnimatePresence>
+            <motion.aside
+              aria-label="Notifications"
+              initial={{ opacity: 0, x: 24, filter: "blur(4px)" }}
+              animate={{
+                opacity: 1,
+                x: 0,
+                filter: "blur(0px)",
+                transition: BASE,
+              }}
+              exit={{
+                opacity: 0,
+                x: 24,
+                filter: "blur(4px)",
+                transition: LEAVE,
+              }}
+              className="glass-sheet glass-airy fixed top-[calc(27px+env(safe-area-inset-top))] right-2 z-[70] w-[400px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-3xl max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] max-sm:w-auto max-sm:max-w-none"
+            >
+              <NotificationCenter
+                tabs={false}
+                title="Notifications"
+                emptyMessage="Nothing is waiting on you."
+                className="w-full max-w-none border-none bg-transparent shadow-none"
+                clear={{
+                  label: "Clear",
+                  onClear: notifications.clear,
+                  disabled: !clearable,
+                }}
+                notifications={[
+                  ...(updateRow ? [updateRow] : []),
+                  ...notifications.notifications.map((n) =>
+                    row(n, notifications),
+                  ),
+                ]}
+                // Update asks first, in a dialog over the panel.
+                onAction={(id, answer) =>
+                  id === UPDATE
+                    ? setAsking(true)
+                    : void notifications.answer(id, answer)
+                }
+              />
+              {notifications.said && (
+                <p className="text-body-2-regular text-text-error-primary px-4 pb-3">
+                  {notifications.said}
+                </p>
+              )}
+            </motion.aside>
+          </>
+        )}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -299,17 +311,20 @@ function row(
     content: (
       <>
         {n.records.length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1.5">
-            {n.records.map((id) => (
-              <Link
-                key={id}
-                href={`/brain/records/${id}`}
-                className="text-caption-1-medium text-text-secondary bg-background-secondary-default hover:bg-background-secondary-hover duration-fast ease-plain rounded-full px-2 py-0.5 transition-colors"
-              >
-                {notifications.titles[id] ?? id}
-              </Link>
+          <p className="text-body-2-regular text-text-tertiary mt-1.5">
+            About{" "}
+            {n.records.map((id, i) => (
+              <Fragment key={id}>
+                {i > 0 && ", "}
+                <Link
+                  href={`/brain/records/${id}`}
+                  className="text-text-secondary underline-offset-2 hover:underline"
+                >
+                  {notifications.titles[id] ?? id}
+                </Link>
+              </Fragment>
             ))}
-          </div>
+          </p>
         )}
         {answered && (
           <p className="text-body-2-medium text-text-tertiary mt-1.5">
@@ -325,7 +340,7 @@ function row(
 }
 
 // An ask that offers nothing to pick takes whatever the person types.
-function Typed({ onSay }: { onSay: (answer: string) => void }) {
+export function Typed({ onSay }: { onSay: (answer: string) => void }) {
   const [answer, setAnswer] = useState("");
   return (
     <form
@@ -382,11 +397,8 @@ export function NotificationToasts({
             status={n.kind === "ask" ? "information" : "neutral"}
             icon={n.kind === "ask" ? RiQuestionAnswerLine : RiNotification3Line}
             introDelay={0}
-            // A note goes by itself; an ask is a decision waiting on the
-            // person and stays until they take it.
-            autoDismissDuration={
-              n.kind === "ask" || held === n.id ? undefined : TOAST
-            }
+            // It goes by itself; an ask is still behind the clock, waiting.
+            autoDismissDuration={held === n.id ? undefined : TOAST}
             onDismiss={() => notifications.drop(n.id)}
             closeLabel="Close"
             onClick={() => notifications.show(true)}

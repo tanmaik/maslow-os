@@ -73,13 +73,13 @@ function instructions(a: About | null, client: string | null): string {
     : `This is one person's brain. Today is ${today}.`;
   return `${whose}
 
-A brain is a graph of what a person knows: records, the links between them, and a log of every change. It is a mind, not a mirror: write what you concluded, with a confidence and an edge back to a stub of what it rests on (the app, its own id, and enough to cite it), never a copy of a mailbox or a calendar.
+A brain is a graph of what a person knows: records, the links between them, and a log of every change. It is a mind, not a mirror: write what you concluded, with an edge back to a stub of what it rests on (the app, its own id, and enough to cite it), never a copy of a mailbox or a calendar.
 
 Types are this person's own vocabulary, and it starts empty. Reuse a name before defining one; a record of an undefined type is refused. Define a type in the same write call. A type may declare fields; values then live in props and must fit. Reshape it later with redefine and undefine. A verb is any word an edge carries; nothing defines it. The catalog also lists types colleagues shared into this brain, each with its owner: read them as you read the person's own, and never write to them. You cannot share; share asks the person, who accepts or declines on their brain's pages.
 
 A record from an app carries the app as source and the app's own id as sourceRef, and the same pair written twice is one record; a record written without them is filed as source brain with a fresh ref. Ids are ten characters; carry them exactly.
 
-Answers are lines, not JSON. A record: id type when "title" src=source:ref, then c=confidence when it is a conclusion, shared:level, removed or merged→id when so, then its props as JSON; its body sits beneath, indented. A link from a record: → verb id "title" or ← for one made to it. A change in the log: #seq when subject id action by=who: field before→after; by=you is the person, by=colleague is theirs, any other name is an app's.`;
+Answers are lines, not JSON. A record: id type written "title" src=source:ref, then shared:level, removed or merged→id when so, then its props as JSON; its body sits beneath, indented. A link from a record: → verb id "title" or ← for one made to it. A change in the log: #seq when subject id action by=who: field before→after; by=you is the person, by=colleague is theirs, any other name is an app's.`;
 }
 
 const ref = z.union([
@@ -117,8 +117,6 @@ const props = z.record(z.string(), z.unknown());
 const moment = z.iso
   .datetime({ offset: true })
   .describe("ISO 8601 with a zone, like 2026-09-05T14:30:00Z");
-const instant = moment.nullable();
-const confidence = z.number().min(0).max(1).nullable();
 const record = z.object({
   type: z.string(),
   source: z.string().optional().describe("the app it came from, like gmail"),
@@ -126,17 +124,11 @@ const record = z.object({
   title: z.string().max(500).optional(),
   body: z.string().max(100_000).optional().describe("markdown"),
   props: props.optional(),
-  occurredAt: instant.optional(),
-  confidence: confidence
-    .optional()
-    .describe("how sure, when the record is a conclusion"),
 });
 const edge = z.object({
   from: ref,
   verb: z.string(),
   to: ref,
-  confidence: confidence.optional(),
-  occurredAt: instant.optional(),
 });
 const filter = z.object({
   property: z.string(),
@@ -146,7 +138,7 @@ const filter = z.object({
 const id = z.string().regex(brain.ID).describe("ten characters");
 const ids = z.array(id).min(1).max(50);
 // A change to a record: what a record has, minus where it came from, all
-// optional. A null confidence takes it away.
+// optional.
 const change = record
   .omit({ source: true, sourceRef: true })
   .partial()
@@ -167,6 +159,16 @@ const fieldChange = property.partial().extend({
   newName: fieldName.optional(),
 });
 const field = z.object({ type: z.string(), name: z.string() });
+
+// The conversation on the person's computer an ask came from, given by
+// the door there, so the answer goes back to it as the next word.
+const replyTo = z
+  .string()
+  .uuid()
+  .optional()
+  .describe(
+    "the conversation on the person's computer the answer is said into",
+  );
 
 type Result = {
   content: { type: "text"; text: string }[];
@@ -297,10 +299,10 @@ export function brainServer(
   );
 
   server.registerTool(
-    "read",
+    "list",
     {
       description:
-        "Records, newest first by when they happened, one per line with the first line of the body beneath. Filter by type, time, a person record they link to, and full-text query (words, quoted phrases, -exclusions). A type matches by name across everyone the person may see; owner narrows to one person's. where and orderBy need a type and read one person's records by their declared fields: the owner's, or the person's own. Pages by cursor. detail full gives whole bodies.",
+        "Records of the brain, newest written first, one per line with the first line of the body beneath: the structured way to read. Name a type, then filter on any field it declares with where and order by any field with orderBy, or take a window of when records were written with since and until; page with cursor. Fields and their kinds are in catalog. Filter by type, a window of when they were written, a person record they link to, and conditions on the type's declared fields; search finds records by their words or their meaning. A type matches by name across everyone the person may see; owner narrows to one person's. where and orderBy need a type and read one person's records by their declared fields: the owner's, or the person's own. Pages by cursor. detail full gives whole bodies.",
       inputSchema: {
         scope: z
           .enum(["mine", "shared", "all"])
@@ -317,7 +319,6 @@ export function brainServer(
         person: id.optional().describe("a person record's id"),
         since: moment.optional(),
         until: moment.optional(),
-        query: z.string().optional(),
         where: z.array(filter).optional(),
         orderBy: z
           .object({
@@ -455,7 +456,7 @@ export function brainServer(
     "edit",
     {
       description:
-        "Changes records. New props replace the old and must fit the type's fields. occurredAt null takes the time away; confidence null takes it away. A change naming the last change it saw is refused rather than overwriting what changed since. Answers with each record as it is now.",
+        "Changes records. New props replace the old and must fit the type's fields. A change naming the last change it saw is refused rather than overwriting what changed since. Answers with each record as it is now.",
       inputSchema: { changes: z.array(change).min(1).max(50) },
     },
     door(async (q, a) => {
@@ -554,6 +555,7 @@ export function brainServer(
           .string()
           .max(1000)
           .describe("why, in a sentence the person reads"),
+        reply_to: replyTo,
       },
     },
     door(async (q, a) => {
@@ -574,6 +576,7 @@ export function brainServer(
         records: a.records ?? [],
         options: ["Accept", "Decline"],
         request: ask.id,
+        replyTo: a.reply_to,
       });
       return {
         text: `asked ${ask.id} as notification ${notification.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,
@@ -681,7 +684,7 @@ export function brainServer(
     "ask",
     {
       description:
-        "Asks the person a question in their notification center and answers with the notification's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notifications tool reads it back.",
+        "Asks the person a question in their notification center and answers with the notification's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notifications tool reads it back; with reply_to it is also said into that conversation on their computer.",
       inputSchema: {
         title: z.string().min(1).max(200).describe("the question itself"),
         body: z.string().max(4000).optional().describe("markdown"),
@@ -691,10 +694,16 @@ export function brainServer(
           .optional()
           .describe("what they may pick; free text when there are none"),
         records: ids.optional().describe("what the question is about"),
+        reply_to: replyTo,
       },
     },
     door(async (q, a) => {
-      const n = await notifications.leaveNotification(q, { kind: "ask", ...a });
+      const { reply_to, ...rest } = a;
+      const n = await notifications.leaveNotification(q, {
+        kind: "ask",
+        ...rest,
+        replyTo: reply_to,
+      });
       return {
         text: `asked ${n.id}: ${n.title}; read the answer with notifications ids=[${n.id}]`,
         data: n,
@@ -907,120 +916,167 @@ export function brainServer(
     }),
   );
 
-  // Recall exists where vectors can be made.
+  // Search by words is everywhere; search by meaning exists where vectors
+  // can be made.
   const vectors = model();
-  if (vectors) {
-    // Every token the model counts goes on the meter, in the name of the
-    // app that asked.
-    const metered = async (
-      q: Query,
-      texts: string[],
-      as: "query" | "document",
-    ) => {
-      const made = await embed(texts, as);
-      await spend(
-        q,
-        s.userId,
-        "vectors",
-        "token",
-        made.tokens,
-        PRICES.vectors,
-        s.client ?? "browser",
-      );
-      return made.vectors;
-    };
-    // Records changed since their vector was made are caught up first, a
-    // batch at a time until none are behind, each batch in a transaction
-    // of its own, so what was made stays made if the model fails midway.
-    // One ask does at most fifty batches; a brain larger than that fills
-    // in over a few. The catch-up ends early, and says so, rather than
-    // ending the ask, when the org is at its month's ceiling for vectors
-    // or the model turns it away for asking too often: what has a vector
-    // is still recalled.
-    const catchUp = async (): Promise<string | null> => {
-      const month = new Date();
-      month.setUTCDate(1);
-      month.setUTCHours(0, 0, 0, 0);
-      for (let batch = 0; batch < 50; batch++) {
-        try {
-          const step = await asPerson(s, async (q) => {
-            const behind = await brain.stale(q, vectors);
-            if (behind.length === 0) return "done";
-            const used = await spentSince(q, "vectors", month);
-            if (used >= CEILINGS.vectors) {
-              console.error(
-                `vectors: org ${s.orgId} at the ceiling of ${CEILINGS.vectors} tokens this month`,
-              );
-              return "this month's room for vectors is used up";
-            }
-            const made = await metered(
-              q,
-              behind.map((b) => b.text),
-              "document",
-            );
-            await brain.remember(
-              q,
-              vectors,
-              behind.map((b, i) => ({ ...b, embedding: made[i]! })),
-            );
-            return "more";
-          });
-          if (step === "done") return null;
-          if (step !== "more") return step;
-        } catch (err) {
-          if (err instanceof RateLimited) return err.message;
-          throw err;
-        }
-      }
-      return null;
-    };
-    server.registerTool(
-      "recall",
-      {
-        description:
-          "Records nearest a question by meaning, best first with a score, across types. Use when you do not know the words a record uses; read with query when you do.",
-        inputSchema: {
-          question: z.string(),
-          type: z.string().optional(),
-          since: moment.optional(),
-          until: moment.optional(),
-          limit: z.number().int().min(1).max(50).optional(),
-        },
-        annotations: { readOnlyHint: true },
-      },
-      (a) =>
-        refusing(async () => {
-          if (!/[\p{L}\p{N}]/u.test(a.question))
-            throw new brain.Invalid("a question needs a word");
-          const behind = await catchUp();
-          return asPerson(s, async (q) => {
-            const [asked] = await metered(q, [a.question], "query");
-            const found = await brain.recall(q, vectors, asked!, {
-              type: a.type,
-              since: date(a.since),
-              until: date(a.until),
-              limit: a.limit,
-            });
-            const head =
-              found.length === 0
-                ? "no records"
-                : `${plural(found.length, "record")}, nearest first`;
-            return {
-              text: [
-                head,
-                ...(behind
-                  ? [
-                      `records changed since their vector was made are not among them: ${behind}`,
-                    ]
-                  : []),
-                ...found.map((f) => `${f.score.toFixed(2)} ${line(f.record)}`),
-              ].join("\n"),
-              data: { records: found, behind },
-            };
-          });
-        }),
+  // Every token the model counts goes on the meter, in the name of the
+  // app that asked.
+  const metered = async (
+    q: Query,
+    texts: string[],
+    as: "query" | "document",
+  ) => {
+    const made = await embed(texts, as);
+    await spend(
+      q,
+      s.userId,
+      "vectors",
+      "token",
+      made.tokens,
+      PRICES.vectors,
+      s.client ?? "browser",
     );
-  }
+    return made.vectors;
+  };
+  // Records changed since their vector was made are caught up first, a
+  // batch at a time until none are behind, each batch in a transaction
+  // of its own, so what was made stays made if the model fails midway.
+  // One ask does at most fifty batches; a brain larger than that fills
+  // in over a few. The catch-up ends early, and says so, rather than
+  // ending the ask, when the org is at its month's ceiling for vectors
+  // or the model turns it away for asking too often: what has a vector
+  // is still found.
+  const catchUp = async (): Promise<string | null> => {
+    if (!vectors) return null;
+    const month = new Date();
+    month.setUTCDate(1);
+    month.setUTCHours(0, 0, 0, 0);
+    for (let batch = 0; batch < 50; batch++) {
+      try {
+        const step = await asPerson(s, async (q) => {
+          const behind = await brain.stale(q, vectors);
+          if (behind.length === 0) return "done";
+          const used = await spentSince(q, "vectors", month);
+          if (used >= CEILINGS.vectors) {
+            console.error(
+              `vectors: org ${s.orgId} at the ceiling of ${CEILINGS.vectors} tokens this month`,
+            );
+            return "this month's room for vectors is used up";
+          }
+          const made = await metered(
+            q,
+            behind.map((b) => b.text),
+            "document",
+          );
+          await brain.remember(
+            q,
+            vectors,
+            behind.map((b, i) => ({ ...b, embedding: made[i]! })),
+          );
+          return "more";
+        });
+        if (step === "done") return null;
+        if (step !== "more") return step;
+      } catch (err) {
+        if (err instanceof RateLimited) return err.message;
+        throw err;
+      }
+    }
+    return null;
+  };
+  server.registerTool(
+    "search",
+    {
+      description:
+        "Records that say a thing or are about it, best first. how=words is a grep: exact hits on the words, quoted phrases and -exclusions over the title, the body and every field. how=meaning finds the records nearest in meaning to a question, with a score. The default, both, puts the word hits first and fills the rest by meaning, each line saying which. Use list to query by type and field.",
+      inputSchema: {
+        query: z.string().describe("words, a quoted phrase, or a question"),
+        how: z
+          .enum(["words", "meaning", "both"])
+          .optional()
+          .describe(
+            "words for a grep, meaning for nearest by sense; both by default",
+          ),
+        type: z.string().optional(),
+        since: moment.optional(),
+        until: moment.optional(),
+        limit: z.number().int().min(1).max(50).optional(),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    (a) =>
+      refusing(async () => {
+        if (!/[\p{L}\p{N}]/u.test(a.query))
+          throw new brain.Invalid("a search needs a word");
+        const limit = Math.min(a.limit ?? 10, 50);
+        const how = a.how ?? "both";
+        if (how !== "words" && !vectors)
+          throw new brain.Invalid(
+            "search by meaning is off here; search with how=words",
+          );
+        const behind = how === "words" ? null : await catchUp();
+        return asPerson(s, async (q) => {
+          const words =
+            how === "meaning"
+              ? []
+              : (
+                  await brain.read(q, {
+                    query: a.query,
+                    type: a.type,
+                    since: date(a.since),
+                    until: date(a.until),
+                    limit,
+                  })
+                ).records;
+          const seen = new Set(words.map((r) => r.id));
+          let meaning: { record: brain.BrainRecord; score: number }[] = [];
+          if (how !== "words" && vectors && words.length < limit) {
+            const [asked] = await metered(q, [a.query], "query");
+            meaning = (
+              await brain.nearest(q, vectors, asked!, {
+                type: a.type,
+                since: date(a.since),
+                until: date(a.until),
+                limit,
+              })
+            ).filter((f) => !seen.has(f.record.id));
+          }
+          const found = [
+            ...words.map((r) => ({ how: "words" as const, record: r })),
+            ...meaning.map((f) => ({
+              how: "meaning" as const,
+              record: f.record,
+              score: f.score,
+            })),
+          ].slice(0, limit);
+          const head =
+            found.length === 0
+              ? "no records"
+              : `${plural(found.length, "record")}, ${
+                  how === "words"
+                    ? "by words"
+                    : how === "meaning"
+                      ? "nearest by meaning"
+                      : "by words then by meaning"
+                }`;
+          return {
+            text: [
+              head,
+              ...(behind
+                ? [
+                    `records changed since their vector was made are not among those by meaning: ${behind}`,
+                  ]
+                : []),
+              ...found.map(
+                (f) =>
+                  `${f.how === "words" ? "words" : f.score.toFixed(2)} ${line(f.record)}`,
+              ),
+            ].join("\n"),
+            data: { records: found, behind },
+          };
+        });
+      }),
+  );
 
   // The person's apps, where this deployment has them: what is connected,
   // what fits a task, and running one. Three tools however many apps, so

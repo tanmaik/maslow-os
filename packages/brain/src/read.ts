@@ -159,8 +159,8 @@ async function narrow(q: Query, opts: ReadOptions) {
          where (e.from_id = r.id or e.to_id = r.id)
            and e.deleted_at is null
            and p.id in (select same_record($4)))))`,
-    "($5::timestamptz is null or coalesce(occurred_at, created_at) >= $5)",
-    "($6::timestamptz is null or coalesce(occurred_at, created_at) < $6)",
+    "($5::timestamptz is null or created_at >= $5)",
+    "($6::timestamptz is null or created_at < $6)",
     `($7::text is null
        or search @@ websearch_to_tsquery('english', $7)
        or search @@ to_tsquery('english', $8))`,
@@ -239,8 +239,8 @@ async function narrow(q: Query, opts: ReadOptions) {
   return { where, params, param, field };
 }
 
-// Records, newest first by when they happened, filtered and searched. Every
-// record carries its source and ref, so a caller can cite it.
+// Records, newest written first, filtered and searched. Every record
+// carries its source and ref, so a caller can cite it.
 export async function read(
   q: Query,
   opts: ReadOptions = {},
@@ -249,7 +249,7 @@ export async function read(
   const limit = Math.min(Math.max(opts.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const { where, params, param, field } = await narrow(q, opts);
 
-  let order = "coalesce(occurred_at, created_at)";
+  let order = "created_at";
   let orderType = "timestamptz";
   let direction: "asc" | "desc" = "desc";
   if (opts.orderBy) {
@@ -408,7 +408,7 @@ export async function edgesOf(
          where o.id = case when e.from_id = any($1::text[])
            then wt.winner else wf.winner end
            and o.deleted_at is null)
-     order by coalesce(e.occurred_at, e.created_at), e.id`,
+     order by e.created_at, e.id`,
     [same, verb ?? null],
   );
   return rows.map(toEdge);
@@ -472,8 +472,7 @@ const standing = (ids: string) => `
     select id, at as winner from up where merged_into is null
   ), resolved as (
     select distinct on (wf.winner, e.verb, wt.winner)
-      e.id, wf.winner as from_id, e.verb, wt.winner as to_id,
-      e.confidence, e.occurred_at, e.created_at
+      e.id, wf.winner as from_id, e.verb, wt.winner as to_id, e.created_at
     from touched e
     join winner wf on wf.id = e.from_id
     join winner wt on wt.id = e.to_id

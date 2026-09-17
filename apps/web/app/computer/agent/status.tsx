@@ -1,5 +1,6 @@
 "use client";
 
+import { RiShieldCheckLine, RiSpeedUpFill } from "@remixicon/react";
 import { useEffect, useState } from "react";
 
 import type { Context, Mode } from "@/app/computer/agent/acp";
@@ -8,6 +9,7 @@ import { ContextRing } from "@/components/application/ai-chat/ai-chat-composer";
 import {
   PermissionMenu,
   type ComposerPermission,
+  type ComposerPermissionOption,
 } from "@/components/application/composer-panel/composer-panel";
 import {
   Popover,
@@ -17,21 +19,32 @@ import {
 import type { Usage } from "@/lib/computer";
 import { dayOf, dollars } from "@/lib/dollars";
 
-// How the agent acts, in the composer's words and in the protocol's: the
-// menu offers auto, manual, plan and bypass; Claude Code names the same
-// four acceptEdits, default, plan and bypassPermissions.
+// How the agent acts, in the composer's words and in the protocol's: two
+// ways, bypass and auto, which Claude Code names bypassPermissions and
+// acceptEdits. In bypass nothing asks; in auto the person's own tools go
+// through and a command asks first.
 const PERMISSION_OF: Record<string, ComposerPermission> = {
-  default: "manual",
   acceptEdits: "auto",
-  plan: "plan",
   bypassPermissions: "bypass",
 };
-const MODE_OF: Record<ComposerPermission, string> = {
-  manual: "default",
+const MODE_OF: Partial<Record<ComposerPermission, string>> = {
   auto: "acceptEdits",
-  plan: "plan",
   bypass: "bypassPermissions",
 };
+const WAYS: ComposerPermissionOption[] = [
+  {
+    id: "bypass",
+    label: "Bypass",
+    description: "Never asks",
+    icon: RiShieldCheckLine,
+  },
+  {
+    id: "auto",
+    label: "Auto",
+    description: "Asks before a command",
+    icon: RiSpeedUpFill,
+  },
+];
 
 // The week's spend against the cap, read from `/usage` once a minute.
 function useUsage(): Usage | null {
@@ -80,10 +93,11 @@ export function Status({
       <div className="flex min-w-0 items-center gap-3">
         {modes.length > 0 && (
           <PermissionMenu
-            value={(mode && PERMISSION_OF[mode]) || "manual"}
+            value={(mode && PERMISSION_OF[mode]) || "bypass"}
+            options={WAYS}
             onChange={(p) => {
               const to = MODE_OF[p];
-              if (modes.some((m) => m.id === to)) onMode(to);
+              if (to && modes.some((m) => m.id === to)) onMode(to);
             }}
           />
         )}

@@ -18,7 +18,7 @@ import { Terminal as Xterm } from "@xterm/xterm";
 import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
-import { BarButton, InBar } from "@/app/desktop/panel";
+import { BarButton, InBar, useFolded } from "@/app/desktop/panel";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { IconButton } from "@/components/base/buttons/icon-button";
@@ -32,6 +32,22 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { liveSocket } from "@/lib/live";
 import { FAST, LEAVE } from "@/lib/motion";
 import { cx } from "@/utils/cx";
+
+// The keys a phone's keyboard lacks, as the terminal would send them.
+const KEYS: { label: string; send: string; title?: string }[] = [
+  { label: "Esc", send: "\x1b", title: "Escape" },
+  { label: "Tab", send: "\t" },
+  { label: "Ctrl", send: "", title: "Control, for the next letter" },
+  { label: "↑", send: "\x1b[A", title: "Up" },
+  { label: "↓", send: "\x1b[B", title: "Down" },
+  { label: "←", send: "\x1b[D", title: "Left" },
+  { label: "→", send: "\x1b[C", title: "Right" },
+  { label: "-", send: "-" },
+  { label: "/", send: "/" },
+  { label: "|", send: "|" },
+  { label: "~", send: "~" },
+  { label: "Paste", send: "" },
+];
 
 // The biggest picture the machine will hold, as its door has it.
 const BIGGEST = 24 * 1024 * 1024;
@@ -195,6 +211,11 @@ export function Terminal({
   // The shell to turn back to as soon as the machine lists them.
   const back = useRef<number | null>(null);
   const term = useRef<Xterm | null>(null);
+  // A phone's keyboard has no control key: the strip's Ctrl arms the next
+  // letter typed, which goes as the control code.
+  const folded = useFolded();
+  const [ctrl, setCtrl] = useState(false);
+  const armed = useRef(false);
   const [away, setAway] = useState<string | null>("Connecting…");
   const [offered, setOffered] = useState<string | null>(null);
   // Whether the offered address was just copied, shown on its mark.
@@ -414,7 +435,14 @@ export function Terminal({
       };
       el.addEventListener("paste", pasted, true);
 
-      t.onData((d) => socket.current?.send(encoder.encode(d)));
+      t.onData((d) => {
+        if (armed.current && d.length === 1 && /[a-z]/i.test(d)) {
+          armed.current = false;
+          setCtrl(false);
+          d = String.fromCharCode(d.toUpperCase().charCodeAt(0) & 0x1f);
+        }
+        socket.current?.send(encoder.encode(d));
+      });
       t.onBinary((d) =>
         socket.current?.send(Uint8Array.from(d, (c) => c.charCodeAt(0))),
       );
@@ -877,6 +905,45 @@ export function Terminal({
           </AnimatePresence>
         </div>
       </div>
+      {/* On a phone, the keys a shell needs that its keyboard lacks: a
+          strip along the bottom, over the keyboard, each key sent as the
+          terminal would send it. */}
+      {folded && (
+        <div className="flex shrink-0 items-stretch gap-1 overflow-x-auto border-t border-separator-border bg-background-secondary-default px-1.5 pt-1 pb-[calc(env(safe-area-inset-bottom)+1.25rem)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:h-9">
+          {KEYS.map((k) => (
+            <button
+              key={k.label}
+              type="button"
+              aria-label={k.title ?? k.label}
+              aria-pressed={k.label === "Ctrl" ? ctrl : undefined}
+              onPointerDown={(e) => e.preventDefault()}
+              onClick={() => {
+                if (k.label === "Ctrl") {
+                  armed.current = !armed.current;
+                  setCtrl(armed.current);
+                } else if (k.label === "Paste") {
+                  void navigator.clipboard
+                    .readText()
+                    .then(
+                      (text) =>
+                        text && socket.current?.send(encoder.encode(text)),
+                    )
+                    .catch(() => {});
+                } else socket.current?.send(encoder.encode(k.send));
+                term.current?.focus();
+              }}
+              className={cx(
+                "min-w-11 shrink-0 rounded-lg px-2.5 font-mono text-body-2-regular text-text-primary transition-colors duration-fast ease-plain active:bg-background-tertiary-default",
+                k.label === "Ctrl" && ctrl
+                  ? "bg-accent-500 text-white"
+                  : "bg-background-primary-default shadow-xs",
+              )}
+            >
+              {k.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

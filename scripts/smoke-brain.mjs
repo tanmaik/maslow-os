@@ -615,25 +615,19 @@ export async function smokeBrain(stack) {
         from: { source: "seed", sourceRef: "person:wile" },
         verb: "owes",
         to: { source: "seed", sourceRef: "person:beep" },
-        confidence: 0.8,
-        occurredAt: "2026-08-28T15:04:00Z",
       };
       const same = await brain.write(q, { edges: [link] });
-      const stronger = await brain.write(q, {
-        edges: [{ ...link, confidence: 0.95 }],
-      });
+      const again = await brain.write(q, { edges: [link] });
       const after = await brain.edgesOf(q, owes.id, "owes");
-      return { seeded, same, stronger, after };
+      return { seeded, same, again, after };
     });
     check(
-      "an edge carries strength and time",
+      "an edge is one however often it is written",
       detail.seeded.length === 1 &&
-        detail.seeded[0].confidence === 0.8 &&
-        detail.seeded[0].occurredAt instanceof Date &&
         detail.same.edges === 0 &&
-        detail.stronger.edges === 1 &&
-        detail.after[0].confidence === 0.95,
-      `${detail.seeded[0]?.confidence} then ${detail.after[0]?.confidence}`,
+        detail.again.edges === 0 &&
+        detail.after.length === 1,
+      `${detail.after.length} edge after ${detail.same.edges + detail.again.edges} changes`,
     );
 
     // An edge joins two records and can be taken back.
@@ -662,8 +656,6 @@ export async function smokeBrain(stack) {
             from: wile,
             verb: "owes",
             to: { source: "seed", sourceRef: "person:beep" },
-            confidence: 0.95,
-            occurredAt: "2026-08-28T15:04:00Z",
           },
         ],
       });
@@ -805,7 +797,6 @@ export async function smokeBrain(stack) {
             sourceRef: "mail:rr-1",
             title: "Beep from the other address",
             body: "Sent from the R. Runner account.",
-            occurredAt: new Date("2026-09-02T10:00:00Z"),
           },
         ],
         edges: [
@@ -1422,7 +1413,7 @@ export async function smokeBrain(stack) {
       `marge's shares on share-1: ${margeGave.join(", ") || "none"}; joining another org's group ${joinTheirs}`,
     );
 
-    // An editor rewrites a link on a shared record; a ref two people carry
+    // An editor links from a shared record; a ref two people carry
     // must be named by id; merging into an alias needs its winner.
     const relinked = await as(marge)(async (q) => {
       const [target] = (
@@ -1445,7 +1436,6 @@ export async function smokeBrain(stack) {
             from: { id: privateNote },
             verb: "mentions",
             to: { id: target },
-            confidence: 0.5,
           },
         ],
       });
@@ -1456,9 +1446,8 @@ export async function smokeBrain(stack) {
         edges: [
           {
             from: { id: privateNote },
-            verb: "mentions",
+            verb: "cites",
             to: { id: relinked },
-            confidence: 0.9,
           },
         ],
       }),
@@ -1531,12 +1520,12 @@ export async function smokeBrain(stack) {
       return attempt(() => brain.merge(q, c, o));
     });
     check(
-      "editors relink, ambiguous refs are refused, a merge needs its winner",
+      "editors link on a shared record, ambiguous refs are refused, a merge needs its winner",
       rewritten.edges === 1 &&
         ambiguous === "Invalid" &&
         intoAlias === "Forbidden" &&
         crossPerson === "Invalid",
-      `relink ${rewritten.edges}, ambiguous ${ambiguous}, merge into alias ${intoAlias}, across people ${crossPerson}`,
+      `link ${rewritten.edges}, ambiguous ${ambiguous}, merge into alias ${intoAlias}, across people ${crossPerson}`,
     );
 
     // A deleted group takes its shares with it, even on records the org
@@ -1784,6 +1773,50 @@ export async function smokeBrain(stack) {
         others.byId === null &&
         others.answering === "Unanswerable",
       `waiting ${left.counts.waiting}→${left.after.waiting}, unread ${left.counts.unread}; off the options ${left.outside}, twice ${left.twice}; a colleague sees ${others.all} and answering is ${others.answering}`,
+    );
+
+    // Clear takes what is done with, a note and an answered ask, and
+    // leaves an ask still waiting where it stands.
+    const cleared = await as(marge)(async (q) => {
+      const waiting = await notifications.leaveNotification(q, {
+        kind: "ask",
+        title: "Proof the second loaf?",
+        options: ["Yes", "No"],
+      });
+      const gone = await notifications.clearDone(q);
+      return { waiting, gone, kept: await notifications.notificationsOf(q) };
+    });
+    check(
+      "clear takes what is done and leaves what waits",
+      cleared.gone >= 2 &&
+        cleared.kept.some((n) => n.id === cleared.waiting.id) &&
+        cleared.kept.every((n) => n.kind === "ask" && n.answer === null) &&
+        !cleared.kept.some(
+          (n) => n.id === left.note.id || n.id === left.ask.id,
+        ),
+      `${cleared.gone} cleared, ${cleared.kept.length} still waiting`,
+    );
+
+    // An ask names the conversation its answer goes back to; a note has
+    // nowhere to answer to.
+    const conversation = "11111111-2222-4333-8444-555555555555";
+    const replied = await as(marge)(async (q) => ({
+      ask: await notifications.leaveNotification(q, {
+        kind: "ask",
+        title: "Which loaf first?",
+        options: ["Rye", "Wheat"],
+        replyTo: conversation,
+      }),
+      note: await notifications.leaveNotification(q, {
+        kind: "note",
+        title: "The oven is on",
+        replyTo: conversation,
+      }),
+    }));
+    check(
+      "an ask answers to a conversation",
+      replied.ask.replyTo === conversation && replied.note.replyTo === null,
+      `ask→${replied.ask.replyTo}, note→${replied.note.replyTo}`,
     );
 
     // Export and import.

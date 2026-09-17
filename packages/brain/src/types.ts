@@ -60,9 +60,6 @@ export type BrainRecord = {
   title: string;
   body: string;
   props: Record<string, unknown>;
-  occurredAt: Date | null;
-  // How sure the writer was; set when the record is a conclusion.
-  confidence: number | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -79,14 +76,12 @@ export type BrainRecord = {
 // of these would blank a body that was never read.
 export type Stub = Omit<BrainRecord, "body"> & { body?: null };
 
-// One directed link between two records: what, how strongly, since when.
+// One directed link between two records.
 export type Edge = {
   id: string;
   fromId: string;
   verb: string;
   toId: string;
-  confidence: number | null;
-  occurredAt: Date | null;
   createdAt: Date;
 };
 
@@ -127,16 +122,12 @@ export type RecordInput = {
   title?: string;
   body?: string;
   props?: Record<string, unknown>;
-  occurredAt?: Date | string | null;
-  confidence?: number | null;
 };
 
 export type EdgeInput = {
   from: Ref;
   verb: string;
   to: Ref;
-  confidence?: number | null;
-  occurredAt?: Date | string | null;
 };
 
 // A condition on a declared field. `in` takes a list of values; `contains`
@@ -149,5 +140,5 @@ export type Filter = {
 };
 
 // What to order by: a declared field, or, with no field named, when the
-// record happened.
+// record was written.
 export type Sort = { property?: string; direction?: "asc" | "desc" };

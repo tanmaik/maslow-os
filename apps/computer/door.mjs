@@ -524,8 +524,7 @@ const server = http.createServer(async (req, res) => {
     if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     const said = parse(await bodyOf(req));
-    const { latitude, longitude, accuracy, temperature, unit, condition } =
-      said ?? {};
+    const { latitude, longitude, accuracy } = said ?? {};
     if (
       typeof latitude !== "number" ||
       typeof longitude !== "number" ||
@@ -536,20 +535,13 @@ const server = http.createServer(async (req, res) => {
         400,
         "A location names its latitude, longitude and accuracy.",
       );
-    const weather =
-      typeof temperature === "number" && typeof condition === "string"
-        ? `${temperature}°${unit === "F" || unit === "C" ? unit : ""} ${condition}`
-        : "";
     appendLocation(
       [
         new Date().toISOString(),
         latitude,
         longitude,
         `${Math.round(accuracy)}m`,
-        weather,
-      ]
-        .filter(Boolean)
-        .join(" "),
+      ].join(" "),
     );
     res.writeHead(204);
     return res.end();
@@ -630,8 +622,8 @@ const server = http.createServer(async (req, res) => {
   }
   // The two tools of the door's own, asked for by the small server it
   // hands every conversation of the agent's: a wakeup, which prompts the
-  // conversation again after a while, and a monitor, which prompts it
-  // with each line a command prints. The token names the conversation.
+  // conversation again after a while or with what a command prints, and
+  // stop, which ends one. The token names the conversation.
   if (to.mine && url.pathname === "/maslow/tools" && req.method === "POST") {
     if (!fromTheMachine(req))
       return say(res, 403, "Only the machine itself may ask.");
@@ -640,32 +632,51 @@ const server = http.createServer(async (req, res) => {
     if (!id)
       return say(res, 403, "That is no conversation of this computer's.");
     const args = ask?.args ?? {};
-    if (ask?.tool === "schedule_wakeup") {
+    if (ask?.tool === "wakeup") {
+      const command = String(args.command ?? "").trim();
+      if (command) {
+        let pattern = null;
+        if (args.pattern !== undefined && String(args.pattern) !== "") {
+          try {
+            pattern = new RegExp(String(args.pattern));
+          } catch (err) {
+            return say(res, 400, `That pattern does not parse: ${err.message}`);
+          }
+        }
+        const told = watchStart(id, command, pattern);
+        return say(res, told.ok ? 200 : 400, told.said);
+      }
       const delay = Math.min(
         86400,
         Math.max(30, Number(args.delay_seconds) || 0),
       );
       const prompt = String(args.prompt ?? "").trim();
-      if (!prompt) return say(res, 400, "Say what to wake up with.");
+      if (!prompt)
+        return say(
+          res,
+          400,
+          "Say what to wake up with, or give a command to watch.",
+        );
       wakeupSet(id, delay, prompt);
-      return say(res, 200, `You will be woken in ${delay} seconds.`);
-    }
-    if (ask?.tool === "monitor") {
-      const command = String(args.command ?? "").trim();
-      if (!command) return say(res, 400, "Say what to run.");
-      const told = monitorStart(
-        id,
-        command,
-        String(args.description ?? command),
+      return say(
+        res,
+        200,
+        `You will be woken in ${delay} seconds; stop delay ends it.`,
       );
-      return say(res, told.ok ? 200 : 400, told.said);
     }
-    if (ask?.tool === "stop_monitor") {
-      const m = monitors.get(String(args.id ?? ""));
-      if (!m || m.chat !== id)
-        return say(res, 404, "No monitor of yours by that id.");
-      monitorStop(m);
-      return say(res, 200, `Monitor ${m.id} stopped.`);
+    if (ask?.tool === "stop") {
+      const which = String(args.id ?? "").trim();
+      if (which === "delay") {
+        if (!wakeups.has(id))
+          return say(res, 404, "No wakeup is waiting for you.");
+        wakeupClear(id);
+        return say(res, 200, "The wakeup is off.");
+      }
+      const w = watches.get(which);
+      if (!w || w.chat !== id)
+        return say(res, 404, "No wakeup of yours by that id.");
+      watchStop(w);
+      return say(res, 200, `${w.id} stopped.`);
     }
     return say(res, 400, "No such tool.");
   }
@@ -682,6 +693,21 @@ const server = http.createServer(async (req, res) => {
     if (!fromTheMachine(req))
       return say(res, 403, "Only the machine itself may ask.");
     return askTheBrain(req, res);
+  }
+  // A word to a conversation, for our server alone: the answer to an ask
+  // the agent left with this conversation to answer to. Said, and the
+  // conversation woken to hear it if it sleeps.
+  if (to.mine && url.pathname === "/maslow/say" && req.method === "POST") {
+    if (!ours(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    const said = parse(await bodyOf(req));
+    const chat = typeof said?.chat === "string" ? said.chat : "";
+    const text = String(said?.text ?? "").trim();
+    if (!chat || !text)
+      return say(res, 400, "Say which conversation, and what.");
+    if (typeof said?.answered === "string") answered(chat, said.answered);
+    void chatSay(chat, text);
+    return say(res, 202, "Said.");
   }
   // The numbers, for our server alone: it signs its ask with the secret.
   // With them, when the person was last here and what is running in their
@@ -1615,9 +1641,8 @@ function handed() {
   };
 }
 
-// A word to a conversation from the door itself, a wakeup firing or a
-// monitor's lines: into the record as a line of the person's, into the
-// running turn if one runs and as a turn of its own if not, and the
+// A word to a conversation from outside its window — a wakeup firing, a
+// watched line, an answer the person gave elsewhere — with the
 // conversation woken first if it sleeps.
 async function chatSay(id, text) {
   const room = acp ?? agentStart();
@@ -1625,35 +1650,176 @@ async function chatSay(id, text) {
   if (acp !== room) return;
   const chat = await chatOpen(room, id);
   if (!chat || acp !== room) return;
-  fromAgent(room, {
-    jsonrpc: "2.0",
-    method: "session/update",
-    params: {
-      sessionId: chat.id,
-      update: {
-        sessionUpdate: "user_message_chunk",
-        content: { type: "text", text },
-      },
-    },
-  });
-  const steer = (chat.busy ?? 0) > 0;
-  if (!steer) {
-    chat.busy = (chat.busy ?? 0) + 1;
-    chatRunning(room, chat, true);
-  }
-  try {
-    await agentAsk(room, "session/prompt", {
-      sessionId: chat.id,
-      prompt: [{ type: "text", text }],
-    });
-  } catch {
+  await chatWord(room, chat, [{ type: "text", text }]).catch(() => {
     // A turn that failed ends like any other; the record says what it said.
+  });
+}
+
+// The one way a word reaches a conversation, whoever says it: into the
+// record in their words, then a turn of its own when none runs, and into
+// the running turn when one does — at once while the agent is thinking,
+// and once the tool it is running has answered if one is, since a tool
+// cut off midway is work lost. Into the turn means the turn is stopped
+// where it stands and prompted on with the word, as Claude Code's own
+// terminal does with a word typed while it works.
+async function chatWord(room, chat, prompt) {
+  const text = prompt
+    .filter((c) => c?.type === "text")
+    .map((c) => c.text)
+    .join("");
+  if (text)
+    fromAgent(room, {
+      jsonrpc: "2.0",
+      method: "session/update",
+      params: {
+        sessionId: chat.id,
+        update: {
+          sessionUpdate: "user_message_chunk",
+          content: { type: "text", text },
+        },
+      },
+    });
+  if ((chat.busy ?? 0) === 0) return chatTurn(room, chat, prompt);
+  chat.held.push(...prompt);
+  if (chat.inflight.size === 0) chatInterrupt(room, chat);
+  return { stopReason: "end_turn" };
+}
+
+// A turn: the prompt sent and answered, and every word held for it while
+// it ran sent on as its continuation, so what comes back is the end of
+// the whole of it.
+async function chatTurn(room, chat, prompt) {
+  chat.busy = (chat.busy ?? 0) + 1;
+  chatRunning(room, chat, true);
+  try {
+    let words = prompt;
+    for (;;) {
+      let result;
+      try {
+        result = await agentAsk(room, "session/prompt", {
+          sessionId: chat.id,
+          prompt: words,
+        });
+      } catch (err) {
+        if (!chat.held.length) throw err;
+        result = null;
+      }
+      // A turn that ended left no tool running, whatever it last said.
+      chat.inflight.clear();
+      if (!chat.held.length || acp !== room || room.chats.get(chat.id) !== chat)
+        return result;
+      words = chat.held.splice(0);
+    }
   } finally {
-    if (!steer && acp === room && room.chats.get(chat.id) === chat) {
+    if (acp === room && room.chats.get(chat.id) === chat) {
       chat.busy = Math.max(0, (chat.busy ?? 1) - 1);
       settle(room, chat);
     }
   }
+}
+
+// The running turn stopped where it stands, so what is held for it goes
+// on as its next word. A question the agent had open belongs to the turn
+// that just stopped.
+function chatInterrupt(room, chat) {
+  moveOn(room, chat);
+  toAgent(room, {
+    jsonrpc: "2.0",
+    method: "session/cancel",
+    params: { sessionId: chat.id },
+  });
+}
+
+// The brain's ask, called by the door for a question the agent asks the
+// person, with this conversation to answer to: the same door the
+// machine's own `ask` goes through.
+async function askTheBrainFor(chat, q) {
+  const url = process.env.BRAIN_URL;
+  if (!url) throw new Error("This computer is not connected to a brain.");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${process.env.BRAIN_TOKEN ?? ""}`,
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+    },
+    body: JSON.stringify({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "tools/call",
+      params: {
+        name: "ask",
+        arguments: {
+          title: q.title,
+          ...(q.body ? { body: q.body } : {}),
+          ...(q.options.length ? { options: q.options } : {}),
+          reply_to: chat,
+        },
+      },
+    }),
+  });
+  const said = await res.json().catch(() => null);
+  const text = said?.result?.content?.[0]?.text ?? "";
+  const id = /^asked (\S+):/.exec(text)?.[1];
+  if (!res.ok || said?.error || said?.result?.isError || !id)
+    throw new Error(
+      said?.error?.message || text || `the brain answered ${res.status}`,
+    );
+  return id;
+}
+
+// A question the agent asks the person, put to them as an ask of the
+// brain's with this conversation to answer to, one per question: it stands
+// in the thread and behind the clock, and the answer comes back as the
+// next word. The agent is told the ids at once and its turn goes on.
+async function askForAgent(room, chat, said) {
+  const asked = [];
+  try {
+    for (const q of said.params?.questions ?? []) {
+      const options = (q.options ?? [])
+        .map((o) => String(o.label ?? "").trim())
+        .filter(Boolean)
+        .slice(0, 6);
+      const body = (q.options ?? [])
+        .filter((o) => o.description)
+        .map((o) => `- ${o.label}: ${o.description}`)
+        .join("\n");
+      const title = String(q.question ?? "")
+        .trim()
+        .slice(0, 200);
+      const id = await askTheBrainFor(chat.id, { title, body, options });
+      asked.push(id);
+      fromAgent(room, {
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId: chat.id,
+          update: { sessionUpdate: "_maslow/asked", id, title, body, options },
+        },
+      });
+    }
+    toAgent(room, { jsonrpc: "2.0", id: said.id, result: { asked } });
+  } catch (err) {
+    toAgent(room, {
+      jsonrpc: "2.0",
+      id: said.id,
+      error: { code: -32603, message: err.message },
+    });
+  }
+}
+
+// An ask answered where the person saw it leaves the conversation's
+// record, open or kept, so it stands nowhere once it is done.
+function answered(id, notification) {
+  const ring = acp?.chats.get(id)?.ring ?? kept.get(id);
+  if (!ring) return;
+  const at = ring.findIndex(
+    (m) =>
+      m.params?.update?.sessionUpdate === "_maslow/asked" &&
+      m.params.update.id === notification,
+  );
+  if (at >= 0) ring.splice(at, 1);
+  toWatchers({ maslow: { chat: { id, answered: notification } } });
 }
 
 // A wakeup: one per conversation, kept on the disk so the door coming
@@ -1693,6 +1859,13 @@ function wakeupArm(id, at, prompt) {
     ),
   );
 }
+function wakeupClear(id) {
+  clearTimeout(wakeups.get(id));
+  wakeups.delete(id);
+  const w = wakeupsWere();
+  delete w[id];
+  wakeupsAre(w);
+}
 function wakeupSet(id, delay, prompt) {
   const at = Date.now() + delay * 1000;
   const w = wakeupsWere();
@@ -1701,21 +1874,21 @@ function wakeupSet(id, delay, prompt) {
   wakeupArm(id, at, prompt);
 }
 
-// A monitor: a command run as the person, whose lines reach its
-// conversation as they come, a second's worth at a time. It outlives the
-// conversation's sleep, waking it with what it prints, and ends with the
-// door.
-const monitors = new Map();
-let ranMonitors = 0;
-function monitorStart(chat, command, description) {
+// A watch: a command run as the person, whose lines reach its
+// conversation as they come, a second's worth at a time, and only those
+// matching its pattern where it has one. It outlives the conversation's
+// sleep, waking it with what it prints, and ends with the door.
+const watches = new Map();
+let ranWatches = 0;
+function watchStart(chat, command, pattern) {
   let mine = 0;
-  for (const m of monitors.values()) if (m.chat === chat) mine++;
+  for (const w of watches.values()) if (w.chat === chat) mine++;
   if (mine >= 4)
     return {
       ok: false,
-      said: "Four monitors already run for you; stop one first.",
+      said: "Four commands are already watched for you; stop one first.",
     };
-  const id = `m${++ranMonitors}`;
+  const id = `w${++ranWatches}`;
   const proc = spawn(
     "/usr/sbin/chroot",
     [
@@ -1730,7 +1903,7 @@ function monitorStart(chat, command, description) {
     ],
     { cwd: "/", stdio: ["ignore", "pipe", "pipe"], detached: true },
   );
-  const m = {
+  const w = {
     id,
     chat,
     proc,
@@ -1739,43 +1912,45 @@ function monitorStart(chat, command, description) {
     timer: undefined,
     stopped: false,
   };
-  monitors.set(id, m);
+  watches.set(id, w);
+  const wanted = (line) =>
+    line.trim() !== "" && (!pattern || pattern.test(line));
   const tell = () => {
-    m.timer = undefined;
-    if (!m.lines.length) return;
-    const said = m.lines.splice(0).join("\n");
-    void chatSay(chat, `[monitor ${id}: ${description}]\n${said}`);
+    w.timer = undefined;
+    if (!w.lines.length) return;
+    const said = w.lines.splice(0).join("\n");
+    void chatSay(chat, `[wakeup ${id}: ${command}]\n${said}`);
   };
   const heard = (buf) => {
-    const parts = (m.held + buf).split("\n");
-    m.held = parts.pop() ?? "";
-    if (m.held.length > 4096) {
-      m.lines.push(`${m.held.slice(0, 4096)} …`);
-      m.held = "";
+    const parts = (w.held + buf).split("\n");
+    w.held = parts.pop() ?? "";
+    if (w.held.length > 4096) {
+      parts.push(`${w.held.slice(0, 4096)} …`);
+      w.held = "";
     }
-    for (const line of parts) if (line.trim()) m.lines.push(line);
-    if (m.lines.length > 200) m.lines.splice(0, m.lines.length - 200);
-    if (!m.timer) m.timer = setTimeout(tell, 1000);
+    for (const line of parts) if (wanted(line)) w.lines.push(line);
+    if (w.lines.length > 200) w.lines.splice(0, w.lines.length - 200);
+    if (w.lines.length && !w.timer) w.timer = setTimeout(tell, 1000);
   };
   proc.stdout.on("data", heard);
   proc.stderr.on("data", heard);
   proc.on("error", (err) => heard(`${err.message}\n`));
   proc.on("exit", (code, signal) => {
-    monitors.delete(id);
-    if (m.held.trim()) m.lines.push(m.held);
-    clearTimeout(m.timer);
-    if (!m.stopped) m.lines.push(`(ended: ${signal ?? `exit ${code}`})`);
+    watches.delete(id);
+    if (wanted(w.held)) w.lines.push(w.held);
+    clearTimeout(w.timer);
+    if (!w.stopped) w.lines.push(`(ended: ${signal ?? `exit ${code}`})`);
     tell();
   });
   return {
     ok: true,
-    said: `Monitor ${id} started: ${description}. What it prints reaches you as it comes; stop_monitor ${id} ends it.`,
+    said: `Watching ${id}: ${command}. ${pattern ? "The lines matching the pattern" : "What it prints"} reach you as they come; stop ${id} ends it.`,
   };
 }
-function monitorStop(m) {
-  m.stopped = true;
+function watchStop(w) {
+  w.stopped = true;
   try {
-    process.kill(-m.proc.pid, "SIGTERM");
+    process.kill(-w.proc.pid, "SIGTERM");
   } catch {
     // Gone already.
   }
@@ -2014,13 +2189,18 @@ function chatRunning(room, chat, on) {
     toWatchers({ maslow: { chat: { id: chat.id, running: on } } });
   }
   if (on) return;
-  // A question the agent asked before it acted belongs to the prompt that
-  // just ended, answered or not; it is not asked of the next socket to
-  // arrive.
+  moveOn(room, chat);
+  void tellContext(chat);
+  void entitle(chat);
+  nap(room, chat);
+}
+
+// A question the agent asked before it acted belongs to the turn that
+// just ended or was stopped, answered or not; it is not asked of the next
+// socket to arrive.
+function moveOn(room, chat) {
   for (let i = chat.ring.length - 1; i >= 0; i--)
-    if (
-      /^(session\/request_permission|_maslow\/ask)$/.test(chat.ring[i].method)
-    ) {
+    if (chat.ring[i].method === "session/request_permission") {
       const [gone] = chat.ring.splice(i, 1);
       if (gone.id !== undefined)
         toAgent(room, {
@@ -2029,20 +2209,14 @@ function chatRunning(room, chat, on) {
           error: { code: -32800, message: "The person moved on." },
         });
     }
-  void tellContext(chat);
-  void entitle(chat);
-  nap(room, chat);
 }
 
 // A turn is over once the agent has been quiet for a moment with no
 // prompt of the door's own still out and no question waiting on the
-// person: a word pushed into a running turn can start another the door
-// never asked for, and that one has no answer to mark its end.
+// person.
 const SETTLE = 1000;
 const asking = (chat) =>
-  chat.ring.some((m) =>
-    /^(session\/request_permission|_maslow\/ask)$/.test(m.method),
-  );
+  chat.ring.some((m) => m.method === "session/request_permission");
 function settle(room, chat) {
   clearTimeout(chat.settle);
   chat.settle = setTimeout(() => {
@@ -2242,11 +2416,14 @@ function fromAgent(room, said) {
   const chat = room.chats.get(said.params?.sessionId);
   if (!chat) return;
   if (chat.replaying && said.method === "session/update") return;
+  if (said.method === "_maslow/ask" && said.id !== undefined)
+    return void askForAgent(room, chat, said);
   chat.ring.push(said);
   if (chat.ring.length > KEPT) chat.ring.shift();
   toWatchers(said);
   if (said.method === "session/update") {
-    const kind = said.params?.update?.sessionUpdate;
+    const u = said.params?.update ?? {};
+    const kind = u.sessionUpdate;
     if (
       /^(agent_message_chunk|agent_thought_chunk|tool_call|tool_call_update|plan)$/.test(
         kind,
@@ -2255,7 +2432,28 @@ function fromAgent(room, said) {
       if (!chat.running) chatRunning(room, chat, true);
       settle(room, chat);
     }
-  } else if (asking(chat)) clearTimeout(chat.settle);
+    // Which tools are running, so a word held for the turn waits on them
+    // and no longer.
+    if (
+      (kind === "tool_call" || kind === "tool_call_update") &&
+      /^(pending|in_progress)$/.test(u.status ?? "")
+    )
+      chat.inflight.add(u.toolCallId);
+    if (
+      kind === "tool_call_update" &&
+      /^(completed|failed)$/.test(u.status ?? "")
+    ) {
+      chat.inflight.delete(u.toolCallId);
+      if (chat.inflight.size === 0 && chat.held.length)
+        chatInterrupt(room, chat);
+    }
+  } else if (said.method === "session/request_permission") {
+    // A tool waiting on leave has not started: a word held for the turn
+    // need not wait on it.
+    chat.inflight.delete(said.params?.toolCall?.toolCallId);
+    if (chat.held.length) chatInterrupt(room, chat);
+    clearTimeout(chat.settle);
+  }
 }
 
 // The records of conversations closed since the door started, by id, so
@@ -2392,6 +2590,10 @@ async function chatOpen(room, id) {
     replaying: kept.has(id),
     quiet: undefined,
     ready: null,
+    // What is said to a running turn, until the turn can hear it, and
+    // the tools it is running meanwhile.
+    held: [],
+    inflight: new Set(),
   };
   kept.delete(id);
   if (id) {
@@ -2540,6 +2742,7 @@ function agent(ws) {
         const stopped = room.chats.get(said.params?.sessionId);
         if (said.method === "session/cancel" && stopped) {
           stopped.busy = 0;
+          stopped.held = [];
           chatRunning(room, stopped, false);
         }
         return toAgent(room, said);
@@ -2566,44 +2769,36 @@ function agent(ws) {
             );
         });
       const chat = room.chats.get(sid);
+      // A prompt is a word into the conversation, answered when the turn
+      // it starts, or joins, has ended.
+      if (said.method === "session/prompt" && chat) {
+        chatWord(room, chat, said.params?.prompt ?? []).then(
+          (result) =>
+            ws.sendText(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: said.id,
+                result: result ?? { stopReason: "end_turn" },
+              }),
+            ),
+          (err) =>
+            ws.sendText(
+              JSON.stringify({
+                jsonrpc: "2.0",
+                id: said.id,
+                error: {
+                  code: -32603,
+                  message: err?.message ?? "The agent stopped answering.",
+                },
+              }),
+            ),
+        );
+        return;
+      }
       // Asked under a number of the door's own, so two tabs asking at once
       // never take each other's answer.
       const id = ++room.asked;
-      // A prompt while one runs is a word into the running turn: the
-      // agent hears it at its next step, and the turn is still the one.
-      const steer = said.method === "session/prompt" && (chat?.busy ?? 0) > 0;
-      if (said.method === "session/prompt" && chat && !steer) {
-        chat.busy = (chat.busy ?? 0) + 1;
-        chatRunning(room, chat, true);
-      }
-      if (said.method === "session/prompt") {
-        // What the person said goes into the record in their own words,
-        // steer or not.
-        const words = (said.params?.prompt ?? [])
-          .filter((c) => c?.type === "text")
-          .map((c) => c.text)
-          .join("");
-        if (words)
-          fromAgent(room, {
-            jsonrpc: "2.0",
-            method: "session/update",
-            params: {
-              sessionId: said.params?.sessionId,
-              update: {
-                sessionUpdate: "user_message_chunk",
-                content: { type: "text", text: words },
-              },
-            },
-          });
-      }
       room.waiting.set(id, (answer) => {
-        if (said.method === "session/prompt" && !steer) {
-          const now = room.chats.get(sid);
-          if (now) {
-            now.busy = Math.max(0, (now.busy ?? 1) - 1);
-            settle(room, now);
-          }
-        }
         ws.sendText(
           JSON.stringify({
             jsonrpc: "2.0",

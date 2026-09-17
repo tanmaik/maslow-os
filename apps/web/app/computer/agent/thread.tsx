@@ -5,6 +5,7 @@ import {
   RiEditLine,
   RiFileTextLine,
   RiGlobalLine,
+  RiQuestionAnswerLine,
   RiTerminalBoxLine,
   RiToolsLine,
 } from "@remixicon/react";
@@ -30,10 +31,10 @@ import {
   Line as Said,
   UserMessage,
 } from "@/components/application/ai-chat/ai-chat-container";
-import { Questionnaire } from "@/components/application/questionnaire/questionnaire";
 import { Notification } from "@/components/base/notification/notification";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Markdown } from "@/components/markdown";
+import { Typed } from "@/components/notifications";
 import {
   TaskList,
   type TaskListStep,
@@ -372,7 +373,7 @@ const ASK_MARK: Record<ToolKind, typeof RiToolsLine> = {
   switch_mode: RiToolsLine,
   other: RiToolsLine,
 };
-const ASK_SAID: Record<ToolKind, string> = {
+export const ASK_SAID: Record<ToolKind, string> = {
   read: "Read a file?",
   edit: "Change a file?",
   delete: "Delete a file?",
@@ -384,7 +385,7 @@ const ASK_SAID: Record<ToolKind, string> = {
   switch_mode: "Change how it acts?",
   other: "Use this tool?",
 };
-const ANSWER: Record<PermissionOption["kind"], string> = {
+export const ANSWER: Record<PermissionOption["kind"], string> = {
   allow_once: "Allow",
   allow_always: "Always",
   reject_once: "No",
@@ -397,42 +398,37 @@ function Asked({
   ask: Ask;
   onAnswer: (result: unknown) => void;
 }) {
-  // A questionnaire: each question a step, the answers by question as
-  // Claude Code's tool takes them, the labels picked joined by commas.
-  const qs = ask.questions;
-  if (qs?.length)
+  // A question, standing until the person answers it here or behind the
+  // clock: what it offers as buttons, or a line to type into.
+  // The description is a paragraph, so the body stands in it as lines.
+  if (ask.asked)
     return (
-      <Questionnaire
-        className="shadow-none"
-        questions={qs.map((q, i) => ({
-          id: String(i),
-          question: q.question,
-          stepLabel: q.header,
-          select: q.multiSelect ? "multiple" : "single",
-          options: q.options.map((o) => ({
-            value: o.label,
-            label: o.label,
-            description: o.description,
-          })),
-          other: true,
-        }))}
-        onComplete={(a) =>
-          onAnswer({
-            answers: Object.fromEntries(
-              qs.map((q, i) => {
-                const said = a[String(i)];
-                return [
-                  q.question,
-                  [
-                    ...(said?.values ?? []),
-                    ...(said?.other ? [said.other] : []),
-                  ].join(", "),
-                ];
-              }),
-            ),
-          })
-        }
-      />
+      <div>
+        <Notification
+          status="information"
+          icon={RiQuestionAnswerLine}
+          title={ask.title}
+          description={
+            ask.asked.body ? (
+              <span className="whitespace-pre-line">
+                {ask.asked.body.replace(/^- /gm, "")}
+              </span>
+            ) : undefined
+          }
+          dismissible={false}
+          className="shadow-none"
+          actions={ask.asked.choices.map((o, i) => ({
+            label: o,
+            variant: i === 0 ? "primary" : "secondary",
+            onClick: () => onAnswer(o),
+          }))}
+        />
+        {ask.asked.choices.length === 0 && (
+          <div className="px-4 pb-3">
+            <Typed onSay={onAnswer} />
+          </div>
+        )}
+      </div>
     );
   // The thing itself, without the backticks Claude Code wraps a command in.
   const what = ask.title.replace(/^`+|`+$/g, "").trim();
@@ -442,7 +438,7 @@ function Asked({
       icon={ASK_MARK[ask.kind] ?? RiToolsLine}
       title={ASK_SAID[ask.kind] ?? ASK_SAID.other}
       description={
-        <span className="line-clamp-3 font-mono text-[12px] leading-5 break-all">
+        <span className="line-clamp-3 font-mono text-caption-1-regular break-all">
           {what}
         </span>
       }

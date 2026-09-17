@@ -27,8 +27,9 @@ export type Storage =
 // write-only, made to be given to a browser.
 export type Analytics = { kind: "posthog"; key: string } | { kind: "none" };
 
-// Vectors for the brain's recall come from Voyage, or from a stand-in that
-// hashes words, or from nowhere, in which case there is no recall.
+// Vectors for the brain's search by meaning come from Voyage, or from a
+// stand-in that hashes words, or from nowhere, in which case search is by
+// words alone.
 export type Embeddings =
   | { kind: "voyage"; apiKey: string; model: string }
   | { kind: "fake" }
@@ -68,6 +69,9 @@ export type Computers =
 export type Models =
   | { kind: "openrouter"; provisioningKey: string; capUsd: number }
   | { kind: "none" };
+
+// What turns a person's voice into words, for hold to talk.
+export type Speech = { kind: "deepgram"; apiKey: string } | { kind: "none" };
 // Production is the live Vercel environment or any box that is not a
 // development server and not a Vercel preview.
 const production = process.env.VERCEL
@@ -137,8 +141,8 @@ function analytics(): Analytics {
   return { kind: "none" };
 }
 
-// A deployment without Voyage has no recall in production, and a stand-in
-// anywhere else.
+// A deployment without Voyage searches by words alone in production, and
+// has a stand-in anywhere else.
 function embeddings(): Embeddings {
   const { VOYAGE_API_KEY: apiKey } = process.env;
   if (apiKey)
@@ -148,6 +152,16 @@ function embeddings(): Embeddings {
       model: "voyage-4-lite",
     };
   return production ? { kind: "none" } : { kind: "fake" };
+}
+
+// A deployment without Deepgram cannot hear, and says so wherever a person
+// would hold to talk; production does not start without it.
+function speech(): Speech {
+  const { DEEPGRAM_API_KEY: apiKey } = process.env;
+  if (apiKey) return { kind: "deepgram", apiKey };
+  if (production)
+    throw new Error("DEEPGRAM_API_KEY is not set; production cannot hear.");
+  return { kind: "none" };
 }
 
 // A deployment without Composio has no connections in production, and
@@ -251,6 +265,7 @@ export const deployment = {
   models: models(),
   connections: connections(),
   embeddings: embeddings(),
+  speech: speech(),
   sync: sync(),
   https,
   identity: identityProvider(),

@@ -84,7 +84,7 @@ function SelectContent({
           data-slot="select-content"
           data-align-trigger={alignItemWithTrigger}
           className={cn(
-            "glass-solid relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-2xl border-0 bg-popover p-2.5 text-popover-foreground shadow-dropdown p-2 transition-[opacity,scale,filter] duration-fast ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-95 data-starting-style:blur-[2px] data-ending-style:duration-instant data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-95 data-ending-style:blur-[2px] data-[align-trigger=true]:transition-none",
+            "glass-solid relative isolate z-50 max-h-(--available-height) w-(--anchor-width) min-w-40 origin-(--transform-origin) overflow-x-hidden overflow-y-auto rounded-2xl !border-0 bg-popover p-1 text-popover-foreground shadow-dropdown p-2 transition-[opacity,scale,filter] duration-fast ease-out-quart data-starting-style:opacity-0 data-starting-style:scale-95 data-starting-style:blur-[2px] data-ending-style:duration-instant data-ending-style:ease-in-quad data-ending-style:opacity-0 data-ending-style:scale-95 data-ending-style:blur-[2px] data-[align-trigger=true]:transition-none",
             className,
           )}
           {...props}
@@ -123,7 +123,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "relative flex w-full cursor-pointer items-center gap-2 rounded-2lg p-2 text-body-medium pr-8 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-selected:bg-dropdown-item-hover-background not-data-[variant=destructive]:focus:**:text-text-primary data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "relative flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-medium pr-8 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-selected:bg-dropdown-item-hover-background not-data-[variant=destructive]:focus:**:text-text-primary data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
         className,
       )}
       {...props}

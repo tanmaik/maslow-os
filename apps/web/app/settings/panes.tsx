@@ -103,23 +103,25 @@ export function Panes({
   return (
     <div className="prefs">
       <nav className="prefs-side" aria-label="Panes">
-        <InputBase
-          ref={field}
-          size="small"
-          type="search"
-          aria-label="Search"
-          placeholder="Search"
-          leadingIcon={RiSearchLine}
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && shown[0]) {
-              e.preventDefault();
-              open(shown[0].id);
-            } else if (e.key === "Escape") setQuery("");
-          }}
-          className="prefs-search"
-        />
+        <div className="contents max-sm:hidden">
+          <InputBase
+            ref={field}
+            size="small"
+            type="search"
+            aria-label="Search"
+            placeholder="Search"
+            leadingIcon={RiSearchLine}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && shown[0]) {
+                e.preventDefault();
+                open(shown[0].id);
+              } else if (e.key === "Escape") setQuery("");
+            }}
+            className="prefs-search"
+          />
+        </div>
         {shown.length === 0 ? (
           <p className="px-2 py-1 text-body-2-regular text-text-secondary">
             Nothing is called that.

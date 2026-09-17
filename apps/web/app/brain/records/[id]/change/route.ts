@@ -22,7 +22,7 @@ import { principal } from "@/lib/session";
 import { vocabulary } from "../../../catalog";
 import { recordHref } from "../../../format";
 import { refused } from "../../../refuse";
-import { confidenceFrom, fieldValue, instantFrom } from "../../../props";
+import { fieldValue } from "../../../props";
 
 // The number of the last change to one record, which a page watching it
 // compares against the one it has.
@@ -89,12 +89,6 @@ export async function POST(
             fieldValue(f, String(form.get(`p.${f.name}`))) ?? null,
           ]),
         );
-      }
-      if (form.has("occurred_at")) {
-        patch.occurredAt = instantFrom(form.get("occurred_at"));
-      }
-      if (form.has("confidence")) {
-        patch.confidence = confidenceFrom(form.get("confidence"));
       }
       if (!Object.keys(patch).length) return;
       if (form.has("seen")) {

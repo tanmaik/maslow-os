@@ -27,7 +27,7 @@ export {
   type Graph,
   type ReadOptions,
 } from "./read.ts";
-export { recall, remember, stale } from "./recall.ts";
+export { nearest, remember, stale } from "./search.ts";
 export { revert } from "./revert.ts";
 export { share, sharesOf, typeSharesOf, unshare } from "./share.ts";
 export { exportBrain, importBrain } from "./transfer.ts";

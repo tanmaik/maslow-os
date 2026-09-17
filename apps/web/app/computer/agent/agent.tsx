@@ -11,13 +11,12 @@ import { useEffect, useRef, useState } from "react";
 
 import type { Content, Past } from "@/app/computer/agent/acp";
 import { useChats } from "@/app/computer/agent/chats";
-import {
-  heardOf,
-  recognizer,
-  type Recognizer,
-} from "@/app/computer/agent/speech";
+import { useEar } from "@/app/computer/agent/ear";
+import { AskSheet } from "@/app/computer/agent/leave";
 import { Status } from "@/app/computer/agent/status";
+import { Talk } from "@/app/computer/agent/talk";
 import { Thread } from "@/app/computer/agent/thread";
+import { BarButton, InBar, useFolded } from "@/app/desktop/panel";
 import { Composer } from "@/components/application/ai-chat/ai-chat-composer";
 import { AiChatShell } from "@/components/application/ai-chat/ai-chat-shell";
 import type { AiChatRepo } from "@/components/application/ai-chat/ai-chat-sidebar";
@@ -65,6 +64,11 @@ function kindOf(name: string, type: string): ComposerAttachmentKind {
     return "code";
   return "document";
 }
+
+// Words heard put after what was typed, with a space between where one
+// is missing.
+const join = (typed: string, heard: string) =>
+  heard ? `${typed}${typed && !typed.endsWith(" ") ? " " : ""}${heard}` : typed;
 
 // When a conversation was last worked on, short enough for the rail's chip.
 function when(at: string | undefined): string {
@@ -133,10 +137,17 @@ export function Agent({ href }: { href?: string } = {}) {
   }, []);
   const [typed, setTyped] = useState("");
   const [held, setHeld] = useState<Held[]>([]);
-  const [listening, setListening] = useState(false);
-  const hearing = useRef<Recognizer | null>(null);
-  const [canHear, setCanHear] = useState(false);
-  useEffect(() => setCanHear(recognizer() !== null), []);
+  const ear = useEar();
+  const folded = useFolded();
+  // On a phone a chat opens in voice mode, the keyboard one tap away, and
+  // on the last conversation rather than a new one.
+  const [typing, setTyping] = useState(false);
+  useEffect(() => {
+    if (folded && !current && ids.length === 0 && past[0]) {
+      open(past[0].sessionId);
+      setCurrent(past[0].sessionId);
+    }
+  }, [folded, current, ids.length, past, open]);
   // How much of the screen the keyboard takes on a phone, so the composer
   // sits on top of it rather than under it.
   const [keyboard, setKeyboard] = useState(0);
@@ -271,39 +282,19 @@ export function Agent({ href }: { href?: string } = {}) {
     );
   };
 
-  // The person's voice into the field, through the browser's own ear.
+  // The desk's mic: the same ear, clicked on and off, its words landing in
+  // the field beside what was typed while it listened. On a phone the mic
+  // is the way back to voice mode.
+  const base = useRef("");
+  useEffect(() => {
+    if (ear.on && !folded) setTyped(join(base.current, ear.heard));
+  }, [ear.on, ear.heard, folded]);
   const listen = (on: boolean) => {
-    if (!on) {
-      hearing.current?.stop();
-      hearing.current = null;
-      setListening(false);
-      return;
-    }
-    const r = recognizer();
-    if (!r) return;
-    r.continuous = true;
-    r.interimResults = true;
-    // What this dictation has put in the field, so a result that refines
-    // what was heard replaces its own words and never what the person
-    // typed beside them while it listened.
-    let said = "";
-    r.onresult = (e) => {
-      const heard = heardOf(e);
-      setTyped((was) => {
-        const before = was.endsWith(said)
-          ? was.slice(0, was.length - said.length)
-          : was;
-        said = `${before && !before.endsWith(" ") ? " " : ""}${heard}`;
-        return before + said;
-      });
-    };
-    r.onend = () => {
-      hearing.current = null;
-      setListening(false);
-    };
-    hearing.current = r;
-    setListening(true);
-    r.start();
+    if (folded) return setTyping(false);
+    if (on) {
+      base.current = typed;
+      void ear.start();
+    } else void ear.stop().then((text) => setTyped(join(base.current, text)));
   };
 
   // The commands this conversation offers, once the person types a slash.
@@ -418,8 +409,7 @@ export function Agent({ href }: { href?: string } = {}) {
               {MODEL}
             </span>
           }
-          mic={canHear}
-          listening={listening}
+          listening={ear.on}
           onListen={listen}
           value={typed}
           onValueChange={setTyped}
@@ -451,6 +441,59 @@ export function Agent({ href }: { href?: string } = {}) {
 
   const title =
     chat?.title ?? past.find((p) => p.sessionId === here)?.title ?? "New chat";
+  // On a phone the window is the conversation alone: the chats as a
+  // picker under the bar, and under it either the voice mode or the
+  // thread with the keyboard.
+  if (folded)
+    return (
+      <div className="flex h-full min-h-0 flex-col">
+        <InBar phone="strip">
+          <select
+            aria-label="Chat"
+            value={here ?? ""}
+            onChange={(e) => {
+              if (e.target.value === "") begin();
+              else if (e.target.value !== here) {
+                open(e.target.value);
+                setCurrent(e.target.value);
+              }
+            }}
+            className="min-w-0 flex-1 truncate bg-transparent text-body-2-medium text-text-primary outline-none"
+          >
+            <option value="">New chat</option>
+            {here && !past.some((p) => p.sessionId === here) && (
+              <option value={here}>{chat?.title ?? "New chat"}</option>
+            )}
+            {past.map((p) => (
+              <option key={p.sessionId} value={p.sessionId}>
+                {chats[p.sessionId]?.title ?? p.title ?? "New chat"}
+              </option>
+            ))}
+          </select>
+          <BarButton icon={RiChatNewLine} label="New chat" onClick={begin} />
+        </InBar>
+        <AskSheet
+          ask={chat?.asks[0] ?? null}
+          onAnswer={(a, result) => chat && answer(chat.id, a, result)}
+        />
+        {typing ? (
+          <>
+            <div className="flex min-h-0 flex-1 flex-col">{transcript}</div>
+            <div className="shrink-0 px-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)]">
+              {composer}
+            </div>
+          </>
+        ) : (
+          <Talk
+            chat={chat ?? null}
+            ear={ear}
+            note={why ?? away}
+            onSay={say}
+            onType={() => setTyping(true)}
+          />
+        )}
+      </div>
+    );
   return (
     <AiChatShell
       className="h-full"

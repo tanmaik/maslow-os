@@ -617,6 +617,16 @@ html[data-accent="graphite"] {
   -webkit-user-select: none;
   font-weight: 500;
 }
+/* On a phone with a window open the bar and the handle lie on the window's
+   paper rather than the wallpaper, and read in the text's own colour. */
+html[data-paper] .mac-top-menubar {
+  color: var(--color-text-primary);
+}
+html[data-paper] .phone-handle {
+  background: var(--color-text-primary);
+  opacity: 0.55;
+  box-shadow: none;
+}
 
 /* Settings, as a Mac lays out System Settings: a rail of panes down the
    left with a search over it, and the pane on the right, its name over
@@ -713,20 +723,26 @@ html[data-accent="graphite"] {
   .prefs {
     flex-direction: column;
   }
+  /* A strip of chips along the top, scrolled sideways by a thumb; the
+     search, which the strip makes needless, is not drawn. */
   .prefs-side {
     width: auto;
     flex-direction: row;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
-    gap: 4px;
-    padding: 8px;
-    overflow: visible;
+    gap: 6px;
+    padding: 8px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
     border-right: 0;
     border-bottom: 1px solid var(--prefs-line);
   }
+  .prefs-side::-webkit-scrollbar {
+    display: none;
+  }
   .prefs-search {
-    width: 100%;
-    margin-bottom: 2px;
+    display: none;
   }
   .prefs-group {
     display: contents;
@@ -735,7 +751,13 @@ html[data-accent="graphite"] {
     display: none;
   }
   .prefs-item {
-    min-height: 34px;
+    flex: 0 0 auto;
+    width: auto;
+    min-height: 36px;
+    padding: 4px 12px 4px 6px;
+    white-space: nowrap;
+    border-radius: 999px;
+    border: 1px solid var(--prefs-line);
   }
 }
 
@@ -777,8 +799,7 @@ html[data-accent="graphite"] {
   }
 }
 
-/* A phone: the picker under Settings reads as a list, one pane wide, not
-   a grid of icons there is no room to lay out. */
+/* A phone: every menu is a sheet, and a pane's grid is one column. */
 @media (max-width: 639.98px) {
   /* Every menu — a window's, the desk's, the dock's, a row's — is a sheet
      up from the bottom edge, where a thumb is, rather than a card beside
@@ -801,18 +822,6 @@ html[data-accent="graphite"] {
   .prefs-section-grid {
     grid-template-columns: 1fr;
     justify-items: stretch;
-  }
-  .prefs-item {
-    width: 100%;
-    flex-direction: row;
-    justify-content: flex-start;
-    text-align: left;
-    min-height: 44px;
-  }
-  .prefs-item-label {
-    display: flex;
-    align-items: center;
-    min-height: 0;
   }
 }
 

@@ -7,7 +7,7 @@ import { principal } from "@/lib/session";
 
 import { recordHref } from "../format";
 import { backTo, refused } from "../refuse";
-import { definitionsFrom, instantFrom, propsFrom } from "../props";
+import { definitionsFrom, propsFrom } from "../props";
 
 // The one type the product itself knows, defined the first time it is used.
 const NOTE = "note";
@@ -52,7 +52,6 @@ export async function POST(request: Request) {
             // The fields the record is fitted to: the ones being declared
             // here, or the ones the type already has.
             props: propsFrom(form, known?.properties ?? declaring ?? []),
-            occurredAt: instantFrom(form.get("occurred_at")) ?? new Date(),
           },
         ],
       });

@@ -35,8 +35,6 @@ export type Snapshot = {
     title: string;
     body: string;
     props: Record<string, unknown>;
-    occurredAt: string | null;
-    confidence: number | null;
     // Set when this record was merged into the one named.
     mergedInto: { source: string; sourceRef: string } | null;
   }[];
@@ -44,8 +42,6 @@ export type Snapshot = {
     from: { source: string; sourceRef: string };
     verb: string;
     to: { source: string; sourceRef: string };
-    confidence: number | null;
-    occurredAt: string | null;
   }[];
   shares: {
     on: { source: string; sourceRef: string } | { type: string };
@@ -67,8 +63,6 @@ type ShareExportRow = {
 
 type EdgeExportRow = {
   verb: string;
-  confidence: number | null;
-  occurred_at: Date | null;
   from_source: string;
   from_ref: string;
   to_source: string;
@@ -93,7 +87,7 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
      order by r.created_at, r.id`,
   );
   const edges = await q.query<EdgeExportRow>(
-    `select e.verb, e.confidence, e.occurred_at,
+    `select e.verb,
             f.source as from_source, f.source_ref as from_ref,
             t.source as to_source, t.source_ref as to_ref
      from edges e
@@ -141,8 +135,6 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       title: r.title,
       body: r.body,
       props: r.props,
-      occurredAt: r.occurred_at?.toISOString() ?? null,
-      confidence: r.confidence,
       mergedInto: r.into_source
         ? { source: r.into_source, sourceRef: r.into_ref! }
         : null,
@@ -151,8 +143,6 @@ export async function exportBrain(q: Query): Promise<Snapshot> {
       from: { source: e.from_source, sourceRef: e.from_ref },
       verb: e.verb,
       to: { source: e.to_source, sourceRef: e.to_ref },
-      confidence: e.confidence,
-      occurredAt: e.occurred_at?.toISOString() ?? null,
     })),
     shares: shares.rows.flatMap((s) => {
       const subject =
@@ -191,10 +181,6 @@ export type Imported = {
 const isObject = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
 const isText = (v: unknown) => typeof v === "string";
-const isTime = (v: unknown) =>
-  v === null || (isText(v) && !Number.isNaN(Date.parse(v)));
-const isConfidence = (v: unknown) =>
-  v === null || (typeof v === "number" && v >= 0 && v <= 1);
 const isRef = (v: unknown) =>
   isObject(v) && isText(v.source) && isText(v.sourceRef);
 const isNamed = (v: unknown) => isObject(v) && isText(v.name);
@@ -222,8 +208,6 @@ const isRecordEntry = (v: unknown) =>
   isText(v.title) &&
   isText(v.body) &&
   isObject(v.props) &&
-  isTime(v.occurredAt) &&
-  isConfidence(v.confidence) &&
   (v.mergedInto === null || isRef(v.mergedInto));
 const LEVELS = new Set<string>(["view", "edit", "owner"]);
 const isShareEntry = (v: unknown) =>
@@ -238,12 +222,7 @@ const isShareEntry = (v: unknown) =>
   LEVELS.has(v.level) &&
   (v.subject !== "everyone" || v.level === "view");
 const isEdgeEntry = (v: unknown) =>
-  isObject(v) &&
-  isRef(v.from) &&
-  isRef(v.to) &&
-  isText(v.verb) &&
-  isConfidence(v.confidence) &&
-  isTime(v.occurredAt);
+  isObject(v) && isRef(v.from) && isRef(v.to) && isText(v.verb);
 
 // Whether a parsed file is a brain snapshot this version can import, down to
 // each entry, so nothing malformed reaches a transaction.

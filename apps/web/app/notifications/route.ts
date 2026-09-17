@@ -2,7 +2,7 @@ import { Forbidden, Invalid, NotFound, stubs } from "@maslow/brain";
 import { asPerson } from "@maslow/db";
 import {
   answerNotification,
-  clearRead,
+  clearDone,
   markRead,
   notificationCounts,
   notificationOf,
@@ -12,6 +12,7 @@ import {
 import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
+import { tellAnswer } from "@/lib/computer";
 import { principal } from "@/lib/session";
 import { Refused, told } from "@/lib/shares";
 
@@ -56,7 +57,7 @@ export async function POST(request: Request) {
   try {
     const files = await asPerson(p, async (q) => {
       if (said.read) await markRead(q);
-      if (said.clear) await clearRead(q);
+      if (said.clear) await clearDone(q);
       if (said.id && said.answer !== undefined) {
         // An ask to share carries a request, and answering the notification is
         // answering the request: the same path the brain's pages take.
@@ -74,6 +75,9 @@ export async function POST(request: Request) {
             )
           ).files;
         } else await answerNotification(q, said.id, said.answer);
+        // The answer goes back to the conversation it came from, once
+        // this answer has landed.
+        after(() => tellAnswer(p, said.id!));
       }
       return [];
     });

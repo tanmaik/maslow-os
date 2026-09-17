@@ -24,7 +24,6 @@ import {
   type ToolKind,
   type Update,
   type Word,
-  type Question,
 } from "@/app/computer/agent/acp";
 import { liveSocket } from "@/lib/live";
 
@@ -52,9 +51,9 @@ export type Ask = {
   title: string;
   kind: ToolKind;
   options: PermissionOption[];
-  // The questions, when what is asked is a questionnaire rather than
-  // leave to act.
-  questions?: Question[];
+  // A question standing until the person answers it, here or behind the
+  // clock: the notification's id is the ask's, with what it offers.
+  asked?: { body: string; choices: string[] };
 };
 
 // Allow, then always, then refusing: the order a person weighs them in.
@@ -66,9 +65,9 @@ const WEIGHT: Record<PermissionOption["kind"], number> = {
 };
 
 // How the agent acts, kept on the device and said to every conversation
-// as it opens: auto until the person picks otherwise.
+// as it opens: bypass, never asking, until the person picks auto.
 const MODE = "agent-mode";
-const AUTO = "acceptEdits";
+const AUTO = "bypassPermissions";
 
 // One conversation as this tab holds it.
 export type Chat = {
@@ -187,8 +186,13 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
         patch(c.id, (was) => ({
           ...was,
           running: c.running!,
-          // No prompt, no question pending from it.
-          asks: c.running ? was.asks : [],
+          // No prompt, no leave pending from it; a question stands.
+          asks: c.running ? was.asks : was.asks.filter((a) => a.asked),
+        }));
+      if (c.answered !== undefined)
+        patch(c.id, (was) => ({
+          ...was,
+          asks: was.asks.filter((a) => a.askId !== c.answered),
         }));
       if (c.modes) {
         const offered = c.modes.availableModes ?? [];
@@ -259,7 +263,21 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       if (line.method === "session/update" && typeof sid === "string") {
         const update = line.params?.update as Update | undefined;
         if (!update) return;
-        if (update.sessionUpdate === "current_mode_update")
+        if (update.sessionUpdate === "_maslow/asked")
+          patch(sid, (was) => ({
+            ...was,
+            asks: [
+              ...was.asks.filter((a) => a.askId !== update.id),
+              {
+                askId: update.id,
+                title: update.title,
+                kind: "other",
+                options: [],
+                asked: { body: update.body, choices: update.options },
+              },
+            ],
+          }));
+        else if (update.sessionUpdate === "current_mode_update")
           patch(sid, (was) => ({ ...was, mode: update.currentModeId }));
         else if (update.sessionUpdate === "available_commands_update")
           patch(sid, (was) => ({
@@ -303,25 +321,6 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           options: [...(p?.options ?? [])].sort(
             (a, b) => WEIGHT[a.kind] - WEIGHT[b.kind],
           ),
-        };
-        patch(sid, (was) => ({ ...was, asks: [...was.asks, one] }));
-        return;
-      }
-      // A question the agent asks the person, as the adapter hands it on.
-      if (
-        line.method === "_maslow/ask" &&
-        line.id !== undefined &&
-        typeof sid === "string"
-      ) {
-        const questions =
-          (line.params as { questions?: Question[] } | undefined)?.questions ??
-          [];
-        const one: Ask = {
-          askId: line.id,
-          title: questions[0]?.question ?? "",
-          kind: "other",
-          options: [],
-          questions,
         };
         patch(sid, (was) => ({ ...was, asks: [...was.asks, one] }));
         return;
@@ -432,9 +431,17 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     },
     [send, patch],
   );
+  // An answer: to a question, through the app, which says it back into
+  // the conversation; to leave to act, straight to the agent.
   const answer = useCallback(
     (id: string, a: Ask, result: unknown) => {
-      send({ jsonrpc: "2.0", id: a.askId, result });
+      if (a.asked)
+        void fetch("/notifications", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ id: a.askId, answer: result }),
+        });
+      else send({ jsonrpc: "2.0", id: a.askId, result });
       patch(id, (was) => ({
         ...was,
         asks: was.asks.filter((one) => one.askId !== a.askId),

@@ -40,13 +40,7 @@ export type Computer = {
   // image, which does not wait on them for long.
   updateImage: string | null;
   updateReadyAt: Date | null;
-  updateWhen: UpdateWhen | null;
-  updateSecurity: boolean;
 };
-
-// When a computer takes an update: at once, at three in the morning where
-// it is, or the next time nobody is using it.
-export type UpdateWhen = "now" | "tonight" | "idle";
 
 // A move of a computer to another region, as far as it has got: the
 // region, when it was asked for, the snapshot of the old disk, the disk
@@ -73,7 +67,6 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.model_spent_usd::float as "modelSpentUsd", c.model_cap_usd::float as "modelCapUsd",
   c.session_id as "sessionId", c.move,
   c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
-  c.update_when as "updateWhen", c.update_security as "updateSecurity",
   (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
@@ -177,14 +170,6 @@ export async function setDisk(q: Query, id: string, diskGb: number) {
   ]);
 }
 
-// The size the computer is to be; the machine follows at its next remake.
-export async function setSize(q: Query, id: string, size: Size) {
-  await q.query(
-    "update computers set cpu_kind = $2, cpus = $3, memory_mb = $4 where id = $1",
-    [id, size.cpuKind, size.cpus, size.memoryMb],
-  );
-}
-
 // The member's computer, or null before it is claimed.
 export async function computerOf(
   q: Query,
@@ -285,40 +270,17 @@ export async function openComputerSession(
   return sessionId;
 }
 
-// An update waiting on the person, or nothing once the machine is on the
-// image of the day. A fresh image asks again, so a choice made about the
-// last one never carries an unseen change onto their machine; clearing
-// one keeps the hour the person picked unless that hour is what took it.
-export async function setUpdate(
-  q: Query,
-  id: string,
-  update: { image: string; security: boolean } | null,
-  when: UpdateWhen | null = null,
-) {
+// An update waiting on the person, to the image named, or nothing once
+// the machine is on the image of the day. A fresh image asks again, so
+// nothing said about the last one carries an unseen change onto their
+// machine.
+export async function setUpdate(q: Query, id: string, image: string | null) {
   await q.query(
-    `update computers set update_image = $2, update_security = $3,
-       update_ready_at = case when $2::text is null then null else now() end,
-       update_when = $4
+    `update computers set update_image = $2,
+       update_ready_at = case when $2::text is null then null else now() end
      where id = $1`,
-    [
-      id,
-      update?.image ?? null,
-      update?.security ?? false,
-      update ? null : when,
-    ],
+    [id, image],
   );
-}
-
-// When the person asked for the update waiting on them.
-export async function setUpdateWhen(
-  q: Query,
-  id: string,
-  when: UpdateWhen | null,
-) {
-  await q.query("update computers set update_when = $2 where id = $1", [
-    id,
-    when,
-  ]);
 }
 
 // How far the move has got, or null once it is over.

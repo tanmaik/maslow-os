@@ -12,9 +12,6 @@ function day(s: string) {
   return Number.isNaN(d.getTime()) ? s : format(d, "d MMM yyyy");
 }
 
-export const percent = (c: number | null) =>
-  c === null ? "" : `${Math.round(c * 100)}%`;
-
 // One height for every control in a form of the brain's: the 36 a text
 // field and a button already are, so a picker beside them is not 2px
 // taller than the rest of the row.

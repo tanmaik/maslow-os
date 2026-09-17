@@ -48,7 +48,7 @@ export function ListView({
 }) {
   const whose = (r: BrainRecord) =>
     r.ownerId === me ? null : (people.get(r.ownerId) ?? "someone");
-  const at = (r: BrainRecord) => r.occurredAt ?? r.createdAt;
+  const at = (r: BrainRecord) => r.createdAt;
   const shown = showFields ? properties.slice(0, 4) : [];
   const row = (r: BrainRecord) => (
     <EagerLink
@@ -92,13 +92,7 @@ export function ListView({
           by === "recent" ? "w-12" : "w-32",
         )}
       >
-        {r.occurredAt && (
-          <LocalTime
-            at={r.occurredAt}
-            fallback=""
-            clockOnly={by === "recent"}
-          />
-        )}
+        <LocalTime at={r.createdAt} fallback="" clockOnly={by === "recent"} />
       </span>
     </EagerLink>
   );

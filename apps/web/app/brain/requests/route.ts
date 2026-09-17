@@ -3,6 +3,7 @@ import { asPerson } from "@maslow/db";
 import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
+import { tellAnswer } from "@/lib/computer";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 import { Refused, told } from "@/lib/shares";
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
   try {
     const made = await asPerson(p, (db) => answerShareAsk(db, p, id, intent));
     after(() => told(p, made.files));
+    const answered = made.notification;
+    if (answered) after(() => tellAnswer(p, answered));
   } catch (err) {
     if (
       err instanceof Invalid ||

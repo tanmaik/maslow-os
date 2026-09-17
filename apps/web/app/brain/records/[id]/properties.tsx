@@ -9,7 +9,6 @@ import {
   RiHashtag,
   RiListCheck,
   RiPriceTag3Line,
-  RiSpeedUpLine,
   RiText,
   RiToggleLine,
 } from "@remixicon/react";
@@ -20,12 +19,11 @@ import { SettingsCard } from "@/components/application/settings/settings-rows";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
 import { Select, SelectItem } from "@/components/base/select/select";
-import { Slider } from "@/components/base/slider/slider";
 import { DateField } from "@/components/date-field";
 import { LocalTime } from "@/components/local-time";
 import { cx } from "@/utils/cx";
 
-import { cell, FIELD, percent } from "../../format";
+import { cell, FIELD } from "../../format";
 import { save } from "./save";
 
 type Mark = ComponentType<{
@@ -48,31 +46,23 @@ const MARKS: Record<string, Mark> = {
 // The word for a choice left empty.
 const NONE = "none";
 
-// What an unfilled line says. A field with no value is empty; how sure a
-// record is was never said, which a hand-written record legitimately is.
-const UNSAID: Record<string, string> = { "how sure": "not said" };
-
 // How many filled rows show before the rest fold, so the words are never
 // far below the title.
 const SHOWN = 5;
 
-// What a record holds beside its words, as rows of a card: each field, how
-// sure, when it happened. The first few filled rows show; the rest, and
+// What a record holds beside its words, as rows of a card: each field. The first
+// few filled rows show; the rest, and
 // every empty one, wait behind one row that says how many more there are.
 // A row is clicked into to change it and kept as it is left.
 export function Properties({
   id,
   fields,
   values,
-  occurredAt,
-  confidence,
   canEdit,
 }: {
   id: string;
   fields: Property[];
   values: Record<string, unknown>;
-  occurredAt: string | null;
-  confidence: number | null;
   canEdit: boolean;
 }) {
   const router = useRouter();
@@ -129,16 +119,6 @@ export function Properties({
         .filter(Boolean);
     return c;
   };
-  const whenShown = valueOf("occurred_at", occurredAt) as string | null;
-  // How sure is kept as a part of one and shown as a percentage, and what
-  // was just chosen is a percentage on its way.
-  const sureChosen = chosen["confidence"];
-  const sureShown =
-    sureChosen === undefined
-      ? confidence
-      : sureChosen === ""
-        ? null
-        : Number(sureChosen) / 100;
   const open = (line: string) => {
     setPending(null);
     setEditing(line);
@@ -204,51 +184,6 @@ export function Properties({
       ),
     });
   }
-  if (confidence !== null || canEdit) {
-    const shown = sureShown === null ? "" : <Meter value={sureShown} />;
-    rows.push({
-      key: "how sure",
-      shown,
-      row: (
-        <Line
-          key="how sure"
-          label="how sure"
-          mark={RiSpeedUpLine}
-          shown={shown}
-          editing={editing === "how sure"}
-          onOpen={canEdit ? () => open("how sure") : undefined}
-          onClose={() => done("confidence")}
-        >
-          <Sure value={sureShown} onPick={setPending} />
-        </Line>
-      ),
-    });
-  }
-  const whenNode = whenShown ? <LocalTime at={whenShown} /> : "";
-  rows.push({
-    key: "when",
-    shown: whenNode,
-    row: (
-      <Line
-        key="when"
-        label="when"
-        mark={RiCalendarScheduleLine}
-        shown={whenNode}
-        editing={editing === "when"}
-        onOpen={canEdit ? () => open("when") : undefined}
-        onClose={() => done("occurred_at")}
-      >
-        <DateField
-          id="occurred_at"
-          name="occurred_at"
-          time
-          defaultValue={whenShown ?? undefined}
-          onChange={setPending}
-        />
-      </Line>
-    ),
-  });
-
   // A reader who cannot fill an empty row is not shown one.
   const held = canEdit ? rows : rows.filter((r) => r.shown);
   if (!held.length) return null;
@@ -286,23 +221,6 @@ export function Properties({
         </p>
       )}
     </SettingsCard>
-  );
-}
-
-// How sure, as a meter: a track, and as much of it as the record is sure,
-// read out beside it.
-function Meter({ value }: { value: number }) {
-  return (
-    <span className="inline-flex items-center gap-2">
-      {/* A number a person is reading, not a thing that moves. */}
-      <span className="flex h-1.5 w-24 overflow-hidden rounded-full bg-chart-track">
-        <span
-          className="h-full rounded-full bg-accent-500"
-          style={{ width: `${Math.round(value * 100)}%` }}
-        />
-      </span>
-      <span className="tabular-nums">{percent(value)}</span>
-    </span>
   );
 }
 
@@ -358,7 +276,7 @@ function Line({
               shown ? "text-text-primary" : "text-text-tertiary",
             )}
           >
-            {shown || UNSAID[label] || "Empty"}
+            {shown || "Empty"}
           </button>
         ) : (
           <span
@@ -367,38 +285,10 @@ function Line({
               shown ? "text-text-primary" : "text-text-tertiary",
             )}
           >
-            {shown || UNSAID[label] || "Empty"}
+            {shown || "Empty"}
           </span>
         )}
       </dd>
-    </div>
-  );
-}
-
-// How sure, from nothing to certain, read out above the thumb.
-function Sure({
-  value,
-  onPick,
-}: {
-  value: number | null;
-  onPick: (value: string) => void;
-}) {
-  const [now, setNow] = useState(Math.round((value ?? 1) * 100));
-  return (
-    <div className="w-44">
-      <Slider
-        aria-label="How sure"
-        thumbLabel="How sure"
-        minValue={0}
-        maxValue={100}
-        step={5}
-        value={now}
-        formatValue={(v) => `${v}%`}
-        onChange={(v) => {
-          setNow(v);
-          onPick(String(v));
-        }}
-      />
     </div>
   );
 }
