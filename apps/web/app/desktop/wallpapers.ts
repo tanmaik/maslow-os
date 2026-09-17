@@ -1,7 +1,10 @@
 // What the desktop lies on. The built-ins ship with the app, so nothing a
-// person does can take them away; each is a few kilobytes of gradient and
-// grain, drawn crisp at any size. "Plain" is the bare warm ground, and is
-// also what the desktop falls back to when a picture will not load.
+// person does can take them away: nine photographs, free to use, each from
+// an original at least 4000 pixels wide, cut to 2560 by 1600 and a few
+// hundred kilobytes, and credited on the tile and in NOTICE; the picker
+// draws its tiles from a small copy of each, under `small/`. "Plain" is
+// the bare warm ground, and is also what the desktop falls back to when a
+// picture will not load.
 
 export type Paper = {
   // The name the choice is kept under.
@@ -10,17 +13,65 @@ export type Paper = {
   name: string;
   // The file it is drawn from; null is the bare ground.
   src: string | null;
+  // Who made the picture, and on what terms, read under the name.
+  credit?: string;
 };
 
 export const PAPERS: Paper[] = [
-  { id: "dusk", name: "Dusk", src: "/wallpapers/dusk.svg" },
-  { id: "dawn", name: "Dawn", src: "/wallpapers/dawn.svg" },
-  { id: "ember", name: "Ember", src: "/wallpapers/ember.svg" },
-  { id: "amber", name: "Amber", src: "/wallpapers/amber.svg" },
-  { id: "clay", name: "Clay", src: "/wallpapers/clay.svg" },
-  { id: "rose", name: "Rose", src: "/wallpapers/rose.svg" },
-  { id: "moss", name: "Moss", src: "/wallpapers/moss.svg" },
-  { id: "sand", name: "Sand", src: "/wallpapers/sand.svg" },
+  {
+    id: "carina",
+    name: "Carina",
+    src: "/wallpapers/carina.jpg",
+    credit: "NASA, ESA, CSA, STScI · public domain",
+  },
+  {
+    id: "aurora",
+    name: "Aurora",
+    src: "/wallpapers/aurora.jpg",
+    credit: "Aneta P. · CC BY 4.0",
+  },
+  {
+    id: "milkyway",
+    name: "Milky Way",
+    src: "/wallpapers/milkyway.jpg",
+    credit: "ESO / H. H. Heyer · CC BY 4.0",
+  },
+  {
+    id: "peak",
+    name: "Matterhorn",
+    src: "/wallpapers/peak.jpg",
+    credit: "Willi Winzig · CC BY 2.0",
+  },
+  {
+    id: "falls",
+    name: "Skógafoss",
+    src: "/wallpapers/falls.jpg",
+    credit: "Matthew Roth · CC BY 2.0",
+  },
+  {
+    id: "fog",
+    name: "Fog",
+    src: "/wallpapers/fog.jpg",
+    credit: "Annie Spratt · CC0",
+  },
+  {
+    id: "surf",
+    name: "Surf",
+    src: "/wallpapers/surf.jpg",
+    credit: "Christian Ferrer · CC BY 4.0",
+  },
+  {
+    id: "volcano",
+    name: "Lava",
+    src: "/wallpapers/volcano.jpg",
+    credit: "Rennett Stowe · CC BY 2.0",
+  },
+  {
+    id: "skyline",
+    name: "Brooklyn",
+    src: "/wallpapers/skyline.jpg",
+    credit: "Martin St-Amant · CC BY 3.0",
+  },
   { id: "plain", name: "Plain", src: null },
 ];
 
@@ -32,7 +83,7 @@ export type Kept = { key: string; url: string; bytes: number };
 export type Papers = { choice: string | null; own: Kept[] };
 
 // The one a desktop wears until the person picks another.
-export const DEFAULT_PAPER = "dusk";
+export const DEFAULT_PAPER = "carina";
 
 // A person's own wallpaper is chosen by its object's key.
 const keyOf = (choice: string | null): string | null =>

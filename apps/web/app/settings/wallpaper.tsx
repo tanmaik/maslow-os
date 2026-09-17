@@ -52,12 +52,14 @@ function told(choice: string) {
 // One tile: the picture, 16:10, ringed when it is the one being worn.
 function Tile({
   name,
+  credit,
   src,
   chosen,
   onPick,
   onRemove,
 }: {
   name: string;
+  credit?: string;
   src: string | null;
   chosen: boolean;
   onPick: () => void;
@@ -78,8 +80,16 @@ function Tile({
       >
         {src && (
           <img
-            src={src}
+            // A built-in's tile is its small copy; a person's own picture
+            // has none and is drawn as it is.
+            src={
+              src.startsWith("/wallpapers/")
+                ? src.replace("/wallpapers/", "/wallpapers/small/")
+                : src
+            }
             alt=""
+            loading="lazy"
+            decoding="async"
             className="size-full object-cover object-center"
           />
         )}
@@ -87,6 +97,11 @@ function Tile({
       <span className="truncate text-caption-1-medium text-text-secondary">
         {name}
       </span>
+      {credit && (
+        <span className="-mt-1.5 truncate text-caption-1-regular text-text-tertiary">
+          {credit}
+        </span>
+      )}
       {onRemove && (
         <CloseButton
           size="2xs"
@@ -161,6 +176,7 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
           <Tile
             key={p.id}
             name={p.name}
+            credit={p.credit}
             src={p.src}
             chosen={(worn ?? DEFAULT_PAPER) === p.id}
             onPick={() => wear(p.id)}

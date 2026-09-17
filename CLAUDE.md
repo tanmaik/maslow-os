@@ -575,8 +575,9 @@ icon's menu opens another, and every window after the first is
 numbered, on the bar, in the menu and on its icon when put away. The dock and the window's frame are ryOS's
 (github.com/ryokun6/ryos), carried over as code under its licence, which
 is now ours too: AGPL-3.0, in `LICENSE`, with `NOTICE` saying what came
-from where. What the desktop lies on is ours: eight abstract wallpapers that ship with
-the app, a few kilobytes of gradient and grain each, and the bare warm
+from where. What the desktop lies on is ours: nine photographs that ship with
+the app, free to use and credited on their tiles and in NOTICE, each cut
+to 2560 wide and a few hundred kilobytes, and the bare warm
 ground, which is also what is left when a picture will not load. A person
 adds their own, kept whole in the bucket and theirs alone. They are all
 in Settings under Look, where a right-click on the desktop goes, and the one

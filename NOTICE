@@ -18,3 +18,19 @@ Pro components and chart cards are under BoardUI's Pro licence, bought
 by Maslow Industries: they may be shipped inside Maslow and not
 published as source, so this repository does not go public with them in
 it.
+
+The wallpapers under apps/web/public/wallpapers are photographs, each
+cut to 2560 by 1600 from an original found on Wikimedia Commons or in
+the image library of the National Aeronautics and Space Administration
+(NASA), and credited on its tile in Settings and here:
+  carina.jpg    NASA, ESA, CSA, STScI — Webb, the Cosmic Cliffs — public domain
+  aurora.jpg    Aneta P. — "Zorza polarna i perseid" — CC BY 4.0
+  milkyway.jpg  ESO / H. H. Heyer — "360-degree Panorama of the Southern Sky" — CC BY 4.0
+  peak.jpg      Willi Winzig — "Matterhorn by Moonlight" — CC BY 2.0
+  falls.jpg     Matthew Roth — "Skogafoss in Iceland" — CC BY 2.0
+  fog.jpg       Annie Spratt — "Foggy Winter morning" — CC0
+  surf.jpg      Christian Ferrer — "Waves at La Corniche" — CC BY 4.0
+  volcano.jpg   Rennett Stowe — "Lava Into the Sea at Night" — CC BY 2.0
+  skyline.jpg   Martin St-Amant (S23678) — "Pont de Brooklyn de nuit" — CC BY 3.0
+The Creative Commons pictures are cropped and recompressed; nothing else
+of them is changed.
