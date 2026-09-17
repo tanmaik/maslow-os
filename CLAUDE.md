@@ -585,7 +585,8 @@ picked is worn at once and follows the person to any device. Glass is the browse
 is truly behind it, frosted and bent at the edges through one SVG filter
 (`components/glass.tsx`), never a picture of the page; Chrome bends,
 Safari and Firefox frost. Glass is the chrome and paper is the content:
-the menu bar fully transparent with nothing painted, the dock clear glass, and menus, dialogs, every
+the menu bar fully transparent with nothing painted on a laptop, and on a
+phone one flat band with the status bar in the app's own ground, the dock clear glass, and menus, dialogs, every
 window's bar and every rail beside its content (the brain's types, the
 terminal's windows, the Agent's conversations, the Settings toolbar)
 frosted at one level, keeping

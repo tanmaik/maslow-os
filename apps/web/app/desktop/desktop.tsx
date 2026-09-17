@@ -1137,9 +1137,6 @@ const FADE = 300;
 // darkened so the menu bar's words read against it whatever the picture
 // is; the darkening is the wallpaper's, not the bar's: the bar itself is
 // nothing but its words.
-// The ground's colour, for the browser's bars when no picture is shown.
-const GROUND = "#1c1815";
-
 function Wallpaper({ choice }: { choice: string | null }) {
   const still = useReducedMotion();
   // A picture that would not load is not asked for again.
@@ -1150,70 +1147,62 @@ function Wallpaper({ choice }: { choice: string | null }) {
   // The one arriving over it, while it arrives; nothing at rest.
   const [arriving, setArriving] = useState<{ src: string | null } | null>(null);
   const [lit, setLit] = useState(false);
-  // The browser's own bars, the status bar above all, take the colour of
-  // the wallpaper's top edge, read from the picture once it is shown;
-  // with no picture, the ground.
+  // Whether the ground under the menu bar is light, read from the top of
+  // the picture shown, or from the scheme when there is none, so the
+  // bar's words are dark on a light ground and white on a dark one.
   useEffect(() => {
     let gone = false;
-    const set = (color: string) => {
-      let meta = document.querySelector<HTMLMetaElement>(
-        'meta[name="theme-color"]',
-      );
-      if (!meta) {
-        meta = document.createElement("meta");
-        meta.name = "theme-color";
-        document.head.appendChild(meta);
-      }
-      meta.content = color;
-    };
+    const root = document.documentElement;
+    const tell = (light: boolean) =>
+      root.toggleAttribute("data-paper-light", light);
     if (!shown) {
-      set(GROUND);
-      return;
+      // The bare ground: light or dark as the scheme is, and again when
+      // the scheme changes under it.
+      const read = () => tell(!root.classList.contains("dark"));
+      read();
+      const watch = new MutationObserver(read);
+      watch.observe(root, { attributes: true, attributeFilter: ["class"] });
+      return () => watch.disconnect();
     }
     const img = new Image();
     img.crossOrigin = "anonymous";
-    img.onload = () => {
+    // The strip of the picture that actually lies under the bar: the
+    // picture covers the screen, centred, so at another aspect the top of
+    // the file is not the top of the screen.
+    const sample = () => {
       if (gone) return;
       try {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        const screen = window.innerWidth / window.innerHeight;
+        const wide = w / h > screen;
+        const visW = wide ? h * screen : w;
+        const visH = wide ? h : w / screen;
+        const x0 = (w - visW) / 2;
+        const y0 = (h - visH) / 2;
         const c = document.createElement("canvas");
         c.width = 16;
-        c.height = 4;
+        c.height = 2;
         const g = c.getContext("2d");
         if (!g) return;
-        // The top slice of the picture, scaled down: its average is the
-        // colour under the status bar.
-        g.drawImage(
-          img,
-          0,
-          0,
-          img.naturalWidth,
-          Math.max(1, img.naturalHeight * 0.06),
-          0,
-          0,
-          16,
-          4,
-        );
-        const d = g.getImageData(0, 0, 16, 4).data;
-        let r = 0,
-          gg = 0,
-          b = 0;
-        for (let i = 0; i < d.length; i += 4) {
-          r += d[i]!;
-          gg += d[i + 1]!;
-          b += d[i + 2]!;
-        }
-        const n = d.length / 4;
-        set(
-          `rgb(${Math.round(r / n)} ${Math.round(gg / n)} ${Math.round(b / n)})`,
-        );
+        g.drawImage(img, x0, y0, visW, Math.max(1, visH * 0.05), 0, 0, 16, 2);
+        const d = g.getImageData(0, 0, 16, 2).data;
+        let sum = 0;
+        for (let i = 0; i < d.length; i += 4)
+          sum += 0.2126 * d[i]! + 0.7152 * d[i + 1]! + 0.0722 * d[i + 2]!;
+        tell(sum / (d.length / 4) > 150);
       } catch {
-        set(GROUND);
+        tell(false);
       }
     };
-    img.onerror = () => !gone && set(GROUND);
+    img.onload = sample;
+    img.onerror = () => !gone && tell(false);
     img.src = shown;
+    const resized = () => img.complete && sample();
+    window.addEventListener("resize", resized);
     return () => {
       gone = true;
+      window.removeEventListener("resize", resized);
     };
   }, [shown]);
 

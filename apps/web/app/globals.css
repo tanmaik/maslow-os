@@ -653,7 +653,11 @@ html[data-accent="graphite"] {
    under it all is the wallpaper's dark warmth in either scheme. What
    scrolls, scrolls inside a window or a screen of its own. */
 html {
-  background-color: oklch(0.15 0.008 58);
+  /* The ground under the page in either scheme: the bare warm ground the
+     desktop lies on, and what a phone's browser paints beyond the page. It
+     is the ground, not a neutral of the grey ramp. */
+  --ground: oklch(0.15 0.008 58);
+  background-color: var(--ground);
   overscroll-behavior: none;
   /* The phone's own inset under the screen, readable from a script. */
   --safe-area-bottom: env(safe-area-inset-bottom, 0px);
@@ -680,14 +684,25 @@ body {
   -webkit-user-select: none;
   font-weight: 500;
 }
-/* On a phone the bar and the status bar over it are one frosted band: the
-   phone frosts what runs under its status bar anyway, and a band that
-   owns that frost reads on any wallpaper. */
-@media (max-width: 639px) {
-  .mac-top-menubar {
-    background: rgb(0 0 0 / 0.18);
-    -webkit-backdrop-filter: blur(22px) saturate(185%);
-    backdrop-filter: blur(22px) saturate(185%);
+/* On a light ground the menu bar's words are dark, and what a press or a
+   hover paints under them is dark too. */
+html[data-paper-light] .mac-top-menubar {
+  color: #1c1815;
+}
+html[data-paper-light] .mac-top-menubar button:hover,
+html[data-paper-light] .mac-top-menubar [aria-expanded="true"] {
+  background-color: rgb(0 0 0 / 0.08);
+}
+
+/* On a phone, held either way, the menu bar and the status bar over it are
+   one flat band in the app's own ground, so the top blends into the app
+   rather than the wallpaper: a screen narrower than a laptop's, or a
+   touch-driven one turned on its side, which a tablet is not. */
+@media (max-width: 639px), ((pointer: coarse) and (max-height: 500px)) {
+  .mac-top-menubar,
+  html[data-paper-light] .mac-top-menubar {
+    background: var(--ground);
+    color: var(--color-text-white);
   }
 }
 
