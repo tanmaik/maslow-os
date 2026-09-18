@@ -33,3 +33,12 @@ the brain's `place`.
   `ask` for the person. Nothing of it is in the person's own `~/.claude`.
 - **Installing stays the CLI.** `npx boardui@latest add <name>` writes the
   components; the guide names it, and no server does it.
+
+## Later that day
+
+Tanmai: the only configuration of ours on the person's own Claude Code
+should be the same two servers, the brain and the computer with every
+tool made for this agent, the browser and BoardUI included. So the two
+servers are seeded into their `~/.claude.json` and kept current there,
+theirs to change or remove; the mode, the skill link and the model stay
+out, as #279 settled.

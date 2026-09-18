@@ -549,11 +549,12 @@ update` works; the image carries a copy under ours, read-only and unable
 to update itself, which runs until theirs arrives. `claude` on their path
 is ours either way, and it hands whichever copy they have their own
 credentials; an editor drives the same Claude Code over the Agent Client
-Protocol through `claude-code-acp`. Their Claude Code is plain: nothing
-of ours is written into their `~/.claude`, no server, no mode, no skill,
-and it signs in to their own account as a fresh install would. Ours, in
-its own directory, knows two MCP servers, and a note there says what this
-computer is and to use them: the computer's own, `packages/browser`,
+Protocol through `claude-code-acp`. Their Claude Code knows the same two
+MCP servers as ours, seeded into their own `~/.claude.json` and kept
+current there except where they changed or removed one, and nothing else
+of ours: no mode, no model, no skill, and it signs in to their own
+account. Ours, in its own directory, knows the same two, and a note there
+says what this computer is and to use them: the computer's own, `packages/browser`,
 running on the machine outside the person's Linux but as the person,
 which is the browser, with its profile on the disk and a page of its own,
 `/browser`, where the person watches it live and takes it over with their

@@ -126,11 +126,12 @@ else
   rm -f "$OS/etc/profile.d/maslow-brain.sh"
 fi
 
-# Our own session's configuration, written whole from the image; and the
-# person's own Claude Code left theirs alone, with whatever an earlier
-# image put in their files taken back. Bounded, so nothing in the home
-# can hold the boot.
+# Our own session's configuration, written whole from the image; the two
+# servers given into the person's own Claude Code and kept current there,
+# except where they changed one; and whatever else an earlier image put in
+# their files taken back. Bounded, so nothing in the home can hold the boot.
 timeout 30 node /opt/maslow/seed.mjs "$HOME_DIR" ours || echo "ours: could not be seeded; the Agent may start without its servers"
+timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" servers || echo "servers: could not be seeded; left alone"
 timeout 30 node /opt/maslow/seed.mjs "$HOME_DIR" theirs || echo "theirs: could not be taken back; left alone"
 
 # Claude Code lives in the person's Linux, where it updates itself the way
