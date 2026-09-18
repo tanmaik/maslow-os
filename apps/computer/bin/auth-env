@@ -4,7 +4,7 @@
 # its environment, both put there by the door — the agent behind the Agent
 # window and the terminals it runs its commands in — sends every model
 # call to Maslow's gateway at MASLOW_MODEL_URL, which holds the key, meters
-# the person, and runs the one model, GPT-5.6 Luna, whatever was asked. Everything else, above all
+# the person, and runs the one model, GLM 5.3 Flash, whatever was asked. Everything else, above all
 # `claude` in the person's own terminal, is plain Claude Code on whatever
 # they set up themselves, an Anthropic sign-in or a key of their own:
 # nothing of ours is set, and anything of ours left in the environment is
@@ -22,14 +22,14 @@ if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_TOKEN:-}" ]; then
   export ANTHROPIC_BASE_URL="$MASLOW_MODEL_URL"
   export ANTHROPIC_AUTH_TOKEN="$MASLOW_MODEL_TOKEN"
   export ANTHROPIC_API_KEY=""
-  export ANTHROPIC_MODEL="openai/gpt-5.6-luna"
+  export ANTHROPIC_MODEL="z-ai/glm-5.3-flash:nitro"
   # Every name Claude Code's own /model offers points at the one model
   # our key pays for. No Claude model is reachable on Maslow's key.
-  export ANTHROPIC_DEFAULT_FABLE_MODEL="openai/gpt-5.6-luna"
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="openai/gpt-5.6-luna"
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="openai/gpt-5.6-luna"
-  export ANTHROPIC_DEFAULT_HAIKU_MODEL="openai/gpt-5.6-luna"
-  export CLAUDE_CODE_SUBAGENT_MODEL="openai/gpt-5.6-luna"
+  export ANTHROPIC_DEFAULT_FABLE_MODEL="z-ai/glm-5.3-flash:nitro"
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="z-ai/glm-5.3-flash:nitro"
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="z-ai/glm-5.3-flash:nitro"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="z-ai/glm-5.3-flash:nitro"
+  export CLAUDE_CODE_SUBAGENT_MODEL="z-ai/glm-5.3-flash:nitro"
   export CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK=1
   # The model takes far more, but a call goes through
   # the gateway, which takes a few megabytes at most: a quarter of a

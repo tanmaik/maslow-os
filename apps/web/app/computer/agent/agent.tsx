@@ -39,10 +39,6 @@ const HOME = "/home/me";
 // as needed, so the agent reads it there with its own hands.
 const ATTACHMENTS = "Attachments";
 
-// The one model this computer's agent runs on, named in the composer
-// and nowhere else, since the key answers to nothing else.
-const MODEL = "GPT-5.6 Luna";
-
 // What the device keeps: whether the rail stands open, and which chats
 // the person pinned to the top of it.
 const RAIL = "agent-rail";
@@ -384,14 +380,9 @@ export function Agent({ href }: { href?: string } = {}) {
               <RiAttachment2 className="size-5" aria-hidden />
             </label>
           }
-          model={
-            <span
-              title="The model this computer's agent runs on"
-              className="shrink-0 rounded-xl px-2 py-1 text-caption-1-medium whitespace-nowrap text-text-secondary"
-            >
-              {MODEL}
-            </span>
-          }
+          // The model is the deployment's, not the person's to pick or to
+          // be told: the composer names none.
+          modelMenu={false}
           listening={ear.on}
           onListen={listen}
           value={typed}

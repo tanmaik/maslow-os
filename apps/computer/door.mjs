@@ -2099,7 +2099,7 @@ async function entitle(chat) {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "openai/gpt-5.6-luna",
+        model: "z-ai/glm-5.3-flash:nitro",
         max_tokens: 400,
         messages: [
           {

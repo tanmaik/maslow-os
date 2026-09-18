@@ -5,7 +5,7 @@ import { deployment } from "./deployment.ts";
 
 // The one model the agent runs on, whatever name a call asks for, and
 // how much it thinks before it answers: the least it offers.
-export const MODEL = "openai/gpt-5.6-luna";
+export const MODEL = "z-ai/glm-5.3-flash:nitro";
 export const REASONING = { effort: "none" };
 
 // The address a machine's agent sends its model calls to: this deployment's

@@ -447,8 +447,8 @@ so a door that comes back after a new image loads the same conversation.
 The window is a conversation: what the agent says as markdown, what it
 thought folded away, a row for every tool call with its changes or its
 output beside it, the plan it is working to, and what it asks before it
-acts, answered there. Which conversation, which mode and which model are
-the person's to pick; a new one, a fork of this one and any of the ones
+acts, answered there. Which conversation and which mode are the person's
+to pick, and the model is the deployment's alone; a new one, a fork of this one and any of the ones
 the machine keeps are a click away. Nothing durable lives in
 a tab: the tab is a view onto state on the machine, and the machine's
 browser never idles away. What a program on the machine opens goes to whoever is at the terminal:
@@ -486,7 +486,7 @@ stack holds open for the brain. Two Claude Codes run on the machine and they nev
 settings: ours keeps its configuration in a directory of its own,
 `~/.maslow/claude`, seeded at boot with its servers, so what it
 writes down there never reaches the person's own `~/.claude`. The Agent window's is ours: started with
-`MASLOW_AUTH=managed`, it runs through the gateway, on GPT-5.6 Luna at
+`MASLOW_AUTH=managed`, it runs through the gateway, on GLM 5.3 Flash at
 the least reasoning it offers and nothing else — the gateway puts that
 model and that much thought on every call whatever was asked for, so no
 Claude model is reachable on what Maslow pays for — and the app is the
@@ -502,7 +502,8 @@ ask of the brain's with this conversation to answer to: it stands in the
 thread and behind the clock alike, is answered in either, the answer is
 said back into the conversation as its next word, and the turn does not
 wait on it; the pill
-composer with the one model named and a mic, which is the same ear
+composer, naming no model, since the choice is the deployment's and not
+the person's to be told, with a mic, which is the same ear
 hold to talk uses, clicked on and off with the words landing in the
 field, live while the agent works, since a word typed then goes
 into the running turn: at once while the agent is thinking, and once the
