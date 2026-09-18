@@ -14,7 +14,10 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # A GitHub-hosted runner of the org's, 4 cores and 16 GB, named
+    # "check": the dev server the smoke boots takes more than the 7.8 GB
+    # a standard runner has.
+    runs-on: check
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -24,9 +27,4 @@ jobs:
       # The pinned pnpm, straight from the registry.
       - run: npm install -g "pnpm@$(node -p "require('./package.json').packageManager.split('@')[1]")"
       - run: pnpm install --frozen-lockfile
-      # The runner has 7.8 GB and the dev server the smoke boots takes most
-      # of it; swap lets a tight run finish slowly rather than die silently.
-      - run: |
-          sudo fallocate -l 8G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
-          free -h
       - run: pnpm check
