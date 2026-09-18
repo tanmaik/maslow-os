@@ -71,6 +71,38 @@ final class Ear {
   // What was said before the line opened, sent the moment it does.
   private var held: [Data] = []
   private var done = false
+  // A ticket minted ahead of the hold, so the line opens the moment the
+  // thumb lands rather than after a round trip to our server.
+  private var ready: (ticket: Ticket, at: ContinuousClock.Instant)?
+  private var warming: Task<Void, Never>?
+  private var awake = false
+
+  // Gets ready while the Agent is in view: the microphone allowed and its
+  // session held open for as long as the Agent is, and a fresh ticket kept
+  // in hand, minted again as each one nears the end of its minute. The
+  // engine itself waits for the hold, since it has no valid input to
+  // prepare on before the session is live.
+  func warm() {
+    warming?.cancel()
+    warming = Task {
+      guard await AVAudioApplication.requestRecordPermission() else { return }
+      // The Agent may have gone while the phone asked; then nothing opens.
+      guard !Task.isCancelled else { return }
+      if !awake, (try? awaken()) != nil { awake = true }
+      while !Task.isCancelled {
+        if let t = try? await ticket(fresh: true) { ready = (t, .now) }
+        try? await Task.sleep(for: .seconds(40))
+      }
+    }
+  }
+
+  // The Agent out of view: the tickets stop, and the microphone's session
+  // is given back so nothing else on the phone stays interrupted.
+  func rest() {
+    warming?.cancel()
+    warming = nil
+    if !on { release() }
+  }
 
   // The microphone open and the words arriving, or a sentence saying why
   // not.
@@ -90,10 +122,10 @@ final class Ear {
     do {
       // The microphone first, so what is said while the line is being
       // opened is heard too.
-      try awaken()
+      if !awake { try awaken(); awake = true }
       try pump()
       on = true
-      let ticket = try await ticket()
+      let ticket = try await ticket(fresh: false)
       // Let go before the line opened: nothing was said.
       guard on else { return }
       try open(ticket)
@@ -114,7 +146,7 @@ final class Ear {
       try? await socket.send(.string(#"{"type":"CloseStream"}"#))
       // Deepgram answers the end of the audio with the last of the words;
       // they are worth a moment's wait and no more.
-      for _ in 0..<40 where !done {
+      for _ in 0..<16 where !done {
         try? await Task.sleep(for: .milliseconds(50))
       }
     }
@@ -143,8 +175,9 @@ final class Ear {
     reading = nil
     socket?.cancel(with: .goingAway, reason: nil)
     socket = nil
-    try? AVAudioSession.sharedInstance().setActive(
-      false, options: .notifyOthersOnDeactivation)
+    // While the Agent is in view the session stays open for the next hold;
+    // otherwise this hold was the last use of it.
+    if warming == nil { release() }
   }
 
   private func awaken() throws {
@@ -153,9 +186,22 @@ final class Ear {
     try session.setActive(true, options: .notifyOthersOnDeactivation)
   }
 
-  // A token of this person's, minted by our server for this hold alone,
-  // or the server's own sentence saying nothing can be heard.
-  private func ticket() async throws -> Ticket {
+  // The session given back, so the next hold opens it anew.
+  private func release() {
+    guard awake else { return }
+    awake = false
+    try? AVAudioSession.sharedInstance().setActive(
+      false, options: .notifyOthersOnDeactivation)
+  }
+
+  // A token of this person's, minted by our server for one hold, or the
+  // server's own sentence saying nothing can be heard. The one kept in
+  // hand serves while it is under a minute old.
+  private func ticket(fresh: Bool) async throws -> Ticket {
+    if !fresh, let ready, ready.at.duration(to: .now) < .seconds(50) {
+      self.ready = nil
+      return ready.ticket
+    }
     guard let api else { throw Unheard(said: "Sign in first.") }
     var request = URLRequest(url: api.server.appending(path: "/speech/ticket"))
     request.httpMethod = "POST"

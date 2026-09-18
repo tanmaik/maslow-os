@@ -39,7 +39,11 @@ struct AgentView: View {
       thread
         .navigationTitle($title)
         .toolbarTitleDisplayMode(.inline)
-        .task(id: session.held?.token) { ear.api = session.api }
+        .task(id: session.held?.token) {
+          ear.api = session.api
+          ear.warm()
+        }
+        .onDisappear { ear.rest() }
         .toolbar {
           ToolbarItem(placement: .topBarLeading) {
             Button("Conversations", systemImage: "list.bullet") { listing = true }

@@ -81,6 +81,11 @@ final class Location: NSObject, CLLocationManagerDelegate {
     if [.authorizedWhenInUse, .authorizedAlways].contains(manager.authorizationStatus) {
       manager.requestLocation()
     }
+    // While Using is the first answer iOS lets a person give; the phone
+    // then asks once more for Always, which is what the log needs.
+    if manager.authorizationStatus == .authorizedWhenInUse {
+      manager.requestAlwaysAuthorization()
+    }
     background()
   }
 

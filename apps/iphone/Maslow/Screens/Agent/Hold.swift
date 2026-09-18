@@ -30,16 +30,16 @@ struct HoldToTalk: View {
 
   var body: some View {
     ZStack {
-      if ear.on && !reduceMotion {
-        Capsule()
-          .fill(.tint)
-          .blur(radius: 14)
-          .opacity(0.15 + ear.level * 0.45)
-          .scaleEffect(1.02 + ear.level * 0.05)
-      }
       Capsule()
-        .fill(.tint)
-        .opacity(note != nil ? 0.25 : leaving ? 0.35 : holding ? 0.8 : 1)
+        .fill(.clear)
+        .glassEffect(.regular.tint(Color.accentColor).interactive(), in: .capsule)
+        .opacity(note != nil ? 0.5 : 1)
+      if holding && !reduceMotion {
+        // The voice as a ring that swells with it: one stroke, nothing blurred.
+        Capsule()
+          .strokeBorder(.white.opacity(0.25 + ear.level * 0.5), lineWidth: 2)
+          .scaleEffect(x: 1 + ear.level * 0.04, y: 1 + ear.level * 0.12)
+      }
       words
         .foregroundStyle(.white)
         .padding(.horizontal, 18)
@@ -56,7 +56,7 @@ struct HoldToTalk: View {
         }
         .onEnded { touch in lift(cancelled: away(touch.location)) }
     )
-    .animation(reduceMotion ? nil : .smooth(duration: 0.15), value: ear.level)
+    .animation(reduceMotion ? nil : .smooth(duration: 0.12), value: ear.level)
     .animation(reduceMotion ? .smooth(duration: 0.2) : .snappy(duration: 0.25), value: holding)
     .animation(.snappy(duration: 0.2), value: leaving)
     .sensoryFeedback(trigger: holding) { _, now in
