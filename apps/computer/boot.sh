@@ -170,9 +170,9 @@ keep /usr/sbin/sshd -D -e -f /opt/maslow/etc/sshd_config &
 keep node /opt/maslow/door.mjs &
 # The computer's own tool server: the browser, ours, outside the person's
 # Linux but run as the person, so it updates with the image and reaches
-# only their home, and beside it the guides: how this system works, how
-# an app is built here, how the brain is used, and BoardUI's rules and
-# catalog, read from the image; the Agent inside finds it on 8082. Its profile, logins included, is on the disk.
+# only their home, and beside it the four skills as tools: how this
+# system works, how an app is built here, how the brain is used, and
+# BoardUI's rules and catalog; the Agent inside finds it on 8082. Its profile, logins included, is on the disk.
 # It is a real, headed Chrome on a display nobody looks at, Xvfb, as big
 # as the largest pane it is ever drawn into: a headless one announces
 # itself, and sites that turn bots away turn it away too.
@@ -182,7 +182,7 @@ chown 1000:1000 "$DISK/browser"
 keep chroot --userspec=1000:1000 --groups=1000 / \
   /usr/bin/env -i HOME=/data/home BROWSER_PROFILE=/data/browser BROWSER_PATHS=/home/me=/data/home \
   PLAYWRIGHT_BROWSERS_PATH=/opt/maslow/browsers DISPLAY=:99 BROWSER_HEADED=1 \
-  MASLOW_GUIDES=/opt/maslow/etc/guides MASLOW_BOARDUI=/opt/maslow/skills/boardui \
+  MASLOW_SKILLS=/opt/maslow/skills \
   /usr/local/bin/node /opt/maslow/browser/bin/browser-mcp.mjs --http 8082 &
 
 # A stop is a hard stop: what is still in memory is written to the disk

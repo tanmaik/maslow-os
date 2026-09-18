@@ -49,7 +49,7 @@ else takeBack(JSON.parse(fs.readFileSync(0, "utf8")));
 
 // The configuration of our own session, ~/.maslow/claude: the same MCP
 // servers and the same way of asking as the person's, written whole every
-// boot since nobody edits it by hand, the BoardUI skill linked in, and,
+// boot since nobody edits it by hand, the four skills linked in, and,
 // once, the conversations the door had open before ours had a directory,
 // so the Agent's chats still open; the person's own conversations are
 // theirs and stay where they are. The copy is marked done only once it is,
@@ -86,8 +86,10 @@ function ours() {
       write(path.join(dir, ".claude.json"), { ...config, hasCompletedOnboarding: true, mcpServers: mcp });
       write(path.join(dir, "settings.json"), { permissions: settings });
       fs.copyFileSync("/opt/maslow/etc/CLAUDE.md", path.join(dir, "CLAUDE.md"));
-      const link = path.join(dir, "skills", "boardui");
-      try { if (!fs.lstatSync(link).isSymbolicLink()) throw new Error(); } catch { try { fs.rmSync(link, { recursive: true, force: true }); } catch {} fs.symlinkSync("/opt/maslow/skills/boardui", link); }
+      for (const skill of ["maslow", "apps", "brain", "boardui"]) {
+        const link = path.join(dir, "skills", skill);
+        try { if (!fs.lstatSync(link).isSymbolicLink()) throw new Error(); } catch { try { fs.rmSync(link, { recursive: true, force: true }); } catch {} fs.symlinkSync("/opt/maslow/skills/" + skill, link); }
+      }
       const done = path.join(dir, ".conversations-carried");
       if (ids && !fs.existsSync(done)) {
         const from = path.join(process.env.HOME, ".claude", "projects", slug);

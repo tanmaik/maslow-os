@@ -51,3 +51,18 @@ MCP, and the browser tools. So the guides are four, each a tool that
 answers with one file the image carries: `maslow`, `apps` (which took in
 `widget`), `brain` and `boardui`. The note in the Agent's own directory
 names when to read each.
+
+Tanmai asked whether they are tools or skills. Both, from one file each:
+`apps/computer/skills/<name>/SKILL.md` is linked into the Agent's own
+skills, so Claude Code loads it as it loads any skill, and the `computer`
+server answers with the same file, front matter off, when the tool is
+called, which is how the person's own Claude Code reaches it.
+
+Tanmai, once more: some of these are tools, the browser's and the door's
+own, then BoardUI's MCP with whatever it provided, attached, and then the
+skills that explain things. So the four guides are skills alone, the
+guide tools are gone, and BoardUI's own MCP server is back, started once
+beside ours from the package the image carries and offered as the
+`boardui_` tools, a project path carried to where the process sees the
+home. The person's own Claude Code gets the browser and BoardUI's tools
+through the one server; the skills are the Agent's.

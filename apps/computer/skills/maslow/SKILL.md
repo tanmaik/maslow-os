@@ -1,3 +1,9 @@
+---
+name: maslow
+description: >-
+  How this Maslow computer works: the home, ports as windows or widgets, the browser and what it is not for, how to talk to the person with notify and ask, wakeup and stop, and what is never yours to touch. Read once when a conversation starts.
+---
+
 # How this system works
 
 You are on a Maslow computer: one person's own Linux, always on, with

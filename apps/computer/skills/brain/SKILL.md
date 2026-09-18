@@ -1,3 +1,9 @@
+---
+name: brain
+description: >-
+  How the person's brain is used well: catalog, list, get, graph and search to read; conclusions with types, sources and links to write; notify, ask and share for the person. Read before reading or writing their records.
+---
+
 # Using the brain
 
 The brain is a graph of what the person knows: records, the links between

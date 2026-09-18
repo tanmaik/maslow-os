@@ -1,6 +1,9 @@
-import { readFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
+import { createRequire } from "node:module";
+import path from "node:path";
 
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
@@ -91,12 +94,111 @@ function place(p: string): string {
     : p;
 }
 
+// A tool's inputs as BoardUI's server declares them, as the shape ours
+// registers: objects, strings, numbers, booleans, lists and choices,
+// each with its words, required or not. Anything else is passed as is.
+function shaped(schema: Record<string, unknown> | undefined): z.ZodRawShape {
+  const props = (schema?.properties ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const required = new Set((schema?.required as string[] | undefined) ?? []);
+  const one = (p: Record<string, unknown>): z.ZodTypeAny => {
+    let t: z.ZodTypeAny;
+    if (Array.isArray(p.enum)) t = z.enum(p.enum as [string, ...string[]]);
+    else if (p.type === "string") t = z.string();
+    else if (p.type === "number" || p.type === "integer") t = z.number();
+    else if (p.type === "boolean") t = z.boolean();
+    else if (p.type === "array")
+      t = z.array(one((p.items as Record<string, unknown>) ?? {}));
+    else if (p.type === "object") t = z.object(shaped(p)).passthrough();
+    else t = z.unknown();
+    return typeof p.description === "string" ? t.describe(p.description) : t;
+  };
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const [name, p] of Object.entries(props))
+    shape[name] = required.has(name) ? one(p) : one(p).optional();
+  return shape;
+}
+
+// BoardUI's own MCP server, started once from the package beside this
+// one: what it offers, and the client it answers. Null, said once, when
+// it will not start, and the browser stands alone.
+type Attached = {
+  client: Client;
+  tools: Awaited<ReturnType<Client["listTools"]>>["tools"];
+};
+async function startBoardui(): Promise<Attached | null> {
+  // The program as its package names it, wherever the package manager
+  // put it.
+  const need = createRequire(import.meta.url);
+  const pkg = need("boardui/package.json") as {
+    bin: string | Record<string, string>;
+  };
+  const bin = path.join(
+    path.dirname(need.resolve("boardui/package.json")),
+    typeof pkg.bin === "string" ? pkg.bin : pkg.bin.boardui!,
+  );
+  const client = new Client({ name: "computer", version: "1" });
+  // Run by this same node, wherever it is, with a path that finds it: the
+  // process this runs in is started with no path of its own.
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [bin, "mcp"],
+    cwd: process.env.HOME ?? "/",
+    // Given its home, for the licence it keeps, and a path, and nothing
+    // else of this process's.
+    env: {
+      HOME: process.env.HOME ?? "/",
+      PATH: [
+        path.dirname(process.execPath),
+        process.env.PATH ?? "/usr/bin:/bin",
+      ].join(":"),
+    },
+    stderr: "pipe",
+  });
+  let said = "";
+  transport.stderr?.on("data", (d) => (said = (said + d).slice(-400)));
+  try {
+    await client.connect(transport);
+    return { client, tools: (await client.listTools()).tools };
+  } catch (err) {
+    console.error(
+      `boardui: not attached: ${(err as Error).message} ${said.trim()}`,
+    );
+    return null;
+  }
+}
+
+// BoardUI's tools offered as ours, each as boardui_<name>, with a project
+// path carried to where this process sees the home.
+function offerBoardui(server: McpServer, attached: Attached | null): void {
+  if (!attached) return;
+  for (const t of attached.tools) {
+    server.registerTool(
+      `boardui_${t.name}`,
+      {
+        description: t.description ?? "",
+        inputSchema: shaped(t.inputSchema as Record<string, unknown>),
+      },
+      (async (args: Record<string, unknown>) => {
+        if (typeof args.projectDir === "string")
+          args.projectDir = place(args.projectDir);
+        return (await attached.client.callTool({
+          name: t.name,
+          arguments: args,
+        })) as Result;
+      }) as unknown as Parameters<typeof server.registerTool>[2],
+    );
+  }
+}
+
 function browserServer(browser: Browser, gif: Gif): McpServer {
   const server = new McpServer(
     { name: "computer", version: "1" },
     {
       instructions:
-        "This computer's browser and its guides. Read maslow once for how this system works; boardui before any screen; apps before building anything that runs here or goes on the desktop; brain before the person's records. For the browser, start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
+        "This computer's browser, and BoardUI's own server beside it as the boardui_ tools, which look components up and install them into a project by its path. For the browser, start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
     },
   );
 
@@ -159,73 +261,6 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
     (args: unknown) => Promise<string | Result>
   >();
 
-  // What this computer knows beside its browser: how this system works,
-  // how an app is built here, how the brain is used, and BoardUI's rules
-  // and catalog, read from the image where the machine names them;
-  // anywhere else the tools say so.
-  const guides = process.env.MASLOW_GUIDES;
-  const boardui = process.env.MASLOW_BOARDUI;
-  const guide = (at: string) => {
-    try {
-      return readFileSync(at, "utf8");
-    } catch {
-      return "Not on this computer.";
-    }
-  };
-  const written = (name: string, description: string) =>
-    tool(name, description, {}, async () =>
-      guides ? guide(`${guides}/${name}.md`) : "Not on this computer.",
-    );
-  written(
-    "maslow",
-    "How this system works: the computer, ports and windows, the browser, how to talk to the person, and what is never yours to touch. Read it once when a conversation starts.",
-  );
-  written(
-    "apps",
-    "How an app is built here and shown: a folder in the home served on a port, run as the person in the background, seen as a window on the desktop or placed on it as a widget.",
-  );
-  written(
-    "brain",
-    "How the person's brain is used well: reading with catalog, list, get, graph and search; writing conclusions with types, sources and links; notify, ask and share.",
-  );
-  tool(
-    "boardui",
-    "How an interface is built here: BoardUI's rules, or its catalog of components, its patterns, theming or motion. Read the rules before building a screen; look a component up by a word before installing it with `npx boardui@latest add <name>`.",
-    {
-      topic: z
-        .enum(["rules", "components", "patterns", "theming", "motion"])
-        .optional()
-        .describe("the rules when left out"),
-      find: z
-        .string()
-        .optional()
-        .describe("a word to look for in the catalog, like table or chart"),
-    },
-    async ({ topic = "rules", find }) => {
-      if (!boardui) return "Not on this computer.";
-      // The rules without the skill's own front matter.
-      const text = guide(
-        topic === "rules"
-          ? `${boardui}/SKILL.md`
-          : `${boardui}/references/${topic}.md`,
-      ).replace(/^---\n[\s\S]*?\n---\n/, "");
-      if (topic !== "components") return text;
-      // The catalog is long: its headings alone, or the parts that
-      // mention the word.
-      const parts = text.split(/\n(?=#{2,3} )/);
-      if (!find)
-        return parts
-          .map((p) => p.split("\n")[0]!)
-          .filter((h) => h.startsWith("#"))
-          .join("\n");
-      const hits = parts.filter((p) =>
-        p.toLowerCase().includes(find.toLowerCase()),
-      );
-      return hits.length
-        ? hits.join("\n")
-        : `Nothing in the catalog mentions ${find}.`;
-    },
-  );
   tool(
     "tabs_context",
     "Lists the open tabs with their ids, titles and addresses. Call this first.",
@@ -728,8 +763,11 @@ export async function serve(http?: number): Promise<void> {
   const bye = () => browser.quit().finally(() => process.exit(0));
   process.on("SIGINT", bye);
   process.on("SIGTERM", bye);
+  const boardui = await startBoardui();
   if (http === undefined) {
-    await browserServer(browser, gif).connect(new StdioServerTransport());
+    const one = browserServer(browser, gif);
+    offerBoardui(one, boardui);
+    await one.connect(new StdioServerTransport());
     process.stdin.on("close", bye);
     return;
   }
@@ -995,6 +1033,7 @@ export async function serve(http?: number): Promise<void> {
       enableJsonResponse: true,
     });
     const server = browserServer(browser, gif);
+    offerBoardui(server, boardui);
     await server.connect(transport);
     res.on("close", () => void server.close());
     await transport.handleRequest(req, res);

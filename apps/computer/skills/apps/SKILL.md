@@ -1,3 +1,9 @@
+---
+name: apps
+description: >-
+  How an app is built on this computer and shown: a folder in the home served on a port, run as the person in the background, looked at with the browser, then a window on the desktop or a widget placed on it. Read before building anything that runs here.
+---
+
 # Building an app here
 
 An app is a folder in the home that serves on a port of this computer.

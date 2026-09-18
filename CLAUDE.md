@@ -559,15 +559,18 @@ running on the machine outside the person's Linux but as the person,
 which is the browser, with its profile on the disk and a page of its own,
 `/browser`, where the person watches it live and takes it over with their
 own clicks and keys, dragging to select and carrying the words out, and
-beside the browser's tools four guides read from the image: `maslow`,
-how this system works; `apps`, how an app is built here and shown as a
-window or a widget; `brain`, how the brain is used well; and `boardui`,
-BoardUI's rules and catalog, so what the Agent builds for them looks
-like Maslow; and the
+beside the browser's tools BoardUI's own MCP server, started beside ours
+from the package the image carries and offered as the `boardui_` tools,
+which look components up and install them into an app by its path; and
+the
 brain at this deployment's `/mcp`, reached with a session of the owner's
 that our server opens for the computer and the person can end in
-settings. BoardUI's skill is linked in ours from the image too, and
-BoardUI's own MCP server is not used. The
+settings. Four skills the image carries are linked into ours: `maslow`,
+how this system works; `apps`, how an app is built here and shown as a
+window or a widget; `brain`, how the brain is used well; and `boardui`,
+BoardUI's own, so what the Agent builds for them looks like Maslow. The
+skills are the Agent's; the person's own Claude Code has the two servers
+and nothing else of ours. The
 brain's MCP is the brain and the connectors, and nothing of the machine:
 no hand that runs a command or reads or writes a file goes into it.
 
