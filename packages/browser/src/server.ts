@@ -96,7 +96,7 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
     { name: "computer", version: "1" },
     {
       instructions:
-        "This computer's browser and its guides. Before building any interface call boardui; before making anything for the person's desktop call widget. For the browser, start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
+        "This computer's browser and its guides. Read maslow once for how this system works; boardui before any screen; apps before building anything that runs here or goes on the desktop; brain before the person's records. For the browser, start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
     },
   );
 
@@ -159,11 +159,12 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
     (args: unknown) => Promise<string | Result>
   >();
 
-  // What this computer knows beside its browser: BoardUI's rules and
-  // catalog, and how a widget is made, read from the image where the
-  // machine names them; anywhere else the tools say so.
+  // What this computer knows beside its browser: how this system works,
+  // how an app is built here, how the brain is used, and BoardUI's rules
+  // and catalog, read from the image where the machine names them;
+  // anywhere else the tools say so.
   const guides = process.env.MASLOW_GUIDES;
-  const widget = process.env.MASLOW_WIDGET;
+  const boardui = process.env.MASLOW_BOARDUI;
   const guide = (at: string) => {
     try {
       return readFileSync(at, "utf8");
@@ -171,6 +172,22 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
       return "Not on this computer.";
     }
   };
+  const written = (name: string, description: string) =>
+    tool(name, description, {}, async () =>
+      guides ? guide(`${guides}/${name}.md`) : "Not on this computer.",
+    );
+  written(
+    "maslow",
+    "How this system works: the computer, ports and windows, the browser, how to talk to the person, and what is never yours to touch. Read it once when a conversation starts.",
+  );
+  written(
+    "apps",
+    "How an app is built here and shown: a folder in the home served on a port, run as the person in the background, seen as a window on the desktop or placed on it as a widget.",
+  );
+  written(
+    "brain",
+    "How the person's brain is used well: reading with catalog, list, get, graph and search; writing conclusions with types, sources and links; notify, ask and share.",
+  );
   tool(
     "boardui",
     "How an interface is built here: BoardUI's rules, or its catalog of components, its patterns, theming or motion. Read the rules before building a screen; look a component up by a word before installing it with `npx boardui@latest add <name>`.",
@@ -185,12 +202,12 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
         .describe("a word to look for in the catalog, like table or chart"),
     },
     async ({ topic = "rules", find }) => {
-      if (!guides) return "Not on this computer.";
+      if (!boardui) return "Not on this computer.";
       // The rules without the skill's own front matter.
       const text = guide(
         topic === "rules"
-          ? `${guides}/SKILL.md`
-          : `${guides}/references/${topic}.md`,
+          ? `${boardui}/SKILL.md`
+          : `${boardui}/references/${topic}.md`,
       ).replace(/^---\n[\s\S]*?\n---\n/, "");
       if (topic !== "components") return text;
       // The catalog is long: its headings alone, or the parts that
@@ -209,13 +226,6 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
         : `Nothing in the catalog mentions ${find}.`;
     },
   );
-  tool(
-    "widget",
-    "How a widget is made for the person's desktop: an app on a port of this computer, built with BoardUI, run as the person and placed with the brain's place tool.",
-    {},
-    async () => (widget ? guide(widget) : "Not on this computer."),
-  );
-
   tool(
     "tabs_context",
     "Lists the open tabs with their ids, titles and addresses. Call this first.",

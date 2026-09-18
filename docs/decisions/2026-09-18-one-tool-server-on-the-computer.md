@@ -42,3 +42,12 @@ tool made for this agent, the browser and BoardUI included. So the two
 servers are seeded into their `~/.claude.json` and kept current there,
 theirs to change or remove; the mode, the skill link and the model stay
 out, as #279 settled.
+
+## Later still
+
+Tanmai: the computer is a merge of BoardUI, our skill explaining how the
+system functions, a skill on how to build apps, a skill on how to use the
+MCP, and the browser tools. So the guides are four, each a tool that
+answers with one file the image carries: `maslow`, `apps` (which took in
+`widget`), `brain` and `boardui`. The note in the Agent's own directory
+names when to read each.
