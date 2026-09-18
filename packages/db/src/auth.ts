@@ -403,6 +403,46 @@ export async function disconnectAgent(
   return Boolean(gone.rowCount);
 }
 
+// How many browsers and phones hold a session of the person's, across
+// every org they are in, this one included.
+export async function devicesOf(p: Principal): Promise<number> {
+  let n = 0;
+  for (const m of await membershipsOf(p)) {
+    n += await asOrg(m.orgId, async (q) =>
+      Number(
+        (
+          await q.query<{ n: string }>(
+            "select count(*) as n from sessions where user_id = $1 and client is null",
+            [m.userId],
+          )
+        ).rows[0]!.n,
+      ),
+    );
+  }
+  return n;
+}
+
+// Ends every browser's and phone's session of the person's, in every org
+// they are in, but the one asking, so a lost phone or a forgotten browser
+// is out from the next request. How many ended.
+export async function signOutOthers(
+  p: Principal,
+  keep: string | undefined,
+): Promise<number> {
+  const id = keep?.match(TOKEN)?.[2] ?? null;
+  let n = 0;
+  for (const m of await membershipsOf(p)) {
+    const gone = await asOrg(m.orgId, (q) =>
+      q.query(
+        "delete from sessions where user_id = $1 and client is null and id is distinct from $2::uuid",
+        [m.userId, id],
+      ),
+    );
+    n += gone.rowCount ?? 0;
+  }
+  return n;
+}
+
 export async function deleteSession(token: string | undefined): Promise<void> {
   const parts = token?.match(TOKEN);
   if (!parts) return;

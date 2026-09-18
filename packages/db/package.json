@@ -16,6 +16,7 @@
     "./desktops": "./src/desktops.ts",
     "./brain-views": "./src/brain-views.ts",
     "./notifications": "./src/notifications.ts",
+    "./phones": "./src/phones.ts",
     "./wallpapers": "./src/wallpapers.ts",
     "./shared-files": "./src/shared-files.ts",
     "./oauth": "./src/oauth.ts"

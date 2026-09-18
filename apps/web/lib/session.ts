@@ -5,7 +5,7 @@ import {
   type Principal,
   type Session,
 } from "@maslow/db/auth";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { cache } from "react";
 
@@ -31,11 +31,15 @@ export const noticed = (to: string, notice: string) =>
   `${to}${to.includes("?") ? "&" : "?"}${notice}`;
 
 // Who the current request acts as, or null when nobody is signed in. Looked
-// up once per request, however many components ask. A session an app holds
-// opens the brain, never the site.
+// up once per request, however many components ask. A browser carries the
+// session as a cookie; the phone carries the same session as a bearer
+// token. A session an app holds opens the brain, never the site.
 export const principal = cache(
   async (): Promise<Omit<Session, "client"> | null> => {
-    const s = await resolveSession((await cookies()).get(SESSION)?.value);
+    const token =
+      (await cookies()).get(SESSION)?.value ??
+      (await headers()).get("authorization")?.match(/^Bearer (.+)$/i)?.[1];
+    const s = await resolveSession(token);
     return s && s.client === null ? s : null;
   },
 );

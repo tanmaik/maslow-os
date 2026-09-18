@@ -36,7 +36,11 @@
         "SYNC_URL",
         "SYNC_SECRET",
         "APP_URL",
-        "DEEPGRAM_API_KEY"
+        "DEEPGRAM_API_KEY",
+        "APNS_TEAM_ID",
+        "APNS_KEY_ID",
+        "APNS_KEY",
+        "APNS_BUNDLE_ID"
       ]
     },
     "typecheck": {

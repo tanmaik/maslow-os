@@ -800,6 +800,27 @@ trusted for thirty seconds. The code runs in the database's own AWS region,
 Ohio, so a round trip to it is under a millisecond and a person's own trip
 is paid once a click; the database stays on and never sleeps.
 
+## The iPhone
+
+Maslow on a phone is a native iPhone app in `apps/iphone`: SwiftUI on
+iOS 26, wearing the system's own Liquid Glass and nothing drawn beside
+it. The phone is the person: it signs in through `POST /auth/device`
+with the same code the lock screen sends, holds a browser's kind of
+session as a bearer token, opens the site's own doors with it, and is
+refused by the brain's MCP as a browser is. It reads the brain through
+three thin doors over `packages/brain`, `/brain/types`, `/brain/read`
+and `/brain/get`, and what waits on the person through `/notifications`.
+The Agent on it runs in Bypass and offers no mode, and its one big
+button is hold to talk, streamed to Deepgram as the web's is. With
+Always allowed, the phone logs the person's location for as long as
+they carry it, straight to their computer's door and never through us.
+A lost phone is ended from Settings › Access with "Sign out the
+others". A notification left for the person reaches a closed phone
+through Apple's push service on a key of ours, off in the open where
+the key is not set. The project file is written by `xcodegen` from `project.yml`
+and never committed. The settled design is
+`docs/decisions/2026-09-17-the-iphone.md`.
+
 ## Metering and billing
 
 There is no meter. Two rules stand in for it. Every resource we make

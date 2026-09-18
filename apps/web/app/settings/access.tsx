@@ -73,13 +73,17 @@ function Shared({ ports }: { ports: SharedPort[] }) {
 export async function AccessPane({
   p,
   agents,
+  devices,
   saidKeys,
   saidAgent,
+  saidDevices,
 }: {
   p: Principal;
   agents: Agent[];
+  devices: number;
   saidKeys: Told;
   saidAgent: Told;
+  saidDevices: Told;
 }) {
   const d = deployment.computers;
   const h = await headers();
@@ -127,6 +131,33 @@ export async function AccessPane({
         <Head>Agents on your brain</Head>
         <Agents agents={agents} said={saidAgent} />
       </div>
+      <form
+        action="/settings/devices"
+        method="post"
+        className="flex flex-col gap-2"
+      >
+        <Head>Browsers and phones</Head>
+        <Rows>
+          <Row
+            label={
+              devices === 1
+                ? "Signed in here and nowhere else"
+                : `Signed in on ${devices} browsers and phones, this one included`
+            }
+            description="A lost phone or a forgotten browser stays signed in until you end it here."
+          >
+            <Button
+              variant="secondary"
+              size="small"
+              type="submit"
+              disabled={devices <= 1}
+            >
+              Sign out the others
+            </Button>
+          </Row>
+        </Rows>
+        <Said {...saidDevices} />
+      </form>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { computerById, type Computer } from "@maslow/db/computers";
 import { groupsOf } from "@maslow/db/groups";
 import { tellNotification } from "@maslow/db/notifications";
 import { orgOf } from "@maslow/db/settings";
+
+import { pushNotification } from "./push.ts";
 import {
   copiesOf,
   copiesRecorded,
@@ -282,12 +284,14 @@ export async function tellReached(
   await asPerson(p, async (q) => {
     const { members } = await orgOf(p);
     const me = members.find((m) => m.id === p.userId)?.name ?? "A colleague";
-    for (const id of await membersReached(q, to))
-      await tellNotification(q, id, {
+    for (const id of await membersReached(q, to)) {
+      const n = await tellNotification(q, id, {
         title: `${me} shared ${file.name} with you`,
         body: `It is in Files, under ${me}, and at /file/${file.id}.`,
         from: me,
       });
+      await pushNotification({ orgId: p.orgId, userId: id }, n);
+    }
   });
 }
 

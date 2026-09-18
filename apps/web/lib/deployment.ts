@@ -61,6 +61,19 @@ export type Computers =
     }
   | { kind: "none" };
 
+// Notifications reach a closed phone through Apple's push service, on a key
+// of ours from the Apple Developer Program, or not at all. Not a fallback:
+// a deployment without the key has the feature off, in the open.
+export type Push =
+  | {
+      kind: "apns";
+      teamId: string;
+      keyId: string;
+      key: string;
+      bundleId: string;
+    }
+  | { kind: "none" };
+
 // Model keys for the computers come from OpenRouter, minted per person
 // with a provisioning key of ours, or from nowhere, in which case Claude
 // Code on a computer runs on the person's own account and the page says
@@ -213,6 +226,18 @@ function computers(): Computers {
 // The cap is what a person may spend on models in a week, in dollars: the
 // one ceiling of ours they are shown, and the default a computer's row
 // carries from the day its key is minted.
+function push(): Push {
+  const { APNS_TEAM_ID, APNS_KEY_ID, APNS_KEY } = process.env;
+  if (!APNS_TEAM_ID || !APNS_KEY_ID || !APNS_KEY) return { kind: "none" };
+  return {
+    kind: "apns",
+    teamId: APNS_TEAM_ID,
+    keyId: APNS_KEY_ID,
+    key: APNS_KEY.replace(/\\n/g, "\n"),
+    bundleId: process.env.APNS_BUNDLE_ID ?? "tech.maslow.iphone",
+  };
+}
+
 function models(): Models {
   const provisioningKey = process.env.OPENROUTER_PROVISIONING_KEY;
   if (!provisioningKey) return { kind: "none" };
@@ -263,6 +288,7 @@ export const deployment = {
   storage: storage(),
   computers: computers(),
   models: models(),
+  push: push(),
   connections: connections(),
   embeddings: embeddings(),
   speech: speech(),

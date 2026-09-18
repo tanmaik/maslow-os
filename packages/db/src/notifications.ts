@@ -73,12 +73,13 @@ export async function tellNotification(
   q: Query,
   personId: string,
   n: { title: string; body?: string; from: string },
-): Promise<void> {
-  await q.query(
+): Promise<Notification> {
+  const { rows } = await q.query<Notification>(
     `insert into notifications (person_id, kind, title, body, author)
-     values ($1, 'note', $2, $3, $4)`,
+     values ($1, 'note', $2, $3, $4) returning ${columns}`,
     [personId, n.title.trim(), n.body?.trim() ?? "", n.from],
   );
+  return rows[0]!;
 }
 
 // The person's notifications, newest first.

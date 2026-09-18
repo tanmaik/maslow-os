@@ -5,6 +5,7 @@ import { computerOf } from "@maslow/db/computers";
 import * as notifications from "@maslow/db/notifications";
 import { spend, spentSince } from "@maslow/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { after } from "next/server";
 import { z } from "zod";
 
 import { connections } from "./connections";
@@ -12,6 +13,7 @@ import { embed, model, RateLimited } from "./embeddings";
 import * as lines from "./lines";
 import { CEILINGS, PRICES } from "./prices";
 import { widgetsOf, place, unplace } from "./desktop";
+import { pushNotification } from "./push.ts";
 import { named, Refused, tools, type Action } from "./tools";
 
 // Who and what an agent is connected to, read once when it connects.
@@ -281,6 +283,12 @@ export function brainServer(
       refusing(() => asPerson(s, (q) => fn(q, args)));
   const date = (s: string | undefined) => (s ? new Date(s) : undefined);
   const line = lines.record;
+  // A notification just left reaches the person's phones once this
+  // answer is out, wearing the count of asks still waiting on them.
+  const pushed = async (q: Query, n: notifications.Notification) => {
+    const { waiting } = await notifications.notificationCounts(q);
+    after(() => pushNotification(s, n, waiting));
+  };
 
   server.registerTool(
     "catalog",
@@ -578,6 +586,7 @@ export function brainServer(
         request: ask.id,
         replyTo: a.reply_to,
       });
+      await pushed(q, notification);
       return {
         text: `asked ${ask.id} as notification ${notification.id}: ${plural(ask.items.length, "item")} to ${plural(ask.subjects.length, "party")} at ${ask.level}; the person decides`,
         data: { ...ask, notification: notification.id },
@@ -676,6 +685,7 @@ export function brainServer(
         kind: "note",
         ...a,
       });
+      await pushed(q, n);
       return { text: `noted ${n.id}: ${n.title}`, data: n };
     }),
   );
@@ -704,6 +714,7 @@ export function brainServer(
         ...rest,
         replyTo: reply_to,
       });
+      await pushed(q, n);
       return {
         text: `asked ${n.id}: ${n.title}; read the answer with notifications ids=[${n.id}]`,
         data: n,

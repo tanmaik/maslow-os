@@ -1,0 +1,70 @@
+# The iPhone app. `xcodegen` here writes Maslow.xcodeproj from this file;
+# the project file itself is never committed.
+name: Maslow
+options:
+  bundleIdPrefix: tech.maslow
+  deploymentTarget:
+    iOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: "YES"
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    SWIFT_STRICT_CONCURRENCY: complete
+    SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY: "YES"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: "YES"
+    TARGETED_DEVICE_FAMILY: "1"
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm
+    from: "1.2.0"
+targets:
+  Maslow:
+    type: application
+    platform: iOS
+    sources:
+      - path: Maslow
+    dependencies:
+      - package: SwiftTerm
+    entitlements:
+      path: Maslow/Maslow.entitlements
+      properties:
+        aps-environment: development
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tech.maslow.iphone
+        DEVELOPMENT_TEAM: 4Z47W5JY4G
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+    info:
+      path: Maslow/Info.plist
+      properties:
+        CFBundleDisplayName: Maslow
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        ITSAppUsesNonExemptEncryption: false
+        NSMicrophoneUsageDescription: Hold to talk to your agent.
+        NSSpeechRecognitionUsageDescription: Turns what you say into words for your agent.
+        NSLocationWhenInUseUsageDescription: Logs where you are to your own computer, once a minute while Maslow is open.
+        NSLocationAlwaysAndWhenInUseUsageDescription: Logs where you are to your own computer, once a minute while Maslow is open and whenever you move with it closed.
+        UIBackgroundModes:
+          - location
+        NSLocalNetworkUsageDescription: Reaches a development server on this network.
+        NSAppTransportSecurity:
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+  MaslowTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: MaslowTests
+    dependencies:
+      - target: Maslow
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: tech.maslow.iphone.tests
+        GENERATE_INFOPLIST_FILE: "YES"

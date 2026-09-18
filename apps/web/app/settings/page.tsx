@@ -1,5 +1,5 @@
 import { asPerson } from "@maslow/db";
-import { agentsOf } from "@maslow/db/auth";
+import { agentsOf, devicesOf } from "@maslow/db/auth";
 import { groupsOf } from "@maslow/db/groups";
 import { orgOf, type Member } from "@maslow/db/settings";
 import { redirect } from "next/navigation";
@@ -60,6 +60,7 @@ const PANE_OF: Partial<Record<keyof Notice, string>> = {
   invite: "members",
   connection: "apps",
   agent: "access",
+  devices: "access",
   group: "groups",
   delete: "org",
 };
@@ -96,9 +97,11 @@ type Notice = {
   // The account a sign-in just made, to be named.
   account?: string;
   agent?: "disconnected" | "gone";
+  devices?: "ended";
 };
 
 const NOTICES: Record<string, string> = {
+  "devices=ended": "Signed out everywhere else. This browser stays signed in.",
   "org=saved": "Saved.",
   "org=name": "The org needs a name of up to 80 characters.",
   "org=image":
@@ -229,11 +232,12 @@ export default async function Settings({
   // other pane, owe nothing to the vendor or the machine.
   const came = (Object.keys(n) as (keyof Notice)[]).find((k) => k in PANE_OF);
   const view = n.pane ?? (came && PANE_OF[came]) ?? "you";
-  const [{ org, members, invited, past }, groups, agents, papers] =
+  const [{ org, members, invited, past }, groups, agents, devices, papers] =
     await Promise.all([
       orgOf(p),
       view === "groups" ? groupsOf(p) : [],
       view === "access" ? agentsOf(p) : [],
+      view === "access" ? devicesOf(p) : 0,
       view === "look" ? asPerson(p, papersOf) : null,
     ]);
   const me = members.find((m) => m.id === p.userId)!;
@@ -468,8 +472,10 @@ export default async function Settings({
       <AccessPane
         p={p}
         agents={agents}
+        devices={devices}
         saidKeys={said("keys")}
         saidAgent={said("agent")}
+        saidDevices={said("devices")}
       />
     ),
     org: (

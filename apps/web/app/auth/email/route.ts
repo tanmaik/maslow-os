@@ -37,16 +37,18 @@ export async function POST(request: Request) {
     return new Response("An email address is required.", { status: 400 });
   const address = email.trim().toLowerCase();
   const to = destination(origin(request), form.get("next"));
-  if (!OPEN && !(await known(address)))
-    return abandoned(noticed(to, "email=closed"));
 
   // The network address is what the nearest proxy reports; with no proxy
-  // there is none to count against.
+  // there is none to count against. It is counted before the address is
+  // looked up, so probing for accounts is bounded as tightly as asking
+  // for codes is.
   const from = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const allowed =
-    (await allow(`email:${address}`, PER_EMAIL, WINDOW)) &&
-    (!from || (await allow(`from:${from}`, PER_ADDRESS, WINDOW)));
-  if (!allowed) return abandoned(noticed(to, "email=slow"));
+  if (from && !(await allow(`from:${from}`, PER_ADDRESS, WINDOW)))
+    return abandoned(noticed(to, "email=slow"));
+  if (!OPEN && !(await known(address)))
+    return abandoned(noticed(to, "email=closed"));
+  if (!(await allow(`email:${address}`, PER_EMAIL, WINDOW)))
+    return abandoned(noticed(to, "email=slow"));
 
   let code: string;
   try {
