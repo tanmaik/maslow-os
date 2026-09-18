@@ -85,20 +85,25 @@ function vendorsOf(env) {
   };
 }
 
-// The address this checkout's dev server has on its own computer, where it
-// runs on one: the port, then the machine's id, which Fly writes in
-// /etc/hosts beside the machine's private address, under the computers'
-// domain. Nothing on a laptop.
-function computerAddress(webPort, domain) {
-  if (!domain) return null;
+// The id of the Maslow computer this checkout runs on, which Fly writes
+// in /etc/hosts beside the machine's private address; null on a laptop.
+function computerId() {
   let hosts;
   try {
     hosts = fs.readFileSync("/etc/hosts", "utf8");
   } catch {
     return null;
   }
-  const id = /^\S+[ \t]+([0-9a-f]{14})$/m.exec(hosts)?.[1];
-  return id ? `${webPort}-${id}.${domain}` : null;
+  return /^\S+[ \t]+([0-9a-f]{14})$/m.exec(hosts)?.[1] ?? null;
+}
+
+// The one outside origin the dev server serves its assets to: this port
+// and this machine, on whichever computers' domain reaches it, since a
+// checkout makes its machines in one environment and may itself run on a
+// computer of another. Null on a laptop.
+function devOrigin(webPort, id, domain) {
+  if (!id || !domain) return null;
+  return `${webPort}-${id}.*.${domain.split(".").slice(1).join(".")}`;
 }
 
 export async function startStack({
@@ -154,7 +159,8 @@ export async function startStack({
     APP_URL: `http://127.0.0.1:${webPort}`,
   };
 
-  const address = computerAddress(webPort, values?.FLY_MACHINES_DOMAIN);
+  const computer = computerId();
+  const origin = devOrigin(webPort, computer, values?.FLY_MACHINES_DOMAIN);
   const web = spawn(
     path.join(root, "apps", "web", "node_modules", ".bin", "next"),
     ["dev", "-p", String(webPort)],
@@ -165,7 +171,7 @@ export async function startStack({
         ...process.env,
         ...values,
         ...live,
-        ...(address ? { DEV_ORIGIN: address } : {}),
+        ...(origin ? { DEV_ORIGIN: origin } : {}),
         DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
         // The machines this checkout makes carry its name, so its own
         // dev server renews their lease and no other's.
@@ -187,8 +193,9 @@ export async function startStack({
     pgPort,
     webPort,
     url,
-    // Where the stack is reached on its own computer, or null on a laptop.
-    address,
+    // The id of the computer the stack runs on and is served to, or null on
+    // a laptop or without the secrets that name the site.
+    computer: origin ? computer : null,
     applied,
     secrets: values && Object.keys(values).length,
     vendors: vendorsOf({ ...process.env, ...values, ...live, ...extraEnv }),
