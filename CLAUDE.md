@@ -620,7 +620,10 @@ for with the browser's own prompt the moment the desktop is drawn for a
 signed-in person, never asked again on that device once it is refused,
 and logged to their own machine and nowhere else.
 Any window fills the screen with
-one press and comes back. A snapped window fills exactly the screen
+one press and comes back, or with a double-click anywhere on its title
+bar but a field or the lights; the bar shows a grip while the pointer is
+on it, and a filled window pulled by its bar comes back down under the
+pointer and is carried from there. A snapped window fills exactly the screen
 under the menu bar and up to the dock, edge to edge. A port can be put
 on the desktop itself, from its icon's menu: a widget, with no bar, under
 every window, moved by the grip along its top and resized by its

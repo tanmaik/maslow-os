@@ -1576,6 +1576,9 @@ function DesktopPage({
 // the window by.
 const CONTROL =
   "button, a, input, textarea, select, [role=button], [role=textbox], [contenteditable=true]";
+// Where a double-click is the field's or the lights' own, not the bar's.
+const TYPING =
+  "input, textarea, select, [role=textbox], [contenteditable=true], [data-titlebar-controls]";
 
 // One window's frame, drawn as ryOS draws one: three lights and its name
 // in a bar to drag it by, every edge and corner to resize it by, and the
@@ -1778,6 +1781,15 @@ function Frame({
   move.current = drag;
   const toggle = useRef(full ? onCollapse : onExpand);
   toggle.current = full ? onCollapse : onExpand;
+  const filled = useRef(full);
+  filled.current = full;
+  // A filled window pulled by its bar comes back down under the pointer,
+  // the same way along its own bar as the pointer was along the full
+  // one, and is carried from there.
+  const shape = useRef(onShape);
+  shape.current = onShape;
+  const held = useRef(card);
+  held.current = card;
   const turn = useRef(onSwitch);
   turn.current = onSwitch;
   const [nudge, setNudge] = useState(0);
@@ -1791,6 +1803,9 @@ function Frame({
     // the previous window, nudging the window 10px the way the finger
     // went meanwhile (ryOS useSwipeNavigation.ts:80-118, windowFrameUtils.ts:10-25).
     let swipe: { id: number; x: number } | null = null;
+    // A filled window is pulled down once the hand has moved a few
+    // pixels, then carried as any window is.
+    let pull: { id: number; x: number; y: number } | null = null;
     const down = (e: globalThis.PointerEvent) => {
       if ((e.target as Element | null)?.closest(CONTROL)) return;
       if (e.pointerType === "touch") {
@@ -1802,8 +1817,38 @@ function Frame({
         }
         lastTap = now;
         swipe = { id: e.pointerId, x: e.clientX };
+      } else if (filled.current && e.button === 0) {
+        pull = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        return;
       }
       move.current("move")(e as unknown as PointerEvent<HTMLDivElement>);
+    };
+    const pulled = (e: globalThis.PointerEvent) => {
+      if (!pull || e.pointerId !== pull.id) return;
+      if (Math.hypot(e.clientX - pull.x, e.clientY - pull.y) < 4) return;
+      pull = null;
+      const rect = bar.getBoundingClientRect();
+      const along = between((e.clientX - rect.left) / rect.width, 0, 1);
+      const was = held.current;
+      toggle.current();
+      shape.current({ ...was, x: along * (1 - was.w), y: 0 }, false);
+      // Carried once the window is drawn back down.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() =>
+          move.current("move")({
+            button: 0,
+            pointerId: e.pointerId,
+            clientX: e.clientX,
+            clientY: e.clientY,
+            currentTarget: bar,
+            preventDefault() {},
+            stopPropagation() {},
+          } as unknown as PointerEvent<HTMLDivElement>),
+        ),
+      );
+    };
+    const unpull = (e: globalThis.PointerEvent) => {
+      if (pull && e.pointerId === pull.id) pull = null;
     };
     const across = (e: globalThis.PointerEvent) => {
       if (!swipe || e.pointerId !== swipe.id) return;
@@ -1818,19 +1863,25 @@ function Frame({
       if (Math.abs(dx) > 100) turn.current(dx < 0 ? 1 : -1);
     };
     const twice = (e: MouseEvent) => {
-      if ((e.target as Element | null)?.closest(CONTROL)) return;
+      if ((e.target as Element | null)?.closest(TYPING)) return;
       toggle.current();
     };
     bar.addEventListener("pointerdown", down);
     bar.addEventListener("pointermove", across);
+    bar.addEventListener("pointermove", pulled);
     bar.addEventListener("pointerup", up);
+    bar.addEventListener("pointerup", unpull);
     bar.addEventListener("pointercancel", up);
+    bar.addEventListener("pointercancel", unpull);
     bar.addEventListener("dblclick", twice);
     return () => {
       bar.removeEventListener("pointerdown", down);
       bar.removeEventListener("pointermove", across);
+      bar.removeEventListener("pointermove", pulled);
       bar.removeEventListener("pointerup", up);
+      bar.removeEventListener("pointerup", unpull);
       bar.removeEventListener("pointercancel", up);
+      bar.removeEventListener("pointercancel", unpull);
       bar.removeEventListener("dblclick", twice);
     };
   }, [bar]);
@@ -1948,10 +1999,13 @@ function Frame({
         ) : (
           <div
             ref={setBar}
-            className={`relative flex h-6 shrink-0 items-center select-none [&:has([data-nameless])_[data-name]]:hidden ${
-              free ? "cursor-move touch-none" : ""
-            }`}
+            className="group/bar relative flex h-6 shrink-0 cursor-move touch-none items-center select-none [&:has([data-nameless])_[data-name]]:hidden"
           >
+            {/* A grip, shown while the pointer is on the bar. */}
+            <span
+              aria-hidden
+              className="bg-foreground-icon-tertiary ease-plain duration-fast pointer-events-none absolute top-[3px] left-1/2 h-0.5 w-4 -translate-x-1/2 rounded-full opacity-0 transition-opacity group-hover/bar:opacity-60"
+            />
             <div
               className="group/traffic relative ml-1.5 flex items-center gap-2"
               data-titlebar-controls
