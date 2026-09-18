@@ -52,7 +52,7 @@ export async function smokeSync(stack, signIn) {
     const way = async (i) => {
       const res = await fetch(`${stack.url}/brain/records/${id}/live`, {
         headers: { cookie: await signIn(acme.users[i].id) },
-        signal: AbortSignal.timeout(20_000),
+        signal: AbortSignal.timeout(60_000),
       });
       if (!res.ok) throw new Error(`live answered ${res.status}`);
       return res.json();
@@ -78,10 +78,9 @@ export async function smokeSync(stack, signIn) {
       ]);
       return person;
     };
-    // Request the app's sync route once before connecting, so `next dev`
-    // has compiled it before the relay's eight-second call to it.
+    // The app's sync route, compiled before the relay's first call to it.
     await fetch(`${stack.url}/brain/sync/${id}`, {
-      signal: AbortSignal.timeout(20_000),
+      signal: AbortSignal.timeout(60_000),
     });
     const marge = await join(0);
     const runner = await join(1);

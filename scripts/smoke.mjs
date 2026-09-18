@@ -4,6 +4,8 @@
 // is the merge gate.
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
+import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -106,6 +108,34 @@ const youOn = (html) => html.match(/data-you[^>]*>([^<]*)</)?.[1];
 const offers = (html, orgName) => html.includes(`\\"orgName\\":\\"${orgName}`);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Available memory over total, and the three largest processes by what
+// they hold, as one line.
+const memory = () => {
+  const gb = (bytes) => (bytes / 2 ** 30).toFixed(1);
+  let available = os.freemem();
+  try {
+    const m = /MemAvailable:\s+(\d+) kB/.exec(
+      readFileSync("/proc/meminfo", "utf8"),
+    );
+    if (m) available = Number(m[1]) * 1024;
+  } catch {}
+  let top = "";
+  try {
+    top = execFileSync("ps", ["-eo", "rss=,comm=", "--sort=-rss"], {
+      encoding: "utf8",
+    })
+      .trim()
+      .split("\n")
+      .slice(0, 3)
+      .map((l) => {
+        const [rss, ...comm] = l.trim().split(/\s+/);
+        return `${comm.join(" ")} ${gb(Number(rss) * 1024)}`;
+      })
+      .join(", ");
+  } catch {}
+  return `${gb(available)} of ${gb(os.totalmem())} GB available${top ? `; ${top}` : ""}`;
+};
 
 // What the sign-in page says outside production.
 const SIGNED_OUT = "Sign in as one of the seeded people";
@@ -1372,10 +1402,10 @@ try {
   // the app and the relay last wrote, and the stack is stopped as after
   // any other failure, so a hang is a failure with a reason.
   const suite = async (name, run) => {
-    // What the machine has left as each suite begins, since a runner that
-    // runs out of memory dies with no word of its own.
+    // What the machine has left as each suite begins, and who holds the
+    // rest.
     console.log(
-      `smoke: ${name}, ${(os.freemem() / 2 ** 30).toFixed(1)} of ${(os.totalmem() / 2 ** 30).toFixed(1)} GB free, load ${os.loadavg()[0].toFixed(1)}`,
+      `smoke: ${name}, ${memory()}, load ${os.loadavg()[0].toFixed(1)}`,
     );
     let quiet = 0;
     const write = process.stdout.write.bind(process.stdout);
