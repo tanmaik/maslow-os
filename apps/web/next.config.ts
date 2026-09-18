@@ -5,11 +5,13 @@ const config: NextConfig = {
   agentRules: false,
   devIndicators: false,
   // A phone on the same network, or one reached through a tunnel, may look
-  // at a laptop's stack: the dev server serves its own assets to those
-  // origins as it does to localhost. Production never reads this.
+  // at a laptop's stack, and a stack on a Maslow computer is reached at that
+  // computer's own address, which the dev script names: the dev server
+  // serves its own assets to those origins as it does to localhost, and to
+  // no other computer's. Production never reads this.
   allowedDevOrigins: [
     "*.trycloudflare.com",
-    "*.computers.maslow.tech",
+    ...(process.env.DEV_ORIGIN ? [process.env.DEV_ORIGIN] : []),
     "10.*.*.*",
     "192.168.*.*",
   ],

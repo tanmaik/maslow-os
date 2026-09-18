@@ -85,6 +85,22 @@ function vendorsOf(env) {
   };
 }
 
+// The address this checkout's dev server has on its own computer, where it
+// runs on one: the port, then the machine's id, which Fly writes in
+// /etc/hosts beside the machine's private address, under the computers'
+// domain. Nothing on a laptop.
+function computerAddress(webPort, domain) {
+  if (!domain) return null;
+  let hosts;
+  try {
+    hosts = fs.readFileSync("/etc/hosts", "utf8");
+  } catch {
+    return null;
+  }
+  const id = /^\S+[ \t]+([0-9a-f]{14})$/m.exec(hosts)?.[1];
+  return id ? `${webPort}-${id}.${domain}` : null;
+}
+
 export async function startStack({
   webPort,
   stdio = "inherit",
@@ -138,6 +154,7 @@ export async function startStack({
     APP_URL: `http://127.0.0.1:${webPort}`,
   };
 
+  const address = computerAddress(webPort, values?.FLY_MACHINES_DOMAIN);
   const web = spawn(
     path.join(root, "apps", "web", "node_modules", ".bin", "next"),
     ["dev", "-p", String(webPort)],
@@ -148,6 +165,7 @@ export async function startStack({
         ...process.env,
         ...values,
         ...live,
+        ...(address ? { DEV_ORIGIN: address } : {}),
         DATABASE_URL: `postgres://app@127.0.0.1:${pgPort}/postgres`,
         // The machines this checkout makes carry its name, so its own
         // dev server renews their lease and no other's.
@@ -169,6 +187,8 @@ export async function startStack({
     pgPort,
     webPort,
     url,
+    // Where the stack is reached on its own computer, or null on a laptop.
+    address,
     applied,
     secrets: values && Object.keys(values).length,
     vendors: vendorsOf({ ...process.env, ...values, ...live, ...extraEnv }),

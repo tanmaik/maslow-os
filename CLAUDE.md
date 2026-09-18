@@ -52,7 +52,11 @@ starts without a daemon starts everywhere.
 
 Every checkout is self-contained — its own database, its own ports picked free
 at start, its own machines on Fly under a lease it renews, nothing shared
-with another checkout. Ten worktrees are ten independent stacks. A migration is created with `pnpm migration:new <name>`,
+with another checkout. Ten worktrees are ten independent stacks. A
+checkout on a Maslow computer is reached at that computer's own address
+under the computers' domain, port first; `pnpm dev` prints it as
+`computer`, and it is the one outside origin the dev server serves its
+assets to, so no other computer's page is trusted. A migration is created with `pnpm migration:new <name>`,
 which stamps the clock; the runner refuses two files with the same stamp, so
 parallel work cannot collide on a name.
 

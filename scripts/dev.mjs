@@ -36,6 +36,7 @@ for (const [name, vendor] of Object.entries(stack.vendors)) {
   );
 }
 console.log(`web       http://localhost:${stack.webPort}`);
+if (stack.address) console.log(`computer  https://${stack.address}`);
 
 // The machines this checkout made keep running only while it does: their
 // lease is renewed every ten minutes, and the hourly reap stops what
