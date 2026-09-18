@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { createServer, type ServerResponse } from "node:http";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -92,10 +93,10 @@ function place(p: string): string {
 
 function browserServer(browser: Browser, gif: Gif): McpServer {
   const server = new McpServer(
-    { name: "browser", version: "1" },
+    { name: "computer", version: "1" },
     {
       instructions:
-        "A real browser. Start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
+        "This computer's browser and its guides. Before building any interface call boardui; before making anything for the person's desktop call widget. For the browser, start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
     },
   );
 
@@ -157,6 +158,63 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
     string,
     (args: unknown) => Promise<string | Result>
   >();
+
+  // What this computer knows beside its browser: BoardUI's rules and
+  // catalog, and how a widget is made, read from the image where the
+  // machine names them; anywhere else the tools say so.
+  const guides = process.env.MASLOW_GUIDES;
+  const widget = process.env.MASLOW_WIDGET;
+  const guide = (at: string) => {
+    try {
+      return readFileSync(at, "utf8");
+    } catch {
+      return "Not on this computer.";
+    }
+  };
+  tool(
+    "boardui",
+    "How an interface is built here: BoardUI's rules, or its catalog of components, its patterns, theming or motion. Read the rules before building a screen; look a component up by a word before installing it with `npx boardui@latest add <name>`.",
+    {
+      topic: z
+        .enum(["rules", "components", "patterns", "theming", "motion"])
+        .optional()
+        .describe("the rules when left out"),
+      find: z
+        .string()
+        .optional()
+        .describe("a word to look for in the catalog, like table or chart"),
+    },
+    async ({ topic = "rules", find }) => {
+      if (!guides) return "Not on this computer.";
+      // The rules without the skill's own front matter.
+      const text = guide(
+        topic === "rules"
+          ? `${guides}/SKILL.md`
+          : `${guides}/references/${topic}.md`,
+      ).replace(/^---\n[\s\S]*?\n---\n/, "");
+      if (topic !== "components") return text;
+      // The catalog is long: its headings alone, or the parts that
+      // mention the word.
+      const parts = text.split(/\n(?=#{2,3} )/);
+      if (!find)
+        return parts
+          .map((p) => p.split("\n")[0]!)
+          .filter((h) => h.startsWith("#"))
+          .join("\n");
+      const hits = parts.filter((p) =>
+        p.toLowerCase().includes(find.toLowerCase()),
+      );
+      return hits.length
+        ? hits.join("\n")
+        : `Nothing in the catalog mentions ${find}.`;
+    },
+  );
+  tool(
+    "widget",
+    "How a widget is made for the person's desktop: an app on a port of this computer, built with BoardUI, run as the person and placed with the brain's place tool.",
+    {},
+    async () => (widget ? guide(widget) : "Not on this computer."),
+  );
 
   tool(
     "tabs_context",

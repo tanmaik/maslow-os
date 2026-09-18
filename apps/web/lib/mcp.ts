@@ -621,7 +621,7 @@ export function brainServer(
     "place",
     {
       description:
-        "Puts a widget on the person's desktop, or moves one already there by its id, which keeps what it shows unless told otherwise. A widget is an app served on a port: of the person's own computer, or of a colleague's computer that was opened to them, named by its machine. Where it lies and how big it is are shares of the desktop, 0 to 1, from the top left; left out, it goes where the next widget goes, at the size a window of it opens at. A widget lies under the person's windows, on every device they open the desktop on, and they may move, resize, put away or remove it like their own. Answers with the widget.",
+        "Puts a widget on the person's desktop, or moves one already there by its id, which keeps what it shows unless told otherwise. A widget is an app served on a port: of the person's own computer, or of a colleague's computer that was opened to them, named by its machine. Where it lies and how big it is are shares of the desktop, 0 to 1, from the top left; left out, it goes where the next widget goes, at the size a window of it opens at. A widget lies under the person's windows, on every device they open the desktop on, and they may move, resize, minimize or remove it like their own. Answers with the widget.",
       inputSchema: {
         port: z.number().int().min(1).max(65535).optional(),
         machine: z

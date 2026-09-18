@@ -1,5 +1,6 @@
 // Two jobs at boot, neither of which stops it. Ours: the configuration
-// of our own session, ~/.maslow/claude, written whole from the image.
+// of our own session, ~/.maslow/claude, written whole from the image,
+// with the note that tells it what this computer is.
 // Theirs: the person's own Claude Code is theirs alone, so whatever an
 // earlier image put in their ~/.claude, the servers, the mode and the
 // skill link, is taken back once, where they never changed it, and
@@ -72,6 +73,7 @@ function ours() {
       try { config = JSON.parse(fs.readFileSync(path.join(dir, ".claude.json"), "utf8")); } catch {}
       write(path.join(dir, ".claude.json"), { ...config, hasCompletedOnboarding: true, mcpServers: mcp });
       write(path.join(dir, "settings.json"), { permissions: settings });
+      fs.copyFileSync("/opt/maslow/etc/CLAUDE.md", path.join(dir, "CLAUDE.md"));
       const link = path.join(dir, "skills", "boardui");
       try { if (!fs.lstatSync(link).isSymbolicLink()) throw new Error(); } catch { try { fs.rmSync(link, { recursive: true, force: true }); } catch {} fs.symlinkSync("/opt/maslow/skills/boardui", link); }
       const done = path.join(dir, ".conversations-carried");

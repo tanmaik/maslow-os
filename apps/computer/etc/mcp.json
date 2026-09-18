@@ -1,5 +1,5 @@
 {
-  "browser": {
+  "computer": {
     "type": "http",
     "url": "http://127.0.0.1:8082/mcp"
   },
@@ -9,10 +9,5 @@
     "headers": {
       "Authorization": "Bearer ${BRAIN_TOKEN}"
     }
-  },
-  "boardui": {
-    "type": "stdio",
-    "command": "npx",
-    "args": ["-y", "boardui@latest", "mcp"]
   }
 }
