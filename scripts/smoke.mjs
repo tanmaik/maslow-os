@@ -4,6 +4,7 @@
 // is the merge gate.
 import fs from "node:fs/promises";
 import { createServer } from "node:http";
+import os from "node:os";
 import path from "node:path";
 
 import { measure } from "../apps/web/lib/meter.ts";
@@ -1366,19 +1367,52 @@ try {
     "session=00000000-0000-4000-8000-000000000001.00000000-0000-4000-8000-000000000009",
   );
   check("unknown session", stale.includes(SIGNED_OUT), "sign-in page");
-  // Every suite runs, whatever failed before it.
-  failed = !(await smokeConnections(stack, signIn)) || failed;
-  failed = !(await smokeDb(stack)) || failed;
-  failed = !(await smokeBrain(stack)) || failed;
-  failed = !(await smokeMcp(stack, signIn)) || failed;
-  failed = !(await smokeSync(stack, signIn)) || failed;
+  // Every suite runs, whatever failed before it. One that prints nothing
+  // for a minute is stalled: the run fails with the suite's name and what
+  // the app and the relay last wrote, and the stack is stopped as after
+  // any other failure, so a hang is a failure with a reason.
+  const suite = async (name, run) => {
+    // What the machine has left as each suite begins, since a runner that
+    // runs out of memory dies with no word of its own.
+    console.log(
+      `smoke: ${name}, ${(os.freemem() / 2 ** 30).toFixed(1)} of ${(os.totalmem() / 2 ** 30).toFixed(1)} GB free, load ${os.loadavg()[0].toFixed(1)}`,
+    );
+    let quiet = 0;
+    const write = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (...args) => ((quiet = 0), write(...args));
+    let watch;
+    const stalled = new Promise((_, reject) => {
+      watch = setInterval(() => {
+        if (++quiet < 60) return;
+        reject(
+          new Error(
+            `smoke: stalled in ${name} for a minute; app ${stack.app.up() ? "up" : "down"}: ${stack.app.said().slice(-600)}\nrelay ${stack.sync.up() ? "up" : "down"}: ${stack.sync.said().slice(-600)}`,
+          ),
+        );
+      }, 1000);
+    });
+    try {
+      return await Promise.race([run(), stalled]);
+    } finally {
+      clearInterval(watch);
+      process.stdout.write = write;
+    }
+  };
+  failed =
+    !(await suite("connections", () => smokeConnections(stack, signIn))) ||
+    failed;
+  failed = !(await suite("db", () => smokeDb(stack))) || failed;
+  failed = !(await suite("brain", () => smokeBrain(stack))) || failed;
+  failed = !(await suite("mcp", () => smokeMcp(stack, signIn))) || failed;
+  failed = !(await suite("sync", () => smokeSync(stack, signIn))) || failed;
 } catch (err) {
   console.error(err);
   failed = true;
 } finally {
   // The pool goes before the database does, so a crash above is the error
-  // that is shown, not the shutdown's.
-  await globalThis.__pool?.end();
+  // that is shown, not the shutdown's; a pool still waiting on a query
+  // that never answers is given ten seconds and left behind.
+  await Promise.race([globalThis.__pool?.end(), sleep(10_000)]);
   await stack.stop();
   await fs.rm(scratch, { recursive: true, force: true });
 }

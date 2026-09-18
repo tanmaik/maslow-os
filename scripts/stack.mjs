@@ -174,11 +174,16 @@ export async function startStack({
     vendors: vendorsOf({ ...process.env, ...values, ...live, ...extraEnv }),
     // What the web process was given, for the dev script's own calls.
     env: { ...process.env, ...values, ...live, ...extraEnv },
-    // What the relay said on stderr lately, and whether it is still up.
+    // What the relay and the app said on stderr lately, and whether each
+    // is still up.
     sync: {
       url: live.SYNC_URL,
       said: () => syncStderr,
       up: () => !exited(sync),
+    },
+    app: {
+      said: () => stderr,
+      up: () => !exited(web),
     },
     web,
     // Resolves once Next answers; fails at once if Next has died.

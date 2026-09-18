@@ -52,12 +52,15 @@ export async function smokeSync(stack, signIn) {
     const way = async (i) => {
       const res = await fetch(`${stack.url}/brain/records/${id}/live`, {
         headers: { cookie: await signIn(acme.users[i].id) },
+        signal: AbortSignal.timeout(20_000),
       });
       if (!res.ok) throw new Error(`live answered ${res.status}`);
       return res.json();
     };
     // A connection the relay rejects never syncs, so a rejection fails
-    // this check at once, with the relay's own error output.
+    // this check at once, with the relay's own error output; one the
+    // relay never answers fails after twenty seconds, saying whether the
+    // relay is still running.
     const join = async (i) => {
       const { url, name, ticket } = await way(i);
       const person = open(url, name, ticket);
@@ -67,12 +70,19 @@ export async function smokeSync(stack, signIn) {
         person.closed.then(() => {
           throw new Error(`the relay rejected it: ${stack.sync.said()}`);
         }),
+        wait(20_000).then(() => {
+          throw new Error(
+            `the relay did not answer in 20s; relay ${stack.sync.up() ? "up" : "down"}: ${stack.sync.said()}`,
+          );
+        }),
       ]);
       return person;
     };
     // Request the app's sync route once before connecting, so `next dev`
     // has compiled it before the relay's eight-second call to it.
-    await fetch(`${stack.url}/brain/sync/${id}`);
+    await fetch(`${stack.url}/brain/sync/${id}`, {
+      signal: AbortSignal.timeout(20_000),
+    });
     const marge = await join(0);
     const runner = await join(1);
     check(
