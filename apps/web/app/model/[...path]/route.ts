@@ -2,7 +2,7 @@ import { asOrg } from "@maslow/db";
 import { computerById } from "@maslow/db/computers";
 
 import { deployment } from "@/lib/deployment";
-import { MODEL, modelTokenOpens } from "@/lib/models";
+import { MODEL, modelTokenOpens, REASONING } from "@/lib/models";
 
 // A model call can stream for minutes.
 export const maxDuration = 300;
@@ -44,6 +44,9 @@ export async function POST(
     return new Response("The body is JSON.", { status: 400 });
   }
   body.model = MODEL;
+  // How much the model thinks is ours to set, not the caller's.
+  body.reasoning = REASONING;
+  delete body.thinking;
   // OpenRouter reads these to reach other models; a caller does not set
   // them, so the one-model boundary holds.
   delete body.models;

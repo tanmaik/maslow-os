@@ -41,7 +41,7 @@ const ATTACHMENTS = "Attachments";
 
 // The one model this computer's agent runs on, named in the composer
 // and nowhere else, since the key answers to nothing else.
-const MODEL = "GLM 5.3 Flash";
+const MODEL = "GPT-5.6 Luna";
 
 // What the device keeps: whether the rail stands open, and which chats
 // the person pinned to the top of it.

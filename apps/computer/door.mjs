@@ -2099,10 +2099,7 @@ async function entitle(chat) {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "z-ai/glm-5.3-flash:nitro",
-        // The model thinks before it answers and will not be told not to;
-        // the budget is wide enough that the name comes after the thought
-        // rather than in place of it.
+        model: "openai/gpt-5.6-luna",
         max_tokens: 400,
         messages: [
           {
