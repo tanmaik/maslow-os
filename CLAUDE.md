@@ -480,7 +480,7 @@ calls and nothing else. Where a machine cannot dial the deployment, as
 on a laptop, the call goes to its own door and up the line the laptop's
 stack holds open for the brain. Two Claude Codes run on the machine and they never share credentials or
 settings: ours keeps its configuration in a directory of its own,
-`~/.maslow/claude`, seeded at boot with the same servers, so what it
+`~/.maslow/claude`, seeded at boot with its servers, so what it
 writes down there never reaches the person's own `~/.claude`. The Agent window's is ours: started with
 `MASLOW_AUTH=managed`, it runs through the gateway, on GLM 5.3 Flash on
 whichever of its providers is fastest and nothing else — the gateway puts
@@ -548,10 +548,10 @@ update` works; the image carries a copy under ours, read-only and unable
 to update itself, which runs until theirs arrives. `claude` on their path
 is ours either way, and it hands whichever copy they have their own
 credentials; an editor drives the same Claude Code over the Agent Client
-Protocol through `claude-code-acp`. It starts in auto
-mode, seeded into their own `~/.claude/settings.json` and theirs to change. It knows
-three MCP servers out of the box, seeded into its
-settings: the browser tool, `packages/browser`,
+Protocol through `claude-code-acp`. Their Claude Code is plain: nothing
+of ours is written into their `~/.claude`, no server, no mode, no skill,
+and it signs in to their own account as a fresh install would. Ours, in
+its own directory, knows three MCP servers: the browser tool, `packages/browser`,
 running on the machine as its own server outside the person's Linux but
 as the person, with its profile on the disk and a page of its own,
 `/browser`, where the person watches it live and takes it over with their
@@ -559,9 +559,8 @@ own clicks and keys, dragging to select and carrying the words out; and
 the brain at this
 deployment's `/mcp`, reached with a session of the owner's that our
 server opens for the computer and the person can end in settings; and
-BoardUI's, the skin Maslow wears, with its skill linked among the
-person's from the image, so what Claude Code builds for them looks like
-Maslow. The
+BoardUI's, the skin Maslow wears, with its skill linked in ours from the
+image, so what the Agent builds for them looks like Maslow. The
 brain's MCP is the brain and the connectors, and nothing of the machine:
 no hand that runs a command or reads or writes a file goes into it.
 

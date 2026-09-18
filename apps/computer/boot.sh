@@ -126,22 +126,12 @@ else
   rm -f "$OS/etc/profile.d/maslow-brain.sh"
 fi
 
-# Claude Code knows the browser and the brain, and starts in auto: ours
-# are seeded into the person's files and kept current there, except where
-# the person changed one. Ten seconds at most each, so nothing in the home
+# Our own session's configuration, written whole from the image; and the
+# person's own Claude Code left theirs alone, with whatever an earlier
+# image put in their files taken back. Bounded, so nothing in the home
 # can hold the boot.
-timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" mcp || echo "mcp: could not be seeded; left alone"
-timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" settings || echo "settings: could not be seeded; left alone"
 timeout 30 node /opt/maslow/seed.mjs "$HOME_DIR" ours || echo "ours: could not be seeded; the Agent may start without its servers"
-# And it knows the skin Maslow wears: BoardUI's skill, ours in the image,
-# is a link among the person's skills, so it follows the image and what
-# Claude Code builds for them looks like Maslow. Made as the person, so a
-# link they left among their files reaches only what they already reach.
-chroot --userspec=1000:1000 "$OS" /bin/sh -c '
-  mkdir -p /home/me/.claude/skills && [ -d /home/me/.claude/skills ] || exit 0
-  [ -L /home/me/.claude/skills/boardui ] || [ ! -e /home/me/.claude/skills/boardui ] || exit 0
-  ln -sfn /opt/maslow/skills/boardui /home/me/.claude/skills/boardui
-' || echo "skill: could not be linked; left alone"
+timeout 30 node /opt/maslow/seed.mjs "$HOME_DIR" theirs || echo "theirs: could not be taken back; left alone"
 
 # Claude Code lives in the person's Linux, where it updates itself the way
 # Claude Code does and `claude update` works. The image carries a copy too,
