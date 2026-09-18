@@ -63,17 +63,58 @@ type ConnectedAccount = {
   created_at: string;
 };
 
-// Composio's auth config for an app, made once and kept for the process.
+// An auth config at Composio: which app it signs in to, whether Composio
+// runs that sign-in or the person set it up themselves, and whether it is
+// on.
+type AuthConfig = {
+  id: string;
+  toolkit: { slug: string };
+  is_composio_managed: boolean;
+  status: string;
+};
+
+// Every item of a listing, every page of it: Composio pages at a hundred
+// and hands back a cursor to the next until there is none.
+async function every<T>(path: string): Promise<T[]> {
+  const out: T[] = [];
+  let cursor: string | null | undefined;
+  do {
+    const page = await call<Page<T>>(
+      "GET",
+      `${path}${path.includes("?") ? "&" : "?"}limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    out.push(...page.items);
+    cursor = page.next_cursor;
+  } while (cursor);
+  return out;
+}
+
+const enabled = (a: AuthConfig) => a.status === "ENABLED";
+
+// The apps the person set up sign-in for themselves at Composio, by slug:
+// the ones Composio runs no sign-in for — Spotify, say — and any they
+// chose to run on their own.
+async function own(): Promise<Set<string>> {
+  const configs = await every<AuthConfig>(
+    "/auth_configs?is_composio_managed=false",
+  );
+  return new Set(configs.filter(enabled).map((a) => a.toolkit.slug));
+}
+
+// Composio's auth config for an app, made once and kept for the process:
+// the person's own where they made one, else Composio's, made if need be.
 const authConfigs = new Map<string, Promise<string>>();
 function authConfig(slug: string): Promise<string> {
   let found = authConfigs.get(slug);
   if (!found) {
     found = (async () => {
-      const listed = await call<Page<{ id: string }>>(
-        "GET",
-        `/auth_configs?toolkit_slug=${encodeURIComponent(slug)}&is_composio_managed=true&limit=1`,
-      );
-      if (listed.items[0]) return listed.items[0].id;
+      const on = (
+        await every<AuthConfig>(
+          `/auth_configs?toolkit_slug=${encodeURIComponent(slug)}`,
+        )
+      ).filter(enabled);
+      const pick = on.find((a) => !a.is_composio_managed) ?? on[0];
+      if (pick) return pick.id;
       const made = await call<{ auth_config: { id: string } }>(
         "POST",
         "/auth_configs",
@@ -102,15 +143,24 @@ const toAccount = (a: ConnectedAccount): Account => ({
 });
 
 export const composio = {
-  // The apps whose sign-in Composio runs for us, that match a search, most
-  // used first; the most used of all when the search is empty.
+  // The apps that can be connected, that match a search, most used first;
+  // the most used of all when the search is empty. An app can be connected
+  // where Composio runs its sign-in for us, or where the person set that
+  // sign-in up themselves at Composio.
   async search(query: string, limit = 12): Promise<App[]> {
-    const page = await call<Page<Toolkit>>(
-      "GET",
-      `/toolkits?managed_by=composio&sort_by=usage&limit=${limit}&search=${encodeURIComponent(query)}`,
-    );
+    const [page, mine] = await Promise.all([
+      call<Page<Toolkit>>(
+        "GET",
+        `/toolkits?managed_by=composio&sort_by=usage&limit=${limit}&search=${encodeURIComponent(query)}`,
+      ),
+      own(),
+    ]);
     return page.items
-      .filter((t) => !t.no_auth && t.composio_managed_auth_schemes?.length)
+      .filter(
+        (t) =>
+          !t.no_auth &&
+          (t.composio_managed_auth_schemes?.length || mine.has(t.slug)),
+      )
       .map(toApp);
   },
 
@@ -146,17 +196,11 @@ export const composio = {
 
   // Every account of one user, every page.
   async accountsOf(userId: string): Promise<Account[]> {
-    const out: Account[] = [];
-    let cursor: string | null | undefined;
-    do {
-      const page = await call<Page<ConnectedAccount>>(
-        "GET",
-        `/connected_accounts?user_ids=${encodeURIComponent(userId)}&limit=100${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
-      );
-      out.push(...page.items.map(toAccount));
-      cursor = page.next_cursor;
-    } while (cursor);
-    return out;
+    return (
+      await every<ConnectedAccount>(
+        `/connected_accounts?user_ids=${encodeURIComponent(userId)}`,
+      )
+    ).map(toAccount);
   },
 
   // Completes a sign-in Composio is holding until we vouch for who did it:

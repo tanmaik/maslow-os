@@ -7,6 +7,11 @@ export USER LOGNAME LANG
 USER=$(id -un)
 LOGNAME=$USER
 LANG=${LANG:-C.UTF-8}
+# A Mac's terminal may be one this Linux has no description of — Ghostty
+# calls itself xterm-ghostty — and tmux will not join a client it cannot
+# describe; the login just closes. Such a terminal is spoken to as the
+# xterm it is built on.
+infocmp "${TERM-}" >/dev/null 2>&1 || export TERM=xterm-256color
 case ${SSH_ORIGINAL_COMMAND-} in
   "") exec /opt/maslow/terminal.sh ;;
   internal-sftp) exec /usr/lib/openssh/sftp-server ;;

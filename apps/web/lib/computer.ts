@@ -56,8 +56,10 @@ import { isRegion, regionName, type Region } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
 import { SIZES } from "./sizes.ts";
 
-// Every computer starts at the ladder's first rung, with this much disk.
-const FLOOR = { ...SIZES.small, diskGb: 10 };
+// Every computer starts at the ladder's first rung, with this much disk:
+// enough for a checkout of a Node project, its modules and its build,
+// which ten was not.
+const FLOOR = { ...SIZES.small, diskGb: 20 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
 export const IMAGE = "registry.fly.io/maslow-computers-dev:door-71";
@@ -1088,24 +1090,30 @@ const DISK_CEILING_GB = 200;
 // Grows a disk before it fills: past four fifths full, by half again, up
 // to the ceiling, while the machine runs. Fly says when a machine must be
 // restarted to see the room, and then it is, as for a new image. A disk
-// that cannot be read this hour is left for the next.
-async function grow(q: Query, c: Computer, s: Stats): Promise<void> {
+// that cannot be read this time is left for the next. True when it grew.
+async function grow(q: Query, c: Computer, s: Stats): Promise<boolean> {
   // The whole disk's room, ours on it included, not the person's bytes
   // alone; a machine that does not yet say is left alone.
-  if (s.free == null || s.disk === null || s.free > s.disk * 0.2) return;
-  await extend(q, c, "the disk was nearly full");
+  if (s.free == null || s.disk === null || s.free > s.disk * 0.2) return false;
+  return extend(q, c, "the disk was nearly full");
 }
 
 // Grows the disk by half again, up to the ceiling; at the ceiling, says
-// so to us and leaves it.
-async function extend(q: Query, c: Computer, why: string): Promise<void> {
-  if (c.diskGb >= DISK_CEILING_GB) {
+// so to us and leaves it. True when it grew.
+async function extend(q: Query, c: Computer, why: string): Promise<boolean> {
+  // From the disk as Fly has it, which is larger than the row says when
+  // it was grown by hand; asking Fly for a size it already has is refused.
+  const have = Math.max(
+    c.diskGb,
+    (await fly.volume(c.volumeId!))?.size_gb ?? 0,
+  );
+  if (have >= DISK_CEILING_GB) {
     console.error(
       `computer ${c.id}: disk at the ceiling of ${DISK_CEILING_GB} GB, ${why}`,
     );
-    return;
+    return false;
   }
-  const gb = Math.min(DISK_CEILING_GB, Math.ceil(c.diskGb * 1.5));
+  const gb = Math.min(DISK_CEILING_GB, Math.ceil(have * 1.5));
   const { needsRestart } = await fly.extendVolume(c.volumeId!, gb);
   await setDisk(q, c.id, gb);
   await note(q, {
@@ -1114,13 +1122,46 @@ async function extend(q: Query, c: Computer, why: string): Promise<void> {
     resource: "disk",
     event: "grown",
     ref: c.volumeId,
-    detail: { from: c.diskGb, gb, restarted: needsRestart },
+    detail: { from: have, gb, restarted: needsRestart },
     why,
   });
   if (needsRestart) {
     await fly.restart(c.machineId!);
     await setReady(q, c.id, false);
   }
+  return true;
+}
+
+// Every running computer's disk grown if it is nearly full, now: what the
+// ten-minute cron asks, so a machine filling in the minutes a checkout and
+// its build take is not left an hour for the sweep. Each computer is held
+// as the sweep holds it, so the two never grow one disk at once; one that
+// cannot be read is left for the next call. How many grew.
+export async function growNow(): Promise<number> {
+  if (deployment.computers.kind === "none") return 0;
+  const orgs = await asMeter(async (q) =>
+    (await q.query<{ id: string }>("select id from orgs")).rows.map(
+      (r) => r.id,
+    ),
+  );
+  let grown = 0;
+  for (const orgId of orgs) {
+    for (const c of await asOrg(orgId, allComputers)) {
+      if (!c.current || !c.readyAt || !c.machineId || !c.volumeId) continue;
+      try {
+        await asOrg(orgId, async (q) => {
+          if (!(await holdComputer(q, c.id))) return;
+          const s = await fly
+            .stats(c.machineId!, ticket(c, 60))
+            .catch(() => null);
+          if (s && (await grow(q, c, s))) grown++;
+        });
+      } catch (err) {
+        console.error(`computer ${c.id}: grow: ${(err as Error).message}`);
+      }
+    }
+  }
+  return grown;
 }
 
 // A ticket the computer's door takes: its expiry and how much of the

@@ -5,6 +5,10 @@
     {
       "path": "/meter/sweep",
       "schedule": "7 * * * *"
+    },
+    {
+      "path": "/meter/disks",
+      "schedule": "*/10 * * * *"
     }
   ]
 }

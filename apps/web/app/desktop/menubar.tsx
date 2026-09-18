@@ -476,8 +476,6 @@ export function MenuBar({
                 [
                   ["Left half", "left", "⌃⌥←"],
                   ["Right half", "right", "⌃⌥→"],
-                  ["Top half", "top", "⌃⌥↑"],
-                  ["Bottom half", "bottom", "⌃⌥↓"],
                   ["Top left", "top left", "⌃⌥U"],
                   ["Top right", "top right", "⌃⌥I"],
                   ["Bottom left", "bottom left", "⌃⌥J"],

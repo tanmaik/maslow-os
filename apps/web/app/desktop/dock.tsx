@@ -953,6 +953,8 @@ export function Dock({
                 </ContextMenuItem>
               </>
             )}
+            <ContextMenuSeparator />
+            {settings}
           </>
         }
       />
@@ -1168,6 +1170,8 @@ export function Dock({
                             >
                               Close
                             </ContextMenuItem>
+                            <ContextMenuSeparator />
+                            {settings}
                           </>
                         }
                       />

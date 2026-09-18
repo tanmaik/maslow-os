@@ -30,9 +30,10 @@ progress bar until then. It never sleeps: the hourly sweep starts a
 current member's machine if it is stopped and stops a past member's if it
 runs, and gives a member with none one beside their org's others; an org
 with none yet waits for a sign-in, which knows where the person is. The
-floor is two CPUs, two gigabytes and ten of disk, about twelve dollars a
-month; a bigger size drops back to the floor only when nobody is connected
-and nothing is running, because dropping is a restart too.
+floor is two CPUs, two gigabytes and twenty of disk (ten until
+2026-09-18), about twelve dollars a month; a bigger size drops back to the
+floor only when nobody is connected and nothing is running, because
+dropping is a restart too.
 
 ## What the person sees
 
@@ -91,6 +92,13 @@ reads each running computer's numbers, and a disk more than four fifths
 full is grown by half again. It cannot shrink; a smaller disk is a copy
 while stopped. There is a ceiling, it is ours, it is 200 GB, and it never
 shows: hitting it alerts us and never walls the person.
+
+Since 2026-09-18 the check runs every ten minutes as well, on a cron of
+its own (`/meter/disks`), not only at the hour's sweep: Tanmai's machine
+filled from 23% free to none in the 35 minutes between sweeps — a second
+checkout of this repo and its build — and sat there. A machine fills in
+the minutes a build takes, so an hour is too long. The floor is 20 GB
+now, not 10, for the same reason.
 
 ## The door is the way in
 

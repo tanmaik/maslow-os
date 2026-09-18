@@ -118,65 +118,59 @@ const OVER = 0.08;
 // reach on any screen; the ends are a long stretch, so a corner is as easy
 // to mean as a side.
 const SIDE = 0.06;
+// How far along an edge a corner reaches. Past it, the edge is its half.
 const END = 0.2;
-// How much of the top edge, either side of its middle, fills the screen.
-const MIDDLE = 0.12;
+// The whole desktop: what a window filling the screen is given, and what a
+// window carried to the top edge lands on.
+const WHOLE: Box & Point = { x: 0, y: 0, w: 1, h: 1 };
+// Seven places and no more: the whole desktop, a half at either side, and
+// the four quarters at the corners. A hand carrying a window has to tell
+// them apart in the moment, so the vocabulary is the one every desktop
+// already teaches, and nothing finer.
 function landing(x: number, y: number): (Box & Point) | null {
   const l = x < SIDE;
   const r = x > 1 - SIDE;
   const u = y < SIDE;
   const d = y > 1 - SIDE;
   if (!l && !r && !u && !d) return null;
-  if (l || r) {
-    const top = y < END;
-    const bottom = y > 1 - END;
-    return {
-      x: r ? 0.5 : 0,
-      y: bottom ? 0.5 : 0,
-      w: 0.5,
-      h: top || bottom ? 0.5 : 1,
-    };
-  }
   const left = x < END;
   const right = x > 1 - END;
-  if (left || right)
+  const top = y < END;
+  const bottom = y > 1 - END;
+  // A corner is a quarter, reached from either of the two edges that meet
+  // there, so the aim that misses one catches the other.
+  if ((l || r) && (top || bottom))
+    return { x: r ? 0.5 : 0, y: bottom ? 0.5 : 0, w: 0.5, h: 0.5 };
+  if ((u || d) && (left || right))
     return { x: right ? 0.5 : 0, y: d ? 0.5 : 0, w: 0.5, h: 0.5 };
-  // The bottom is the half below it, all the way along.
-  if (!u) return { x: 0, y: 0.5, w: 1, h: 0.5 };
-  // The top reads as five: a quarter at either end, the half above along
-  // most of it, and the whole desktop in the middle, where a window carried
-  // straight up is heading anyway. Which one it is, is drawn before it is
-  // let go.
-  return Math.abs(x - 0.5) < MIDDLE
-    ? { x: 0, y: 0, w: 1, h: 1 }
-    : { x: 0, y: 0, w: 1, h: 0.5 };
+  // A side, along all the rest of it, is that half.
+  if (l || r) return { x: r ? 0.5 : 0, y: 0, w: 0.5, h: 1 };
+  // The top is the whole desktop, where a window carried straight up is
+  // heading anyway. The bottom is nowhere: there is no half below to land
+  // on, and a window dragged near the dock keeps the place it was in.
+  return u ? WHOLE : null;
 }
 
-// The eight a keyboard can ask for by name, and the whole desktop.
+// The six a keyboard can ask for by name. The seventh place a hand can
+// carry a window to, the whole desktop, is the green light's act instead.
 const PLACES: Record<string, Box & Point> = {
   left: { x: 0, y: 0, w: 0.5, h: 1 },
   right: { x: 0.5, y: 0, w: 0.5, h: 1 },
-  top: { x: 0, y: 0, w: 1, h: 0.5 },
-  bottom: { x: 0, y: 0.5, w: 1, h: 0.5 },
   "top left": { x: 0, y: 0, w: 0.5, h: 0.5 },
   "top right": { x: 0.5, y: 0, w: 0.5, h: 0.5 },
   "bottom left": { x: 0, y: 0.5, w: 0.5, h: 0.5 },
   "bottom right": { x: 0.5, y: 0.5, w: 0.5, h: 0.5 },
 };
 
-// The whole desktop: what a window filling the screen is given, and what a
-// window carried to the middle of the top edge lands on.
-const WHOLE: Box & Point = { x: 0, y: 0, w: 1, h: 1 };
-
-// What a key means, held with Control and Option: the arrows for the four
-// sides and the keys under a right hand for the four corners. By the
-// key's place, not its name: with Option held a Mac names a letter
-// something else. Nothing here is a key a Mac or a browser keeps.
+// What a key means, held with Control and Option: the arrows for the two
+// sides and the keys under a right hand for the four corners. Up and down
+// name no place: there are no halves above and below any more, and the
+// screen is filled with the green light's own key. By the key's place,
+// not its name: with Option held a Mac names a letter something else.
+// Nothing here is a key a Mac or a browser keeps.
 const ASKS: Record<string, string> = {
   ArrowLeft: "left",
   ArrowRight: "right",
-  ArrowUp: "top",
-  ArrowDown: "bottom",
   KeyU: "top left",
   KeyI: "top right",
   KeyJ: "bottom left",
