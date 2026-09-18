@@ -399,9 +399,10 @@ forty milliseconds the guess was good and the page says nothing. If it
 comes in above, the guess was wrong, and the page says so plainly and
 offers the move.
 
-That one real number is the only number shown. Nothing is guessed for
-the regions the person is not in, because nothing can measure them
-honestly. Beside it the page says the address the person arrived from,
+Nothing is guessed for the regions the person is not in, because nothing
+can measure them honestly; since 2026-09-18 the pane also times the trip
+to Maslow and Maslow's trip to the computer, live, so a slow moment can be
+laid at the right door (`2026-09-18-the-computer-says-how-fast-it-feels.md`). Beside it the page says the address the person arrived from,
 the city that address is in when the request said, and the region nearest
 it, by name: that is the recommendation, and the move button offers it.
 

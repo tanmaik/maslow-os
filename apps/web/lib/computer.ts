@@ -1806,6 +1806,14 @@ export async function statsOf(p: Principal): Promise<Stats | null> {
   return fly.stats(c.machineId!, ticket(c, 60));
 }
 
+// How long Maslow takes to reach the computer's door and back, in
+// milliseconds. Null until it is ready.
+export async function pingOf(p: Principal): Promise<number | null> {
+  const c = await ready(p);
+  if (!c) return null;
+  return fly.ping(c.machineId!);
+}
+
 // Pays a purged member's or a deleted org's computer back to Fly: the
 // machine, then the disk, each written to the ledger as it goes. The ref
 // names both; the member is gone, so the row says the org alone.

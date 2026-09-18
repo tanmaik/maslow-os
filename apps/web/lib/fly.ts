@@ -1009,4 +1009,17 @@ export const fly = {
       return false;
     }
   },
+
+  // The round trip from this server to the machine's door and back, in
+  // milliseconds: what every page that asks the computer something pays.
+  async ping(machineId: string): Promise<number> {
+    const t = performance.now();
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/health`, {
+      headers: { "fly-force-instance-id": machineId },
+      signal: AbortSignal.timeout(8_000),
+      redirect: "manual",
+    });
+    if (res.status !== 200) throw new Error(`the door answered ${res.status}`);
+    return Math.round(performance.now() - t);
+  },
 };

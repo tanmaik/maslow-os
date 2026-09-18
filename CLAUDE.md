@@ -371,8 +371,12 @@ fills and never shows a cap. Where it is is one of the
 North American regions Fly still makes disks in, seven today, since Fly
 retires regions now and then and a retired one refuses a new disk;
 it is guessed at sign-in from where the request came
-and said on the page by name beside the one honest number, the round
-trip the person's own browser measures to it; over forty milliseconds
+and said on the page by name beside three live numbers, each timed again
+and again while the pane is open and named for what rides on it: the
+round trip the person's own browser measures to their computer, which a
+keystroke in the terminal pays; the one it measures to Maslow, which a
+click pays; and the one Maslow measures to the computer, which Files and
+the desktop's ports pay on top. Over forty milliseconds to the computer
 the page says so and names the region nearest them. A move is a button
 of the person's and nothing else's: the machine stops, its disk is
 snapshotted, the snapshot is restored in the new region, a machine there
