@@ -47,9 +47,9 @@ else if (name === "as-me") mine(JSON.parse(fs.readFileSync(0, "utf8")));
 else if (name === "theirs") theirs();
 else takeBack(JSON.parse(fs.readFileSync(0, "utf8")));
 
-// The configuration of our own session, ~/.maslow/claude: the same MCP
-// servers and the same way of asking as the person's, written whole every
-// boot since nobody edits it by hand, the four skills linked in, and,
+// The configuration of our own session, ~/.maslow/claude: the two MCP
+// servers, kept current every boot beside any the Agent added itself,
+// how it acts, written whole, the four skills linked in, and,
 // once, the conversations the door had open before ours had a directory,
 // so the Agent's chats still open; the person's own conversations are
 // theirs and stay where they are. The copy is marked done only once it is,
@@ -83,7 +83,7 @@ function ours() {
       const write = (at, value) => fs.writeFileSync(at, JSON.stringify(value, null, 2) + "\\n");
       let config = {};
       try { config = JSON.parse(fs.readFileSync(path.join(dir, ".claude.json"), "utf8")); } catch {}
-      write(path.join(dir, ".claude.json"), { ...config, hasCompletedOnboarding: true, mcpServers: mcp });
+      write(path.join(dir, ".claude.json"), { ...config, hasCompletedOnboarding: true, mcpServers: { ...(config.mcpServers ?? {}), ...mcp } });
       write(path.join(dir, "settings.json"), { permissions: settings });
       fs.copyFileSync("/opt/maslow/etc/CLAUDE.md", path.join(dir, "CLAUDE.md"));
       for (const skill of ["maslow", "apps", "brain", "boardui"]) {
