@@ -461,9 +461,9 @@ sign-in page that judges a browser by where it sits refuses the machine's;
 a sign-in whose answer comes back to the machine says so on the page, and
 the person carries the answer back by pasting the address that would not
 load. SSH is a third road in, carried over a
-WebSocket through the same door with no ticket, opened by the public key
-a person sets in settings, set up on a Mac by the one command the
-Access pane shows, which installs the Python script the app serves as
+WebSocket through the same door with no ticket, opened by the keys the
+Access pane lists, one per Mac with a Remove on each, set up on a Mac by
+the one command the pane shows, which installs the Python script the app serves as
 ssh's ProxyCommand, makes the Mac a key if it has none and registers its
 public half, and writes a `Host` named after the computer that uses that
 key and no agent, and

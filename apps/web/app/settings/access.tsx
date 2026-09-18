@@ -7,8 +7,7 @@ import { headers } from "next/headers";
 
 import { Command, Head } from "@/app/computer/making";
 import { Button, ButtonLink } from "@/components/base/buttons/button";
-import { Textarea } from "@/components/base/textarea/textarea";
-import { sharedWithMe, sharingOf, sshOf } from "@/lib/computer";
+import { sharedWithMe, sharingOf, sshKeysOf, sshOf } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 
 import { Agents } from "./agents";
@@ -94,36 +93,33 @@ export async function AccessPane({
   return (
     <div className="flex flex-col gap-5">
       {ssh && (
-        <form
-          action="/settings/keys"
-          method="post"
-          className="flex flex-col gap-2"
-        >
+        <div className="flex flex-col gap-2">
           <Head>SSH</Head>
           <p className="px-3 text-body-regular text-text-secondary">
-            Run once on your Mac, then <code>ssh {ssh.name}</code>. It gives
-            your computer the Mac's key, listed below with any you add.
+            Run once on a Mac, then <code>ssh {ssh.name}</code>.
           </p>
           <Command text={ssh.command} />
-          <Textarea
-            size="small"
-            aria-label="Public key"
-            name="keys"
-            rows={3}
-            defaultValue={c?.authorizedKeys ?? ""}
-            placeholder="ssh-ed25519 AAAA… you@yourmac"
-            spellCheck="false"
-            inputClassName="resize-none font-mono text-caption-1-regular"
-          />
-          <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <Said {...saidKeys} />
-            </div>
-            <Button type="submit" size="small">
-              Save
-            </Button>
-          </div>
-        </form>
+          {/* The Macs that can get in, each by the name its key carries. */}
+          {c && c.authorizedKeys !== "" && (
+            <Rows>
+              {sshKeysOf(c.authorizedKeys).map((k) => (
+                <Row
+                  key={k.fingerprint}
+                  label={k.name}
+                  description={k.fingerprint}
+                >
+                  <form action="/settings/keys" method="post">
+                    <input type="hidden" name="remove" value={k.fingerprint} />
+                    <Button type="submit" variant="secondary" size="xs">
+                      Remove
+                    </Button>
+                  </form>
+                </Row>
+              ))}
+            </Rows>
+          )}
+          <Said {...saidKeys} />
+        </div>
       )}
       {d.kind !== "none" && <LivePorts sharing={shares} />}
       <Shared ports={shared} />

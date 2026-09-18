@@ -37,7 +37,7 @@ import {
   type SharedPort,
 } from "@maslow/db/computers";
 
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
 import { modelToken, modelUrl } from "./models.ts";
@@ -1655,8 +1655,31 @@ export async function sshOf(
 
 // One public key per line, as ssh-keygen writes it: the kind, the key,
 // and a comment if any.
-export const SSH_KEY =
+const SSH_KEY =
   /^(ssh-ed25519|ssh-rsa|ecdsa-sha2-nistp(256|384|521)|sk-ssh-ed25519@openssh\.com|sk-ecdsa-sha2-nistp256@openssh\.com) [A-Za-z0-9+/]+=*( [^\r\n]*)?$/;
+
+// The keys that open a computer as the pane lists them: each named by the
+// comment ssh-keygen wrote, the Mac's user and name, or by its kind, and
+// told apart by the fingerprint ssh prints.
+export function sshKeysOf(
+  text: string,
+): { line: string; name: string; fingerprint: string }[] {
+  return text
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const [kind, key, ...comment] = line.split(" ");
+      const digest = createHash("sha256")
+        .update(Buffer.from(key ?? "", "base64"))
+        .digest("base64")
+        .replace(/=+$/, "");
+      return {
+        line,
+        name: comment.join(" ") || kind!,
+        fingerprint: `SHA256:${digest}`,
+      };
+    });
+}
 
 // Adds a Mac's public key to the ones that open the computer, on the same
 // link its setup script was fetched with, and gives the machine the keys

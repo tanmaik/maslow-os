@@ -146,9 +146,9 @@ const NOTICES: Record<string, string> = {
   "connection=gone": "No such app or connection.",
   "connection=unanswered":
     "Composio refused or didn't answer, so nothing changed. Try again in a moment.",
-  "keys=saved": "Saved, and given to your computer.",
-  "keys=invalid":
-    "Each line must be one public key as ssh-keygen writes it, and at most twenty of them.",
+  "keys=removed": "Removed, and taken off your computer.",
+  "keys=unreached":
+    "Removed here, but your computer did not answer; it still accepts that key until it next starts.",
   "agent=disconnected": "Disconnected. Its token no longer works.",
   "agent=gone": "That agent was already disconnected.",
 };
@@ -174,8 +174,8 @@ const WRONG = new Set([
   "connection=name",
   "connection=gone",
   "connection=unanswered",
-  "keys=invalid",
   "agent=gone",
+  "keys=unreached",
 ]);
 
 // A line under a form, in BoardUI's supporting voice.
