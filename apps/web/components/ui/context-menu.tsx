@@ -108,7 +108,7 @@ function ContextMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "group/context-menu-item relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 focus:*:[svg]:text-text-primary data-[variant=destructive]:*:[svg]:text-destructive",
+        "group/context-menu-item relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 focus:*:[svg]:text-text-primary data-[variant=destructive]:*:[svg]:text-destructive",
         className,
       )}
       {...props}
@@ -135,7 +135,7 @@ function ContextMenuSubTrigger({
       data-slot="context-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-open:bg-dropdown-item-hover-background [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-open:bg-dropdown-item-hover-background [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -172,7 +172,7 @@ function ContextMenuCheckboxItem({
       data-slot="context-menu-checkbox-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pr-8 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pr-8 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       checked={checked}
@@ -212,7 +212,7 @@ function ContextMenuRadioItem({
       data-slot="context-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pr-8 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pr-8 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -234,7 +234,7 @@ function ContextMenuSeparator({
   return (
     <ContextMenuPrimitive.Separator
       data-slot="context-menu-separator"
-      className={cn("-mx-2.5 my-2 h-px bg-separator-border", className)}
+      className={cn("-mx-2.5 my-1 h-px bg-separator-border", className)}
       {...props}
     />
   );

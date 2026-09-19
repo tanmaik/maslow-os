@@ -2,6 +2,8 @@
 
 import { useEffect, useRef } from "react";
 
+import { PERMISSIONS_EVENT, permissionsAsked } from "@/components/permissions";
+
 // Whether this device has answered the browser's own prompt: "on" once
 // granted, "off" once declined or unanswered, and unset before it has ever
 // been asked. Frames of the same page (Settings is one, the desktop is
@@ -76,8 +78,9 @@ function report(
 
 // The person's location, logged to their own machine: read through the
 // browser's own permission once a minute while the desktop is open and
-// looked at, at once on landing and on coming back into view, and never
-// asked again on this device once refused. Off where this deployment
+// looked at, at once on landing and on coming back into view, first
+// from the card that asks for everything, and never asked again on this
+// device once refused. Off where this deployment
 // makes no computers, since there is no door to carry it to.
 export function useLocation(computers: boolean): void {
   const target = useRef<{
@@ -100,7 +103,14 @@ export function useLocation(computers: boolean): void {
 
     const ask = async () => {
       if (document.hidden || stopped) return;
-      if (localStorage.getItem(LOCATION_KEY) === "off") return;
+      // Not before the card that asks for everything at once has been
+      // answered, so the browser's prompt comes from that one tap.
+      if (!permissionsAsked()) return;
+      try {
+        if (localStorage.getItem(LOCATION_KEY) === "off") return;
+      } catch {
+        // No storage: refused is not remembered, and the browser is asked.
+      }
       const pos = await positionOnce();
       if (stopped) return;
       if (pos === "refused") return keepLocation(false);
@@ -117,12 +127,14 @@ export function useLocation(computers: boolean): void {
     const look = () => void ask().finally(soon);
 
     document.addEventListener("visibilitychange", look);
+    document.addEventListener(PERMISSIONS_EVENT, look);
     look();
 
     return () => {
       stopped = true;
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", look);
+      document.removeEventListener(PERMISSIONS_EVENT, look);
     };
   }, [computers]);
 }

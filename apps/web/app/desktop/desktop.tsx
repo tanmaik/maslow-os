@@ -20,6 +20,7 @@ import {
 
 import { LiveBrowser } from "@/app/browser/live";
 import { Down } from "@/app/desktop/down";
+import { Permissions } from "@/components/permissions";
 import type { Progress } from "@/lib/computer";
 import { Look } from "@/app/computer/files/look";
 import { FileExplorer } from "@/app/computer/files/file-explorer";
@@ -655,8 +656,17 @@ export function Desktop({
         href: item.href,
         ...item.box,
         ...(at ?? cascade(cards, item.box)),
-        // On a phone a window opens under the menu bar, not down a cascade.
-        ...(medium ? {} : { y: 0 }),
+        // On a phone a window opens under the menu bar, each after the
+        // first a little lower, so the bar of the one under it shows
+        // (ryOS useWindowManager.ts:47-48).
+        ...(medium
+          ? {}
+          : {
+              y: Math.min(
+                0.24,
+                0.04 * cards.filter((c) => !c.minimized && !c.pinned).length,
+              ),
+            }),
         ...(pinned ? { pinned } : {}),
       });
     };
@@ -1161,6 +1171,7 @@ export function Desktop({
         onFront={raise}
         onClose={(w) => void close(w.card.id)}
       />
+      {you && <Permissions computers={computers} />}
       {down && <Down />}
     </>
   );
@@ -1789,7 +1800,13 @@ function Frame({
     // window stays as it is and lands nowhere.
     let moved = false;
     const onMove = (m: globalThis.PointerEvent) => {
-      if (!moved && Math.hypot(m.clientX - from.x, m.clientY - from.y) < 4)
+      // A finger has to mean it: under the slop iOS gives a tap, a
+      // window stays put (ryOS useSwipeNavigation.ts:80-118).
+      if (
+        !moved &&
+        Math.hypot(m.clientX - from.x, m.clientY - from.y) <
+          (m.pointerType === "touch" ? 12 : 4)
+      )
         return;
       moved = true;
       onShape(to(m), false);
@@ -2063,7 +2080,7 @@ function Frame({
         ) : (
           <div
             ref={setBar}
-            className="group/bar relative flex h-6 shrink-0 cursor-move touch-none items-center select-none [&:has([data-nameless])_[data-name]]:hidden"
+            className="group/bar relative flex h-[24px] shrink-0 cursor-move touch-none items-center select-none [&:has([data-nameless])_[data-name]]:hidden"
           >
             {/* A grip, shown while the pointer is on the bar. */}
             <span

@@ -83,6 +83,15 @@ try {
       baseURL: stack.url.replace("127.0.0.1", "localhost"),
     })
   ).newPage();
+  // A device that was already asked for the microphone, notifications and
+  // the location, so the card that asks once never covers the dock here.
+  await page.addInitScript(() => {
+    try {
+      localStorage.setItem("maslow.permissions", "asked");
+    } catch {
+      // A page with no storage is asked, and the check taps Not now.
+    }
+  });
   // Signed in as Wile, the first seeded person, the way the lock screen's
   // development sign-in does it.
   await page.goto("/");
@@ -94,6 +103,9 @@ try {
   });
   await page.waitForURL((u) => u.pathname === "/");
   await page.waitForSelector(".mac-dock-surface");
+  const later = page.getByRole("button", { name: "Not now" });
+  if (await later.isVisible({ timeout: 1000 }).catch(() => false))
+    await later.tap().catch(() => later.click());
 
   const rect = (sel) =>
     page.evaluate((s) => {
@@ -214,13 +226,11 @@ try {
   // The desktop left as it was found: a window this check opened is
   // closed, one it only raised is put back in its place.
   await press(
-    page
-      .locator(
-        created
-          ? '[data-window] button[aria-label="Close"]'
-          : '[data-window] button[aria-label="Back to its place"]',
-      )
-      .last(),
+    page.locator(
+      created
+        ? '[data-window][data-front] button[aria-label="Close"]'
+        : '[data-window][data-front] button[aria-label="Back to its place"]',
+    ),
   );
   await page.waitForTimeout(400);
 } catch (err) {

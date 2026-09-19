@@ -215,7 +215,7 @@ function Keys({ children }: { children: string }) {
 }
 // A menu's name on the bar: lit in the accent, rounded, while it is open.
 const name =
-  "my-auto rounded-lg px-2 py-0.5 whitespace-nowrap transition-colors duration-fast ease-plain hover:bg-white/10 aria-expanded:bg-linear-to-b aria-expanded:from-accent-600 aria-expanded:to-accent-700 aria-expanded:text-text-white aria-expanded:shadow-nav-selected focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--color-border-focus-ring)]";
+  "flex items-center self-stretch rounded-lg px-2 whitespace-nowrap transition-colors duration-fast ease-plain hover:bg-white/10 aria-expanded:bg-linear-to-b aria-expanded:from-accent-600 aria-expanded:to-accent-700 aria-expanded:text-text-white aria-expanded:shadow-nav-selected focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[color:var(--color-border-focus-ring)]";
 
 export function MenuBar({
   you,
@@ -349,9 +349,7 @@ export function MenuBar({
           </MenubarMenu>
           {front && (
             <MenubarMenu>
-              <MenubarTrigger
-                className={`text-caption-1-medium ${name} max-sm:text-caption-1-semibold`}
-              >
+              <MenubarTrigger className={`text-caption-1-semibold ${name}`}>
                 {front.card.title}
               </MenubarTrigger>
               <MenubarContent align="start" alignOffset={0} sideOffset={1}>

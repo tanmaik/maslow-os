@@ -1,7 +1,8 @@
 // What the person had running, remembered so a restart puts it back: each
-// terminal window in its folder, with its name and the command running in
-// it, and each server listening on a port with its folder and command.
-// Kept on the disk, since the machine is what a restart throws away.
+// terminal window in its folder, with its name and the command in its
+// foreground, and each server listening on a port with its folder and
+// command. Kept on the disk, since the machine is what a restart throws
+// away.
 import fs from "node:fs";
 import { readdir, readFile, readlink } from "node:fs/promises";
 
@@ -34,30 +35,93 @@ function is(w) {
 // from outside their Linux.
 const theirs = (p) => (p.startsWith(OS) ? p.slice(OS.length) || "/" : p);
 
-// Every process: its parent, and its own command and folder when asked.
+// Every process: its parent and its process group.
 async function processes() {
   const out = new Map();
   for (const pid of (await readdir("/proc")).filter((d) => /^\d+$/.test(d))) {
     const stat = await readFile(`/proc/${pid}/stat`, "utf8").catch(() => null);
     if (!stat) continue;
     const after = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-    out.set(Number(pid), { ppid: Number(after[1]) });
+    out.set(Number(pid), {
+      ppid: Number(after[1]),
+      pgid: Number(after[2]),
+      tpgid: Number(after[5]),
+    });
   }
   return out;
 }
-async function commandOf(pid) {
+
+// The environment of a process, as name → value.
+async function environOf(pid) {
+  const raw = await readFile(`/proc/${pid}/environ`, "utf8").catch(() => "");
+  const out = new Map();
+  for (const kv of raw.split("\0")) {
+    const eq = kv.indexOf("=");
+    if (eq > 0) out.set(kv.slice(0, eq), kv.slice(eq + 1));
+  }
+  return out;
+}
+
+// A command as it was typed: its words, its folder, and what the line
+// gave it that a shell of the person's does not give every command.
+async function commandOf(pid, given) {
   const cmd = await readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "");
   const argv = cmd.replace(/\0+$/, "").split("\0").filter(Boolean);
+  if (!argv.length) return null;
   const cwd = await readlink(`/proc/${pid}/cwd`).catch(() => null);
-  return argv.length ? { argv, path: cwd ? theirs(cwd) : HOME } : null;
+  const env = [];
+  if (given) {
+    const own = await environOf(pid);
+    for (const [k, v] of own)
+      if (
+        /^[A-Z][A-Z0-9_]*$/.test(k) &&
+        !THE_SHELLS.has(k) &&
+        !SECRET.test(k) &&
+        v.length <= 200 &&
+        given.get(k) !== v
+      )
+        env.push(`${k}=${v}`);
+  }
+  return { argv, env, path: cwd ? theirs(cwd) : HOME };
 }
+// What every shell of the person's gives a command, read from a fresh
+// one: the line's own variables are what a job holds beyond it.
+async function givenBy(them) {
+  const out = await them("/bin/bash", "-lc", "env");
+  const map = new Map();
+  for (const kv of (out ?? "").split("\n")) {
+    const eq = kv.indexOf("=");
+    if (eq > 0) map.set(kv.slice(0, eq), kv.slice(eq + 1));
+  }
+  return map;
+}
+// A variable that may hold a credential is never written down or typed
+// back: by its name, and everything ours or Claude Code's.
+const SECRET =
+  /TOKEN|SECRET|KEY|PASS|AUTH|CREDENTIAL|COOKIE|PRIVATE|^MASLOW_|^ANTHROPIC_|^CLAUDE_/;
+// What a shell or a terminal sets for its own reasons, never the line.
+const THE_SHELLS = new Set([
+  "_",
+  "SHELL",
+  "MASLOW_WELCOMED",
+  "SHLVL",
+  "OLDPWD",
+  "PWD",
+  "TMUX",
+  "TMUX_PANE",
+  "TERM",
+  "TERM_PROGRAM",
+  "TERM_PROGRAM_VERSION",
+  "COLUMNS",
+  "LINES",
+]);
 
 // Between the fields tmux answers: a tab it would print as an underscore.
 const APART = " ~|~ ";
 
-// The windows of the person's terminal, and what runs in each: the first
-// child of the window's shell is the program in the foreground.
-async function windows(tmux) {
+// The windows of the person's terminal, and what runs in each: the job
+// the terminal is given to, which the shell says by its process group.
+async function windows(tmux, procs, given) {
   const out = await tmux(
     "list-panes",
     "-s",
@@ -73,26 +137,28 @@ async function windows(tmux) {
     ].join(APART),
   );
   if (out === null) return { windows: [], inside: new Set() };
-  const procs = await processes();
   const inside = new Set();
   const found = [];
   for (const line of out.trim().split("\n").filter(Boolean)) {
     const [, name, auto, path, pid] = line.split(APART);
     const shell = Number(pid);
-    const child = [...procs].find(([, p]) => p.ppid === shell)?.[0];
-    if (child) inside.add(child);
-    const command = child ? await commandOf(child) : null;
+    const fore = procs.get(shell)?.tpgid;
+    const job =
+      fore && fore !== procs.get(shell)?.pgid
+        ? [...procs].find(([, p]) => p.pgid === fore && p.ppid === shell)?.[0]
+        : undefined;
+    if (job) inside.add(job);
     found.push({
       path: path || HOME,
       name: auto === "0" ? name : null,
-      command: command?.argv ?? null,
+      command: job ? await commandOf(job, given) : null,
     });
   }
-  return { windows: found, inside, procs };
+  return { windows: found, inside };
 }
 
-// Whether a process runs under one of the terminal's windows, so the
-// window's command brings it back.
+// Whether a process runs under one of the terminal's jobs, so the job
+// brings it back.
 const under = (procs, inside, pid) => {
   for (let p = pid, n = 0; p > 1 && n < 64; n++) {
     if (inside.has(p)) return true;
@@ -101,14 +167,19 @@ const under = (procs, inside, pid) => {
   return false;
 };
 
-// Written down now: what is in the terminal and what is on the ports, the
-// ports not already inside a window.
-export async function remember(tmux, listeners) {
-  const { windows: w, inside, procs } = await windows(tmux);
+// Written down now: what is in the terminal and what is on the ports, a
+// server once however many ports it holds, and not one already inside a
+// window.
+export async function remember(tmux, them, listeners) {
+  const [procs, given] = await Promise.all([processes(), givenBy(them)]);
+  const { windows: w, inside } = await windows(tmux, procs, given);
   const ports = [];
+  const seen = new Set();
   for (const l of await listeners()) {
-    if (procs && under(procs, inside, Number(l.pid))) continue;
-    const command = await commandOf(l.pid);
+    const pid = Number(l.pid);
+    if (seen.has(pid) || under(procs, inside, pid)) continue;
+    seen.add(pid);
+    const command = await commandOf(pid, given);
     if (command) ports.push({ port: l.port, ...command });
   }
   is({ boot: booted(), windows: w, ports });
@@ -119,7 +190,10 @@ const quoted = (s) =>
   /^[A-Za-z0-9_./:=@%+,-]+$/.test(s) ? s : `'${s.replaceAll("'", "'\\''")}'`;
 // The command as a line typed into the shell; a Claude Code that was
 // running comes back with its conversation continued.
-function line(argv) {
+// A line a terminal takes whole: the kernel drops one over four thousand
+// characters, so the words alone are typed where the whole would not fit.
+const A_LINE = 3000;
+function line({ argv, env = [] }) {
   const words = [...argv];
   const program = words[0].split("/").pop();
   if (
@@ -127,32 +201,75 @@ function line(argv) {
     !words.some((w) => ["--continue", "-c", "--resume", "-r"].includes(w))
   )
     words.push("--continue");
-  return words.map(quoted).join(" ");
+  const whole = [...env, ...words].map(quoted).join(" ");
+  return whole.length <= A_LINE ? whole : words.map(quoted).join(" ");
+}
+
+// A window's shell waited for, up to ten seconds, so what is typed into
+// it lands at its prompt; typed anyway after that, since a terminal keeps
+// what arrives before its shell reads.
+async function prompted(tmux, at) {
+  for (let i = 0; i < 100; i++) {
+    const cmd = await tmux(
+      "display",
+      "-p",
+      "-t",
+      at,
+      "#{pane_current_command}",
+    );
+    if (cmd !== null && /^(bash|-bash|sh|zsh)$/.test(cmd.trim())) return;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
+// A session that is only the bare shell the terminal opens with: nothing
+// in it yet, so what was there before can be put in beside it.
+async function bare(tmux) {
+  const out = await tmux(
+    "list-panes",
+    "-s",
+    "-t",
+    "main",
+    "-F",
+    "#{session_windows} #{history_size} #{pane_current_command}",
+  );
+  if (out === null) return null;
+  const [n, history, cmd] = out.trim().split(/\s+/);
+  return n === "1" && history === "0" && /^(bash|-bash)$/.test(cmd ?? "");
 }
 
 // The terminal put back as it was before the machine last went: the
 // windows in their folders, named where the person named them, each
 // command typed back in so it runs in view, and the servers that ran
-// outside a window in windows of their own. Once per boot, and never over
-// a terminal that is already there.
+// outside a window in windows of their own. Once per boot, into a
+// terminal that is not there yet or holds nothing, and never over one
+// with anything in it.
 export async function restore(tmux) {
   const w = was();
   if (!w || w.boot === booted()) return;
-  if ((await tmux("has-session", "-t", "main")) !== null) return;
+  const there = await bare(tmux);
+  if (there === false) return;
   const folder = (p) => (fs.existsSync(OS + p) ? p : HOME);
   const runs = [...(w.windows ?? []), ...(w.ports ?? [])];
-  let index = 0;
+  let made = 0;
   for (const r of runs) {
-    index++;
-    const made =
-      index === 1
+    const opened =
+      made === 0 && there === null
         ? await tmux("new-session", "-d", "-s", "main", "-c", folder(r.path))
         : await tmux("new-window", "-d", "-t", "main", "-c", folder(r.path));
-    if (made === null) break;
-    if (r.name) await tmux("rename-window", "-t", `main:${index}`, r.name);
-    if (r.command?.length)
-      await tmux("send-keys", "-t", `main:${index}`, line(r.command), "Enter");
+    if (opened === null) break;
+    made++;
+    const at = `main:${made + (there ? 1 : 0)}`;
+    if (r.name) await tmux("rename-window", "-t", at, r.name);
+    if (r.command?.argv?.length || r.argv?.length) {
+      await prompted(tmux, at);
+      await tmux("send-keys", "-t", at, line(r.command ?? r), "Enter");
+    }
   }
-  is({ ...w, boot: booted() });
-  if (runs.length) console.log(`restored ${runs.length} of the terminal`);
+  if (made === runs.length) is({ ...w, boot: booted() });
+  console.log(
+    made === runs.length
+      ? `restored ${made} of the terminal`
+      : `restored ${made} of ${runs.length} of the terminal; the rest is tried at the next boot`,
+  );
 }

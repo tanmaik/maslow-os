@@ -582,7 +582,10 @@ deployment without our provisioning key has no Agent of ours, and says
 so. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
-ever calls home. The person's location, read from their browser once a
+ever calls home: our Claude Code on it sends no telemetry, no error
+report and no update check, every switch it has for those off in its
+environment, and the one word every tool honours, `DO_NOT_TRACK`, set
+beside them. The person's location, read from their browser once a
 minute they are in the UI and granted, is sent straight to their own
 machine's door and appended to `/home/me/.maslow/location.log`, never
 through us or into our database. Claude Code lives in the person's Linux, installed there on the first
@@ -645,8 +648,8 @@ the menu bar fully transparent with nothing painted on a laptop, and on a
 phone one flat band with the status bar in the app's own ground, the dock clear glass, and menus, dialogs, every
 window's bar and every rail beside its content (the brain's types, the
 terminal's windows, the Agent's conversations, the Settings toolbar)
-frosted at one level, keeping
-most of their own colour so their words read; what is read or edited,
+glass at one level, blurred only as much as their words need and
+keeping enough of their own colour to read; what is read or edited,
 a list, a form, a terminal, a page on a port, lies on solid ground. Two
 looks and no third. A page framed in a window is flush to its frame: no
 margin, no card edge, no toolbar of its own that the bar already is. The dock is a
@@ -663,10 +666,13 @@ About This Computer (the machine, where it is, its size and image, and
 what it is using, laid out as ryOS's is), Settings, your other orgs and
 the way out; the
 front window's own menu stands beside it; Window lists every window on
-every desktop; the clock is at the right. The person's location is asked
-for with the browser's own prompt the moment the desktop is drawn for a
-signed-in person, never asked again on that device once it is refused,
-and logged to their own machine and nowhere else.
+every desktop; the clock is at the right. The first time the desktop is
+drawn on a device, one card asks for everything Maslow will want of it,
+on one tap: the microphone, notifications and the location, each by the
+browser's own prompt in turn, so nothing stops the person mid-task;
+answered or declined, the card never returns on that device, the
+browser's answers stand, and the location, once granted, is logged to
+their own machine and nowhere else.
 Any window fills the screen with
 one press and comes back, or with a double-click anywhere on its title
 bar but a field or the lights; the bar shows a grip while the pointer is
@@ -718,8 +724,10 @@ hear, and production refuses to start. The settled design is
 A phone is the same desktop, as ryOS's is: the wallpaper, the menu bar,
 the windows and the dock, with no home screen, no handle and no recents.
 Every window is the full width of the screen, 8px in from either side; it
-opens at its app's own height flush under the menu bar, moves up and down
-only by its title bar, resizes from its top and bottom edges only, the
+opens at its app's own height under the menu bar, each window after the
+first a little lower so the bar of the one under it shows, moves up and
+down only by its title bar, and stays put under a finger that has moved
+less than the slop the phone gives a tap; resizes from its top and bottom edges only, the
 bottom a thumb's width and the top a thin strip above the lights since it
 lies flush under the menu bar, and a double-tap on an edge makes it as tall as the desktop
 and the next brings its height back; it fills the screen on a double-tap
@@ -767,6 +775,16 @@ chip or a bar; the headline at 16 names a pane, a sheet, a dialog or an
 empty state, and only a page's own title climbs past it. Nothing is set at
 13, nothing is bolder than medium below the headline but a count in a
 pill, and no size, weight, leading or tracking is ever written by hand.
+On a phone the root is 18 instead of 16, so the same three sizes read
+at arm's length as iOS's do: the body lands at 15.75, the caption at
+13.5 and the headline at 18, near iOS's callout, footnote and headline;
+what is set in px, the menu bar, the dock and a window's 24px bar,
+stays as it is on a laptop, and the name in the bar is the second body
+size, which scales with the rest. Menus are rows of 28 on a
+laptop and 44 on a phone, and a menu-bar word fills the bar's height,
+the front app's in bold. A traffic light's hit area is as wide as its
+pitch and never wider, since three that overlap take each other's taps,
+and as tall as a thumb on a phone.
 Settings is laid out
 as a Mac's System Settings: a rail of panes down the left in two
 groups, yours and the org's, with a search over it that leaves only

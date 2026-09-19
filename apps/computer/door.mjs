@@ -1046,16 +1046,18 @@ const AS_THEM = [
   "PATH=/usr/local/bin:/usr/bin:/bin",
 ];
 
-// A tmux command run as the person, in their Linux, answering its output.
-const tmux = (...args) =>
+// A command run as the person, in their Linux, answering its output, or
+// null where it failed.
+const them = (...args) =>
   new Promise((resolve) => {
     execFile(
       "/usr/sbin/chroot",
-      [...AS_THEM, "tmux", ...args],
-      { timeout: 5000 },
+      [...AS_THEM, ...args],
+      { timeout: 5000, maxBuffer: 4 << 20 },
       (err, out) => resolve(err ? null : out),
     );
   });
+const tmux = (...args) => them("tmux", ...args);
 
 // Every terminal window on the desktop is a tmux session of its own, grouped
 // with main, and numbered so the door can ask after it.
@@ -1116,7 +1118,13 @@ function picture() {
   return pasted;
 }
 
-function talk(ws, url) {
+// A terminal opened as the machine comes up waits for what was there
+// before to be put back, so it joins that and never races it.
+async function talk(ws, url) {
+  let gone = false;
+  ws.closed = () => (gone = true);
+  await arrive();
+  if (gone) return;
   talkers.add(ws);
   const session = `talk-${++talked}`;
   const size = (name, fallback) => {
@@ -2953,18 +2961,18 @@ server.listen(8080, "::", () => console.log("the door is open on 8080"));
 // Once the machine is ready, or after a while if nobody asks: weighed as
 // it stands, then the terminal and the ports put back as they were, and
 // from then on remembered every half minute.
-let arrived = false;
+let arrival = null;
 function arrive() {
-  if (arrived) return;
-  arrived = true;
+  if (arrival) return arrival;
   weigh();
   const keep = () =>
-    remember(tmux, listeners).catch((err) =>
+    remember(tmux, them, listeners).catch((err) =>
       console.error(`remember: ${err.message}`),
     );
-  restore(tmux)
+  arrival = restore(tmux)
     .catch((err) => console.error(`restore: ${err.message}`))
     .finally(() => setInterval(keep, 30_000));
+  return arrival;
 }
 setTimeout(arrive, 60_000);
 

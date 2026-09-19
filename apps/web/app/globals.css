@@ -375,14 +375,23 @@ details summary::-webkit-details-marker {
   body {
     -webkit-tap-highlight-color: transparent;
   }
-  /* Where nothing is selected, the menu bar, the dock, a window's bar and
-     grip, a long press raises the app's own menu, never the phone's
-     copy-and-share callout; words a person may select keep it. */
-  .mac-top-menubar,
-  .mac-dock-surface,
-  .select-none,
-  .touch-none {
+  /* Nothing on the desktop is selected by a long press, and no press
+     raises the phone's copy-and-share callout: chrome is chrome. Words a
+     person may select, an editor, a terminal, a field, a page of prose,
+     say so and keep both. */
+  body {
     -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  .xterm,
+  .select-text {
+    -webkit-touch-callout: default;
+    -webkit-user-select: text;
+    user-select: text;
   }
   a,
   button,
@@ -590,23 +599,24 @@ html[data-accent="graphite"] {
 }
 .glass {
   background: var(--glass);
-  /* Enough blur to frost: at 3px the wallpaper read straight through and
-     the shelf was a slab of its own colour. */
-  -webkit-backdrop-filter: url(#glass-bend) blur(18px) saturate(170%);
-  backdrop-filter: url(#glass-bend) blur(18px) saturate(170%);
+  /* Enough blur to frost and no more: at 3px the wallpaper read straight
+     through and the shelf was a slab of its own colour; at 18 the glass
+     was frosted, and Tanmai asked for glass. */
+  -webkit-backdrop-filter: url(#glass-bend) blur(10px) saturate(170%);
+  backdrop-filter: url(#glass-bend) blur(10px) saturate(170%);
 }
 .glass-solid {
-  background: color-mix(in srgb, var(--popover) 78%, transparent);
-  -webkit-backdrop-filter: blur(22px) saturate(185%) url(#glass-bend);
-  backdrop-filter: blur(22px) saturate(185%) url(#glass-bend);
+  background: color-mix(in srgb, var(--popover) 66%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(185%) url(#glass-bend);
+  backdrop-filter: blur(14px) saturate(185%) url(#glass-bend);
 }
 /* A sheet: the same glass as a menu, without the bend, which is drawn on
    the CPU over everything behind it and costs by the pixel. Dialogs,
    alert dialogs and sheets are too big to bend and keep their frames. */
 .glass-sheet {
-  background: color-mix(in srgb, var(--popover) 78%, transparent);
-  -webkit-backdrop-filter: blur(22px) saturate(185%);
-  backdrop-filter: blur(22px) saturate(185%);
+  background: color-mix(in srgb, var(--popover) 66%, transparent);
+  -webkit-backdrop-filter: blur(14px) saturate(185%);
+  backdrop-filter: blur(14px) saturate(185%);
 }
 /* A sheet with more of the desk in it: the notices, which lie over the
    wallpaper and hold little. */
@@ -626,11 +636,11 @@ html[data-accent="graphite"] {
   background-color: transparent;
   background-image: linear-gradient(
     to bottom,
-    color-mix(in srgb, var(--popover) 62%, transparent),
-    color-mix(in srgb, var(--popover) 80%, transparent)
+    color-mix(in srgb, var(--popover) 52%, transparent),
+    color-mix(in srgb, var(--popover) 70%, transparent)
   );
-  -webkit-backdrop-filter: blur(26px) saturate(185%);
-  backdrop-filter: blur(26px) saturate(185%);
+  -webkit-backdrop-filter: blur(16px) saturate(185%);
+  backdrop-filter: blur(16px) saturate(185%);
   box-shadow:
     var(--pane-cast, var(--glass-cast)),
     inset 0 1px 0 rgba(255, 255, 255, 0.4);

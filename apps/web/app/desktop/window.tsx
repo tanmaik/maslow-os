@@ -70,7 +70,7 @@ export function TrafficLightButton({
       <button
         type="button"
         aria-label={ariaLabel}
-        className="absolute -inset-y-[8px] -inset-x-[4px] z-10 cursor-default rounded-full opacity-0 outline-none max-sm:-inset-y-[12px] max-sm:-inset-x-[6px] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+        className="absolute -inset-x-[4px] -inset-y-[8px] z-10 cursor-default rounded-full opacity-0 outline-none max-sm:-inset-y-[16px] focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-border-focus-ring"
         onClick={(e) => {
           e.stopPropagation();
           onClick();

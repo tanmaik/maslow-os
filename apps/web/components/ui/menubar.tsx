@@ -101,7 +101,7 @@ function MenubarItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "group/menubar-item gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 focus:bg-dropdown-item-hover-background focus:text-text-primary not-data-[variant=destructive]:focus:**:text-text-primary data-inset:pl-9 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive!",
+        "group/menubar-item gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 focus:bg-dropdown-item-hover-background focus:text-text-primary not-data-[variant=destructive]:focus:**:text-text-primary data-inset:pl-9 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive data-disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive!",
         className,
       )}
       {...props}
@@ -123,7 +123,7 @@ function MenubarCheckboxItem({
       data-slot="menubar-checkbox-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pl-9 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary focus:**:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pl-9 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary focus:**:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className,
       )}
       checked={checked}
@@ -158,7 +158,7 @@ function MenubarRadioItem({
       data-slot="menubar-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pl-9 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary focus:**:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex cursor-default items-center gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 pl-9 outline-hidden select-none transition-colors duration-fast ease-plain focus:bg-dropdown-item-hover-background focus:text-text-primary focus:**:text-text-primary data-inset:pl-9 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -200,7 +200,7 @@ function MenubarSeparator({
   return (
     <DropdownMenuSeparator
       data-slot="menubar-separator"
-      className={cn("-mx-2.5 my-2 h-px bg-separator-border", className)}
+      className={cn("-mx-2.5 my-1 h-px bg-separator-border", className)}
       {...props}
     />
   );
@@ -240,7 +240,7 @@ function MenubarSubTrigger({
       data-slot="menubar-sub-trigger"
       data-inset={inset}
       className={cn(
-        "gap-2 rounded-lg px-2.5 py-1.5 text-body-medium max-sm:min-h-[44px] max-sm:px-3 focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-open:bg-dropdown-item-hover-background [&_svg:not([class*='size-'])]:size-4",
+        "gap-2 rounded-lg px-2.5 py-1 text-body-medium max-sm:min-h-[44px] max-sm:px-3 focus:bg-dropdown-item-hover-background focus:text-text-primary data-inset:pl-9 data-open:bg-dropdown-item-hover-background [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}

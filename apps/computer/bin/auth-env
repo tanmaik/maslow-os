@@ -39,6 +39,10 @@ if [ "${MASLOW_AUTH:-}" = managed ] && [ -n "${MASLOW_MODEL_TOKEN:-}" ]; then
   # the conversation to 200k tokens until it did; the window above is the
   # one to keep.
   export CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1
+  # Nothing of ours phones home: no telemetry, no error reports, no bug
+  # command, no update check, and the same word to every tool that asks.
+  export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1
+  export DO_NOT_TRACK=1
 else
   maslow_auth=own
   if [ -n "${MASLOW_MODEL_URL:-}" ] && [ "${ANTHROPIC_BASE_URL:-}" = "$MASLOW_MODEL_URL" ]; then
@@ -47,7 +51,8 @@ else
       ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL \
       CLAUDE_CODE_SUBAGENT_MODEL CLAUDE_CODE_SKIP_FAST_MODE_ORG_CHECK \
       CLAUDE_CODE_MAX_CONTEXT_TOKENS \
-      CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT CLAUDE_CONFIG_DIR
+      CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT CLAUDE_CONFIG_DIR \
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC DO_NOT_TRACK
   fi
 fi
 

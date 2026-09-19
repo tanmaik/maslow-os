@@ -611,7 +611,7 @@ export function Dock({
         clearTimeout(autoHideTimerRef.current);
         autoHideTimerRef.current = null;
       }
-    } else if (!isMouseInZoneRef.current && !phone) {
+    } else if (!isMouseInZoneRef.current) {
       setIsDockVisible(false);
     }
   }, [hiding]);

@@ -78,7 +78,7 @@ const sameShape = (a: Shape, b: Shape) =>
 
 // The image every machine boots, by its label: apps/computer, built and
 // pushed by hand to where the cloud keeps images.
-export const IMAGE = "door-80";
+export const IMAGE = "door-82";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
