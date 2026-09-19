@@ -20,6 +20,8 @@ export type Card = {
   h: number;
   // Minimize in the dock, keeping the place it will come back to.
   minimized?: boolean;
+  // Filling the whole desktop, keeping the place it will come back to.
+  full?: boolean;
   // On the desktop itself, behind every window and with no bar: a widget.
   pinned?: boolean;
 };

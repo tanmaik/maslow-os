@@ -14,8 +14,7 @@ back; a swipe across its title bar brings the next or the previous window
 to the front. The dock lies along the bottom, scrolls sideways when its
 icons overflow, stays while windows stand at their own heights, goes when
 a window fills the screen (ryOS hides it after four seconds; Tanmai asked
-where it went, so ours stays), and comes back on a swipe up from the
-bottom edge. The menus stand in a strip that scrolls
+where it went, so ours stays), and comes back on a tap of the grip left at the bottom edge, or a swipe up from it; the swipe from the very edge is the phone's own home gesture and rarely reaches the page. The menus stand in a strip that scrolls
 sideways, with the front app's name in bold. A phone turned sideways keeps
 its windows whole: under 768px they stay the full width; above it, as on
 a tablet, they are ordinary windows.

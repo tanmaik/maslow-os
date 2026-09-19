@@ -73,6 +73,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
+import { usePhone } from "@/hooks/use-phone";
 
 // Whether the dock hides when the hand leaves it, and whether its icons
 // swell under the pointer, remembered on this device.
@@ -280,11 +281,13 @@ export function Desktop({
         asking = false;
       }
     };
-    // Asked every few seconds, and every second while a window is showing
-    // a port that has stopped, so a restart is over before it is noticed.
+    // Asked every two seconds, so a window opened or filled on another
+    // device is here before the hand leaves it, and every second while a
+    // window is showing a port that has stopped, so a restart is over
+    // before it is noticed.
     const soon = () => {
       clearTimeout(beat);
-      if (!stopped) beat = setTimeout(look, doubted.current.size ? 1000 : 5000);
+      if (!stopped) beat = setTimeout(look, doubted.current.size ? 1000 : 2000);
     };
     const look = () => void ask().finally(soon);
     let beat: ReturnType<typeof setTimeout>;
@@ -323,7 +326,26 @@ export function Desktop({
     }
   }, [looks]);
 
-  const [expanded, setExpanded] = useState<string | null>(null);
+  // Which window fills the screen: kept with the desktop, so it fills the
+  // screen on every device the person opens; one at most, and in front.
+  const filled = (cards: Card[]) =>
+    cards.findLast((c) => c.full && !c.minimized && !c.pinned)?.id ?? null;
+  const expanded = filled(screen.cards);
+  const setExpanded = (
+    to: string | null | ((was: string | null) => string | null),
+  ) =>
+    setScreen((l) => {
+      const was = filled(l.cards);
+      const next = typeof to === "function" ? to(was) : to;
+      if (next === was) return null;
+      const cards = l.cards.map(({ full: _, ...c }) =>
+        c.id === next ? { ...c, full: true, minimized: false } : c,
+      );
+      const it = cards.find((c) => c.id === next);
+      return {
+        cards: it ? [...cards.filter((c) => c.id !== next), it] : cards,
+      };
+    });
   // A block picked from the toolbar, waiting to be put down where the
   // person clicks.
   const carrying = useRef<Dragged | null>(null);
@@ -384,22 +406,14 @@ export function Desktop({
   // 768 (useWindowManager.ts:39, WindowFrame.tsx:277) every window is the
   // full width and moves up and down only, so a phone turned sideways
   // keeps its windows whole. Above both it is a desktop.
-  const [wide, setWide] = useState(true);
+  const wide = !usePhone();
   const [medium, setMedium] = useState(true);
   useEffect(() => {
-    const phone = matchMedia("(min-width: 640px)");
     const tablet = matchMedia("(min-width: 768px)");
-    const read = () => {
-      setWide(phone.matches);
-      setMedium(tablet.matches);
-    };
+    const read = () => setMedium(tablet.matches);
     read();
-    phone.addEventListener("change", read);
     tablet.addEventListener("change", read);
-    return () => {
-      phone.removeEventListener("change", read);
-      tablet.removeEventListener("change", read);
-    };
+    return () => tablet.removeEventListener("change", read);
   }, []);
   // The edge the dock lies along, for the desktop to keep clear of: none
   // while it hides.
@@ -560,8 +574,9 @@ export function Desktop({
       if (!m && b) return null;
       return t ?? null;
     };
-    // This page's cards in this page's order, then what arrived from
-    // elsewhere; what this page took away since is not back because the
+    // The cards in the order the desktop was kept in, so the window in
+    // front is the same on every device, with what this page opened since
+    // on top; what this page took away since is not back because the
     // desktop kept elsewhere still had it. Every widget lies under every
     // window, each group in its own order. A desktop is only so big: past
     // its most, what arrived last is left off, since a desktop the server
@@ -574,10 +589,19 @@ export function Desktop({
     const arrived = theirs
       .filter((c) => !ours.has(c.id) && !gone.has(c.id))
       .slice(0, Math.max(0, MOST - stayed.length));
-    const met = [...stayed, ...arrived];
+    const rank = new Map(theirs.map((c, i) => [c.id, i]));
+    const met = [...stayed, ...arrived].sort(
+      (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
+    );
+    // One window fills the screen at most: two devices filling two at
+    // once meet here, and the one in front wins.
+    const front = met.findLast((c) => c.full && !c.minimized && !c.pinned);
+    const one = met.map(({ full, ...c }) =>
+      full && c.id === front?.id ? { ...c, full } : c,
+    );
     const cards = [
-      ...met.filter((c) => c.pinned),
-      ...met.filter((c) => !c.pinned),
+      ...one.filter((c) => c.pinned),
+      ...one.filter((c) => !c.pinned),
     ];
     known.current = got.layout ?? EMPTY;
     setScreen(() => ({ cards }), again);
@@ -1311,7 +1335,7 @@ function DesktopPage({
   const still = useReducedMotion();
   // What the dock takes on its edge, measured from the icon size the
   // person set, so a filled window stops exactly where the shelf starts.
-  const clear = clearOf(useDockIconSize());
+  const clear = clearOf(useDockIconSize(), away ?? "bottom");
   const [size, setSize] = useState({ w: 0, h: 0 });
   useLayoutEffect(() => {
     const el = box.current;
@@ -1482,7 +1506,7 @@ function DesktopPage({
           ...(away && {
             [away]:
               away === "bottom"
-                ? `calc(env(safe-area-inset-bottom) + ${clear + (narrow ? 12 : 0)}px)`
+                ? `calc(env(safe-area-inset-bottom) + ${clear}px)`
                 : `${clear}px`,
           }),
           ...(room !== null && {
@@ -1523,7 +1547,7 @@ function DesktopPage({
                     // A window let go, snapped or filled grows into its
                     // place; one being carried keeps up with the hand.
                     transition={carried || still ? { duration: 0 } : BASE}
-                    style={{ zIndex: full ? 50 : layer }}
+                    style={{ zIndex: layer }}
                   >
                     <Frame
                       card={c}

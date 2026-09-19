@@ -77,11 +77,16 @@ const EDGE_PADDING = 12;
 // half-pixel rim on either side, which takes room of its own.
 const shelfOf = (iconSize: number) => iconSize + EDGE_PADDING * 2 + 1;
 
-// How far the shelf sits from the edge of the screen.
+// How far the shelf sits from the edge of the screen, and the room the
+// dock keeps under it along the bottom for a hand coming from the edge.
 const EDGE_MARGIN = 6;
+const EDGE_ROOM = 12;
 
-// What the dock takes on its edge: the shelf and the gap beneath it.
-export const clearOf = (iconSize: number) => shelfOf(iconSize) + EDGE_MARGIN;
+// What the dock takes on its edge: the shelf, the gap beneath it, and
+// along the bottom the room under that, so a filled window stops exactly
+// where the shelf starts.
+export const clearOf = (iconSize: number, side: Side = "bottom") =>
+  shelfOf(iconSize) + EDGE_MARGIN + (side === "bottom" ? EDGE_ROOM : 0);
 
 // How big the icons stand at rest, kept on this device beside the dock's
 // other settings, and followed the moment it changes anywhere.
@@ -676,7 +681,12 @@ export function Dock({
       const dx = t.clientX - held.x;
       const dy = t.clientY - held.y;
       held = null;
-      if (e.type === "touchend" && revealsDock(dx, dy)) {
+      // A swipe up, or a plain tap in the zone: the swipe from the very
+      // edge is the phone's own home gesture and rarely reaches the page.
+      const tap =
+        Math.abs(dx) < DOCK_SWIPE_MOVE_THRESHOLD_PX &&
+        Math.abs(dy) < DOCK_SWIPE_MOVE_THRESHOLD_PX;
+      if (e.type === "touchend" && (revealsDock(dx, dy) || tap)) {
         setIsDockVisible(true);
         restartAutoHideTimer();
       }
@@ -864,10 +874,10 @@ export function Dock({
   const settings = (
     <>
       <ContextMenuCheckboxItem checked={hiding} onCheckedChange={onHiding}>
-        Hide the dock when not in use
+        Dock hiding
       </ContextMenuCheckboxItem>
       <ContextMenuCheckboxItem checked={magnify} onCheckedChange={onMagnify}>
-        Make the icons swell
+        Magnification
       </ContextMenuCheckboxItem>
       <ContextMenuSub>
         <ContextMenuSubTrigger>Position</ContextMenuSubTrigger>
@@ -988,8 +998,7 @@ export function Dock({
                   paddingRight: "env(safe-area-inset-right, 0px)",
                 }
               : {
-                  paddingBottom:
-                    "calc(env(safe-area-inset-bottom, 0px) + 12px)",
+                  paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${EDGE_ROOM}px)`,
                 }
           }
         >
@@ -1185,8 +1194,27 @@ export function Dock({
         </div>
 
         {/* The edge a hidden dock lies behind: a pointer there brings it
-            back. */}
-        {hiding && !isDockVisible && (
+            back. Under a finger, a phone held either way, it is a grip
+            drawn over whatever fills the screen, since a finger cannot
+            hover and the bottom edge is the phone's own: a tap on it
+            brings the dock back. */}
+        {hiding && !isDockVisible && phone && (
+          <button
+            type="button"
+            aria-label="Show the dock"
+            // A tap is meant, whatever the moment: none of the cooldown a
+            // pointer straying over the edge gets.
+            onClick={() => {
+              setIsDockVisible(true);
+              restartAutoHideTimer();
+            }}
+            className="fixed bottom-[calc(env(safe-area-inset-bottom)+6px)] left-1/2 z-[70] flex h-6 w-16 -translate-x-1/2 cursor-pointer items-center justify-center"
+            style={{ pointerEvents: "auto" }}
+          >
+            <span className="h-1.5 w-11 rounded-full bg-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]" />
+          </button>
+        )}
+        {hiding && !isDockVisible && !phone && (
           <div
             className={cn(
               "fixed z-40",

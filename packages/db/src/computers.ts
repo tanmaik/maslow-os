@@ -182,6 +182,19 @@ export async function setBackedUp(q: Query, id: string, at: Date) {
   ]);
 }
 
+// The machine's size, as Fly has it: learned back into the row when a
+// machine was given more by hand than the row said.
+export async function setShape(
+  q: Query,
+  id: string,
+  shape: { cpuKind: string; cpus: number; memoryMb: number },
+) {
+  await q.query(
+    "update computers set cpu_kind = $2, cpus = $3, memory_mb = $4 where id = $1",
+    [id, shape.cpuKind, shape.cpus, shape.memoryMb],
+  );
+}
+
 // The disk's size, once Fly has grown it.
 export async function setDisk(q: Query, id: string, diskGb: number) {
   await q.query("update computers set disk_gb = $2 where id = $1", [

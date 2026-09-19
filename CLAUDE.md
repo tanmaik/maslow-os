@@ -364,9 +364,11 @@ the Maslow menu and in About This Computer; and a row on the Computer
 pane. Each has one button, Update, which names what it will stop before
 it stops it. Nothing takes an update on its own, and none of it is on the
 machine.
-Every computer is one size, four shared CPUs and eight gigabytes, since
-the door, the browser and a few Claude Codes at once do not fit in two;
-there is no ladder and nothing to pick yet. The disk grows before it
+Every computer starts at one size, four shared CPUs and eight gigabytes,
+since the door, the browser and a few Claude Codes at once do not fit in
+two; there is no ladder and nothing to pick yet. One given more by hand
+on Fly keeps it: the row learns the machine's size at the next sweep, and
+nothing remade is made smaller than it is. The disk grows before it
 fills and never shows a cap. Where it is is one of the
 North American regions Fly still makes disks in, seven today, since Fly
 retires regions now and then and a retired one refuses a new disk;
@@ -702,7 +704,8 @@ keyboard up the desktop ends where the keyboard begins, so what lies
 along a window's bottom, the terminal's keys, the composer, rises with
 it. The dock lies along the bottom, scrolls sideways when it overflows,
 stays while windows stand at their own heights, goes when a window fills
-the screen, and comes back on a swipe up from the bottom edge. The menus stand in a strip that scrolls sideways, the
+the screen, and comes back on a tap of the grip left at the bottom edge,
+or a swipe up from it. The menus stand in a strip that scrolls sideways, the
 front app's name in bold, and the clock shows the time alone beside the
 search. Never the system's own gestures, which the browser owns. Every
 window's title bar on a phone is the three lights at the left, the name,
@@ -911,6 +914,11 @@ What a reviewer walks by hand is `REVIEW.md`.
   empty database and signs in as every seeded org.
 - The preview built and its database migrated. Both are required checks, so a
   change that fails `next build` or a migration never reaches main.
+- The phone's layout holds: `check:phone` opens a fresh stack in a browser
+  the size of a phone and measures the bar, the dock, a window, the fill
+  and the grip against the numbers settled on 2026-09-18. It is part of
+  `check`, in the image's Chromium or the Chrome a laptop or the runner
+  carries, and skips only where there is no browser at all.
 - A reader read it: Greptile on the pull request, or Codex on the whole
   diff against main, before the merge, and its findings are fixed or
   answered in the pull request.

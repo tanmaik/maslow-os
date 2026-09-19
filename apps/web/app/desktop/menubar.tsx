@@ -28,6 +28,7 @@ import {
   MenubarTrigger,
 } from "@/components/ui/menubar";
 import type { Update } from "@/lib/computer";
+import { usePhone } from "@/hooks/use-phone";
 
 // Who is at the desktop, for the Maslow menu: their name, and the other orgs
 // they are in.
@@ -47,14 +48,7 @@ export type Me = {
 // movement counts as a scroll, taps held off for 100ms after it). On a
 // wide screen the menus stand as they are.
 function MenuStrip({ children }: { children: ReactNode }) {
-  const [phone, setPhone] = useState(false);
-  useEffect(() => {
-    const q = matchMedia("(max-width: 639px)");
-    const read = () => setPhone(q.matches);
-    read();
-    q.addEventListener("change", read);
-    return () => q.removeEventListener("change", read);
-  }, []);
+  const phone = usePhone();
   const strip = useRef<HTMLDivElement>(null);
   const [scroll, setScroll] = useState({ left: 0, width: 0, room: 0 });
   useEffect(() => {

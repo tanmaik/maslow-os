@@ -32,6 +32,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { liveSocket } from "@/lib/live";
 import { FAST, LEAVE } from "@/lib/motion";
 import { cx } from "@/utils/cx";
+import { usePhone } from "@/hooks/use-phone";
 
 // The keys a phone's keyboard lacks, as the terminal would send them.
 const KEYS: { label: string; send: string; title?: string }[] = [
@@ -253,14 +254,7 @@ export function Terminal({
   // a sheet instead of a rail, and starts closed rather than remembered.
   const [rail, setRail] = useState(true);
   const [sheet, setSheet] = useState(false);
-  const [wide, setWide] = useState(true);
-  useEffect(() => {
-    const q = matchMedia("(min-width: 640px)");
-    const read = () => setWide(q.matches);
-    read();
-    q.addEventListener("change", read);
-    return () => q.removeEventListener("change", read);
-  }, []);
+  const wide = !usePhone();
   // The control a hand leaving the terminal lands on.
   const leave = useRef<HTMLButtonElement>(null);
   useEffect(() => {

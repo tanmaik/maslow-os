@@ -43,6 +43,18 @@ export async function POST(
   } catch {
     return new Response("The body is JSON.", { status: 400 });
   }
+  // A count of tokens is answered here, about four characters to a token
+  // over the system words, the messages and the tools, since OpenRouter has
+  // no counter to forward it to and the caller only wants a size, not a
+  // bill.
+  if (path === "/v1/messages/count_tokens") {
+    const said = JSON.stringify([
+      body.system ?? "",
+      body.messages ?? [],
+      body.tools ?? [],
+    ]);
+    return Response.json({ input_tokens: Math.ceil(said.length / 4) });
+  }
   body.model = MODEL;
   // How much the model thinks is ours to set, not the caller's.
   body.reasoning = REASONING;

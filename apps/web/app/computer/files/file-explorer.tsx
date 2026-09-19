@@ -77,6 +77,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { BASE, FAST, LEAVE } from "@/lib/motion";
 import { liveSocket } from "@/lib/live";
 import { cx } from "@/utils/cx";
+import { usePhone } from "@/hooks/use-phone";
 
 // Where the device keeps whether the folders rail is shown, and what the
 // person dropped on it to keep there.
@@ -469,7 +470,7 @@ export function FileExplorer({
   // sheet instead, and starts closed rather than remembered.
   const [rail, setRail] = useState(true);
   const [sheet, setSheet] = useState(false);
-  const [wide, setWide] = useState(true);
+  const wide = !usePhone();
   // What the person dropped on the rail to keep there, and whether a
   // drag is over it now.
   const [pins, setPins] = useState<Pin[]>([]);
@@ -485,11 +486,6 @@ export function FileExplorer({
     } catch {
       setPins([]);
     }
-    const q = matchMedia("(min-width: 640px)");
-    const read = () => setWide(q.matches);
-    read();
-    q.addEventListener("change", read);
-    return () => q.removeEventListener("change", read);
   }, []);
   const toggleRail = () => {
     if (!wide) return setSheet((on) => !on);

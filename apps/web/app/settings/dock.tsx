@@ -97,10 +97,10 @@ export function DockRows() {
           </span>
         </div>
       </Row>
-      <Row label="Hide the dock when not in use">
+      <Row label="Dock hiding">
         <Switch
           size="sm"
-          aria-label="Hide the dock when not in use"
+          aria-label="Dock hiding"
           isSelected={hiding}
           onChange={(to) => {
             setHiding(to);
@@ -108,10 +108,10 @@ export function DockRows() {
           }}
         />
       </Row>
-      <Row label="Make the icons swell">
+      <Row label="Magnification">
         <Switch
           size="sm"
-          aria-label="Make the icons swell"
+          aria-label="Magnification"
           isSelected={magnify}
           onChange={(to) => {
             setMagnify(to);

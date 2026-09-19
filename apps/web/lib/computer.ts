@@ -18,6 +18,7 @@ import {
   portsReaching,
   setBackedUp,
   setDisk,
+  setShape,
   setMachine,
   setModelKey,
   setModelSpent,
@@ -678,12 +679,15 @@ async function remake(
   m: Machine,
   why: string,
 ): Promise<void> {
+  // A machine remade is never made smaller than it is: a size given it by
+  // hand stands over the row's.
+  const has = m.config?.guest ?? {};
   await fly.reshape(m.id, {
     image: IMAGE,
     volumeId: c.volumeId!,
     cpuKind: c.cpuKind,
-    cpus: c.cpus,
-    memoryMb: c.memoryMb,
+    cpus: Math.max(c.cpus, has.cpus ?? 0),
+    memoryMb: Math.max(c.memoryMb, has.memory_mb ?? 0),
     secret: c.secret,
     brain: await brainOf(q, c),
     who: await whoOf(q, c),
@@ -837,7 +841,18 @@ async function reconcileOrg(
       // else, so a machine moves at the first sweep after the image does,
       // however it was left. Fly may name an image with its digest; the
       // tag is what is compared.
+      // A machine given more by hand than the row says keeps it: the row
+      // learns the size, so no sweep or update shrinks it back.
       const g = m.config?.guest ?? {};
+      if ((g.cpus ?? 0) > c.cpus || (g.memory_mb ?? 0) > c.memoryMb) {
+        const shape = {
+          cpuKind: (g.cpu_kind as Computer["cpuKind"]) ?? c.cpuKind,
+          cpus: Math.max(c.cpus, g.cpus ?? 0),
+          memoryMb: Math.max(c.memoryMb, g.memory_mb ?? 0),
+        };
+        await setShape(q, c.id, shape);
+        c = { ...c, ...shape };
+      }
       const sized =
         g.cpu_kind === c.cpuKind &&
         g.cpus === c.cpus &&
