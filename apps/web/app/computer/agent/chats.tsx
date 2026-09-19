@@ -174,8 +174,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     // The app coming back from the background reconnects at once: a phone
     // suspends the page and cuts the line without a word.
+    // One line opening at a time, and a close from a line that is no
+    // longer the one in hand is nobody's.
+    let joining = false;
     const back = () => {
-      if (document.hidden || stopped) return;
+      if (document.hidden || stopped || joining) return;
       if (socket.current?.readyState === WebSocket.OPEN) return;
       clearTimeout(timer);
       void connect();
@@ -361,12 +364,15 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
     };
 
     const connect = async () => {
+      if (joining) return;
+      joining = true;
       try {
-        const next = await liveSocket("agent");
+        const next = await liveSocket("agent").finally(() => (joining = false));
         if (stopped) return next.close();
         socket.current = next;
         next.onmessage = (m) => said(JSON.parse(m.data as string) as Line);
         next.onclose = () => {
+          if (socket.current !== next) return;
           socket.current = null;
           // Nothing will answer what was asked of a socket that is gone,
           // so each waiting ask is let go rather than left mid-await.

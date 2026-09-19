@@ -72,6 +72,14 @@ function MenuStrip({ children }: { children: ReactNode }) {
   const touch = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const scrolled = useRef(false);
   const coasting = useRef<ReturnType<typeof setTimeout>>(undefined);
+  // A moved finger, or a flick still coasting, holds every tap off for a
+  // moment; one timer, so the later word always wins (ryOS
+  // ScrollableMenuWrapper.tsx:50-69).
+  const settle = (ms: number) => {
+    scrolled.current = true;
+    clearTimeout(coasting.current);
+    coasting.current = setTimeout(() => (scrolled.current = false), ms);
+  };
   if (!phone) return <>{children}</>;
   const fade = 24;
   const canLeft = scroll.left > 0;
@@ -89,13 +97,7 @@ function MenuStrip({ children }: { children: ReactNode }) {
   return (
     <div
       ref={strip}
-      onScroll={() => {
-        // A flick coasts on after the finger lifts; nothing opens until it
-        // has stopped for a moment (ryOS ScrollableMenuWrapper.tsx:50-69).
-        scrolled.current = true;
-        clearTimeout(coasting.current);
-        coasting.current = setTimeout(() => (scrolled.current = false), 300);
-      }}
+      onScroll={() => settle(300)}
       className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{
         WebkitOverflowScrolling: "touch",
@@ -118,10 +120,7 @@ function MenuStrip({ children }: { children: ReactNode }) {
       onTouchEnd={() => {
         const moved = touch.current?.moved;
         touch.current = null;
-        if (moved) {
-          scrolled.current = true;
-          setTimeout(() => (scrolled.current = false), 100);
-        }
+        if (moved) settle(100);
       }}
       onPointerDownCapture={(e) => {
         if (scrolled.current) {

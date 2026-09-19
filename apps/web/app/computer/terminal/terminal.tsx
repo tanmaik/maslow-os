@@ -279,8 +279,11 @@ export function Terminal({
     // The way to reconnect, for the app coming back from the background:
     // a phone suspends the page and cuts the line without a word.
     let wake: (() => void) | null = null;
+    // One line opening at a time, and a close from a line that is no
+    // longer the one in hand is nobody's.
+    let joining = false;
     const resume = () => {
-      if (document.hidden || stopped) return;
+      if (document.hidden || stopped || joining) return;
       if (socket.current?.readyState === WebSocket.OPEN) return;
       clearTimeout(timer);
       wake?.();
@@ -455,6 +458,8 @@ export function Terminal({
       );
 
       const connect = async () => {
+        if (joining) return;
+        joining = true;
         try {
           const first = opening.current;
           const next = await liveSocket("talk", {
@@ -463,7 +468,7 @@ export function Terminal({
             // Only the first time: a socket that drops and comes back
             // asks for no new shell.
             ...(first ? { fresh: "1" } : {}),
-          });
+          }).finally(() => (joining = false));
           opening.current = false;
           // A window just opened wants the shell it was given; any other
           // wants the one it was left on.
@@ -525,6 +530,7 @@ export function Terminal({
             }
           };
           next.onclose = () => {
+            if (socket.current !== next) return;
             socket.current = null;
             if (stopped) return;
             setAway("Reconnecting…");

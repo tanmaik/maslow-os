@@ -372,10 +372,16 @@ details summary::-webkit-details-marker {
   body {
     overscroll-behavior: none;
   }
-  /* A press lights nothing, and a long press on the chrome raises the
-     app's own menu, never the phone's copy-and-share callout. */
   body {
     -webkit-tap-highlight-color: transparent;
+  }
+  /* Where nothing is selected, the menu bar, the dock, a window's bar and
+     grip, a long press raises the app's own menu, never the phone's
+     copy-and-share callout; words a person may select keep it. */
+  .mac-top-menubar,
+  .mac-dock-surface,
+  .select-none,
+  .touch-none {
     -webkit-touch-callout: none;
   }
   a,
