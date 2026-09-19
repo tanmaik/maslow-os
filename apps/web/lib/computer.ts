@@ -692,7 +692,6 @@ async function remake(
   why: string,
 ): Promise<void> {
   const shape = atLeast(c, m.config?.guest);
-  if (!sameShape(shape, c)) await setShape(q, c.id, shape);
   await fly.reshape(m.id, {
     image: IMAGE,
     volumeId: c.volumeId!,
@@ -703,6 +702,9 @@ async function remake(
     model: await modelOf(q, c),
     metadata: wanted(c, m),
   });
+  // Written down once Fly has it, so a refused reshape leaves the row
+  // saying what the machine still is.
+  if (!sameShape(shape, c)) await setShape(q, c.id, shape);
   await setReady(q, c.id, false);
   // A machine remade is on the image of the day, whatever the reason, so
   // nothing is left waiting on the person for an update they now have.
