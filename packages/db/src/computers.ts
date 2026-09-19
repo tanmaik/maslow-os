@@ -40,6 +40,10 @@ export type Computer = {
   // image, which does not wait on them for long.
   updateImage: string | null;
   updateReadyAt: Date | null;
+  // Memory in use at the last sweep, and the most seen since the size
+  // was last set; null before the first sweep.
+  memoryUsedMb: number | null;
+  memoryPeakMb: number | null;
 };
 
 // A move of a computer to another region, as far as it has got: the
@@ -67,6 +71,7 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.model_spent_usd::float as "modelSpentUsd", c.model_cap_usd::float as "modelCapUsd",
   c.session_id as "sessionId", c.move,
   c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
+  c.memory_used_mb as "memoryUsedMb", c.memory_peak_mb as "memoryPeakMb",
   (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
@@ -190,8 +195,17 @@ export async function setShape(
   shape: { cpuKind: string; cpus: number; memoryMb: number },
 ) {
   await q.query(
-    "update computers set cpu_kind = $2, cpus = $3, memory_mb = $4 where id = $1",
+    "update computers set cpu_kind = $2, cpus = $3, memory_mb = $4, memory_peak_mb = null where id = $1",
     [id, shape.cpuKind, shape.cpus, shape.memoryMb],
+  );
+}
+
+// Memory as the sweep found it: what is in use now, and the most seen at
+// this size.
+export async function setMemory(q: Query, id: string, usedMb: number) {
+  await q.query(
+    "update computers set memory_used_mb = $2, memory_peak_mb = greatest(memory_peak_mb, $2) where id = $1",
+    [id, usedMb],
   );
 }
 

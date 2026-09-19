@@ -19,6 +19,8 @@ import {
 } from "react";
 
 import { LiveBrowser } from "@/app/browser/live";
+import { Down } from "@/app/desktop/down";
+import type { Progress } from "@/lib/computer";
 import { Look } from "@/app/computer/files/look";
 import { FileExplorer } from "@/app/computer/files/file-explorer";
 import { Agent } from "@/app/computer/agent/agent";
@@ -242,6 +244,10 @@ export function Desktop({
   // What is listening, kept current while the desktop is open. Nothing is
   // asked while the tab is not being looked at.
   const [live, setLive] = useState(ports);
+  // Whether the computer is out of action: its row not ready, or its door
+  // silent to an ask, and the whole desktop greyed until both say
+  // otherwise.
+  const [down, setDown] = useState(false);
   // The command bar: open or not, and what was typed to open it.
   const [bar, setBar] = useState({ open: false, initial: "" });
   // Counted up on every look, so what is watching knows a look happened
@@ -262,6 +268,9 @@ export function Desktop({
           // Null while the computer is not answering.
           ports: Port[] | null;
           rev: number;
+          // Where the computer stands by its row: not ready while the app
+          // is remaking or restarting it, whatever the door still says.
+          computer: Progress;
         } | null;
         if (now && !stopped) {
           if (now.ports) {
@@ -269,6 +278,7 @@ export function Desktop({
             setLive((was) => (same(was, ports) ? was : ports));
             setLooks((n) => n + 1);
           }
+          setDown(computers && (!now.ports || now.computer !== "ready"));
           // The desktop kept elsewhere since this page saw it, a widget the
           // agent placed most often, is taken in.
           // Not while a save of this page's own is out: its answer says
@@ -1151,6 +1161,7 @@ export function Desktop({
         onFront={raise}
         onClose={(w) => void close(w.card.id)}
       />
+      {down && <Down />}
     </>
   );
 }

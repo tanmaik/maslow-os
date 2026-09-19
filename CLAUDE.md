@@ -346,8 +346,15 @@ settled design is `docs/decisions/2026-09-07-the-computer-returns.md`,
 built in its order, one pull request at a time.
 
 It is per membership, claimed at sign-in in the person's region and made
-as the page asks after it, and it never sleeps; the
-page is blocked until it is ready. They are themselves on it, `wile@acme`:
+as the page asks after it, and it never sleeps; while it is being made,
+restarting or moving, the whole desktop is greyed under one card that says
+what it is doing, and clears when the door answers. A restart puts things
+back: the door writes down every half minute what is in the terminal and
+on the ports, each window's folder, name and the command running in it,
+and each server's folder and command, and at the first boot after, puts
+the windows back in their folders, types each command back in so it runs
+in view, a `claude` continued, and starts the servers in windows of their
+own; what a process held in memory is what a restart costs. They are themselves on it, `wile@acme`:
 the account is named after their first name, with a number after it
 when Debian already has that name, and the machine after their
 org at every boot, and files are owned by the number underneath, so a
@@ -364,13 +371,21 @@ the Maslow menu and in About This Computer; and a row on the Computer
 pane. Each has one button, Update, which names what it will stop before
 it stops it. Nothing takes an update on its own, and none of it is on the
 machine.
-Every computer is at least one size, eight shared CPUs and eight
-gigabytes, since the door, the browser and a few Claude Codes at once do
-not fit in two; there is no ladder and nothing to pick yet. That is a
-floor and not a start: a row under it is lifted to it at the next sweep,
-and no machine is ever shaped below it. One given more by hand on Fly
-keeps it: the row learns the machine's size at the next sweep, and
-nothing remade is made smaller than it is. The disk grows before it
+Every computer is at least one size, four shared CPUs and eight
+gigabytes, since memory is what people run out of and the CPUs sit idle:
+the door, the browser and one Claude Code take a gigabyte and a half
+before the person has done anything, each agent a third more and an app
+they build one or two. That is a floor and not a start: a row under it is
+lifted to it at the next sweep, and no machine is ever shaped below it.
+One given more by hand on Fly keeps it: the row learns the machine's size
+at the next sweep, and nothing remade is made smaller than it is. Every
+machine carries two gigabytes of swap, so one that outgrows its memory
+slows rather than losing what it ran. The sweep writes on the row what
+memory is in use and the most seen at this size, so the floor moves on
+what people use; a machine over four fifths at two sweeps running is
+said to us, never walled; and the door weighs a fresh boot the moment it
+is ready, before anything of the person's comes back, and the sweep says
+so to us when the image itself is over two gigabytes. The disk grows before it
 fills and never shows a cap. Where it is is one of the
 North American regions Fly still makes disks in, seven today, since Fly
 retires regions now and then and a retired one refuses a new disk;

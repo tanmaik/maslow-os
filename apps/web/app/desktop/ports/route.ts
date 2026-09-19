@@ -1,5 +1,6 @@
 import { asPerson } from "@maslow/db";
 
+import { standing } from "@/lib/computer";
 import { desktopNow, portsOf } from "@/lib/desktop";
 import { principal } from "@/lib/session";
 
@@ -9,13 +10,15 @@ import { principal } from "@/lib/session";
 // while it is open, so a server started a minute ago is there without a
 // reload, and a widget the agent placed is on screen within seconds. A
 // computer that does not answer leaves the ports unsaid, and the desktop is
-// still said.
+// still said; and where the computer stands, from its row, so a restart
+// the app made greys the desktop the moment it is asked for.
 export async function GET() {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
-  const [rev, ports] = await Promise.all([
+  const [rev, ports, computer] = await Promise.all([
     asPerson(p, desktopNow).then((d) => d?.rev ?? 0),
     portsOf(p).catch(() => null),
+    standing(p),
   ]);
-  return Response.json({ ports, rev });
+  return Response.json({ ports, rev, computer });
 }

@@ -18,6 +18,7 @@ import {
   portsReaching,
   setBackedUp,
   setDisk,
+  setMemory,
   setShape,
   setMachine,
   setModelKey,
@@ -76,12 +77,13 @@ const sameShape = (a: Shape, b: Shape) =>
   a.cpuKind === b.cpuKind && a.cpus === b.cpus && a.memoryMb === b.memoryMb;
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-77";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-80";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
 // answers; moving while it is on its way to another region.
-type Progress = "off" | "disk" | "machine" | "starting" | "moving" | "ready";
+export type Progress =
+  "off" | "disk" | "machine" | "starting" | "moving" | "ready";
 
 // Where a move stands: the old machine stopping, its disk being copied,
 // the copy being restored in the new region, the machine there starting
@@ -126,6 +128,14 @@ function wanted(c: Computer, m: Machine): Record<string, string> {
   const own = m.config?.metadata;
   if (!own) return tags(c);
   return own.lease ? { ...own, lease: new Date().toISOString() } : own;
+}
+
+// Where the person's computer stands, from the row alone: what the app
+// last did to it, with no round trip to the door.
+export async function standing(p: Principal): Promise<Progress> {
+  if (deployment.computers.kind === "none") return "off";
+  const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  return c ? progressOf(c) : "disk";
 }
 
 const progressOf = (c: Computer): Progress =>
@@ -932,6 +942,7 @@ async function reconcileOrg(
           .catch(() => null);
         if (s) {
           await grow(q, c, s);
+          await remember(q, c, s);
         }
         await backUp(q, c);
         // Every copy of what they shared brought up to the disk, and a
@@ -1118,6 +1129,26 @@ async function grow(q: Query, c: Computer, s: Stats): Promise<boolean> {
   if (s.free == null || s.disk === null || s.free > s.disk * 0.2) return false;
   return extend(q, c, "the disk was nearly full");
 }
+
+// Memory written on the row, and a machine over four fifths of it at this
+// sweep and the last is said to us: a ceiling of ours, which alerts us
+// and never walls the person.
+async function remember(q: Query, c: Computer, s: Stats): Promise<void> {
+  const used = Math.round(s.memory.used / 1048576);
+  const total = Math.round(s.memory.total / 1048576);
+  await setMemory(q, c.id, used);
+  const hot = (mb: number | null) => mb !== null && mb > total * 0.8;
+  if (hot(used) && hot(c.memoryUsedMb))
+    console.error(
+      `computer ${c.id}: memory over four fifths for an hour, ${used} of ${total} MB`,
+    );
+  // The image is allowed two gigabytes before the person has done anything.
+  if (s.idleMb !== undefined && s.idleMb > IDLE_MB)
+    console.error(
+      `computer ${c.id}: a fresh boot used ${s.idleMb} MB, over the ${IDLE_MB} the image is allowed`,
+    );
+}
+const IDLE_MB = 2048;
 
 // Grows the disk by half again, up to the ceiling; at the ceiling, says
 // so to us and leaves it. True when it grew.

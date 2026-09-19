@@ -94,6 +94,9 @@ export class Changed extends Error {
 export type Stats = {
   cpu: number;
   memory: { used: number; total: number };
+  // What the machine used the moment it was ready, before anything of the
+  // person's came back: the image's own weight. Absent from an older image.
+  idleMb?: number;
   used: number | null;
   disk: number | null;
   // Room left on the whole disk; absent from a machine on an older image.
@@ -160,6 +163,9 @@ const shape = (m: Shape) => ({
     ...(m.model ? { MODEL_URL: m.model.url, MODEL_TOKEN: m.model.token } : {}),
   },
   guest: { cpu_kind: m.cpuKind, cpus: m.cpus, memory_mb: m.memoryMb },
+  // Two gigabytes of disk standing in for memory, so a machine that
+  // outgrows its memory slows down rather than losing what it was running.
+  swap_size_mb: 2048,
   mounts: [{ volume: m.volumeId, path: "/data" }],
   services: [
     {

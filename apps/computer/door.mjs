@@ -23,7 +23,8 @@ import pty from "node-pty";
 import { backup } from "./backup.mjs";
 import * as files from "./files.mjs";
 import * as shares from "./shares.mjs";
-import { stats } from "./stats.mjs";
+import { listeners, stats, weigh } from "./stats.mjs";
+import { remember, restore } from "./was.mjs";
 
 const SECRET = process.env.DOOR_SECRET;
 const DOMAIN = process.env.DOMAIN;
@@ -490,10 +491,12 @@ const server = http.createServer(async (req, res) => {
   const to = target(req);
   if (!to) return say(res, 404, "Nothing of yours is listening there.");
   // Ready is the door answering with the browser server up behind it.
-  if (to.mine && url.pathname === "/maslow/health")
-    return (await tabsOf()) !== null
-      ? say(res, 200, "ok")
-      : say(res, 503, "The browser is not answering yet.");
+  if (to.mine && url.pathname === "/maslow/health") {
+    if ((await tabsOf()) === null)
+      return say(res, 503, "The browser is not answering yet.");
+    arrive();
+    return say(res, 200, "ok");
+  }
   // The person's own files, for the owner alone: our server asking with a
   // ticket, or their browser carrying one for the whole machine. A ticket
   // for a port opens none of this.
@@ -2946,6 +2949,24 @@ function frameOf(first, payload) {
 }
 
 server.listen(8080, "::", () => console.log("the door is open on 8080"));
+
+// Once the machine is ready, or after a while if nobody asks: weighed as
+// it stands, then the terminal and the ports put back as they were, and
+// from then on remembered every half minute.
+let arrived = false;
+function arrive() {
+  if (arrived) return;
+  arrived = true;
+  weigh();
+  const keep = () =>
+    remember(tmux, listeners).catch((err) =>
+      console.error(`remember: ${err.message}`),
+    );
+  restore(tmux)
+    .catch((err) => console.error(`restore: ${err.message}`))
+    .finally(() => setInterval(keep, 30_000));
+}
+setTimeout(arrive, 60_000);
 
 // The wakeups kept from before the door last ran, armed now: one whose
 // time passed meanwhile fires at once.

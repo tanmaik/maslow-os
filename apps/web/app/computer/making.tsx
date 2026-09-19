@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // What each step of the making says and how far along it is.
-const STEPS: Record<State["progress"], [number, string]> = {
+export const STEPS: Record<State["progress"], [number, string]> = {
   off: [0, "Computers are off here."],
   disk: [15, "Making your disk"],
   machine: [45, "Making your machine"],
@@ -42,7 +42,7 @@ const STEPS: Record<State["progress"], [number, string]> = {
 
 // What each step of a move says and how far along it is; the region's
 // name goes where the blank is.
-const MOVE_STEPS: Record<MoveStep, [number, string]> = {
+export const MOVE_STEPS: Record<MoveStep, [number, string]> = {
   stopping: [10, "Stopping it"],
   copying: [30, "Copying its disk"],
   restoring: [55, "Restoring the copy in _"],

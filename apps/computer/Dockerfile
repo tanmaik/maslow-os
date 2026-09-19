@@ -86,7 +86,7 @@ RUN curl -sS https://downloads.1password.com/linux/keys/1password.asc \
     && ln -s /opt/maslow/op/usr/bin/op /opt/maslow/bin/op \
     && rm -rf /var/cache/apt/archives/*.deb /var/lib/apt/lists/* /etc/apt/sources.list.d/1password.list
 COPY --chmod=0755 apps/computer/boot.sh apps/computer/terminal.sh apps/computer/ssh-login.sh ./
-COPY apps/computer/door.mjs apps/computer/stats.mjs apps/computer/seed.mjs apps/computer/backup.mjs apps/computer/files.mjs apps/computer/shares.mjs apps/computer/agent-tools.mjs ./
+COPY apps/computer/door.mjs apps/computer/stats.mjs apps/computer/seed.mjs apps/computer/backup.mjs apps/computer/files.mjs apps/computer/shares.mjs apps/computer/agent-tools.mjs apps/computer/was.mjs ./
 COPY apps/computer/etc/sshd_config apps/computer/etc/mcp.json apps/computer/etc/tmux.conf apps/computer/etc/settings.json apps/computer/etc/CLAUDE.md etc/
 # What the Agent knows: how this system works, how an app is built here,
 # how the brain is used, and the skin Maslow wears, BoardUI's own skill.

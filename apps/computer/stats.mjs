@@ -153,7 +153,7 @@ function face(port, pid) {
 // through every process's open files, pid to its name. Every read waits
 // its turn rather than holding the door, and the walk stops once every
 // listener is named.
-async function ports() {
+export async function listeners() {
   const listening = new Map();
   for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
     let text;
@@ -210,6 +210,12 @@ async function ports() {
       out.push({ port, pid, name: called, ran });
     }
   }
+  return out;
+}
+
+// The ports as the page sees them, each with its face.
+async function ports() {
+  const out = await listeners();
   // What is no longer serving keeps no face here.
   const here = new Set(out.map((o) => `${o.port}:${o.pid}`));
   for (const key of faces.keys()) if (!here.has(key)) faces.delete(key);
@@ -218,11 +224,17 @@ async function ports() {
     .sort((a, b) => a.port - b.port);
 }
 
+// What the machine used the moment it was ready, before anything of the
+// person's was put back: the weight of the image itself.
+let idle = null;
+export const weigh = () => (idle ??= memory().used);
+
 export async function stats() {
   const disk = await statfs("/data").catch(() => null);
   return {
     cpu,
     memory: memory(),
+    idleMb: idle === null ? undefined : Math.round(idle / 1048576),
     used,
     disk: disk ? disk.blocks * disk.bsize : null,
     // What the whole disk still has room for, the person's and ours alike.
