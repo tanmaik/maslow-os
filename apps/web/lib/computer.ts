@@ -1297,29 +1297,30 @@ export async function share(
 // anyone: the door lets those through with no ticket, so it has to hear
 // of every change, and hears the whole list each time, read after the
 // change committed so a change still in flight is never told. Whether
-// the door took it; a door that could not be reached hears within the
-// hour.
+// a door took it; one that could not be reached, or a computer with no
+// machine to tell, hears within the hour.
 export async function tellPublic(p: Principal): Promise<boolean> {
   try {
-    await asPerson(p, async (q) => {
+    return await asPerson(p, async (q) => {
       const c = await computerOf(q, p.userId);
-      if (c) await retellPublic(q, c);
+      return c ? retellPublic(q, c) : false;
     });
-    return true;
   } catch (err) {
     console.error(`public ports: ${(err as Error).message}`);
     return false;
   }
 }
 
-// The whole list to the door, as the rows have it now, with its number.
-async function retellPublic(q: Query, c: Computer): Promise<void> {
-  if (!c.machineId) return;
+// The whole list to the door, as the rows have it now, with its number;
+// whether there was a machine to tell.
+async function retellPublic(q: Query, c: Computer): Promise<boolean> {
+  if (!c.machineId) return false;
   await fly.publicPorts(
     c.machineId,
     ticket(c, 60),
     await publicPortsOn(q, c.id),
   );
+  return true;
 }
 
 // Where signing out goes on its way home, so the ticket a browser keeps on
