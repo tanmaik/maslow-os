@@ -550,10 +550,12 @@ spend behind that ring; the spend is said in the open on the Agent pane.
 One agent is in view at a time and the rest stand open behind it,
 each with its own Claude Code process, running on; a new one is handed
 over at once, since the door keeps one warm; one quiet for three minutes
-is closed, its process freed, and opens again whole when wanted. An
-agent is made only by the person, who names it as they make it, and
-renamed with a click on the name; nothing makes one on its own, and
-the window opens on the last one spoken to, never on an empty one. The
+is closed, its process freed, and opens again whole when wanted. A
+computer with no agent at all is given its first, Heartbeat, the moment
+its agent starts; every other agent is made only by the person, who
+names it as they make it, and
+renamed with a click on the name; nothing makes another on its own,
+and the window opens on the last one spoken to, never on an empty one. The
 name and the last line each agent said are the door's, kept on the disk.
 An agent picked in the rail is in view at once, whole from the
 door's own record when it was open before, and Claude Code loads it

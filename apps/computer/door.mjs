@@ -2583,6 +2583,13 @@ function agentStart() {
       // and what it answered are there before they look.
       room.state = "ready";
       for (const id of chatsWere()) await chatOpen(room, id);
+      // A computer with no agent at all is given its first, Heartbeat, so
+      // the window never opens on nothing; from then on only the person
+      // makes one.
+      if (!chatsWere().length && Object.keys(titles).length === 0) {
+        const first = await chatOpen(room, null);
+        if (first) entitled(first.id, "Heartbeat");
+      }
       void chatWarm(room);
     } catch (err) {
       room.state = "failed";
