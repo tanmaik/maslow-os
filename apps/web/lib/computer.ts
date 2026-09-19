@@ -23,7 +23,7 @@ import {
   setMachine,
   setModelKey,
   setModelSpent,
-  setModelWeek,
+  turnModelWeek,
   setMove,
   setPlace,
   setReady,
@@ -426,7 +426,7 @@ async function modelKeyOf(q: Query, c: Computer): Promise<string | null> {
   const capUsd = c.modelCapUsd ?? m.capUsd;
   const minted = await openrouter.mint(`${keyPrefix()}${c.id}`, capUsd);
   await setModelKey(q, c.id, minted.key, minted.hash, capUsd);
-  await setModelWeek(q, c.id, weekOf(c).n);
+  await turnModelWeek(q, c.id, weekOf(c).n);
   await note(q, {
     orgId: c.orgId,
     userId: c.userId,
@@ -778,11 +778,12 @@ async function allowance(
   capUsd: number,
 ): Promise<number> {
   const { n } = weekOf(c);
-  if (c.modelWeek === n && read.every === null && read.limit !== null)
-    return read.limit;
+  // The week is turned on the row first, and only its one winner moves
+  // the ceiling; a ceiling OpenRouter refuses rolls the row back with it.
+  const turned = await turnModelWeek(q, c.id, n);
+  if (!turned && read.every === null && read.limit !== null) return read.limit;
   const limit = read.usage + capUsd;
   await openrouter.cap(c.modelKeyHash!, limit);
-  await setModelWeek(q, c.id, n);
   await note(q, {
     orgId: c.orgId,
     userId: c.userId,
@@ -1816,11 +1817,16 @@ async function readUsage(p: Principal): Promise<Usage | null> {
       ? null
       : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   const capUsd = c?.modelCapUsd ?? m.capUsd;
+  // Before there is a key the week is still the computer's own; with no
+  // computer at all it is a week from now.
   if (!c?.modelKeyHash)
     return {
       spentUsd: 0,
       capUsd,
-      resetsAt: new Date(Date.now() + WEEK).toISOString(),
+      resetsAt: (c
+        ? weekOf(c).turns
+        : new Date(Date.now() + WEEK)
+      ).toISOString(),
       days: [],
       models: [],
     };

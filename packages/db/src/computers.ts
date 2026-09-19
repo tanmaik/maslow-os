@@ -130,12 +130,19 @@ export async function clearModelKey(q: Query, id: string) {
   );
 }
 
-// The week of the person's own the key's allowance now stands for.
-export async function setModelWeek(q: Query, id: string, week: number) {
-  await q.query("update computers set model_week = $2 where id = $1", [
-    id,
-    week,
-  ]);
+// The key's allowance turned to a week of the person's own: true for the
+// one caller that turned it, so two asking at once give one week, not
+// two.
+export async function turnModelWeek(
+  q: Query,
+  id: string,
+  week: number,
+): Promise<boolean> {
+  const { rowCount } = await q.query(
+    "update computers set model_week = $2 where id = $1 and model_week is distinct from $2",
+    [id, week],
+  );
+  return rowCount === 1;
 }
 
 // How much of the key's spend the ledger holds now.
