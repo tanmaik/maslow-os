@@ -1243,6 +1243,15 @@ export function FileExplorer({
               // folder, not a row.
               if (!(e.target as HTMLElement).closest("tr")) setTarget(null);
             }}
+            onPointerDown={(e) => {
+              // A finger landing between rows means the folder too; a long
+              // press raises no right-click, so the landing has to say.
+              if (
+                e.pointerType === "touch" &&
+                !(e.target as HTMLElement).closest("tr")
+              )
+                setTarget(null);
+            }}
             onKeyDownCapture={(e) => {
               // Return with one row held renames it, before the list can
               // take it as an open; opening stays a double-click.
@@ -1386,6 +1395,13 @@ export function FileExplorer({
                             setTarget(e);
                             // The row under the right-click is the one the
                             // menu is about, unless it is among those held.
+                            if (!on) setSelected(new Set([e.name]));
+                          }}
+                          onPointerDown={(ev) => {
+                            // A finger landing on a row names it for the
+                            // long press, which raises no right-click.
+                            if (ev.pointerType !== "touch") return;
+                            setTarget(e);
                             if (!on) setSelected(new Set([e.name]));
                           }}
                           className={cx(

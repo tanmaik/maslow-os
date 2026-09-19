@@ -76,16 +76,27 @@ export function useEar(): Ear {
   const [level, setLevel] = useState(0);
   const [on, setOn] = useState(false);
   const [why, setWhy] = useState<string | null>(null);
-  const mic = useRef<{ ctx: AudioContext; node: AudioWorkletNode } | null>(
-    null,
-  );
+  const mic = useRef<{
+    ctx: AudioContext;
+    node: AudioWorkletNode;
+    track: MediaStreamTrack;
+  } | null>(null);
   const ws = useRef<WebSocket | null>(null);
   const said = useRef({ settled: "", settling: "" });
 
   // The microphone, opened once and kept: the audio thread is wired to
   // whichever stream is open at the moment.
   const listen = async () => {
-    if (mic.current) return mic.current;
+    // A phone takes the microphone away in the background or for a call;
+    // what was kept is then dead, and opened again.
+    if (mic.current) {
+      const gone =
+        mic.current.ctx.state === "closed" ||
+        mic.current.track.readyState === "ended";
+      if (!gone) return mic.current;
+      void mic.current.ctx.close().catch(() => {});
+      mic.current = null;
+    }
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -106,7 +117,7 @@ export function useEar(): Ear {
       setLevel(e.data.level);
     };
     ctx.createMediaStreamSource(stream).connect(node);
-    mic.current = { ctx, node };
+    mic.current = { ctx, node, track: stream.getAudioTracks()[0]! };
     return mic.current;
   };
   useEffect(

@@ -372,8 +372,11 @@ details summary::-webkit-details-marker {
   body {
     overscroll-behavior: none;
   }
+  /* A press lights nothing, and a long press on the chrome raises the
+     app's own menu, never the phone's copy-and-share callout. */
   body {
     -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
   }
   a,
   button,

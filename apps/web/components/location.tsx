@@ -31,12 +31,14 @@ const TICKET_FOR = 55 * 60_000;
 // One position, read once: the browser's own permission is the only
 // dialog, ten seconds to answer, and nothing sharper than a phone's coarse
 // fix.
-function positionOnce(): Promise<GeolocationPosition | null> {
+function positionOnce(): Promise<GeolocationPosition | "refused" | null> {
   return new Promise((resolve) => {
-    if (!navigator.geolocation) return resolve(null);
+    if (!navigator.geolocation) return resolve("refused");
     navigator.geolocation.getCurrentPosition(
       (pos) => resolve(pos),
-      () => resolve(null),
+      // Only a refusal is remembered; a fix that took too long is tried
+      // again next time.
+      (err) => resolve(err.code === err.PERMISSION_DENIED ? "refused" : null),
       { enableHighAccuracy: false, timeout: 10_000 },
     );
   });
@@ -101,7 +103,8 @@ export function useLocation(computers: boolean): void {
       if (localStorage.getItem(LOCATION_KEY) === "off") return;
       const pos = await positionOnce();
       if (stopped) return;
-      if (!pos) return keepLocation(false);
+      if (pos === "refused") return keepLocation(false);
+      if (!pos) return;
       keepLocation(true);
       const to = await doorTicket();
       if (!stopped && to) report(pos, to);

@@ -276,6 +276,16 @@ export function Terminal({
     if (!el) return;
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // The way to reconnect, for the app coming back from the background:
+    // a phone suspends the page and cuts the line without a word.
+    let wake: (() => void) | null = null;
+    const resume = () => {
+      if (document.hidden || stopped) return;
+      if (socket.current?.readyState === WebSocket.OPEN) return;
+      clearTimeout(timer);
+      wake?.();
+    };
+    document.addEventListener("visibilitychange", resume);
     let undo = () => {};
 
     const start = async () => {
@@ -526,6 +536,7 @@ export function Terminal({
           timer = setTimeout(connect, 5000);
         }
       };
+      wake = () => void connect();
       void connect();
 
       undo = () => {
@@ -543,6 +554,7 @@ export function Terminal({
       stopped = true;
       clearTimeout(timer);
       clearTimeout(picking.current);
+      document.removeEventListener("visibilitychange", resume);
       undo();
     };
   }, []);

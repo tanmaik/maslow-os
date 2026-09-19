@@ -581,6 +581,25 @@ export function Dock({
   // Whether the dock is out, and what keeps it out: the hand over it, or a
   // timer since it was last shown.
   const [isDockVisible, setIsDockVisible] = useState(!hiding || phone);
+  // How far the keyboard has come up on a phone, so the shelf and its grip
+  // stand above it rather than behind it.
+  const [lift, setLift] = useState(0);
+  useEffect(() => {
+    if (!phone) return setLift(0);
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const measure = () => {
+      const hidden = window.innerHeight - vv.height - vv.offsetTop;
+      setLift(hidden > 80 ? hidden : 0);
+    };
+    vv.addEventListener("resize", measure);
+    vv.addEventListener("scroll", measure);
+    measure();
+    return () => {
+      vv.removeEventListener("resize", measure);
+      vv.removeEventListener("scroll", measure);
+    };
+  }, [phone]);
   const isMouseInZoneRef = useRef(false);
   const autoHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastAutoHideTimeRef = useRef<number>(0);
@@ -671,7 +690,9 @@ export function Dock({
     };
     const start = (e: TouchEvent) => {
       const t = e.changedTouches[0];
-      if (!t || t.clientY < window.innerHeight - zone()) return;
+      const vv = window.visualViewport;
+      const floor = vv ? vv.height + vv.offsetTop : window.innerHeight;
+      if (!t || t.clientY < floor - zone()) return;
       held = { id: t.identifier, x: t.clientX, y: t.clientY };
     };
     const end = (e: TouchEvent) => {
@@ -998,7 +1019,7 @@ export function Dock({
                   paddingRight: "env(safe-area-inset-right, 0px)",
                 }
               : {
-                  paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${EDGE_ROOM}px)`,
+                  paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${EDGE_ROOM + lift}px)`,
                 }
           }
         >
@@ -1208,8 +1229,11 @@ export function Dock({
               setIsDockVisible(true);
               restartAutoHideTimer();
             }}
-            className="fixed bottom-[calc(env(safe-area-inset-bottom)+6px)] left-1/2 z-[70] flex h-6 w-16 -translate-x-1/2 cursor-pointer items-center justify-center"
-            style={{ pointerEvents: "auto" }}
+            className="fixed left-1/2 z-[70] flex h-6 w-16 -translate-x-1/2 cursor-pointer items-center justify-center"
+            style={{
+              pointerEvents: "auto",
+              bottom: `calc(env(safe-area-inset-bottom) + ${6 + lift}px)`,
+            }}
           >
             <span className="h-1.5 w-11 rounded-full bg-white/50 shadow-[0_0_0_1px_rgba(0,0,0,0.25)]" />
           </button>

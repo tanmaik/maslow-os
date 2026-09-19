@@ -15,7 +15,17 @@ to the front. The dock lies along the bottom, scrolls sideways when its
 icons overflow, stays while windows stand at their own heights, goes when
 a window fills the screen (ryOS hides it after four seconds; Tanmai asked
 where it went, so ours stays), and comes back on a tap of the grip left at the bottom edge, or a swipe up from it; the swipe from the very edge is the phone's own home gesture and rarely reaches the page. The menus stand in a strip that scrolls
-sideways, with the front app's name in bold. A phone turned sideways keeps
+sideways, with the front app's name in bold. Since 2026-09-18, from a
+pass against ryOS's phone and a test of every gesture: the resize edges
+are a thumb wide and a double-tap on one makes the window as tall as the
+desktop; a filled window is pulled down by its bar under a finger as under
+a pointer; a fill and a swipe buzz; the dock and its grip rise with the
+keyboard; a window opens flush under the bar; a long press on a Files row
+names the row, since a touch raises no right-click; the phone's own
+copy-and-share callout is off on the chrome; the terminal's and the
+Agent's lines reconnect the moment the app comes back from the
+background, and a microphone the phone took away is opened again. A
+phone turned sideways keeps
 its windows whole: under 768px they stay the full width; above it, as on
 a tablet, they are ordinary windows.
 

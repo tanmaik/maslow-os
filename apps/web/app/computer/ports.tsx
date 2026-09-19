@@ -64,6 +64,13 @@ export function Ports({
     sharing?.shares.filter((s) => s.port === port) ?? [];
   const link = (port: number) =>
     sharing ? `/port/${sharing.machineId}/${port}` : null;
+  // In a window on the desktop a port opens as a window there, never as a
+  // new tab, which on a phone's home-screen app would leave the app.
+  const openHere = (e: React.MouseEvent, port: number) => {
+    if (window.self === window.top) return;
+    e.preventDefault();
+    window.parent.postMessage({ maslow: "open", port }, location.origin);
+  };
   return (
     <div className="flex flex-col gap-2">
       <p className="px-3 text-caption-1-medium text-text-secondary">
@@ -103,6 +110,7 @@ export function Ports({
                     href={`/computer/open?port=${p.port}`}
                     target="_blank"
                     rel="noreferrer"
+                    onClick={(e) => openHere(e, p.port)}
                   >
                     Open
                   </ButtonLink>
@@ -115,6 +123,7 @@ export function Ports({
                       href={`/computer/open?port=${p.port}`}
                       target="_blank"
                       rel="noreferrer"
+                      onClick={(e) => openHere(e, p.port)}
                     />
                   }
                 >

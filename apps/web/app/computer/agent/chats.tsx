@@ -172,6 +172,14 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let stopped = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    // The app coming back from the background reconnects at once: a phone
+    // suspends the page and cuts the line without a word.
+    const back = () => {
+      if (document.hidden || stopped) return;
+      if (socket.current?.readyState === WebSocket.OPEN) return;
+      clearTimeout(timer);
+      void connect();
+    };
     const heard = answers.current;
 
     // One conversation as the door tells of it, whether it came alone or
@@ -395,10 +403,12 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
       }
     };
     void connect();
+    document.addEventListener("visibilitychange", back);
 
     return () => {
       stopped = true;
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", back);
       socket.current?.close();
     };
   }, [ask, list, patch]);

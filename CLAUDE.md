@@ -695,14 +695,21 @@ hear, and production refuses to start. The settled design is
 A phone is the same desktop, as ryOS's is: the wallpaper, the menu bar,
 the windows and the dock, with no home screen, no handle and no recents.
 Every window is the full width of the screen, 8px in from either side; it
-opens at its app's own height under the menu bar, moves up and down only
-by its title bar, resizes from its top and bottom edges only, fills the
-screen on a double-tap of its title bar and comes back on the next, and
+opens at its app's own height flush under the menu bar, moves up and down
+only by its title bar, resizes from its top and bottom edges only, each a
+thumb's width, and a double-tap on an edge makes it as tall as the desktop
+and the next brings its height back; it fills the screen on a double-tap
+of its title bar and comes back on the next or when its bar is pulled
+down, a fill or a swipe buzzing under the finger where the phone can, and
 a swipe across its title bar brings the next or the previous window to
 the front. A phone turned sideways keeps its windows whole. With the
 keyboard up the desktop ends where the keyboard begins, so what lies
 along a window's bottom, the terminal's keys, the composer, rises with
-it. The dock lies along the bottom, scrolls sideways when it overflows,
+it, and the dock and its grip rise too. A phone puts the app to sleep in
+the background and cuts its lines; on its return the terminal's and the
+Agent's sockets reconnect at once, and a microphone the phone took away
+is opened again. A long press raises the app's own menu and never the
+phone's copy-and-share callout. The dock lies along the bottom, scrolls sideways when it overflows,
 stays while windows stand at their own heights, goes when a window fills
 the screen, and comes back on a tap of the grip left at the bottom edge,
 or a swipe up from it. The menus stand in a strip that scrolls sideways, the

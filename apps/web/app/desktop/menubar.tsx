@@ -71,6 +71,7 @@ function MenuStrip({ children }: { children: ReactNode }) {
   }, [phone]);
   const touch = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const scrolled = useRef(false);
+  const coasting = useRef<ReturnType<typeof setTimeout>>(undefined);
   if (!phone) return <>{children}</>;
   const fade = 24;
   const canLeft = scroll.left > 0;
@@ -88,6 +89,13 @@ function MenuStrip({ children }: { children: ReactNode }) {
   return (
     <div
       ref={strip}
+      onScroll={() => {
+        // A flick coasts on after the finger lifts; nothing opens until it
+        // has stopped for a moment (ryOS ScrollableMenuWrapper.tsx:50-69).
+        scrolled.current = true;
+        clearTimeout(coasting.current);
+        coasting.current = setTimeout(() => (scrolled.current = false), 300);
+      }}
       className="flex h-full min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       style={{
         WebkitOverflowScrolling: "touch",

@@ -189,11 +189,15 @@ type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 const INSET = 8;
 
 // On a phone a window is resized from its top and its bottom only, each
-// handle a 12px strip a thumb can find.
+// handle a 24px strip a thumb can find (ryOS WindowFrameResizeHandles.tsx:
+// 44-70).
 const PHONE_EDGES: [Edge, string][] = [
-  ["n", "-top-1.5 right-4 left-4 h-3 cursor-ns-resize"],
-  ["s", "-bottom-1.5 right-4 left-4 h-3 cursor-ns-resize"],
+  ["n", "-top-3 right-2 left-2 h-6 cursor-ns-resize"],
+  ["s", "-bottom-3 right-2 left-2 h-6 cursor-ns-resize"],
 ];
+
+// A short buzz under the finger, where the phone has one to give.
+const buzz = (ms: number) => navigator.vibrate?.(ms);
 
 const EDGES: [Edge, string][] = [
   ["n", "-top-1 right-4 left-4 h-2 cursor-ns-resize"],
@@ -637,6 +641,8 @@ export function Desktop({
         href: item.href,
         ...item.box,
         ...(at ?? cascade(cards, item.box)),
+        // On a phone a window opens under the menu bar, not down a cascade.
+        ...(medium ? {} : { y: 0 }),
         ...(pinned ? { pinned } : {}),
       });
     };
@@ -1807,6 +1813,10 @@ function Frame({
   const shape = useRef(onShape);
   shape.current = onShape;
   const held = useRef(card);
+  // The last tap on a resize edge, and the height a window had before a
+  // double-tap on one made it as tall as the desktop.
+  const edgeTap = useRef(0);
+  const shortly = useRef(card.h);
   held.current = card;
   const turn = useRef(onSwitch);
   turn.current = onSwitch;
@@ -1817,33 +1827,51 @@ function Frame({
     // A second tap within 300ms fills or restores, as ryOS's title bar
     // does (useWindowFrameMaximize.ts:233-269).
     let lastTap = 0;
+    // A fill just made is left alone for a moment, so a third tap does not
+    // undo it mid-flight (ryOS useWindowFrameMaximize.ts:240-242).
+    let toggled = 0;
     // A swipe across the title bar of more than 100px brings the next or
     // the previous window, nudging the window 10px the way the finger
     // went meanwhile (ryOS useSwipeNavigation.ts:80-118, windowFrameUtils.ts:10-25).
     let swipe: { id: number; x: number } | null = null;
     // A filled window is pulled down once the hand has moved a few
-    // pixels, then carried as any window is.
-    let pull: { id: number; x: number; y: number } | null = null;
+    // pixels, then carried as any window is; a finger has to mean it,
+    // more down than across, since across is the swipe to the next window.
+    let pull: { id: number; x: number; y: number; touch: boolean } | null =
+      null;
     const down = (e: globalThis.PointerEvent) => {
       if ((e.target as Element | null)?.closest(CONTROL)) return;
       if (e.pointerType === "touch") {
         const now = Date.now();
+        if (now - toggled < 300) return;
         if (now - lastTap < 300) {
           lastTap = 0;
+          toggled = now;
+          buzz(50);
           toggle.current();
           return;
         }
         lastTap = now;
         swipe = { id: e.pointerId, x: e.clientX };
+        if (filled.current)
+          pull = { id: e.pointerId, x: e.clientX, y: e.clientY, touch: true };
+        else move.current("move")(e as unknown as PointerEvent<HTMLDivElement>);
+        return;
       } else if (filled.current && e.button === 0) {
-        pull = { id: e.pointerId, x: e.clientX, y: e.clientY };
+        pull = { id: e.pointerId, x: e.clientX, y: e.clientY, touch: false };
         return;
       }
       move.current("move")(e as unknown as PointerEvent<HTMLDivElement>);
     };
     const pulled = (e: globalThis.PointerEvent) => {
       if (!pull || e.pointerId !== pull.id) return;
-      if (Math.hypot(e.clientX - pull.x, e.clientY - pull.y) < 4) return;
+      const dx = e.clientX - pull.x;
+      const dy = e.clientY - pull.y;
+      if (pull.touch) {
+        if (Math.abs(dx) > 8 && Math.abs(dx) > dy) return void (pull = null);
+        if (dy < 12) return;
+      } else if (Math.hypot(dx, dy) < 4) return;
+      swipe = null;
       pull = null;
       const rect = bar.getBoundingClientRect();
       const along = between((e.clientX - rect.left) / rect.width, 0, 1);
@@ -1878,7 +1906,10 @@ function Frame({
       const dx = e.clientX - swipe.x;
       swipe = null;
       setNudge(0);
-      if (Math.abs(dx) > 100) turn.current(dx < 0 ? 1 : -1);
+      if (Math.abs(dx) > 100) {
+        buzz(30);
+        turn.current(dx < 0 ? 1 : -1);
+      }
     };
     const twice = (e: MouseEvent) => {
       if ((e.target as Element | null)?.closest(TYPING)) return;
@@ -2160,7 +2191,30 @@ function Frame({
           <div
             key={edge}
             aria-hidden
-            onPointerDown={drag(edge)}
+            onPointerDown={(e) => {
+              // On a phone a double-tap on an edge makes the window as
+              // tall as the desktop, and the next brings its height back
+              // (ryOS useWindowFrameMaximize.ts:70-110).
+              if (narrow && e.pointerType === "touch") {
+                const now = Date.now();
+                if (now - edgeTap.current < 300) {
+                  edgeTap.current = 0;
+                  const was = held.current;
+                  const tall = was.y === 0 && was.h >= 0.98;
+                  if (!tall) shortly.current = was.h;
+                  shape.current(
+                    tall
+                      ? { ...was, h: shortly.current }
+                      : { ...was, y: 0, h: 1 },
+                    true,
+                  );
+                  buzz(50);
+                  return;
+                }
+                edgeTap.current = now;
+              }
+              drag(edge)(e);
+            }}
             className={`pointer-events-auto absolute z-10 touch-none ${where}`}
           />
         ))}
