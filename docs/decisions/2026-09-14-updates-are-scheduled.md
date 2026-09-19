@@ -22,29 +22,18 @@ operating system does not restart while you are typing.
 ## What an update is
 
 - **Ready, not taken.** The sweep finds a machine behind the image of the
-  day, writes `update_image`, `update_ready_at` and `update_security` on
+  day, writes `update_image` and `update_ready_at` on
   its row, and writes `update ready` to the ledger. The machine is left
   alone. A newer image asks again: a choice made about the last one never
   carries an unseen change on.
-- **Said in three quiet places.** A dot on the Maslow menu and a line in
-  the menu under it; a line in About This Computer; a row on Settings →
-  Computer that says the image and offers **Restart now**, **Tonight** and
-  **When I'm idle**. Nothing interrupts.
-- **Restart now asks first.** A dialog names what will stop: every port
+- **Said in three quiet places.** A notification behind the clock; a
+  line in the Maslow menu and in About This Computer; a row on Settings →
+  Computer that says the image and offers **Update**. Nothing interrupts,
+  and nothing takes an update on its own.
+- **Update asks first.** A dialog names what will stop: every port
   serving, by number and by the program serving it, and every program
   running in a tmux window. Then the machine is remade onto the image and
   the pane watches it come back.
-- **Tonight** is 3:00 in the machine's own region, which the hourly sweep
-  catches.
-- **When I'm idle** is the door's word: no key typed into a terminal and
-  no request carried to a port of theirs for half an hour, and nothing
-  listening. A port that listens is treated as busy however quiet it
-  looks, because what a program on the machine serves to itself never
-  passes the door and we cannot honestly say otherwise. The pane says so
-  rather than waiting forever.
-- **A ceiling.** Seven days after an update is ready the idle rule runs on
-  its own, whether or not the person has said anything. An image whose
-  label ends in `-security` runs it from the day it is ready.
 
 ## What still restarts without asking
 
@@ -57,5 +46,4 @@ wrong, and the image of the day comes with it.
 
 All of it is on the computer's row and in the ledger. Nothing about an
 update is written to the machine, and the machine is never asked whether
-it wants one: the door only says when the person was last at it and what
-is running.
+it wants one: the door only says what is running.

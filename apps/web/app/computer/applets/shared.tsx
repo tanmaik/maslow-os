@@ -5,6 +5,21 @@ import type { SharedPort } from "@maslow/db/computers";
 import { Row, Rows } from "@/app/settings/row";
 import { ButtonLink } from "@/components/base/buttons/button";
 
+// How a port reaches the reader, in words: given to them by name, through
+// a group they are in, to everyone in the org, or to anyone at all.
+const reach = (via: string[]) =>
+  via
+    .map((v) =>
+      v === "you"
+        ? "shared with you"
+        : v === "everyone"
+          ? "shared with everyone"
+          : v === "public"
+            ? "public"
+            : `through ${v.replace(/^group:/, "")}`,
+    )
+    .join(", ");
+
 // The ports others opened to this person, each a window a click away: in a
 // window on the desktop it opens as a window there, never as a new tab,
 // which on a phone's home-screen app would leave the app.
@@ -28,6 +43,7 @@ export function Shared({ ports }: { ports: SharedPort[] }) {
           <Row
             key={`${s.machineId}:${s.port}`}
             label={s.name ?? `${s.owner}'s port ${s.port}`}
+            description={s.name ? `${s.owner} · ${reach(s.via)}` : reach(s.via)}
           >
             <ButtonLink
               variant="secondary"

@@ -16,14 +16,7 @@ import type { SharedPort } from "@maslow/db/computers";
 import { wallpaperOf } from "@maslow/db/wallpapers";
 
 import { boxOf } from "@/app/desktop/apps";
-import {
-  cascade,
-  clamp,
-  fresh,
-  MIN,
-  share,
-  type Port,
-} from "@/app/desktop/tiles";
+import { clamp, fresh, MIN, share, type Port } from "@/app/desktop/tiles";
 
 import { publishedOf, sharedWithMe, sharingOf, statsOf } from "./computer.ts";
 
@@ -44,27 +37,10 @@ export async function desktopOf(p: Principal): Promise<{
         `desktop:${p.userId}`,
       ]);
       const had = await desktopsOf(q);
-      if (had.length === 0)
-        return { desktops: [await addDesktop(q, null)], wallpaper };
-      // A desktop kept in a shape the room had before is read as its windows
-      // in order and kept in today's shape.
-      const desktops = await Promise.all(
-        had.map(async (d) => {
-          const older = d.layout && fromBefore(d.layout);
-          return older ? ((await saveDesktop(q, d.id, older)) ?? d) : d;
-        }),
-      );
-      // There is one desktop: windows kept on desktops from before are gathered
-      // onto it, so nothing a person placed is out of reach.
-      const [first, ...rest] = desktops;
-      const strays = rest.flatMap((d) => d.layout?.cards ?? []);
-      if (first && strays.length > 0) {
-        const cards = [...(first.layout?.cards ?? []), ...strays];
-        const gathered = await saveDesktop(q, first.id, { cards });
-        await Promise.all(rest.map((d) => saveDesktop(q, d.id, { cards: [] })));
-        return { desktops: [gathered ?? first], wallpaper };
-      }
-      return { desktops, wallpaper };
+      return {
+        desktops: had.length > 0 ? had : [await addDesktop(q, null)],
+        wallpaper,
+      };
     }),
     // A computer that does not answer never takes the desktop down: the room
     // opens without its ports, the Computer pane says the door is silent,
@@ -118,56 +94,6 @@ export async function portsOf(p: Principal): Promise<Port[]> {
   ];
 }
 
-// --- The shapes the room had before ------------------------------------
-
-type Named = { kind: Kind; title: string; href: string };
-type Leaf = { window: Named };
-type Tree = Leaf | { split: "x" | "y"; a: Tree; b: Tree };
-// The grid the room was for a day: cells across and down, and sizes.
-type Cell = Named & { size: "s" | "m" | "l" | "xl"; x: number; y: number };
-
-const leavesOf = (t: Tree): Named[] =>
-  "window" in t ? [t.window] : [...leavesOf(t.a), ...leavesOf(t.b)];
-
-// A window that framed one section of settings frames all of it, since the
-// dock offers settings as one block.
-const sectioned = (c: { href: string }) => c.href.startsWith("/settings?");
-const whole = <T extends { href: string; title: string }>(c: T): T =>
-  sectioned(c) ? { ...c, href: "/settings", title: "Settings" } : c;
-
-// The windows an older desktop held, in order, each opened at its size where
-// a cascade puts it, or today's windows given names where they had none or
-// pointed at a section of settings; null when the desktop is already as it
-// should be.
-function fromBefore(layout: unknown): Screen | null {
-  if (typeof layout !== "object" || layout === null) return null;
-  const l = layout as Record<string, unknown>;
-  let named: Named[] | null = null;
-  if ("window" in l || "split" in l) named = leavesOf(layout as Tree);
-  else if (
-    Array.isArray(l.cards) &&
-    (l.cards as Cell[]).some((c) => "size" in c)
-  )
-    named = (l.cards as Cell[]).map(({ kind, title, href }) => ({
-      kind,
-      title,
-      href,
-    }));
-  if (!named) {
-    const cards = Array.isArray(l.cards) ? (l.cards as Card[]) : null;
-    if (!cards) return null;
-    if (cards.every((c) => typeof c.id === "string") && !cards.some(sectioned))
-      return null;
-    return { cards: cards.map((c) => whole({ ...c, id: c.id ?? fresh() })) };
-  }
-  const cards: Card[] = [];
-  for (const n of named.map(whole)) {
-    const box = boxOf(n);
-    cards.push(clamp({ id: fresh(), ...n, ...box, ...cascade(cards, box) }));
-  }
-  return { cards };
-}
-
 // --- Keeping a desktop ----------------------------------------------------
 
 // Whether a desktop is well formed: every window framing a path on our own
@@ -182,9 +108,6 @@ const spot = (p: unknown) =>
   (["x", "y", "w", "h"] as const).every((k) =>
     share((p as Record<string, unknown>)[k]),
   );
-// A desktop's place among the person's: a small whole number.
-const among = (n: unknown) =>
-  typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 64;
 function wellFormed(layout: unknown): layout is Screen | null {
   if (layout === null) return true;
   if (typeof layout !== "object") return false;
@@ -213,8 +136,6 @@ function wellFormed(layout: unknown): layout is Screen | null {
       c.y + c.h <= 1.0001 &&
       (c.minimized === undefined || typeof c.minimized === "boolean") &&
       (c.pinned === undefined || typeof c.pinned === "boolean") &&
-      (c.desk === undefined || among(c.desk)) &&
-      (c.home === undefined || among(c.home)) &&
       (c.phone === undefined || spot(c.phone)) &&
       !seen.has(c.id);
     if (!ok) return false;
@@ -265,15 +186,9 @@ const widgetOf = ({ id, title, href, x, y, w, h }: Card): Widget => ({
   h,
 });
 
-// A desktop's cards as they are, or read into today's shape from an older
-// one; a window of today's is left exactly as the person has it.
-function cardsOf(desktop: SavedDesktop | null): Card[] {
-  const layout = desktop?.layout as Record<string, unknown> | null | undefined;
-  if (!layout) return [];
-  const cards = Array.isArray(layout.cards) ? (layout.cards as Card[]) : null;
-  if (cards && cards.every((c) => typeof c.id === "string")) return cards;
-  return fromBefore(layout)?.cards ?? [];
-}
+// A desktop's windows and widgets; none where there is no desktop yet.
+const cardsOf = (desktop: SavedDesktop | null): Card[] =>
+  desktop?.layout?.cards ?? [];
 
 // What lies on the person's desktop: the widgets, and nothing of the windows,
 // which are the person's; and the ports that could lie there beside the

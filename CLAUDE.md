@@ -283,7 +283,7 @@ it does. Every app Composio reaches is one a person can connect; the
 product names none. The page asks Composio what is connected each time it is
 shown, and says so when Composio does not answer. Connecting takes the whole
 tab to the app's sign-in, since a sign-in page refuses to be shown in a
-frame, and the way back lands on the desk with the Settings window open on
+frame, and the way back lands on the desktop with the Settings window open on
 what came of it. In production a finished
 sign-in activates only once we have vouched for who did it. Access to a person's apps
 ends with their membership: a membership that ends or an org that is deleted
@@ -414,7 +414,7 @@ and the page is blocked for the minutes it takes. The computer is a
 pane of Settings, plain first, ready, the update if one waits, the last
 backup with the fourteen kept listed under it, each restoring into a
 dated folder of its own in the home and over nothing, and then its
-numbers, size, where, SSH and reset in the open; About This Computer
+numbers, size, where and reset in the open; About This Computer
 in the Maslow menu is its face on the desktop. A port is the person's until they share it
 with a person, a group or everyone in the org, and it opens or is a 404;
 or they make it public, and it opens to anyone on the internet with the
@@ -475,7 +475,7 @@ through `claude-code-acp`. The door is that agent's client, and it owns
 the terminal a command runs in: a command starts as the person in their
 home and what it writes goes down the sockets as it arrives, so the
 output is live under the tool call that ran it. The tab never runs
-anything. One of those runs per machine, as the person,
+anything. Each agent the person keeps has one of its own, as the person,
 in their home, on managed auth, and the door holds the conversation rather
 than the tab: a prompt keeps going with nobody watching, what it said is
 kept and replayed to the next socket, and the session id is on the disk,
@@ -484,7 +484,7 @@ The window is a conversation: what the agent says as markdown, what it
 thought folded away, a row for every tool call with its changes or its
 output beside it, the plan it is working to, and what it asks before it
 acts, answered there. Which conversation and which mode are the person's
-to pick, and the model is the deployment's alone; a new one, a fork of this one and any of the ones
+to pick, and the model is the deployment's alone; a new one and any of the ones
 the machine keeps are a click away. Nothing durable lives in
 a tab: the tab is a view onto state on the machine, and the machine's
 browser never idles away. What a program on the machine opens goes to whoever is at the terminal:
@@ -582,9 +582,8 @@ turn. There is no cron and no workflow. Every word into a conversation,
 whoever says it, goes through one door function. What the adapter lacks
 for this, one prompt at a time, a close, and the question handed to the
 door, is put into its installed copy when the image is built, in
-`apps/computer/patch-acp.mjs`. Floating conversations on the desktop, the
-pets of 2026-09-15, were tried for a night and taken out the next
-morning: the window is the one shape. `claude` in the
+`apps/computer/patch-acp.mjs`. The window is the one shape a
+conversation has. `claude` in the
 person's terminal is their own: plain Claude Code on their own Claude
 account, signed into inside Claude Code, and nothing of it passes
 through us; there is no switch between the two. An env block in the
@@ -633,8 +632,8 @@ no hand that runs a command or reads or writes a file goes into it.
 
 ## Interface
 
-The canvas is the screen and the chrome floats over it: dark, warm, quiet,
-one look with no light one. Home is a desktop the size of the display that
+The canvas is the screen and the chrome floats over it: warm and quiet, in
+the device's look, or light or dark as the person picks. Home is a desktop the size of the display that
 never scrolls, and every surface of Maslow is a window on it, drawn in
 the window with its controls in the window's bar, placed
 anywhere, at any size the person drags it to, overlapping if they like,
@@ -677,32 +676,30 @@ name in a bar; the one in front casts the deep shadow. A menu bar runs along the
 About This Computer (the machine, where it is, its size and image, and
 what it is using, laid out as ryOS's is), Settings, your other orgs and
 the way out; the
-front window's own menu stands beside it; Window lists every window on
-every desktop; the clock is at the right. The first time the desktop is
+front window's own menu stands beside it; Window lists every window;
+the clock is at the right. The first time the desktop is
 drawn on a device, one card asks for everything Maslow will want of it,
 on one tap: the microphone, notifications and the location, each by the
 browser's own prompt in turn, so nothing stops the person mid-task;
 answered or declined, the card never returns on that device, the
 browser's answers stand, and the location, once granted, is logged to
 their own machine and nowhere else.
-Any window fills the screen with
-one press and comes back, or with a double-click anywhere on its title
-bar but a field or the lights; the bar shows a grip while the pointer is
+Any window fills the desktop and comes back with a double-click
+anywhere on its title bar but a field or the lights, with its keys, or
+from its menu, and only one is filled at a time; the bar shows a grip while the pointer is
 on it, and a filled window pulled by its bar comes back down under the
-pointer and is carried from there. On a laptop the green light takes
-the browser's own full screen too, so the window is the whole display,
-and Escape, the light again or the browser leaving full screen brings
-it back; only a hand on this device asks the browser, since a window
-filled elsewhere fills this desktop alone. A person has as many
-desktops as they like: every window is on one, the Window menu lists
-them with the one in view marked and makes a new one, Control-Option
-with the brackets walks them and with D makes one, and a window's own
-menu moves it to another. A filled window is a desktop of its own: the
-one it left stays as it was under it, it goes back there when it is
-let down, and a window opened while one fills the screen opens on the
-desktop the filled one came from, which comes into view. Which desktop
-is in view is the device's own; the windows and their desktops are the
-person's on every device. A snapped window fills exactly the screen
+pointer and is carried from there. Filling and full screen are two
+things. Filling makes a window as big as the desktop, under the menu bar
+and up to the dock, and is kept with the desktop, so it is filled on
+every device. Full screen is the green light's alone on a laptop, and the
+device's own: the window is the whole display, its bar and nothing else,
+with no menu bar and no dock, and the browser's own full screen is taken
+with it, notifications still arrive over it, and its bar carries it
+nowhere; Escape, the light again, the browser leaving full screen or
+another window opened or raised from this device ends it, and the window
+is back as it was, filled if it was filled. The settled design is
+`docs/decisions/2026-09-19-full-screen-is-the-green-light.md`. A phone has no full screen to give, so its
+green light fills. A snapped window fills exactly the screen
 under the menu bar and up to the dock, edge to edge. A port is a port until its owner publishes
 it as an app, one at a time from Applets, a window in the dock that
 lists every port listening on their computer, each opened, shared or
@@ -736,7 +733,7 @@ widget the agent placed is an ordinary one, dragged, resized, minimized
 or made a window like any other. The desktop is kept on the server with a count of how many times it
 was kept: a save from the page names the count it saw and one that fell
 behind is refused and takes the newer desktop in, its own changes kept over
-it, and the page's five-second ask after ports says when the desktop was
+it, and the page's two-second ask after ports says when the desktop was
 kept elsewhere, so what the agent placed is on screen within seconds on
 every device. There is one desktop
 for now. The keys reach all of it. Command-K opens the command bar,

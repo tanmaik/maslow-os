@@ -78,8 +78,6 @@ const ours = (ticket) => scopeOf(ticket) === "";
 // add one.
 const PUBLIC_PORTS = "/data/public-ports.json";
 const publicSaid = (said) => {
-  // A list kept before it carried a number is as good as the oldest.
-  if (Array.isArray(said)) said = { version: 0, ports: said };
   const ports = Array.isArray(said?.ports) ? said.ports : null;
   const version = said?.version === undefined ? 0 : Number(said.version);
   if (!ports || !Number.isInteger(version) || version < 0) return null;
@@ -105,13 +103,6 @@ function opens(ticket, to) {
   if (scope === null) return false;
   return scope === "" || (to.theirs === true && String(to.port) === scope);
 }
-
-// When the person was last at this computer: a key typed into a terminal
-// or over SSH, or a request the door carried to a port of theirs. The
-// door's own start counts, so a machine that has just booted is never
-// called idle.
-let lastSeen = Date.now();
-const seen = () => (lastSeen = Date.now());
 
 const cookieOf = (req) =>
   (req.headers.cookie ?? "")
@@ -522,7 +513,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(204);
       return res.end();
     }
-    if (!ours(req.headers["x-maslow-ticket"]) && !ours(cookieOf(req)))
+    if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     // What they shared, by id: marked, followed, listed, read, written,
     // sent to the bucket and taken from it, all at our server's asking.
@@ -741,8 +732,8 @@ const server = http.createServer(async (req, res) => {
     return say(res, 202, "Said.");
   }
   // The numbers, for our server alone: it signs its ask with the secret.
-  // With them, when the person was last here and what is running in their
-  // terminal, which is what an update waiting on an idle computer needs.
+  // With them, what is running in their terminal, which an update names
+  // before it stops it.
   if (to.mine && url.pathname === "/maslow/stats") {
     if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
@@ -754,7 +745,6 @@ const server = http.createServer(async (req, res) => {
     return res.end(
       JSON.stringify({
         ...numbers,
-        idleSince: new Date(lastSeen).toISOString(),
         running: programs,
       }),
     );
@@ -844,48 +834,19 @@ const server = http.createServer(async (req, res) => {
     fs.closeSync(dir);
     return say(res, 200, "reset at the next boot");
   }
-  // Signing out of Maslow throws the ticket kept here away. A cookie on
-  // this machine's own name is beyond the reach of our server, which lives
-  // at another, so sign-out sends the browser through here on its way out.
-  // Where it goes next is signed with the same secret a ticket is, or this
-  // would carry anybody anywhere under our name.
-  if (to.mine && url.pathname === "/maslow/leave") {
-    const onward = url.searchParams.get("to") ?? "";
-    const said = url.searchParams.get("sig") ?? "";
-    // Signed under its own label, so what signs a way out can never be
-    // read as a ticket in.
-    const want = createHmac("sha256", SECRET)
-      .update(`leave:${onward}`)
-      .digest("hex");
-    if (
-      want.length !== said.length ||
-      !timingSafeEqual(Buffer.from(want), Buffer.from(said))
-    ) {
-      return say(res, 403, "Nobody asked for that.");
-    }
-    // Thrown away rather than set, and arriving in the middle of a hop that
-    // began at our server, which a browser counts as another site: a cookie
-    // that says Lax would be dropped here and the ticket would live on. It
-    // carries nothing, so saying None gives nothing away. A partitioned
-    // cookie is a different cookie to the browser, so both are thrown away.
-    const gone = `; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=None`;
-    res.writeHead(303, {
-      location: onward,
-      "set-cookie": [`${COOKIE}=${gone}; Partitioned`, `${COOKIE}=${gone}`],
-    });
-    return res.end();
-  }
-  // Everything on this machine is behind a ticket, whether it is ours or a
-  // port of theirs. Another machine's door asks for its own.
-  if (to.mine || to.theirs) {
+  // The machine itself has no page: its terminal, its view and its files
+  // each have a road of their own above.
+  if (to.mine) return say(res, 404, "Nothing is here.");
+  // A port of theirs is behind a ticket, which arrives in the address and
+  // is kept as a cookie on the port's own address. Another machine's door
+  // asks for its own.
+  // A public port asks for nothing, and a word named ticket in its
+  // address is the app's own.
+  if (to.theirs && !PUBLIC.ports.includes(to.port)) {
     const ticket = url.searchParams.get("ticket");
     if (ticket) {
       if (!opens(ticket, to))
         return say(res, 403, "That ticket is not good here.");
-      // Then to where it was going, if that is a path on this machine: one
-      // leading slash, and no backslash anywhere, which a browser would
-      // read as a second slash.
-      const onto = url.searchParams.get("to") ?? "/";
       // The cookie dies with the ticket in it, so a browser never carries
       // one long after it stopped opening anything.
       const left = Math.max(
@@ -893,7 +854,7 @@ const server = http.createServer(async (req, res) => {
         Math.floor(Number(ticket.split(".")[0]) - Date.now() / 1000),
       );
       res.writeHead(303, {
-        location: /^\/(?!\/)[^\\\s]*$/.test(onto) ? onto : "/",
+        location: "/",
         "set-cookie": `${COOKIE}=${ticket}; Path=/; Max-Age=${left}; HttpOnly; Secure; SameSite=None; Partitioned`,
       });
       return res.end();
@@ -901,12 +862,6 @@ const server = http.createServer(async (req, res) => {
     if (!opens(cookieOf(req), to))
       return say(res, 401, "Open this from Maslow.");
   }
-  // The machine itself has no page: its terminal, its view and its files
-  // each have a road of their own above.
-  if (to.mine) return say(res, 200, "ok");
-  // A request on a port of theirs is the person at work here, whoever in
-  // the org sent it; a stranger on a public port is not.
-  if (to.theirs && scopeOf(cookieOf(req)) !== null) seen();
   const onward = http.request(
     {
       host: to.host,
@@ -1002,7 +957,6 @@ server.on("upgrade", (req, socket, head) => {
     socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
     return;
   }
-  if (to.theirs && scopeOf(cookieOf(req)) !== null) seen();
   const onward = net.connect(to.port, to.host, () => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
     for (const [k, v] of Object.entries(forwarded(req)))
@@ -1022,19 +976,17 @@ function ssh(ws) {
   server.on("data", (data) => ws.sendBytes(data));
   server.on("end", () => ws.close());
   server.on("error", () => ws.close());
-  ws.bytes = (data) => {
-    seen();
-    server.write(data);
-  };
+  ws.bytes = (data) => server.write(data);
   ws.closed = () => server.destroy();
 }
 
 // The terminal: the socket joined to a terminal in which the person's own
 // tmux session runs, attached when it exists and made when not, so closing
 // the tab ends this terminal and nothing in the session, and the next tab
-// finds it where it was. Bytes pass untouched both ways; a resize is the
-// one word the socket carries up, and an address the machine wants opened
-// the one it carries down.
+// finds it where it was. Bytes pass untouched both ways. Beside them the
+// socket carries words up, a resize, a window picked, made, renamed or
+// closed and a picture pasted, and words down, the session's windows and
+// an address the machine wants opened.
 
 // Every terminal open right now, for an address to be offered on.
 const talkers = new Set();
@@ -1196,10 +1148,7 @@ async function talk(ws, url) {
     ws.sendText(now);
   };
   const listing = setInterval(() => void list(), 250);
-  ws.bytes = (data) => {
-    seen();
-    term.write(data);
-  };
+  ws.bytes = (data) => term.write(data);
   ws.text = (text) => {
     const said = parse(text);
     // The window this terminal should look at, by number, or a new one.
@@ -1628,8 +1577,8 @@ function frame(nals) {
 
 // The agent: Claude Code on this machine as an editor talks to it, over
 // the Agent Client Protocol. One process for the machine, started as the
-// person in their home on the key Maslow gave the machine, and started
-// again when it ends. It is the one way to that key: the person's own
+// person in their home with the way to Maslow's models, and started again
+// when it ends. It is the one way to those models: the person's own
 // `claude` in a terminal never sees it. The door holds the conversation, not the
 // tab: the sockets carry the protocol's lines both ways, one JSON message
 // to a frame, what the agent said while nobody watched is kept and
@@ -2266,7 +2215,7 @@ const nap = (room, chat) => {
 
 // The terminals the agent runs its commands in. The protocol lets the
 // client own them: the agent asks for one, the door starts it as the
-// person in their home on the key Maslow gave the machine, and what it
+// person in their home with the way to Maslow's models, and what it
 // writes goes to every socket as it arrives, so a command's output is
 // live in the Agent window instead of a wall of text at the end. The
 // browser never runs anything; it is shown what this one did.
@@ -2296,7 +2245,7 @@ function terminalSays(t) {
 }
 
 // A terminal started as the person, in the folder the agent named or
-// their home, through a login shell so the key Claude Code runs on and
+// their home, through a login shell so the way to Maslow's models and
 // their own path are there as in any terminal of theirs.
 function terminalStart(params) {
   const id = `t${++ranTerminals}`;
@@ -2508,8 +2457,8 @@ function agentStart() {
       `LOGNAME=${PERSON}`,
       "SHELL=/bin/bash",
       "LANG=C.UTF-8",
-      // A session of ours, on the key Maslow gave the machine, never on
-      // what the person provided for their own.
+      // A session of ours, through Maslow's gateway, never on what the
+      // person provided for their own.
       ...asOurs(),
       "/bin/bash",
       "-lc",
@@ -2967,6 +2916,12 @@ function frameOf(first, payload) {
   else header.writeBigUInt64BE(BigInt(n), 2);
   return Buffer.concat([header, payload]);
 }
+
+// One request that fails is that request's own failure, never the door's:
+// every terminal and every agent hangs on this process.
+process.on("unhandledRejection", (err) =>
+  console.error(`unhandled: ${err?.message ?? err}`),
+);
 
 server.listen(8080, "::", () => console.log("the door is open on 8080"));
 

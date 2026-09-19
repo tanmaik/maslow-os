@@ -29,7 +29,8 @@ const colors: Record<TrafficLightColor, { fill: string; sign: string }> = {
   green: { fill: "#28c840", sign: "rgba(0, 66, 0, 0.85)" },
 };
 
-// One of a window's three lights: close, minimized, fill the screen. A
+// One of a window's three lights: close, minimize, and full screen, or on
+// a phone, fill. A
 // plain dot, grey on a window that is not in front; its sign shows once
 // a hand is over the three of them.
 export function TrafficLightButton({

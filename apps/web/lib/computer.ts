@@ -84,7 +84,7 @@ const sameShape = (a: Shape, b: Shape) =>
 
 // The image every machine boots, by its label: apps/computer, built and
 // pushed by hand to where the cloud keeps images.
-export const IMAGE = "door-85";
+export const IMAGE = "door-87";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -1261,28 +1261,19 @@ export async function ready(p: Principal): Promise<Computer | null> {
   return c?.readyAt && c.machineId ? c : null;
 }
 
-// Where a ready computer opens: its machine's own address, with a ticket
-// its door takes for a month, and the path on it to go on to, when that
-// is a path. A port of the person's own has an address of its own under
-// the same name, so the app answering there sits at the root of a host and
-// nothing of its own has to be rewritten. Null until it is ready.
+// Where a port of the person's own opens: an address of its own under
+// the machine's name, with a ticket for that port, so the app answering
+// there sits at the root of a host and nothing of its own has to be
+// rewritten. Null until the computer is ready, or where that is no port.
 export async function openLink(
   p: Principal,
-  to: string | null = null,
-  port: number | null = null,
+  port: number,
 ): Promise<string | null> {
   const d = deployment.computers;
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return null;
   const c = await ready(p);
   if (!c || d.kind === "none") return null;
-  // A path on the machine: one leading slash, and no backslash anywhere,
-  // which a browser would read as a second slash.
-  const onward =
-    to && /^\/(?!\/)[^\\\s]*$/.test(to) ? `&to=${encodeURIComponent(to)}` : "";
-  const one =
-    port !== null && Number.isInteger(port) && port > 0 && port < 65536;
-  const at = one ? `${port}-${c.machineId}` : c.machineId;
-  const key = one ? ticket(c, SHARED_FOR, port) : ticket(c, 30 * 24 * 3600);
-  return `https://${at}.${d.domain}/?ticket=${key}${onward}`;
+  return `https://${port}-${c.machineId}.${d.domain}/?ticket=${ticket(c, SHARED_FOR, port)}`;
 }
 
 // How long a ticket for one port lasts. Every visit to a shared port is a
@@ -1339,10 +1330,6 @@ export async function sharedWithMe(p: Principal): Promise<SharedPort[]> {
   return asPerson(p, portsReaching);
 }
 
-// Makes what one of the person's own ports reaches exactly this: anyone
-// on the internet, everyone in the org, or some groups and some people.
-// Nobody outside the org can be named, since the database refuses a member
-// or a group of another org, and there is no level to give, only the port.
 // The apps the person has published from their computer's ports, in the
 // order of their shelf; none where they have no computer.
 export async function publishedOf(p: Principal): Promise<PublishedApp[]> {
@@ -1354,8 +1341,7 @@ export async function publishedOf(p: Principal): Promise<PublishedApp[]> {
 }
 
 // Publishes one of the person's ports as an app, with the name and face
-// they settled on, or takes one off; arranges their shelf. Each refuses,
-// in words, what it cannot do.
+// they settled on, or takes one off. Refuses, in words, what it cannot do.
 export async function publish(
   p: Principal,
   port: number,
@@ -1376,6 +1362,9 @@ export async function publish(
     return null;
   });
 }
+
+// Puts the person's shelf of published apps in the order they dragged it
+// into, each named by its port's address on the desktop.
 export async function arrange(
   p: Principal,
   hrefs: string[],
@@ -1392,6 +1381,10 @@ export async function arrange(
   });
 }
 
+// Makes what one of the person's own ports reaches exactly this: anyone
+// on the internet, everyone in the org, or some groups and some people.
+// Nobody outside the org can be named, since the database refuses a member
+// or a group of another org, and there is no level to give, only the port.
 export async function share(
   p: Principal,
   port: number,
@@ -1446,25 +1439,6 @@ async function retellPublic(q: Query, c: Computer): Promise<boolean> {
     await publicPortsOn(q, c.id),
   );
   return true;
-}
-
-// Where signing out goes on its way home, so the ticket a browser keeps on
-// the machine's own name is thrown away with the session. Our server cannot
-// reach that cookie: it belongs to another name entirely. Where to go next
-// is signed with the computer's secret, so the door carries the browser
-// only where we sent it. Null when there is no machine to pass through, and
-// sign-out then goes straight home.
-export async function leaveLink(
-  p: Principal,
-  home: string,
-): Promise<string | null> {
-  const d = deployment.computers;
-  const c = await ready(p);
-  if (!c || d.kind === "none") return null;
-  const sig = createHmac("sha256", c.secret)
-    .update(`leave:${home}`)
-    .digest("hex");
-  return `https://${c.machineId}.${d.domain}/maslow/leave?to=${encodeURIComponent(home)}&sig=${sig}`;
 }
 
 // The person's files on their own computer, through its door with a
@@ -1545,7 +1519,7 @@ export async function liveTarget(
 
 // A computer whose row an update or a restart reset, ready again the
 // moment its door answers: the desktop alone asks nothing else that would
-// find it, and a person's pets should not wait on a page that polls.
+// find it, and its live sockets should not wait on a page that polls.
 async function awoken(p: Principal): Promise<Computer | null> {
   const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   if (!c?.machineId || c.readyAt || c.move || !(await doorAnswers(c)))

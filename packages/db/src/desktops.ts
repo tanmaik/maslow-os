@@ -24,11 +24,6 @@ export type Card = {
   full?: boolean;
   // On the desktop itself, behind every window and with no bar: a widget.
   pinned?: boolean;
-  // Which of the person's desktops it is on; the first when unsaid.
-  desk?: number;
-  // The desktop a window filling the screen came from: a filled window is
-  // a desktop of its own, and goes back when it is let down.
-  home?: number;
   // Where a widget lies on a phone, apart from where it lies on a laptop,
   // since the two desktops are not the same shape.
   phone?: { x: number; y: number; w: number; h: number };

@@ -1,9 +1,9 @@
 import {
+  RiApps2Line,
   RiBrainLine,
   RiChat3Line,
   RiFolderLine,
   RiGlobalLine,
-  RiPlugLine,
   RiSettings3Line,
   RiTerminalBoxLine,
 } from "@remixicon/react";
@@ -93,8 +93,8 @@ export const APPS: App[] = [
     kind: "page",
     title: "Applets",
     href: "/computer/applets",
-    mark: RiPlugLine,
-    face: "/dock/port.png",
+    mark: RiApps2Line,
+    face: "/dock/applets.png",
     box: { w: 0.4, h: 0.56 },
     bounds: { min: { w: 440, h: 300 }, max: { w: 880 } },
   },
@@ -124,6 +124,14 @@ export const boxOf = (t: { kind: Kind; href: string }): Box =>
     : t.kind === "record"
       ? { w: 0.3, h: 0.42 }
       : { w: 0.42, h: 0.6 });
+
+// A port as something to open: a window of it, at the size a port opens.
+export const portItem = (p: { title: string; href: string }) => ({
+  kind: "port" as const,
+  title: p.title,
+  href: p.href,
+  box: boxOf({ kind: "port", href: p.href }),
+});
 
 // Another window of what this one shows: the same block at the same size,
 // under the same name. The number a window wears is only what tells two of

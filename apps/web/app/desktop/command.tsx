@@ -13,7 +13,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { TypeIcon } from "@/app/brain/type-icon";
-import { APPS, boxOf } from "@/app/desktop/apps";
+import { APPS, portItem } from "@/app/desktop/apps";
 import type { Dragged, Held } from "@/app/desktop/dock";
 import type { Port } from "@/app/desktop/tiles";
 import { Kbd } from "@/components/base/kbd/kbd";
@@ -103,7 +103,6 @@ export function CommandBar({
   onApp,
   onNewApp,
   onWindow,
-  onPort,
   onPin,
   onPane,
   onRecord,
@@ -117,10 +116,9 @@ export function CommandBar({
   ports: Port[];
   // An app: its window brought forward, or its first opened.
   onApp: (b: Dragged) => void;
-  // An app in a window of its own, whatever is open.
+  // An app or a port in a window of its own, whatever is open.
   onNewApp: (b: Dragged) => void;
   onWindow: (w: Held) => void;
-  onPort: (b: Dragged) => void;
   onPin: (b: Dragged) => void;
   onPane: (id: string) => void;
   onRecord: (id: string, title: string) => void;
@@ -223,13 +221,6 @@ export function CommandBar({
     onOpenChange(false);
     act();
   };
-  const port = (p: Port): Dragged => ({
-    kind: "port",
-    title: p.title,
-    href: p.href,
-    face: p.face,
-    box: boxOf({ kind: "port", href: p.href }),
-  });
   const typed = q.trim().length > 0;
 
   return (
@@ -316,7 +307,7 @@ export function CommandBar({
                 <CommandItem
                   key={p.href}
                   value={`port ${p.title}`}
-                  onSelect={() => go(() => onPort(port(p)))}
+                  onSelect={() => go(() => onNewApp(portItem(p)))}
                 >
                   <RiPlugLine aria-hidden />
                   {p.title}
@@ -327,7 +318,7 @@ export function CommandBar({
                   <CommandItem
                     key={`${p.href} desktop`}
                     value={`port ${p.title} on the desktop`}
-                    onSelect={() => go(() => onPin(port(p)))}
+                    onSelect={() => go(() => onPin(portItem(p)))}
                   >
                     <RiLayoutGridLine aria-hidden />
                     {p.title}

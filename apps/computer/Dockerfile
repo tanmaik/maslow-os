@@ -90,8 +90,7 @@ COPY apps/computer/door.mjs apps/computer/stats.mjs apps/computer/seed.mjs apps/
 COPY apps/computer/etc/sshd_config apps/computer/etc/mcp.json apps/computer/etc/tmux.conf apps/computer/etc/settings.json apps/computer/etc/CLAUDE.md etc/
 # What the Agent knows: how this system works, how an app is built here,
 # how the brain is used, and the skin Maslow wears, BoardUI's own skill.
-# Four skills, linked into our session's skills at boot and served as
-# tools by the computer's tool server.
+# Four skills, linked into our session's skills at boot.
 COPY apps/computer/skills skills
 COPY .claude/skills/boardui skills/boardui
 CMD ["/opt/maslow/boot.sh"]

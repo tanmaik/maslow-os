@@ -1,20 +1,16 @@
 import { openLink } from "@/lib/computer";
 import { principal } from "@/lib/session";
 
-// Opens the person's computer: a fresh ticket, and the browser sent to the
-// machine's own door with it, on to the path asked for when there is one.
-// A port of theirs opens at its own address, so nothing of the app that
+// Opens a port of the person's own: a fresh ticket for it, and the browser
+// sent to the port's own address with it, so nothing of the app that
 // answers there has to be rewritten.
 async function open(request: Request) {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });
-  const asked = new URL(request.url).searchParams;
-  const port = asked.get("port");
-  const link = await openLink(
-    p,
-    asked.get("to"),
-    port === null ? null : Number(port),
-  );
+  const port = Number(new URL(request.url).searchParams.get("port") ?? NaN);
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    return new Response("Say which port.", { status: 400 });
+  const link = await openLink(p, port);
   if (!link)
     return new Response("Your computer is not ready.", { status: 409 });
   return Response.redirect(link, 303);

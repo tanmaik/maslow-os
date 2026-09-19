@@ -4,11 +4,12 @@ Maslow is licensed under the GNU Affero General Public License, version 3
 It carries code and assets from ryOS (https://github.com/ryokun6/ryos),
 copyright its authors, under that same licence:
 
-- apps/web/app/room/dock.tsx: the dock, its magnification, its labels, its
+- apps/web/app/desktop/dock.tsx: the dock, its magnification, its labels, its
   dividers and its hiding.
-- apps/web/app/room/window.tsx: the three lights on a window, the way a
+- apps/web/app/desktop/window.tsx: the three lights on a window, the way a
   window leaves for the dock, and the glow where a carried window lands.
-The dock's icons in apps/web/public/dock/ are Maslow's own, drawn for it.
+The dock's icons in apps/web/public/dock/ are Maslow's own, made for it as
+one family of clear glass objects.
 
 It carries the BoardUI design system (https://www.boardui.com), under
 `apps/web/components/base`, `apps/web/components/application`,

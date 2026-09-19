@@ -69,18 +69,15 @@ async function commandOf(pid, given) {
   if (!argv.length) return null;
   const cwd = await readlink(`/proc/${pid}/cwd`).catch(() => null);
   const env = [];
-  if (given) {
-    const own = await environOf(pid);
-    for (const [k, v] of own)
-      if (
-        /^[A-Z][A-Z0-9_]*$/.test(k) &&
-        !THE_SHELLS.has(k) &&
-        !SECRET.test(k) &&
-        v.length <= 200 &&
-        given.get(k) !== v
-      )
-        env.push(`${k}=${v}`);
-  }
+  for (const [k, v] of await environOf(pid))
+    if (
+      /^[A-Z][A-Z0-9_]*$/.test(k) &&
+      !THE_SHELLS.has(k) &&
+      !SECRET.test(k) &&
+      v.length <= 200 &&
+      given.get(k) !== v
+    )
+      env.push(`${k}=${v}`);
   return { argv, env, path: cwd ? theirs(cwd) : HOME };
 }
 // What every shell of the person's gives a command, read from a fresh
@@ -168,7 +165,7 @@ const quoted = (s) =>
 // A line a terminal takes whole: the kernel drops one over four thousand
 // characters, so the words alone are typed where the whole would not fit.
 const A_LINE = 3000;
-function line({ argv, env = [] }) {
+function line({ argv, env }) {
   const words = [...argv];
   const program = words[0].split("/").pop();
   if (

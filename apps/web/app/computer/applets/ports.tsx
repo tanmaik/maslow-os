@@ -57,6 +57,26 @@ function reach(shares: Share[]): string | null {
 // or on a right-click. A port nobody was given is theirs alone: the
 // address is not there for anybody else. A public one is there for
 // anyone, with no sign-in.
+// The face a port wears in its row: the app's own where it was given one,
+// else the favicon its page serves, else, or where that will not load, the
+// dot every listening port has.
+function Face({ src }: { src: string | undefined }) {
+  const [broken, setBroken] = useState<string | null>(null);
+  return src && broken !== src ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={src}
+      alt=""
+      className="size-5 shrink-0 rounded-[5px] object-contain"
+      onError={() => setBroken(src)}
+    />
+  ) : (
+    <span className="flex size-5 shrink-0 items-center justify-center">
+      <StatusDot color="green" />
+    </span>
+  );
+}
+
 export function Ports({
   ports,
   sharing,
@@ -97,7 +117,7 @@ export function Ports({
                 <Row
                   label={
                     <span className="flex items-center gap-2.5">
-                      <StatusDot color="green" />
+                      <Face src={appOf(p.port)?.icon ?? p.face} />
                       <span className="tabular-nums">{p.port}</span>
                     </span>
                   }

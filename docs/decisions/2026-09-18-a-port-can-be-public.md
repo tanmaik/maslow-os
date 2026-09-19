@@ -21,8 +21,8 @@ whatever runs on a public port has to assume strangers will hit it. Who
 may call is the app's to check, with whatever keys it hands out, and how
 hard it may be hit is the app's to limit, which is how every API on the
 internet works. The sheet says so in one sentence when the box is ticked.
-A stranger on a public port does not count as the person at work at their
-computer, so an update waiting on an idle machine still gets its turn.
+A public port asks for no ticket and reads none: a word named `ticket` in
+its address is the app's own.
 
 The door learns which ports are public from our server, the whole list
 each time a share changes, read once the change has committed, and again

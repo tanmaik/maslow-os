@@ -56,10 +56,8 @@ export type Stats = {
   // The face a thing serving there wears, when it has one: its own
   // favicon, which only the machine can reach to ask for.
   ports: { port: number; name: string; face?: string }[];
-  // When the person was last at the computer — a key typed into a
-  // terminal, a request carried to a port of theirs — and what is running
-  // in their terminal now. Absent from a machine on an older image.
-  idleSince?: string;
+  // What is running in their terminal now. Absent from a machine on an
+  // older image.
   running?: string[];
 };
 

@@ -98,19 +98,21 @@ grep -q profile.d/me.sh "$OS/etc/bash.bashrc" ||
 chown root:root "$OS"
 chmod 755 "$OS"
 
-# The key a session of ours runs on, given to the machine by our server,
-# stays with the door, outside the person's Linux: the door hands it to
-# the agent behind the Agent window and to nothing else, so `claude` in a
-# terminal never sees it. What an earlier boot wrote into every login
-# shell goes, along with the switch between the two that no longer exists.
+# The way to Maslow's models, the gateway's address and a token of this
+# computer's, given to the machine by our server, stays with the door,
+# outside the person's Linux: the door hands it to the agent behind the
+# Agent window and the terminals it runs its commands in, so `claude` in a
+# terminal never sees it. No key is on the machine, and no file that would
+# put one into a login shell.
 rm -f "$OS/etc/profile.d/maslow-model-key.sh" "$OS/usr/local/bin/auth" \
   "$OS/usr/local/bin/model" "$OS/etc/profile.d/maslow-model.sh"
 chroot --userspec=1000:1000 "$OS" /bin/sh -c 'rm -f /home/me/.config/maslow/auth /home/me/.config/maslow/model' || true
 # Ours on the path of every shell, a bare `ssh computer claude` included,
 # which reads no profile: `claude` and `claude-code-acp` are the wrappers
-# that read the rule at every start, and `xdg-open` opens an address in
-# the computer's own browser. Every login shell reads the same rule, so an
-# editor that starts Claude Code its own way finds the same one.
+# that read the rule at every start, and `xdg-open` opens a port or a
+# file of theirs on their desktop and offers any other address to their
+# own device. Every login shell reads the same rule, so an editor that
+# starts Claude Code its own way finds the same one.
 ln -sf /opt/maslow/bin/claude "$OS/usr/local/bin/claude"
 ln -sf /opt/maslow/bin/claude-code-acp "$OS/usr/local/bin/claude-code-acp"
 ln -sf /opt/maslow/bin/open "$OS/usr/local/bin/xdg-open"
@@ -170,19 +172,17 @@ keep /usr/sbin/sshd -D -e -f /opt/maslow/etc/sshd_config &
 keep node /opt/maslow/door.mjs &
 # The computer's own tool server: the browser, ours, outside the person's
 # Linux but run as the person, so it updates with the image and reaches
-# only their home, and beside it the four skills as tools: how this
-# system works, how an app is built here, how the brain is used, and
-# BoardUI's rules and catalog; the Agent inside finds it on 8082. Its profile, logins included, is on the disk.
-# It is a real, headed Chrome on a display nobody looks at, Xvfb, as big
-# as the largest pane it is ever drawn into: a headless one announces
-# itself, and sites that turn bots away turn it away too.
+# only their home, and beside it BoardUI's own server as the `boardui_`
+# tools; the Agent inside finds it on 8082. Its profile, logins included,
+# is on the disk. It is a real, headed Chrome on a display nobody looks
+# at, Xvfb, as big as the largest pane it is ever drawn into: a headless
+# one announces itself, and sites that turn bots away turn it away too.
 keep Xvfb :99 -screen 0 2560x1600x24 -nolisten tcp &
 mkdir -p "$DISK/browser"
 chown 1000:1000 "$DISK/browser"
 keep chroot --userspec=1000:1000 --groups=1000 / \
   /usr/bin/env -i HOME=/data/home BROWSER_PROFILE=/data/browser BROWSER_PATHS=/home/me=/data/home \
   PLAYWRIGHT_BROWSERS_PATH=/opt/maslow/browsers DISPLAY=:99 BROWSER_HEADED=1 \
-  MASLOW_SKILLS=/opt/maslow/skills \
   /usr/local/bin/node /opt/maslow/browser/bin/browser-mcp.mjs --http 8082 &
 
 # A stop is a hard stop: what is still in memory is written to the disk

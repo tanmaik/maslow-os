@@ -44,10 +44,8 @@ export type Computer = {
   // image, which does not wait on them for long.
   updateImage: string | null;
   updateReadyAt: Date | null;
-  // Memory in use at the last sweep, and the most seen since the size
-  // was last set; null before the first sweep.
+  // Memory in use at the last sweep; null before the first sweep.
   memoryUsedMb: number | null;
-  memoryPeakMb: number | null;
 };
 
 // A move of a computer to another region, as far as it has got: the
@@ -76,7 +74,7 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.model_week as "modelWeek", c.created_at as "createdAt",
   c.session_id as "sessionId", c.move,
   c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
-  c.memory_used_mb as "memoryUsedMb", c.memory_peak_mb as "memoryPeakMb",
+  c.memory_used_mb as "memoryUsedMb",
   (u.removed_at is null) as current`;
 
 // Claims a computer for a member, at a size, in a region: one per
@@ -636,6 +634,10 @@ export type SharedPort = {
   owner: string;
   name: string | null;
   icon: string | null;
+  // How it reaches the reader: "you" when it was given to them by name,
+  // "everyone", "public", or a group they are in, as "group:" and its
+  // name.
+  via: string[];
 };
 
 // The ports other people opened to the member reading, by name, by a group
@@ -645,10 +647,15 @@ export async function portsReaching(q: Query): Promise<SharedPort[]> {
   return (
     await q.query<SharedPort>(
       `select c.machine_id as "machineId", s.port, u.name as owner,
-              a.name as name, a.icon as icon
+              a.name as name, a.icon as icon,
+              array_agg(distinct case s.subject
+                when 'member' then 'you'
+                when 'group' then 'group:' || g.name
+                else s.subject end) as via
        from port_shares s
        join computers c on c.id = s.computer_id
        join users u on u.id = c.user_id
+       left join groups g on g.id = s.group_id
        left join published_apps a on a.computer_id = s.computer_id and a.port = s.port
        where c.user_id <> current_member() and c.machine_id is not null
          and (s.subject in ('everyone', 'public')

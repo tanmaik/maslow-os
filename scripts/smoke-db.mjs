@@ -300,6 +300,14 @@ export async function smokeDb({ pgPort }) {
           "smoke-machine:4001",
         ]);
         assert.deepEqual(await reaching(mine), []);
+        // And how each reaches them: to everyone, or through a group of
+        // theirs by its name.
+        const via = await asPerson(theirs, async (q) =>
+          (await portsReaching(q)).map((s) => s.via),
+        );
+        assert.deepEqual(via[0], ["everyone"]);
+        assert.equal(via[1].length, 1);
+        assert.match(via[1][0], /^group:./);
         assert.deepEqual(await reaching(others), []);
         // A share must name exactly the one thing it reaches.
         await assert.rejects(

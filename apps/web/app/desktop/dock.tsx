@@ -28,7 +28,7 @@ import {
   type ReactNode,
 } from "react";
 
-import { APPS, boxOf, faceOf } from "@/app/desktop/apps";
+import { APPS, faceOf, portItem } from "@/app/desktop/apps";
 import type { Box, Card, Port } from "@/app/desktop/tiles";
 import { StatusDot } from "@/components/base/badges/status-dot";
 import { BASE, CALM, FAST, LEAVE, SNAP, SWELL } from "@/lib/motion";
@@ -54,16 +54,14 @@ export type Dragged = {
   kind: Card["kind"];
   title: string;
   href: string;
-  // The face it wears, where an app has one of its own.
-  face?: string;
   box: Box;
 };
 
 // Which edge the dock lies along.
 export type Side = "bottom" | "left" | "right";
 
-// A window on some desktop, open or minimized.
-export type Held = { screen: string; card: Card };
+// A window, open or minimized.
+export type Held = { card: Card };
 
 // An icon's size at rest, how much bigger it grows under the pointer, and
 // how far from the pointer the swell reaches.
@@ -1162,12 +1160,9 @@ export function Dock({
                     {ports.map((p) =>
                       icon(
                         {
-                          kind: "port",
-                          title: p.title,
-                          href: p.href,
+                          ...portItem(p),
                           face:
                             p.face ?? faceOf({ kind: "port", href: p.href }),
-                          box: boxOf({ kind: "port", href: p.href }),
                         },
                         PORTS + 1 + shown.findIndex((x) => x.href === p.href),
                       ),

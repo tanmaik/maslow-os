@@ -28,8 +28,8 @@ one port:      `${exp}.${port}.${hmac_sha256(c.secret, `${exp}.${port}`)}`
 ```
 
 `exp` is unix seconds. `liveTarget` mints **3600 s** (one hour), scope empty =
-whole machine. `openLink` mints 30 days for a whole-machine page link and
-`SHARED_FOR = 3600` for a shared port (`:1272-1289`, `:1296`). The secret is
+whole machine. `openLink` and a shared port's link each mint `SHARED_FOR = 3600` for the
+one port they open; nothing mints a ticket for the whole machine as a page. The secret is
 the computer's row secret, held only by our server and that machine
 (`DOOR_SECRET` on the machine, `apps/computer/door.mjs:28`).
 
