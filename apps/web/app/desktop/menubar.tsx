@@ -379,23 +379,28 @@ export function MenuBar({
                   Fill the screen
                 </MenubarItem>
                 <MenubarSeparator />
-                {desks
-                  .filter((n) => n !== desk)
-                  .map((n) => (
-                    <MenubarItem
-                      key={n}
-                      className={item}
-                      onClick={() => onMove(front, n)}
-                    >
-                      Move to Desktop {n + 1}
-                    </MenubarItem>
-                  ))}
-                <MenubarItem
-                  className={item}
-                  onClick={() => onMove(front, Math.max(...desks) + 1)}
-                >
-                  Move to a new desktop
-                </MenubarItem>
+                {/* A filled window is a desktop of its own and is not
+                    moved; let down, it is. */}
+                {!front.card.full &&
+                  desks
+                    .filter((n) => n !== desk)
+                    .map((n) => (
+                      <MenubarItem
+                        key={n}
+                        className={item}
+                        onClick={() => onMove(front, n)}
+                      >
+                        Move to Desktop {n + 1}
+                      </MenubarItem>
+                    ))}
+                {!front.card.full && (
+                  <MenubarItem
+                    className={item}
+                    onClick={() => onMove(front, -1)}
+                  >
+                    Move to a new desktop
+                  </MenubarItem>
+                )}
                 <MenubarSeparator />
                 <MenubarItem className={item} onClick={() => onClose(front)}>
                   Close

@@ -256,6 +256,14 @@ export function Desktop({
   };
   const deskOf = (c: Card) => c.desk ?? 0;
   const onDesk = (c: Card) => deskOf(c) === desk;
+  // The lowest number no window is on and nobody is looking at, so the
+  // desktops stay few and small however many are made and let go.
+  const freeDesk = (cards: Card[], but: number[] = []) => {
+    const used = new Set([desk, ...but, ...cards.map(deskOf)]);
+    let n = 0;
+    while (used.has(n)) n++;
+    return n;
+  };
   // The wallpaper the desktop wears.
   const [paper, setPaper] = useState<string | null>(wallpaper);
   // What this device keeps of the desktop, for the lock screen to wear and to
@@ -383,7 +391,7 @@ export function Desktop({
       const was = filled(l.cards);
       const next = typeof to === "function" ? to(was) : to;
       if (next === was) return null;
-      const own = Math.max(desk, ...l.cards.map(deskOf)) + 1;
+      const own = freeDesk(l.cards);
       const cards = l.cards.map((c) => {
         if (c.id === next)
           return {
@@ -507,9 +515,13 @@ export function Desktop({
     if (!expanded && document.fullscreenElement)
       void document.exitFullscreen().catch(() => {});
   }, [expanded, medium]);
+  // The browser's own leaving of full screen lets the window down, by
+  // the desktop as it is then and not as it was when the page was drawn.
+  const letDown = useRef(() => {});
+  letDown.current = () => setExpanded(null);
   useEffect(() => {
     const left = () => {
-      if (!document.fullscreenElement) setExpanded(null);
+      if (!document.fullscreenElement) letDown.current();
     };
     document.addEventListener("fullscreenchange", left);
     return () => document.removeEventListener("fullscreenchange", left);
@@ -549,10 +561,13 @@ export function Desktop({
     const i = desks.indexOf(desk);
     setDesk(desks[(i + by + desks.length) % desks.length]!);
   };
-  const newDesk = () => setDesk(Math.max(...desks) + 1);
+  const newDesk = () => setDesk(freeDesk(screen.cards));
+  // A window moved to another desktop is an ordinary window there: one
+  // that filled the screen is let down as it goes.
   const moveTo = (w: Held, to: number) => {
-    shape(w.card.id, { desk: to }, true);
-    setDesk(to);
+    const at = to < 0 ? freeDesk(screen.cards) : to;
+    shape(w.card.id, { desk: at, full: undefined, home: undefined }, true);
+    setDesk(at);
   };
 
   // A window brought to the front, out of the dock if it was minimized.
@@ -699,10 +714,19 @@ export function Desktop({
       (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
     );
     // A filled window is a desktop of its own, so any number may be filled
-    // at once, each on its own.
+    // at once, each on its own: two filled on two devices from the same
+    // desktop may have picked the same number, and the later one is
+    // given another.
+    const taken = new Set<number>();
+    const apart = met.map((c) => {
+      if (!c.full || c.minimized || c.pinned) return c;
+      const own = taken.has(deskOf(c)) ? freeDesk(met, [...taken]) : deskOf(c);
+      taken.add(own);
+      return own === deskOf(c) ? c : { ...c, desk: own };
+    });
     const cards = [
-      ...met.filter((c) => c.pinned),
-      ...met.filter((c) => !c.pinned),
+      ...apart.filter((c) => c.pinned),
+      ...apart.filter((c) => !c.pinned),
     ];
     known.current = got.layout ?? EMPTY;
     setScreen(() => ({ cards }), again);
