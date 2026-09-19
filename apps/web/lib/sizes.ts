@@ -4,7 +4,7 @@ import type { Size } from "@maslow/db/computers";
 // apart from it. Every computer starts at the first rung. Shared by the
 // page and the server, so it holds nothing but the ladder.
 export const SIZES = {
-  small: { name: "Small", cpuKind: "shared", cpus: 4, memoryMb: 8192 },
+  small: { name: "Small", cpuKind: "shared", cpus: 8, memoryMb: 8192 },
   medium: { name: "Medium", cpuKind: "shared", cpus: 8, memoryMb: 16384 },
   large: { name: "Large", cpuKind: "performance", cpus: 4, memoryMb: 16384 },
   dedicated: {

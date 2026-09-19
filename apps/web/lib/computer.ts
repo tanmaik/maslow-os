@@ -63,6 +63,18 @@ import { SIZES } from "./sizes.ts";
 // which ten was not.
 const FLOOR = { ...SIZES.small, diskGb: 20 };
 
+// The size a machine is shaped to: never under the floor, never under
+// its row, and never under what it already has, so a size given by hand
+// stands and nothing remade comes back smaller.
+type Shape = Pick<Computer, "cpuKind" | "cpus" | "memoryMb">;
+const atLeast = (c: Computer, g: NonNullable<Machine["config"]>["guest"]) => ({
+  cpuKind: (g?.cpu_kind as Computer["cpuKind"]) ?? c.cpuKind,
+  cpus: Math.max(FLOOR.cpus, c.cpus, g?.cpus ?? 0),
+  memoryMb: Math.max(FLOOR.memoryMb, c.memoryMb, g?.memory_mb ?? 0),
+});
+const sameShape = (a: Shape, b: Shape) =>
+  a.cpuKind === b.cpuKind && a.cpus === b.cpus && a.memoryMb === b.memoryMb;
+
 // The image every machine boots: apps/computer, built and pushed by hand.
 export const IMAGE = "registry.fly.io/maslow-computers-dev:door-77";
 
@@ -679,15 +691,12 @@ async function remake(
   m: Machine,
   why: string,
 ): Promise<void> {
-  // A machine remade is never made smaller than it is: a size given it by
-  // hand stands over the row's.
-  const has = m.config?.guest ?? {};
+  const shape = atLeast(c, m.config?.guest);
+  if (!sameShape(shape, c)) await setShape(q, c.id, shape);
   await fly.reshape(m.id, {
     image: IMAGE,
     volumeId: c.volumeId!,
-    cpuKind: c.cpuKind,
-    cpus: Math.max(c.cpus, has.cpus ?? 0),
-    memoryMb: Math.max(c.memoryMb, has.memory_mb ?? 0),
+    ...shape,
     secret: c.secret,
     brain: await brainOf(q, c),
     who: await whoOf(q, c),
@@ -704,12 +713,7 @@ async function remake(
     resource: "machine",
     event: "made",
     ref: m.id,
-    detail: {
-      image: IMAGE,
-      cpuKind: c.cpuKind,
-      cpus: c.cpus,
-      memoryMb: c.memoryMb,
-    },
+    detail: { image: IMAGE, ...shape },
     why,
   });
 }
@@ -841,15 +845,12 @@ async function reconcileOrg(
       // else, so a machine moves at the first sweep after the image does,
       // however it was left. Fly may name an image with its digest; the
       // tag is what is compared.
-      // A machine given more by hand than the row says keeps it: the row
-      // learns the size, so no sweep or update shrinks it back.
+      // A machine given more by hand than the row says keeps it, and one
+      // under the floor is lifted to it: the row learns the size, so no
+      // sweep or update shrinks it back.
       const g = m.config?.guest ?? {};
-      if ((g.cpus ?? 0) > c.cpus || (g.memory_mb ?? 0) > c.memoryMb) {
-        const shape = {
-          cpuKind: (g.cpu_kind as Computer["cpuKind"]) ?? c.cpuKind,
-          cpus: Math.max(c.cpus, g.cpus ?? 0),
-          memoryMb: Math.max(c.memoryMb, g.memory_mb ?? 0),
-        };
+      const shape = atLeast(c, g);
+      if (!sameShape(shape, c)) {
         await setShape(q, c.id, shape);
         c = { ...c, ...shape };
       }

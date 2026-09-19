@@ -72,7 +72,9 @@ packages, so no monitor resets; it alerts us and shows the button.
 A ladder of four sizes, each named with its CPUs and memory and no price,
 at Tanmai's word on 2026-09-08: Small, two shared CPUs and 2 GB; Medium,
 four and 4 GB; Large, eight and 8 GB; Dedicated, two dedicated CPUs and
-8 GB. Picking one restarts the machine into it in a few seconds; nothing
+8 GB. Since 2026-09-19, at Tanmai's word after a remake shrank a
+computer to the old Small and it crawled, the floor is eight shared CPUs
+and 8 GB, and no path shapes a machine below it. Picking one restarts the machine into it in a few seconds; nothing
 inside can. The row is the truth: the sweep remakes a machine whose size
 is not its row's, as it does for the image. Nothing changes the size but
 the person: the sweep moved a computer up a rung on its own from

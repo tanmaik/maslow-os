@@ -364,10 +364,12 @@ the Maslow menu and in About This Computer; and a row on the Computer
 pane. Each has one button, Update, which names what it will stop before
 it stops it. Nothing takes an update on its own, and none of it is on the
 machine.
-Every computer starts at one size, four shared CPUs and eight gigabytes,
-since the door, the browser and a few Claude Codes at once do not fit in
-two; there is no ladder and nothing to pick yet. One given more by hand
-on Fly keeps it: the row learns the machine's size at the next sweep, and
+Every computer is at least one size, eight shared CPUs and eight
+gigabytes, since the door, the browser and a few Claude Codes at once do
+not fit in two; there is no ladder and nothing to pick yet. That is a
+floor and not a start: a row under it is lifted to it at the next sweep,
+and no machine is ever shaped below it. One given more by hand on Fly
+keeps it: the row learns the machine's size at the next sweep, and
 nothing remade is made smaller than it is. The disk grows before it
 fills and never shows a cap. Where it is is one of the
 North American regions Fly still makes disks in, seven today, since Fly
