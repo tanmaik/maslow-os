@@ -11,6 +11,9 @@ export type Port = {
   title: string;
   href: string;
   face?: string;
+  // A port never published: opened when asked for by number, and in no
+  // dock and no command bar.
+  bare?: true;
 };
 
 // A name for a new window, unlike any other on the desktop.

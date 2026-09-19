@@ -23,7 +23,7 @@ Claude Code's settings, not their accounts in other apps.
 A program listening on a port of this computer is a window on the
 person's desktop. From the shell, `open :3000` opens the window for port
 3000; `open ~/notes/plan.md` opens Files there, with the file picked. A
-port is the person's alone until they share it, under Settings, Access,
+port is the person's alone until they share it, in the Applets window,
 with a person, a group or everyone in their org; for anyone else its
 address is a 404. A port can also lie on the desktop itself as a widget,
 with no title bar, which is what `place` on the brain does. How to build

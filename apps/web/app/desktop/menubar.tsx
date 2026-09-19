@@ -8,6 +8,7 @@
 import { RiCloseLine, RiSearchLine } from "@remixicon/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
+import { turnOff } from "@/app/desktop/off";
 import type { Dragged, Held } from "@/app/desktop/dock";
 import { anotherOf } from "@/app/desktop/apps";
 import { Kbd } from "@/components/base/kbd/kbd";
@@ -198,6 +199,7 @@ function useUpdate(computers: boolean) {
   // The person taking it: told to the app, and gone from the clock at
   // once.
   const take = async () => {
+    turnOff();
     const res = await fetch("/computer/update", { method: "POST" });
     if (!res.ok) throw new Error(await res.text());
     setUpdate(null);

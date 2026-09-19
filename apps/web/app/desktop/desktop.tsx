@@ -11,6 +11,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -111,6 +112,10 @@ type Page = { key: string; cards: Card[] };
 // Whether what is listening is what was listening, so a beat that finds
 // nothing new leaves the dock alone.
 const same = (a: Port[], b: Port[]) => JSON.stringify(a) === JSON.stringify(b);
+
+// How long the card stays once the computer answers, while its windows
+// open afresh under it.
+const LIFT = 1500;
 
 // How many cards a desktop holds at most, as the server keeps it.
 const MOST = 32;
@@ -275,11 +280,17 @@ export function Desktop({
   }, [you?.email, you?.name, you?.picture]);
   // What is listening, kept current while the desktop is open. Nothing is
   // asked while the tab is not being looked at.
-  const [live, setLive] = useState(ports);
+  const [listening, setListening] = useState(ports);
+  // The apps among them: what the dock and the command bar offer.
+  const live = useMemo(() => listening.filter((x) => !x.bare), [listening]);
   // Whether the computer is out of action: its row not ready, or its door
   // silent to an ask, and the whole desktop greyed until both say
   // otherwise.
   const [down, setDown] = useState(false);
+  // Until when a restart the person just asked for is taken as under way,
+  // before an ask has seen it: a refused one lifts after this long.
+  const restart = useRef(0);
+  const ASKED = 20_000;
   // The command bar: open or not, and what was typed to open it.
   const [bar, setBar] = useState({ open: false, initial: "" });
   // Counted up on every look, so what is watching knows a look happened
@@ -307,10 +318,14 @@ export function Desktop({
         if (now && !stopped) {
           if (now.ports) {
             const ports = now.ports;
-            setLive((was) => (same(was, ports) ? was : ports));
+            setListening((was) => (same(was, ports) ? was : ports));
             setLooks((n) => n + 1);
           }
-          setDown(computers && (!now.ports || now.computer !== "ready"));
+          // Off from the moment a restart was asked for, until the asks
+          // see it themselves and carry it from there.
+          const off = computers && (!now.ports || now.computer !== "ready");
+          if (off) restart.current = 0;
+          setDown(off || Date.now() < restart.current);
           // The desktop kept elsewhere since this page saw it, a widget the
           // agent placed most often, is taken in.
           // Not while a save of this page's own is out: its answer says
@@ -359,7 +374,7 @@ export function Desktop({
   const [afresh, setAfresh] = useState<Record<string, number>>({});
   // A window is worth keeping only while what it shows is still there.
   useEffect(() => {
-    const serving = new Set(live.map((x) => x.href));
+    const serving = new Set(listening.map((x) => x.href));
     for (const c of screen.cards) {
       if (c.kind !== "port") continue;
       const missed = doubted.current.get(c.id) ?? 0;
@@ -375,6 +390,29 @@ export function Desktop({
       }
     }
   }, [looks]);
+
+  // The computer back after being out of action: every window of it is
+  // opened afresh under the card, so what the person comes back to is
+  // connected and nothing on it says it is waiting, and the card lifts a
+  // moment later.
+  const wasDown = useRef(false);
+  const [lifting, setLifting] = useState(false);
+  useEffect(() => {
+    if (down) return void (wasDown.current = true);
+    if (!wasDown.current) return;
+    wasDown.current = false;
+    setAfresh((was) => ({
+      ...was,
+      ...Object.fromEntries(
+        screen.cards
+          .filter((c) => c.kind === "page" || c.kind === "port")
+          .map((c) => [c.id, (was[c.id] ?? 0) + 1]),
+      ),
+    }));
+    setLifting(true);
+    const lift = setTimeout(() => setLifting(false), LIFT);
+    return () => clearTimeout(lift);
+  }, [down]);
 
   // Which window fills the screen on the desktop in view: kept with the
   // desktop, so it fills the screen on every device the person opens. A
@@ -960,7 +998,7 @@ export function Desktop({
   // so the ask waits for it rather than being lost.
   const awaited = useRef<{ port: number; until: number } | null>(null);
   const portNamed = (n: number) =>
-    live.find((x) => x.href.split("/").at(-1) === String(n));
+    listening.find((x) => x.href.split("/").at(-1) === String(n));
   const show = (it: Port) =>
     open({
       kind: "port",
@@ -1139,6 +1177,11 @@ export function Desktop({
         url?: unknown;
       };
       if (asked?.maslow === "command") setBar({ open: true, initial: "" });
+      // A restart asked for in any window: the computer is off at once.
+      if (asked?.maslow === "off" && computers) {
+        restart.current = Date.now() + ASKED;
+        setDown(true);
+      }
       // A record named anywhere on the desktop — the menu bar's notifications, a
       // framed page — opened in the Brain window.
       if (
@@ -1331,7 +1374,7 @@ export function Desktop({
         onClose={(w) => void close(w.card.id)}
       />
       {you && <Permissions computers={computers} />}
-      {down && <Down />}
+      {(down || lifting) && <Down back={!down} />}
     </>
   );
 }
@@ -2352,7 +2395,12 @@ function Frame({
                 beforeClose,
               }}
             >
-              <Panel fresh={fresh.current} id={card.id} href={card.href} />
+              <Panel
+                key={afresh}
+                fresh={fresh.current}
+                id={card.id}
+                href={card.href}
+              />
             </BarSlot>
           </div>
         ) : (

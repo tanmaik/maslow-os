@@ -14,7 +14,7 @@ port the door found, as "Port 3000 · node", with whatever favicon the
 door could fetch. The gap ryOS closes with an applet, a file with a name
 and a picture, we close with a row: `published_apps`, one per computer
 and port, holding the name, the face as a data address, and the place on
-its owner's shelf. Publishing is done from the Access pane's list of
+its owner's shelf. Publishing is done from the Applets window's list of
 ports, beside Share, in a dialog that offers the door's favicon and the
 program's name and takes another of either; a picture chosen is shrunk
 by the same image input the avatar uses and kept as the face. An app is

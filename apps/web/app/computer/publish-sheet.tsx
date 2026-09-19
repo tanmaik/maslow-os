@@ -17,7 +17,7 @@ import {
 
 // Publishing a port as an app: the name it will go by and the face it
 // will wear, the port's own offered first and changed here if the person
-// likes, and one Publish. An app already published is renamed the same
+// likes, and one Add to Dock. An app already published is renamed the same
 // way, or taken off the shelf.
 export function PublishSheet({
   port,
@@ -61,7 +61,9 @@ export function PublishSheet({
         >
           <DialogHeader>
             <DialogTitle>
-              {published ? `Port ${port}, as an app` : `Publish port ${port}`}
+              {published
+                ? `Port ${port}, as an app`
+                : `Add port ${port} to the Dock`}
             </DialogTitle>
             <DialogDescription>
               An app is on your shelf, in the dock and the command bar, by its
@@ -114,7 +116,7 @@ export function PublishSheet({
                   void send(form);
                 }}
               >
-                Unpublish
+                Take off the Dock
               </Button>
             )}
             <Button
@@ -126,7 +128,7 @@ export function PublishSheet({
               Cancel
             </Button>
             <Button type="submit" size="small" disabled={busy}>
-              {published ? "Save" : "Publish"}
+              {published ? "Save" : "Add to Dock"}
             </Button>
           </DialogFooter>
         </form>

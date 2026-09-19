@@ -31,7 +31,7 @@ the desktop itself. Read `boardui` before you write any of its screens.
    for a glance, not a page. The desktop is dark unless the person picked
    light, and BoardUI's tokens follow.
 5. Tell the person with `notify`, naming the port. A port is theirs
-   alone until they share it under Settings, Access; to have it opened
+   alone until they share it in the Applets window; to have it opened
    to a colleague, ask through the brain's `share`, which asks them.
 6. Keep the desktop uncluttered: take off, with `unplace`, what is no
    longer worth a glance.

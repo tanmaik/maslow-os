@@ -23,7 +23,7 @@ import pty from "node-pty";
 import { backup } from "./backup.mjs";
 import * as files from "./files.mjs";
 import * as shares from "./shares.mjs";
-import { listeners, stats, weigh } from "./stats.mjs";
+import { stats, weigh } from "./stats.mjs";
 import { remember, restore } from "./was.mjs";
 
 const SECRET = process.env.DOOR_SECRET;
@@ -495,6 +495,8 @@ const server = http.createServer(async (req, res) => {
     if ((await tabsOf()) === null)
       return say(res, 503, "The browser is not answering yet.");
     arrive();
+    if (!arrived)
+      return say(res, 503, "The terminal is being put back as it was.");
     return say(res, 200, "ok");
   }
   // The person's own files, for the owner alone: our server asking with a
@@ -744,6 +746,9 @@ const server = http.createServer(async (req, res) => {
   if (to.mine && url.pathname === "/maslow/stats") {
     if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
+    // Not before the terminal is back: a desktop that asks meanwhile
+    // stays greyed.
+    if (!arrived) return say(res, 503, "The computer is not ready yet.");
     const [numbers, programs] = await Promise.all([stats(), running()]);
     res.writeHead(200, { "content-type": "application/json" });
     return res.end(
@@ -2965,20 +2970,28 @@ function frameOf(first, payload) {
 
 server.listen(8080, "::", () => console.log("the door is open on 8080"));
 
-// Once the machine is ready, or after a while if nobody asks: weighed as
-// it stands, then the terminal and the ports put back as they were, and
-// from then on remembered every half minute.
+// Once the browser is up, or after a while if nobody asks: weighed as it
+// stands, then the terminal put back as it was, and from then on
+// remembered every half minute. The door says ready only once the
+// terminal is back, so the desktop stays greyed until then, and not past
+// SETTLED, since a machine silent for a minute is taken for a dead one.
+const SETTLED = 20_000;
 let arrival = null;
+let arrived = false;
 function arrive() {
   if (arrival) return arrival;
   weigh();
   const keep = () =>
-    remember(tmux, them, listeners).catch((err) =>
+    remember(tmux, them).catch((err) =>
       console.error(`remember: ${err.message}`),
     );
+  setTimeout(() => (arrived = true), SETTLED);
   arrival = restore(tmux)
     .catch((err) => console.error(`restore: ${err.message}`))
-    .finally(() => setInterval(keep, 30_000));
+    .finally(() => {
+      arrived = true;
+      setInterval(keep, 30_000);
+    });
   return arrival;
 }
 setTimeout(arrive, 60_000);

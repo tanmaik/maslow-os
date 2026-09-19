@@ -3,6 +3,7 @@ import {
   RiChat3Line,
   RiFolderLine,
   RiGlobalLine,
+  RiPlugLine,
   RiSettings3Line,
   RiTerminalBoxLine,
 } from "@remixicon/react";
@@ -87,6 +88,15 @@ export const APPS: App[] = [
     face: "/dock/browser.png",
     box: { w: 0.6, h: 0.76 },
     bounds: { min: { w: 560, h: 400 } },
+  },
+  {
+    kind: "page",
+    title: "Applets",
+    href: "/computer/applets",
+    mark: RiPlugLine,
+    face: "/dock/port.png",
+    box: { w: 0.4, h: 0.56 },
+    bounds: { min: { w: 440, h: 300 }, max: { w: 880 } },
   },
   {
     kind: "settings",

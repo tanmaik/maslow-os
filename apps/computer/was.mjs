@@ -1,8 +1,7 @@
-// What the person had running, remembered so a restart puts it back: each
+// What the person had open, remembered so a restart puts it back: each
 // terminal window in its folder, with its name and the command in its
-// foreground, and each server listening on a port with its folder and
-// command. Kept on the disk, since the machine is what a restart throws
-// away.
+// foreground, and nothing else. Kept on the disk, since the machine is
+// what a restart throws away.
 import fs from "node:fs";
 import { readdir, readFile, readlink } from "node:fs/promises";
 
@@ -136,8 +135,7 @@ async function windows(tmux, procs, given) {
       "#{pane_pid}",
     ].join(APART),
   );
-  if (out === null) return { windows: [], inside: new Set() };
-  const inside = new Set();
+  if (out === null) return [];
   const found = [];
   for (const line of out.trim().split("\n").filter(Boolean)) {
     const [, name, auto, path, pid] = line.split(APART);
@@ -147,42 +145,19 @@ async function windows(tmux, procs, given) {
       fore && fore !== procs.get(shell)?.pgid
         ? [...procs].find(([, p]) => p.pgid === fore && p.ppid === shell)?.[0]
         : undefined;
-    if (job) inside.add(job);
     found.push({
       path: path || HOME,
       name: auto === "0" ? name : null,
       command: job ? await commandOf(job, given) : null,
     });
   }
-  return { windows: found, inside };
+  return found;
 }
 
-// Whether a process runs under one of the terminal's jobs, so the job
-// brings it back.
-const under = (procs, inside, pid) => {
-  for (let p = pid, n = 0; p > 1 && n < 64; n++) {
-    if (inside.has(p)) return true;
-    p = procs.get(p)?.ppid ?? 0;
-  }
-  return false;
-};
-
-// Written down now: what is in the terminal and what is on the ports, a
-// server once however many ports it holds, and not one already inside a
-// window.
-export async function remember(tmux, them, listeners) {
+// Written down now: what is in the terminal.
+export async function remember(tmux, them) {
   const [procs, given] = await Promise.all([processes(), givenBy(them)]);
-  const { windows: w, inside } = await windows(tmux, procs, given);
-  const ports = [];
-  const seen = new Set();
-  for (const l of await listeners()) {
-    const pid = Number(l.pid);
-    if (seen.has(pid) || under(procs, inside, pid)) continue;
-    seen.add(pid);
-    const command = await commandOf(pid, given);
-    if (command) ports.push({ port: l.port, ...command });
-  }
-  is({ boot: booted(), windows: w, ports });
+  is({ boot: booted(), windows: await windows(tmux, procs, given) });
 }
 
 // A word as the shell would read it.
@@ -240,17 +215,17 @@ async function bare(tmux) {
 
 // The terminal put back as it was before the machine last went: the
 // windows in their folders, named where the person named them, each
-// command typed back in so it runs in view, and the servers that ran
-// outside a window in windows of their own. Once per boot, into a
-// terminal that is not there yet or holds nothing, and never over one
-// with anything in it.
+// command typed back in so it runs in view. A server that ran outside a
+// window stays down: what listens after a restart is what the person's
+// windows started. Once per boot, into a terminal that is not there yet
+// or holds nothing, and never over one with anything in it.
 export async function restore(tmux) {
   const w = was();
   if (!w || w.boot === booted()) return;
   const there = await bare(tmux);
   if (there === false) return;
   const folder = (p) => (fs.existsSync(OS + p) ? p : HOME);
-  const runs = [...(w.windows ?? []), ...(w.ports ?? [])];
+  const runs = w.windows ?? [];
   let made = 0;
   for (const r of runs) {
     const opened =
@@ -261,9 +236,9 @@ export async function restore(tmux) {
     made++;
     const at = `main:${made + (there ? 1 : 0)}`;
     if (r.name) await tmux("rename-window", "-t", at, r.name);
-    if (r.command?.argv?.length || r.argv?.length) {
+    if (r.command?.argv?.length) {
       await prompted(tmux, at);
-      await tmux("send-keys", "-t", at, line(r.command ?? r), "Enter");
+      await tmux("send-keys", "-t", at, line(r.command), "Enter");
     }
   }
   if (made === runs.length) is({ ...w, boot: booted() });

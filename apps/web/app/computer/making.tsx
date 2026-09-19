@@ -7,6 +7,7 @@ import {
 } from "@remixicon/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { turnOff } from "@/app/desktop/off";
 import { Numbers, useStats } from "@/app/computer/numbers";
 import { Updating } from "@/app/computer/updating";
 import { Where, type From } from "@/app/computer/region";
@@ -240,6 +241,7 @@ function Ready({
             // pane turns to the bar watching it come back the moment it is
             // asked for, not when the answer lands.
             onRestarting();
+            turnOff();
             const res = await fetch("/computer/update", { method: "POST" });
             if (!res.ok) throw new Error(await res.text());
           }}
@@ -260,7 +262,12 @@ function Ready({
               Reset
             </AlertDialogTrigger>
             <AlertDialogContent>
-              <form action="/computer/reset" method="post" className="contents">
+              <form
+                action="/computer/reset"
+                method="post"
+                className="contents"
+                onSubmit={turnOff}
+              >
                 <AlertDialogHeader>
                   <AlertDialogTitle>Start your Linux over?</AlertDialogTitle>
                   <AlertDialogDescription>

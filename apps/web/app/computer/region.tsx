@@ -13,6 +13,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { turnOff } from "@/app/desktop/off";
 import { Button } from "@/components/base/buttons/button";
 import { Notification } from "@/components/base/notification/notification";
 import { Select, SelectItem } from "@/components/base/select/select";
@@ -227,7 +228,12 @@ export function Where({
               Move
             </AlertDialogTrigger>
             <AlertDialogContent>
-              <form action="/computer/move" method="post" className="contents">
+              <form
+                action="/computer/move"
+                method="post"
+                className="contents"
+                onSubmit={turnOff}
+              >
                 <input type="hidden" name="region" value={picked} />
                 <AlertDialogHeader>
                   <AlertDialogTitle>

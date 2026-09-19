@@ -114,7 +114,7 @@ export function Ports({
                     disabled={!sharing}
                     onClick={() => setPublishingPort(p.port)}
                   >
-                    {appOf(p.port) ? "App…" : "Publish…"}
+                    {appOf(p.port) ? "App…" : "Add to Dock…"}
                   </Button>
                   <Button
                     variant="secondary"
@@ -153,7 +153,7 @@ export function Ports({
                   disabled={!sharing}
                   onClick={() => setPublishingPort(p.port)}
                 >
-                  {appOf(p.port) ? "As an app…" : "Publish…"}
+                  {appOf(p.port) ? "As an app…" : "Add to Dock…"}
                 </ContextMenuItem>
                 <ContextMenuItem
                   disabled={!sharing}

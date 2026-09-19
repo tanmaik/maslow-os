@@ -353,14 +353,17 @@ decision is
 
 It is per membership, claimed at sign-in in the person's region and made
 as the page asks after it, and it never sleeps; while it is being made,
-restarting or moving, the whole desktop is greyed under one card that says
-what it is doing, and clears when the door answers. A restart puts things
-back: the door writes down every half minute what is in the terminal and
-on the ports, each window's folder, name and the command running in it,
-and each server's folder and command, and at the first boot after, puts
-the windows back in their folders, types each command back in so it runs
-in view, a `claude` continued, and starts the servers in windows of their
-own; what a process held in memory is what a restart costs. They are themselves on it, `wile@acme`:
+restarting or moving, the whole computer is off: the desktop is covered
+under one card that says what it is doing, so nothing on it is ever seen
+waiting or reconnecting, and once the door answers every window of the
+computer opens afresh under the card before it lifts. A restart puts the
+terminal back and nothing else: the door writes down every half minute
+each window's folder, name and the command running in it, and at the
+first boot after, puts the windows back in their folders and types each
+command back in so it runs in view, a `claude` continued; the door says
+ready only once that is done. A server that ran outside a window stays
+down, since what listens after a restart is what the person's windows
+started; what a process held in memory is what a restart costs. They are themselves on it, `wile@acme`:
 the account is named after their first name, with a number after it
 when Debian already has that name, and the machine after their
 org at every boot, and files are owned by the number underneath, so a
@@ -695,7 +698,10 @@ desktop the filled one came from, which comes into view. Which desktop
 is in view is the device's own; the windows and their desktops are the
 person's on every device. A snapped window fills exactly the screen
 under the menu bar and up to the dock, edge to edge. A port is a port until its owner publishes
-it as an app, one at a time from the ports on the Access pane: the
+it as an app, one at a time from Applets, a window in the dock that
+lists every port listening on their computer, each opened, shared or
+added to the dock from its row, and the ports colleagues opened to
+them: the
 port's own favicon and name are offered and either is changed there,
 and from then on the app is in the dock, the command bar and on the
 desktop by that name and that face, while its port is listening, and
@@ -824,8 +830,8 @@ of its own; on a phone the rail is a strip along the top. Yours are six,
 each named for the question it answers: You, Look, Computer (the
 machine alone: ready, update, where, backups, reset), Agent (what
 it spent this week against the cap, and nothing else), Apps, and Access
-(SSH, the ports they opened and who reaches each, the ports opened to
-them, and the agents signed in to their brain); the org's are Org, with
+(SSH, the agents signed in to their brain, and their other browsers
+and phones; ports are Applets', not Settings'); the org's are Org, with
 deletion at its foot, Members and Groups. Each fact is on one pane and
 said once, and no pane explains what its rows already show. What waits on you waits behind the clock: a click on it slides
 a panel in from the right over the desktop, closed by the clock again,

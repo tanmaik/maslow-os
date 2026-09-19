@@ -153,7 +153,7 @@ function face(port, pid) {
 // through every process's open files, pid to its name. Every read waits
 // its turn rather than holding the door, and the walk stops once every
 // listener is named.
-export async function listeners() {
+async function listeners() {
   const listening = new Map();
   for (const file of ["/proc/net/tcp", "/proc/net/tcp6"]) {
     let text;
