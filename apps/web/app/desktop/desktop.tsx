@@ -190,10 +190,11 @@ const INSET = 8;
 
 // On a phone a window is resized from its top and its bottom only, each
 // handle a 24px strip a thumb can find (ryOS WindowFrameResizeHandles.tsx:
-// 44-70).
+// 44-70), lying mostly outside the frame so the lights, a widget's grip
+// and whatever stands along the foot stay under the thumb.
 const PHONE_EDGES: [Edge, string][] = [
-  ["n", "-top-3 right-2 left-2 h-6 cursor-ns-resize"],
-  ["s", "-bottom-3 right-2 left-2 h-6 cursor-ns-resize"],
+  ["n", "-top-5 right-2 left-2 h-6 cursor-ns-resize"],
+  ["s", "-bottom-5 right-2 left-2 h-6 cursor-ns-resize"],
 ];
 
 // A short buzz under the finger, where the phone has one to give.
@@ -204,10 +205,12 @@ const EDGES: [Edge, string][] = [
   ["s", "-bottom-1 right-4 left-4 h-2 cursor-ns-resize"],
   ["w", "top-4 bottom-4 -left-1 w-2 cursor-ew-resize"],
   ["e", "top-4 -right-1 bottom-4 w-2 cursor-ew-resize"],
-  ["nw", "-top-1 -left-1 size-4 cursor-nwse-resize"],
-  ["ne", "-top-1 -right-1 size-4 cursor-nesw-resize"],
-  ["sw", "-bottom-1 -left-1 size-4 cursor-nesw-resize"],
-  ["se", "-right-1 -bottom-1 size-4 cursor-nwse-resize"],
+  // A corner straddles the frame evenly, six pixels out and six in, so it
+  // stops where the lights begin and a click on the red one closes.
+  ["nw", "-top-1.5 -left-1.5 size-3 cursor-nwse-resize"],
+  ["ne", "-top-1.5 -right-1.5 size-3 cursor-nesw-resize"],
+  ["sw", "-bottom-1.5 -left-1.5 size-3 cursor-nesw-resize"],
+  ["se", "-right-1.5 -bottom-1.5 size-3 cursor-nwse-resize"],
 ];
 
 export function Desktop({

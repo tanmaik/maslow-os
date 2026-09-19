@@ -202,7 +202,12 @@ async function ports() {
       // are both `node` and only the command tells them apart. The
       // arguments arrive separated by nothing, as the kernel keeps them.
       const ran = cmd.replace(/\0+$/, "").split("\0").join(" ").slice(0, 120);
-      out.push({ port, pid, name: name.trim(), ran });
+      // Node names its main thread and not itself, so what it ran names it.
+      const called =
+        name.trim() === "MainThread"
+          ? (ran.split(" ")[0].split("/").pop() ?? name.trim())
+          : name.trim();
+      out.push({ port, pid, name: called, ran });
     }
   }
   // What is no longer serving keeps no face here.
