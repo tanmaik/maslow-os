@@ -696,8 +696,9 @@ A phone is the same desktop, as ryOS's is: the wallpaper, the menu bar,
 the windows and the dock, with no home screen, no handle and no recents.
 Every window is the full width of the screen, 8px in from either side; it
 opens at its app's own height flush under the menu bar, moves up and down
-only by its title bar, resizes from its top and bottom edges only, each a
-thumb's width, and a double-tap on an edge makes it as tall as the desktop
+only by its title bar, resizes from its top and bottom edges only, the
+bottom a thumb's width and the top a thin strip above the lights since it
+lies flush under the menu bar, and a double-tap on an edge makes it as tall as the desktop
 and the next brings its height back; it fills the screen on a double-tap
 of its title bar and comes back on the next or when its bar is pulled
 down, a fill or a swipe buzzing under the finger where the phone can, and

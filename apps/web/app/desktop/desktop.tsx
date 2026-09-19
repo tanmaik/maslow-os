@@ -188,13 +188,14 @@ type Edge = "n" | "s" | "e" | "w" | "ne" | "nw" | "se" | "sw";
 // WindowFrame.tsx:268, `p-2 md:p-0`).
 const INSET = 8;
 
-// On a phone a window is resized from its top and its bottom only, each
-// handle a 24px strip a thumb can find (ryOS WindowFrameResizeHandles.tsx:
-// 44-70), lying mostly outside the frame so the lights, a widget's grip
-// and whatever stands along the foot stay under the thumb.
+// On a phone a window is resized from its top and its bottom only. The
+// bottom is a 24px strip a thumb can find, half of it inside the frame;
+// the top, which lies flush under the menu bar, is a thin strip above
+// the lights and a widget's grip, as ryOS's is on its Mac look
+// (WindowFrameResizeHandles.tsx:44-70).
 const PHONE_EDGES: [Edge, string][] = [
-  ["n", "-top-5 right-2 left-2 h-6 cursor-ns-resize"],
-  ["s", "-bottom-5 right-2 left-2 h-6 cursor-ns-resize"],
+  ["n", "-top-1 right-2 left-2 h-3 cursor-ns-resize"],
+  ["s", "-bottom-3 right-2 left-2 h-6 cursor-ns-resize"],
 ];
 
 // A short buzz under the finger, where the phone has one to give.
