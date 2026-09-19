@@ -190,11 +190,11 @@ const INSET = 8;
 
 // On a phone a window is resized from its top and its bottom only. The
 // bottom is a 24px strip a thumb can find, half of it inside the frame;
-// the top, which lies flush under the menu bar, is a thin strip above
-// the lights and a widget's grip, as ryOS's is on its Mac look
+// the top, which lies flush under the menu bar, is a thin strip inside
+// it that starts past the lights, as ryOS's does on its Mac look
 // (WindowFrameResizeHandles.tsx:44-70).
 const PHONE_EDGES: [Edge, string][] = [
-  ["n", "-top-1 right-2 left-2 h-3 cursor-ns-resize"],
+  ["n", "-top-1 right-2 left-20 h-3 cursor-ns-resize"],
   ["s", "-bottom-3 right-2 left-2 h-6 cursor-ns-resize"],
 ];
 
