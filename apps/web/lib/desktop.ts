@@ -154,6 +154,9 @@ function fromBefore(layout: unknown): Screen | null {
 // desktop at no less than the smallest size, no two windows of one name, and
 // not too many. Nothing can be parked in the table.
 const KINDS = new Set<Kind>(["port", "record", "brain", "settings", "page"]);
+// A desktop's place among the person's: a small whole number.
+const among = (n: unknown) =>
+  typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 64;
 function wellFormed(layout: unknown): layout is Screen | null {
   if (layout === null) return true;
   if (typeof layout !== "object") return false;
@@ -182,6 +185,8 @@ function wellFormed(layout: unknown): layout is Screen | null {
       c.y + c.h <= 1.0001 &&
       (c.minimized === undefined || typeof c.minimized === "boolean") &&
       (c.pinned === undefined || typeof c.pinned === "boolean") &&
+      (c.desk === undefined || among(c.desk)) &&
+      (c.home === undefined || among(c.home)) &&
       !seen.has(c.id);
     if (!ok) return false;
     seen.add(c.id as string);

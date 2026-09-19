@@ -231,6 +231,11 @@ export function MenuBar({
   onCycle,
   onSnap,
   onSettings,
+  desk,
+  desks,
+  onDesk,
+  onNewDesk,
+  onMove,
 }: {
   you: Me | undefined;
   // Whether this deployment makes computers at all: the location's log has
@@ -251,6 +256,13 @@ export function MenuBar({
   // The front window put where a key would put it.
   onSnap: (place: string) => void;
   onSettings: (pane?: string) => void;
+  // The desktop in view, every desktop in use, and the ways between them:
+  // one brought into view, a new one, and the front window moved to one.
+  desk: number;
+  desks: number[];
+  onDesk: (n: number) => void;
+  onNewDesk: () => void;
+  onMove: (w: Held, to: number) => void;
 }) {
   const [makingOrg, setMakingOrg] = useState(false);
   const [about, setAbout] = useState(false);
@@ -367,6 +379,24 @@ export function MenuBar({
                   Fill the screen
                 </MenubarItem>
                 <MenubarSeparator />
+                {desks
+                  .filter((n) => n !== desk)
+                  .map((n) => (
+                    <MenubarItem
+                      key={n}
+                      className={item}
+                      onClick={() => onMove(front, n)}
+                    >
+                      Move to Desktop {n + 1}
+                    </MenubarItem>
+                  ))}
+                <MenubarItem
+                  className={item}
+                  onClick={() => onMove(front, Math.max(...desks) + 1)}
+                >
+                  Move to a new desktop
+                </MenubarItem>
+                <MenubarSeparator />
                 <MenubarItem className={item} onClick={() => onClose(front)}>
                   Close
                 </MenubarItem>
@@ -378,6 +408,20 @@ export function MenuBar({
               Window
             </MenubarTrigger>
             <MenubarContent align="start" alignOffset={0} sideOffset={1}>
+              {/* The desktops, the one in view marked, and a new one. */}
+              {desks.map((n) => (
+                <MenubarItem key={n} className={item} onClick={() => onDesk(n)}>
+                  <span className="min-w-0 flex-1 truncate">
+                    Desktop {n + 1}
+                  </span>
+                  {n === desk && <span aria-label="in view">✓</span>}
+                </MenubarItem>
+              ))}
+              <MenubarItem className={item} onClick={onNewDesk}>
+                New desktop
+                <Keys>⌃⌥D</Keys>
+              </MenubarItem>
+              <MenubarSeparator />
               {open.length === 0 && (
                 <MenubarItem className={item} disabled>
                   Nothing is open

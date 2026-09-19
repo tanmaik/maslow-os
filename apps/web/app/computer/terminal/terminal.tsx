@@ -321,10 +321,25 @@ export function Terminal({
       } catch {
         // The default renderer stands in where WebGL is not to be had.
       }
-      fit.fit();
+      // Fitted to the box, and then one row fewer where the rows as the
+      // renderer draws them, whole device pixels each, run past it: the
+      // sizes the fit reckons with are fractions, and a row cut off at
+      // the foot was the difference.
+      const fitted = () => {
+        fit.fit();
+        const drawn = el.querySelector(".xterm-screen");
+        const style = getComputedStyle(el);
+        const room =
+          el.clientHeight -
+          parseFloat(style.paddingTop) -
+          parseFloat(style.paddingBottom);
+        if (drawn && drawn.getBoundingClientRect().height > room + 0.5)
+          t.resize(t.cols, Math.max(1, t.rows - 1));
+      };
+      fitted();
       t.focus();
 
-      const sized = new ResizeObserver(() => fit.fit());
+      const sized = new ResizeObserver(fitted);
       sized.observe(el);
       const look = new MutationObserver(() => {
         t.options.theme = theme();
@@ -485,7 +500,7 @@ export function Terminal({
           t.reset();
           // How big this is now, told again on arrival: the size the
           // socket was opened for may be stale by the time it is open.
-          fit.fit();
+          fitted();
           next.send(JSON.stringify({ resize: { cols: t.cols, rows: t.rows } }));
           next.onmessage = (m) => {
             if (m.data instanceof ArrayBuffer) t.write(new Uint8Array(m.data));

@@ -88,6 +88,8 @@ const DOCK_SIDE = "maslow.dock.side";
 type Point = { x: number; y: number };
 
 const EMPTY: Screen = { cards: [] };
+// Where this device keeps which desktop it is looking at.
+const DESK = "maslow.desk";
 
 // The surfaces that are panels: drawn in the window itself, their
 // controls in its bar, told which window on the desktop they are and when it
@@ -233,6 +235,27 @@ export function Desktop({
   computers: boolean;
 }) {
   const [screen, setScreenState] = useState<Screen>(desktop.layout ?? EMPTY);
+  // Which desktop is in view on this device, kept here alone: the windows
+  // are the person's on every device, where they are looking is not.
+  const [desk, setDeskState] = useState(0);
+  useEffect(() => {
+    try {
+      const n = Number(sessionStorage.getItem(DESK));
+      if (Number.isInteger(n) && n > 0) setDeskState(n);
+    } catch {
+      // A device with no storage starts on the first desktop.
+    }
+  }, []);
+  const setDesk = (n: number) => {
+    setDeskState(n);
+    try {
+      sessionStorage.setItem(DESK, String(n));
+    } catch {
+      // Then it is not kept.
+    }
+  };
+  const deskOf = (c: Card) => c.desk ?? 0;
+  const onDesk = (c: Card) => deskOf(c) === desk;
   // The wallpaper the desktop wears.
   const [paper, setPaper] = useState<string | null>(wallpaper);
   // What this device keeps of the desktop, for the lock screen to wear and to
@@ -345,10 +368,13 @@ export function Desktop({
     }
   }, [looks]);
 
-  // Which window fills the screen: kept with the desktop, so it fills the
-  // screen on every device the person opens; one at most, and in front.
+  // Which window fills the screen on the desktop in view: kept with the
+  // desktop, so it fills the screen on every device the person opens. A
+  // filled window is a desktop of its own, so the one it left stays as
+  // it was under it, and it goes back there when it is let down.
   const filled = (cards: Card[]) =>
-    cards.findLast((c) => c.full && !c.minimized && !c.pinned)?.id ?? null;
+    cards.findLast((c) => c.full && !c.minimized && !c.pinned && onDesk(c))
+      ?.id ?? null;
   const expanded = filled(screen.cards);
   const setExpanded = (
     to: string | null | ((was: string | null) => string | null),
@@ -357,10 +383,25 @@ export function Desktop({
       const was = filled(l.cards);
       const next = typeof to === "function" ? to(was) : to;
       if (next === was) return null;
-      const cards = l.cards.map(({ full: _, ...c }) =>
-        c.id === next ? { ...c, full: true, minimized: false } : c,
-      );
+      const own = Math.max(desk, ...l.cards.map(deskOf)) + 1;
+      const cards = l.cards.map((c) => {
+        if (c.id === next)
+          return {
+            ...c,
+            full: true,
+            minimized: false,
+            home: deskOf(c),
+            desk: own,
+          };
+        if (c.id === was) {
+          const { full: _full, home: _home, ...rest } = c;
+          return { ...rest, desk: c.home ?? 0 };
+        }
+        return c;
+      });
       const it = cards.find((c) => c.id === next);
+      if (it) setDesk(own);
+      else if (was) setDesk(l.cards.find((c) => c.id === was)?.home ?? 0);
       return {
         cards: it ? [...cards.filter((c) => c.id !== next), it] : cards,
       };
@@ -448,6 +489,31 @@ export function Desktop({
     : hiding
       ? null
       : side;
+  // The green light on a laptop takes the browser's own full screen too,
+  // so the window is the whole display; Escape, the light again or the
+  // browser leaving full screen brings it back. Only a hand here asks the
+  // browser: a window filled on another device fills this desktop alone.
+  const wantsReal = useRef(false);
+  const fill = (id: string | null) => {
+    wantsReal.current = id !== null;
+    setExpanded(id);
+  };
+  useEffect(() => {
+    if (!medium || !document.fullscreenEnabled) return;
+    if (expanded && wantsReal.current) {
+      wantsReal.current = false;
+      void document.documentElement.requestFullscreen().catch(() => {});
+    }
+    if (!expanded && document.fullscreenElement)
+      void document.exitFullscreen().catch(() => {});
+  }, [expanded, medium]);
+  useEffect(() => {
+    const left = () => {
+      if (!document.fullscreenElement) setExpanded(null);
+    };
+    document.addEventListener("fullscreenchange", left);
+    return () => document.removeEventListener("fullscreenchange", left);
+  }, []);
 
   // Escape brings an expanded window back down.
   useEffect(() => {
@@ -468,11 +534,31 @@ export function Desktop({
   // The windows, as the dock and the menu bar list them: a widget is
   // neither open nor minimized, it is part of the desktop.
   const windows = held.filter((w) => !w.card.pinned);
-  const page: Page = { key: desktop.id, cards: screen.cards };
+  // What is drawn: the desktop in view, and the widgets, which lie on
+  // every desktop.
+  const page: Page = {
+    key: desktop.id,
+    cards: screen.cards.filter((c) => c.pinned || onDesk(c)),
+  };
+  // The desktops in use, in order: every one a window is on, and the one
+  // in view.
+  const desks = [
+    ...new Set([...screen.cards.filter((c) => !c.pinned).map(deskOf), desk]),
+  ].sort((a, b) => a - b);
+  const turnDesk = (by: 1 | -1) => {
+    const i = desks.indexOf(desk);
+    setDesk(desks[(i + by + desks.length) % desks.length]!);
+  };
+  const newDesk = () => setDesk(Math.max(...desks) + 1);
+  const moveTo = (w: Held, to: number) => {
+    shape(w.card.id, { desk: to }, true);
+    setDesk(to);
+  };
 
   // A window brought to the front, out of the dock if it was minimized.
   const raise = (w: Held) => {
     if (w.card.pinned) return;
+    if (deskOf(w.card) !== desk) setDesk(deskOf(w.card));
     setScreen((l) => {
       const c = l.cards.find((x) => x.id === w.card.id);
       if (!c) return null;
@@ -612,15 +698,11 @@ export function Desktop({
     const met = [...stayed, ...arrived].sort(
       (a, b) => (rank.get(a.id) ?? Infinity) - (rank.get(b.id) ?? Infinity),
     );
-    // One window fills the screen at most: two devices filling two at
-    // once meet here, and the one in front wins.
-    const front = met.findLast((c) => c.full && !c.minimized && !c.pinned);
-    const one = met.map(({ full, ...c }) =>
-      full && c.id === front?.id ? { ...c, full } : c,
-    );
+    // A filled window is a desktop of its own, so any number may be filled
+    // at once, each on its own.
     const cards = [
-      ...one.filter((c) => c.pinned),
-      ...one.filter((c) => !c.pinned),
+      ...met.filter((c) => c.pinned),
+      ...met.filter((c) => !c.pinned),
     ];
     known.current = got.layout ?? EMPTY;
     setScreen(() => ({ cards }), again);
@@ -649,6 +731,13 @@ export function Desktop({
       const same = cards.filter(
         (c) => pathOf(c.href) === pathOf(item.href),
       ).length;
+      // Opened while a window fills this desktop, it opens on the desktop
+      // that window came from, and that desktop comes into view.
+      const over = cards.find(
+        (c) => c.full && !c.minimized && !c.pinned && onDesk(c),
+      );
+      const where = over ? (over.home ?? 0) : desk;
+      if (where !== desk) setDesk(where);
       return clamp({
         id,
         kind: item.kind,
@@ -667,7 +756,7 @@ export function Desktop({
                 0.04 * cards.filter((c) => !c.minimized && !c.pinned).length,
               ),
             }),
-        ...(pinned ? { pinned } : {}),
+        ...(pinned ? { pinned } : { desk: where }),
       });
     };
     let made: Card | null = null;
@@ -895,15 +984,16 @@ export function Desktop({
   // The next window forward, or the front one to the back.
   const cycle = (back: boolean) =>
     setScreen((l) => {
-      const up = l.cards.filter((c) => !c.minimized && !c.pinned);
+      const up = l.cards.filter((c) => !c.minimized && !c.pinned && onDesk(c));
       if (up.length < 2) return null;
-      const rest = l.cards.filter((c) => c.minimized || c.pinned);
+      const rest = l.cards.filter((c) => !up.includes(c));
       const order = back
         ? [...up.slice(-1), ...up.slice(0, -1)]
         : [...up.slice(1), up[0]!];
       return {
         cards: [
           ...rest.filter((c) => c.pinned),
+          ...rest.filter((c) => !c.pinned && !c.minimized),
           ...order,
           ...rest.filter((c) => c.minimized),
         ],
@@ -964,7 +1054,13 @@ export function Desktop({
           settings();
         } else if (k === "Enter" && front) {
           e.preventDefault();
-          setExpanded((was) => (was === front.id ? null : front.id));
+          fill(expanded === front.id ? null : front.id);
+        } else if (k === "BracketLeft" || k === "BracketRight") {
+          e.preventDefault();
+          turnDesk(k === "BracketRight" ? 1 : -1);
+        } else if (k === "KeyD") {
+          e.preventDefault();
+          newDesk();
         } else {
           const place = PLACES[ASKS[k] ?? ""];
           if (place && front) {
@@ -1091,12 +1187,17 @@ export function Desktop({
         onPick={pick}
         onFront={raise}
         onMinimize={(w) => shape(w.card.id, { minimized: true }, true)}
-        onFill={(w) => setExpanded(w.card.id)}
+        onFill={(w) => fill(w.card.id)}
         onClose={(w) => void close(w.card.id)}
         onSearch={() => setBar({ open: true, initial: "" })}
         onCycle={cycle}
         onSnap={(place) => top && shape(top.id, PLACES[place]!, true)}
         onSettings={settings}
+        desk={desk}
+        desks={desks}
+        onDesk={setDesk}
+        onNewDesk={newDesk}
+        onMove={moveTo}
       />
       <link rel="prefetch" href="/settings?pane=you" as="document" />
       <link rel="prefetch" href="/brain" as="document" />
@@ -1145,7 +1246,7 @@ export function Desktop({
             onFront={front}
             onUnpin={unpin}
             onCarry={setCarried}
-            onExpand={setExpanded}
+            onExpand={fill}
             onCollapse={() => setExpanded(null)}
             onSettings={settings}
             onSearch={() => setBar({ open: true, initial: "" })}

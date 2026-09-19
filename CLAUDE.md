@@ -677,7 +677,20 @@ Any window fills the screen with
 one press and comes back, or with a double-click anywhere on its title
 bar but a field or the lights; the bar shows a grip while the pointer is
 on it, and a filled window pulled by its bar comes back down under the
-pointer and is carried from there. A snapped window fills exactly the screen
+pointer and is carried from there. On a laptop the green light takes
+the browser's own full screen too, so the window is the whole display,
+and Escape, the light again or the browser leaving full screen brings
+it back; only a hand on this device asks the browser, since a window
+filled elsewhere fills this desktop alone. A person has as many
+desktops as they like: every window is on one, the Window menu lists
+them with the one in view marked and makes a new one, Control-Option
+with the brackets walks them and with D makes one, and a window's own
+menu moves it to another. A filled window is a desktop of its own: the
+one it left stays as it was under it, it goes back there when it is
+let down, and a window opened while one fills the screen opens on the
+desktop the filled one came from, which comes into view. Which desktop
+is in view is the device's own; the windows and their desktops are the
+person's on every device. A snapped window fills exactly the screen
 under the menu bar and up to the dock, edge to edge. A port can be put
 on the desktop itself, from its icon's menu: a widget, with no bar, under
 every window, moved by the grip along its top and resized by its
