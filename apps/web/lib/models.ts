@@ -14,7 +14,7 @@ export const REASONING = { effort: "none" };
 const RELAYED = "http://127.0.0.1:8080/maslow/model";
 export function modelUrl(): string {
   const d = deployment.computers;
-  return d.kind === "fly" && d.model ? d.model : RELAYED;
+  return d.kind !== "none" && d.model ? d.model : RELAYED;
 }
 
 // What a machine carries to the gateway in place of a key: its org, its

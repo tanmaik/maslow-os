@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { MOVE_STEPS, STEPS } from "@/app/computer/making";
 import { Progress } from "@/components/ui/progress";
 import type { State } from "@/lib/computer";
-import { regionName } from "@/lib/region";
 
 // The whole desktop out of action while the computer is not answering:
 // greyed under one card that says what the computer is doing, asked after
@@ -36,7 +35,7 @@ export function Down() {
   const [value, words] = move
     ? MOVE_STEPS[move.step]
     : STEPS[progress === "ready" ? "starting" : progress];
-  const step = move ? words.replace("_", regionName(move.to)) : words;
+  const step = move ? words.replace("_", move.toName) : words;
   const title = move
     ? "Your computer is moving"
     : progress === "disk" || progress === "machine"

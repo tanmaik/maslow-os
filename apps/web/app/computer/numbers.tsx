@@ -12,7 +12,7 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 import { useCountUp } from "@/hooks/use-count-up";
-import type { Stats } from "@/lib/fly";
+import type { Stats } from "@/lib/door";
 import { SIZES, specs, type SizeKey } from "@/lib/sizes";
 import { cx } from "@/utils/cx";
 

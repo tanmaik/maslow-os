@@ -33,7 +33,7 @@ export async function ComputerPane({ p }: { p: Principal }) {
           status="neutral"
           dismissible={false}
           title="Computers are off here"
-          description="This deployment has no Fly token, so nobody gets a computer."
+          description="This deployment has no cloud for computers, so nobody gets a computer."
         />
       ) : (
         <Making

@@ -32,7 +32,7 @@ export default async function BrowserPage({
       {off ? (
         <ComputerWaiting
           title="Computers are off here"
-          description="This deployment has no Fly token, so there is no browser to show."
+          description="This deployment has no cloud for computers, so there is no browser to show."
         />
       ) : !ready ? (
         <ComputerWaiting

@@ -38,7 +38,7 @@ import {
 
 import { ready, ticket } from "./computer.ts";
 import { deployment } from "./deployment.ts";
-import { Changed, fly, Gone, type Entry, type SharedEntry } from "./fly.ts";
+import { Changed, door, Gone, type Entry, type SharedEntry } from "./door.ts";
 import { CEILINGS } from "./prices.ts";
 import { bucketed, bytesOf, putBytes, signed } from "./storage.ts";
 import { typeOf } from "../app/computer/files/serve.ts";
@@ -94,7 +94,7 @@ export async function openShared(
   });
   // A machine ready on its row may be stopped or moving right now: it is
   // live only if its door answers, and its copy stands in otherwise.
-  if (o?.live && !(await fly.answers(o.live.machineId!, 3_000)))
+  if (o?.live && !(await door.answers(o.live.machineId!, 3_000)))
     return { ...o, live: null };
   // Saves made while the machine was off land on the disk before anyone
   // reads, saves or checks against it, so the disk is the latest word.
@@ -174,12 +174,12 @@ async function fits(
   file: SharedFile,
   had: boolean,
 ): Promise<void> {
-  const walked = await fly.shared.files(c.machineId!, t(c), file.id);
+  const walked = await door.shared.files(c.machineId!, t(c), file.id);
   if (!("files" in walked)) return;
   const why = tooBig(walked.files, walked.more);
   if (!why) return;
   if (!had)
-    await fly.shared.forget(c.machineId!, t(c), file.id).catch(() => {});
+    await door.shared.forget(c.machineId!, t(c), file.id).catch(() => {});
   throw new Refused(why);
 }
 
@@ -217,7 +217,7 @@ async function marked(
 ): Promise<{ c: Computer; file: SharedFile; had: boolean }> {
   const c = await ready(p);
   if (!c) throw new Refused("Your computer is not ready.");
-  const { had, ...got } = await fly.shared.share(
+  const { had, ...got } = await door.shared.share(
     c.machineId!,
     t(c),
     at,
@@ -242,7 +242,7 @@ export async function shareFile(
   if (shared) await fits(c, file, had);
   const still = await asPerson(p, (q) => setReach(q, file, to));
   if (!still)
-    await fly.shared.forget(c.machineId!, t(c), file.id).catch(() => {});
+    await door.shared.forget(c.machineId!, t(c), file.id).catch(() => {});
   return { file, shared: still };
 }
 
@@ -271,7 +271,7 @@ export async function unmarked(
   if (!c) return;
   for (const { file, had } of files)
     if (!had)
-      await fly.shared.forget(c.machineId!, t(c), file.id).catch(() => {});
+      await door.shared.forget(c.machineId!, t(c), file.id).catch(() => {});
 }
 
 // Tells each person a share reached, in the sharer's name: a note behind
@@ -340,7 +340,7 @@ async function ended(o: Opened): Promise<void> {
   try {
     const owner = await ownerPrincipal(o.live);
     await asPerson(owner, (q) => dropSharedFile(q, o.file.id));
-    await fly.shared.forget(o.live.machineId!, t(o.live), o.file.id);
+    await door.shared.forget(o.live.machineId!, t(o.live), o.file.id);
   } catch (err) {
     console.error(`share ${o.file.id}: ${(err as Error).message}`);
   }
@@ -389,7 +389,12 @@ export async function listShared(
 ): Promise<Entry[] | null> {
   if (o.live) {
     try {
-      return await fly.shared.list(o.live.machineId!, t(o.live), o.file.id, at);
+      return await door.shared.list(
+        o.live.machineId!,
+        t(o.live),
+        o.file.id,
+        at,
+      );
     } catch (err) {
       if (!(err instanceof Gone)) throw err;
       await ended(o);
@@ -413,7 +418,7 @@ export async function statShared(
   live: boolean;
 } | null> {
   if (o.live) {
-    const s = await fly.shared.stat(
+    const s = await door.shared.stat(
       o.live.machineId!,
       t(o.live),
       o.file.id,
@@ -464,7 +469,7 @@ export async function readShared(
   if (o.live) {
     try {
       return {
-        stream: await fly.shared.read(
+        stream: await door.shared.read(
           o.live.machineId!,
           t(o.live),
           o.file.id,
@@ -499,7 +504,7 @@ export async function readShared(
 // make from a document; a PDF as it is comes as any other read does.
 export async function pdfShared(o: Opened, at: string): Promise<Response> {
   if (!o.live) throw new Refused("The owner's computer is off.");
-  return fly.shared.pdf(o.live.machineId!, t(o.live), o.file.id, at);
+  return door.shared.pdf(o.live.machineId!, t(o.live), o.file.id, at);
 }
 
 // A file of a shared thing written whole by a colleague at edit. The save
@@ -533,7 +538,7 @@ export async function writeShared(
           return copyAt(q, o.file.id, at);
         })
       : null;
-    const wrote = await fly.shared.write(
+    const wrote = await door.shared.write(
       o.live.machineId!,
       t(o.live),
       o.file.id,
@@ -681,7 +686,7 @@ async function takePending(
       const url = signed("GET", copy.key, MIRROR_FOR);
       if (!url) continue;
       try {
-        const took = await fly.shared.take(
+        const took = await door.shared.take(
           c.machineId!,
           t(c),
           copy.fileId,
@@ -721,10 +726,10 @@ async function refreshShared(
   file: SharedFile,
 ): Promise<void> {
   const m = c.machineId!;
-  const s = await fly.shared.stat(m, t(c), file.id);
+  const s = await door.shared.stat(m, t(c), file.id);
   if (s === null || "gone" in s) {
     await asPerson(p, (q) => dropSharedFile(q, file.id));
-    await fly.shared.forget(m, t(c), file.id).catch(() => {});
+    await door.shared.forget(m, t(c), file.id).catch(() => {});
     return;
   }
   if ("missing" in s) return;
@@ -737,7 +742,7 @@ async function refreshShared(
     );
   if (!bucketed()) return;
   await takePending(p, c, file.id);
-  const walked = await fly.shared.files(m, t(c), file.id);
+  const walked = await door.shared.files(m, t(c), file.id);
   if (!("files" in walked)) return;
   if (tooBig(walked.files, walked.more)) {
     console.error(`share ${file.id}: past the ceiling, not copied`);
@@ -766,7 +771,7 @@ async function refreshShared(
       for (const f of puts)
         await oweCopy(q, p.orgId, keys.get(f.path)!, MIRROR_FOR, f.size);
     });
-    const sent = await fly.shared.mirror(
+    const sent = await door.shared.mirror(
       m,
       t(c),
       file.id,

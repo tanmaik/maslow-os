@@ -1,7 +1,7 @@
 import { take, updateOf } from "@/lib/computer";
 import { principal } from "@/lib/session";
 
-// Taking an update reshapes the machine at Fly and waits on its door,
+// Taking an update reshapes the machine in the cloud and waits on its door,
 // which takes longer than a function's default.
 export const maxDuration = 60;
 

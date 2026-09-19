@@ -18,7 +18,7 @@ export async function GET() {
   ]);
   return Response.json({
     version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "dev",
-    image: IMAGE.split(":").at(-1) ?? IMAGE,
+    image: IMAGE,
     machine: c?.machineId ?? null,
     where: c ? regionName(c.region) : null,
     size: c ? specs(c) : null,

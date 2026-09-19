@@ -44,18 +44,18 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
 import { modelToken, modelUrl } from "./models.ts";
+import { cloud } from "./cloud.ts";
+import { CloudRefused, DiskGone, type Machine } from "./clouds.ts";
 import {
-  fly,
-  FlyRefused,
+  door,
   type Backup,
   type Entry,
-  type Machine,
   type Restore,
   type Stats,
-} from "./fly.ts";
+} from "./door.ts";
 import { ownerPrincipal, refreshShares } from "./shares.ts";
 import { openrouter } from "./openrouter.ts";
-import { isRegion, regionName, type Region } from "./region.ts";
+import { isRegion, regionName } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
 import { SIZES } from "./sizes.ts";
 
@@ -68,16 +68,17 @@ const FLOOR = { ...SIZES.small, diskGb: 20 };
 // its row, and never under what it already has, so a size given by hand
 // stands and nothing remade comes back smaller.
 type Shape = Pick<Computer, "cpuKind" | "cpus" | "memoryMb">;
-const atLeast = (c: Computer, g: NonNullable<Machine["config"]>["guest"]) => ({
-  cpuKind: (g?.cpu_kind as Computer["cpuKind"]) ?? c.cpuKind,
-  cpus: Math.max(FLOOR.cpus, c.cpus, g?.cpus ?? 0),
-  memoryMb: Math.max(FLOOR.memoryMb, c.memoryMb, g?.memory_mb ?? 0),
+const atLeast = (c: Computer, has: Machine["size"]) => ({
+  cpuKind: (has.cpuKind as Computer["cpuKind"] | undefined) ?? c.cpuKind,
+  cpus: Math.max(FLOOR.cpus, c.cpus, has.cpus ?? 0),
+  memoryMb: Math.max(FLOOR.memoryMb, c.memoryMb, has.memoryMb ?? 0),
 });
 const sameShape = (a: Shape, b: Shape) =>
   a.cpuKind === b.cpuKind && a.cpus === b.cpus && a.memoryMb === b.memoryMb;
 
-// The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-80";
+// The image every machine boots, by its label: apps/computer, built and
+// pushed by hand to where the cloud keeps images.
+export const IMAGE = "door-80";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -93,15 +94,16 @@ export type MoveStep =
 
 // Where a computer stands, for the page: how far it has got, where it
 // is, the move under way if any, and what the last step that failed said
-// — a move that went back, or a refusal from Fly the next ask tries past.
+// — a move that went back, or a refusal from the cloud the next ask tries past.
 export type State = {
   progress: Progress;
   region: string | null;
-  move: { to: string; step: MoveStep } | null;
+  // The region a move goes to, by its code and its name in words.
+  move: { to: string; toName: string; step: MoveStep } | null;
   failed: string | null;
 };
 
-// Fly names carry our ids, so any list from Fly traces back in one look,
+// Names at the cloud carry our ids, so any list from it traces back in one look,
 // and a disk or machine made and never recorded is found again by name.
 const volumeName = (c: Computer) =>
   `c_${c.id.replaceAll("-", "").slice(0, 16)}`;
@@ -114,7 +116,7 @@ function tags(c: Computer): Record<string, string> {
     org: c.orgId,
     member: c.userId,
     computer: c.id,
-    ...(d.kind === "fly" && d.checkout
+    ...(d.kind !== "none" && d.checkout
       ? { checkout: d.checkout, lease: new Date().toISOString() }
       : {}),
   };
@@ -125,8 +127,8 @@ function tags(c: Computer): Record<string, string> {
 // minute and the reap reads nothing else. One made by hand with no tags
 // takes ours.
 function wanted(c: Computer, m: Machine): Record<string, string> {
-  const own = m.config?.metadata;
-  if (!own) return tags(c);
+  const own = m.tags;
+  if (Object.keys(own).length === 0) return tags(c);
   return own.lease ? { ...own, lease: new Date().toISOString() } : own;
 }
 
@@ -163,7 +165,13 @@ const moveStepOf = (m: Move): MoveStep =>
 const stateOf = (c: Computer | null): State => ({
   progress: c ? progressOf(c) : "disk",
   region: c?.region ?? null,
-  move: c?.move ? { to: c.move.to, step: moveStepOf(c.move) } : null,
+  move: c?.move
+    ? {
+        to: c.move.to,
+        toName: regionName(c.move.to),
+        step: moveStepOf(c.move),
+      }
+    : null,
   failed: null,
 });
 
@@ -175,7 +183,7 @@ const DOOR_WAIT = 4_000;
 // Whether the computer's door answers now: what ready means, wherever it
 // is asked. A row with no machine on it has no door to ask.
 const doorAnswers = (c: Computer): Promise<boolean> =>
-  c.machineId ? fly.answers(c.machineId, DOOR_WAIT) : Promise.resolve(false);
+  c.machineId ? door.answers(c.machineId, DOOR_WAIT) : Promise.resolve(false);
 
 // Where the person's computer stands, for a page about to draw it. Ready
 // is the door answering and not a date on a row, so a computer whose door
@@ -241,11 +249,11 @@ export async function advance(p: Principal, region: string): Promise<State> {
       else if (c.readyAt) await revive(q, c, "the door did not answer");
       else await step(q, c, "sign-in");
     } catch (err) {
-      // What Fly refuses is never the page's to carry: the desktop keeps
+      // What the cloud refuses is never the page's to carry: the desktop keeps
       // drawing, the computer says it is still coming, and the refusal is
       // said in words, logged and written down, so the next ask tries
       // again. Anything else is ours and is thrown on.
-      if (!(err instanceof FlyRefused)) throw err;
+      if (!(err instanceof CloudRefused)) throw err;
       console.error(`computer ${c.id}: ${err.message}`);
       await note(q, {
         orgId: c.orgId,
@@ -253,37 +261,32 @@ export async function advance(p: Principal, region: string): Promise<State> {
         resource: "machine",
         event: "refused",
         ref: c.machineId,
-        // The status and the call, never Fly's body: a rejected machine
+        // The status and the call, never the cloud's body: a rejected machine
         // config comes back with parts of itself in it, and that config
         // carries the door's secret, the brain's token and the person's
         // model key. The body is said to the log above and nowhere else.
         detail: { status: err.status, call: err.call },
-        why: "Fly refused while the page asked after the computer",
+        why: `${err.cloud} refused while the page asked after the computer`,
       });
-      failed = `Your computer is taking longer than usual: Fly answered ${err.status}. Trying again.`;
+      failed = `Your computer is taking longer than usual: ${err.cloud} answered ${err.status}. Trying again.`;
     }
     return { ...stateOf(await computerOf(q, p.userId)), failed };
   });
 }
 
-// Whether what Fly says of a disk or a machine means it is on its way
-// out: Fly answers for one it has destroyed for a while yet, so its state
-// is read and not just its place in a listing.
-const going = (state: string) => /destroy/.test(state);
-
-// Whether Fly still has this disk to mount. One 404 is not enough to say
+// Whether the cloud still has this disk to mount. One 404 is not enough to say
 // a disk is gone — a running machine is destroyed on the answer — so the
 // app's whole listing is asked before agreeing with it, and only two
 // answers that agree count as gone.
 async function diskThere(id: string): Promise<boolean> {
   const v =
-    (await fly.volume(id)) ??
-    (await fly.volumes()).find((x) => x.id === id) ??
+    (await cloud.volume(id)) ??
+    (await cloud.volumes()).find((x) => x.id === id) ??
     null;
-  return v !== null && !going(v.state);
+  return v !== null && v.state !== "gone";
 }
 
-// Forgets a disk Fly no longer has and makes another in its place: the
+// Forgets a disk the cloud no longer has and makes another in its place: the
 // person's Linux went with it, so their computer is made again from the
 // disk up, as a first sign-in makes one.
 async function forgetDisk(q: Query, c: Computer, why: string): Promise<void> {
@@ -293,7 +296,7 @@ async function forgetDisk(q: Query, c: Computer, why: string): Promise<void> {
     userId: c.userId,
     resource: "disk",
     // Gone, not destroyed: the ledger says what we did, and we did not
-    // take this one — Fly no longer has it.
+    // take this one — the cloud no longer has it.
     event: "gone",
     ref: c.volumeId,
     why: "its disk was gone; a new one is made",
@@ -302,15 +305,15 @@ async function forgetDisk(q: Query, c: Computer, why: string): Promise<void> {
 }
 
 // One step: the disk, then the machine, then ready once its door answers.
-// Each Fly id is written the moment Fly hands it back; one that cannot be
+// Each id is written the moment the cloud hands it back; one that cannot be
 // written is destroyed on the spot, and one written but never committed
-// is found again by its name, so nothing at Fly goes unrecorded.
+// is found again by its name, so nothing at the cloud goes unrecorded.
 async function step(q: Query, c: Computer, why: string): Promise<void> {
   if (!c.volumeId) {
     const v =
-      (await fly.volumes()).find(
-        (v) => v.name === volumeName(c) && !going(v.state),
-      ) ?? (await fly.createVolume(volumeName(c), c.region, c.diskGb));
+      (await cloud.volumes()).find(
+        (v) => v.name === volumeName(c) && v.state !== "gone",
+      ) ?? (await cloud.createVolume(volumeName(c), c.region, c.diskGb));
     try {
       await setVolume(q, c.id, v.id);
       await note(q, {
@@ -323,26 +326,26 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
         why,
       });
     } catch (err) {
-      await fly.destroyVolume(v.id).catch(() => {});
+      await cloud.destroyVolume(v.id).catch(() => {});
       throw err;
     }
     return;
   }
   if (!c.machineId) {
-    // A disk Fly no longer has — taken by the reap while no machine held
+    // A disk the cloud no longer has — taken by the reap while no machine held
     // it, or by hand — is forgotten and another made in its place, before
     // a machine is asked for on a disk that is not there.
     if (!(await diskThere(c.volumeId))) return forgetDisk(q, c, why);
     let m: Machine;
     try {
       m =
-        (await fly.machines()).find(
+        (await cloud.machines()).find(
           (m) =>
             m.name === machineName(c) &&
-            m.config?.metadata?.computer === c.id &&
-            !going(m.state),
+            m.tags.computer === c.id &&
+            m.state !== "gone",
         ) ??
-        (await fly.createMachine({
+        (await cloud.createMachine({
           name: machineName(c),
           region: c.region,
           image: IMAGE,
@@ -357,11 +360,10 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
           metadata: tags(c),
         }));
     } catch (err) {
-      // Fly refusing the disk says the same thing its list did not: the
-      // disk is gone. Forgotten here, so the ask makes one rather than
+      // The cloud refusing the disk says the same thing its list did not:
+      // the disk is gone. Forgotten here, so the ask makes one rather than
       // asking again forever.
-      if (err instanceof FlyRefused && /volume not found/i.test(err.said))
-        return forgetDisk(q, c, why);
+      if (err instanceof DiskGone) return forgetDisk(q, c, why);
       throw err;
     }
     try {
@@ -382,12 +384,12 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
         why,
       });
     } catch (err) {
-      await fly.destroyMachine(m.id).catch(() => {});
+      await cloud.destroyMachine(m.id).catch(() => {});
       throw err;
     }
     return;
   }
-  if (await fly.answers(c.machineId)) await setReady(q, c.id, true);
+  if (await door.answers(c.machineId)) await setReady(q, c.id, true);
 }
 
 // The name a computer's key carries at OpenRouter: the environment, the
@@ -395,7 +397,7 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
 // and each deployment knows its own.
 const keyPrefix = () => {
   const d = deployment.computers;
-  return `maslow ${deployment.where} ${d.kind === "fly" ? (d.checkout ?? "production") : "off"} `;
+  return `maslow ${deployment.where} ${d.kind !== "none" ? (d.checkout ?? "production") : "off"} `;
 };
 
 // What the machine carries for its model calls: the gateway's address and
@@ -441,7 +443,7 @@ async function brainOf(
   c: Computer,
 ): Promise<{ url: string; token: string } | null> {
   const d = deployment.computers;
-  if (d.kind !== "fly") return null;
+  if (d.kind === "none") return null;
   const sessionId = c.sessionId ?? (await openComputerSession(q, c));
   return { url: d.brain ?? RELAYED, token: `${c.orgId}.${sessionId}` };
 }
@@ -479,7 +481,7 @@ export async function reconcile(): Promise<void> {
       (r) => r.id,
     ),
   );
-  const live = new Map((await fly.machines()).map((m) => [m.id, m]));
+  const live = new Map((await cloud.machines()).map((m) => [m.id, m]));
   const keys = new Set<string>();
   let whole = true;
   for (const orgId of orgs) {
@@ -501,7 +503,7 @@ export async function reconcile(): Promise<void> {
 // restart takes, so a machine is not called unready for want of waiting.
 async function answersSoon(machineId: string, asks = 5): Promise<boolean> {
   for (let ask = 0; ask < asks; ask++) {
-    if (await fly.answers(machineId)) return true;
+    if (await door.answers(machineId)) return true;
     await new Promise((wait) => setTimeout(wait, 4_000));
   }
   return false;
@@ -512,15 +514,12 @@ async function answersSoon(machineId: string, asks = 5): Promise<boolean> {
 // CPU is not a machine that cannot run.
 const PATIENT = 12;
 
-// Whether Fly still has the disk the machine boots from: the one on the
+// Whether the cloud still has the disk the machine boots from: the one on the
 // row and the ones the machine says it mounts, since either may be the
 // one that went. A machine with no disk at all mounts nothing of the
 // person's and counts as without it.
 async function holdsDisk(c: Computer, m: Machine): Promise<boolean> {
-  const mounted = (m.config?.mounts ?? []).map((mount) => mount.volume);
-  // A mount Fly names without a disk is no disk at all, whether it says
-  // so with null or by leaving it out.
-  const named = [c.volumeId, ...mounted].filter((id): id is string =>
+  const named = [c.volumeId, ...m.disks].filter((id): id is string =>
     Boolean(id),
   );
   if (named.length === 0) return false;
@@ -530,8 +529,8 @@ async function holdsDisk(c: Computer, m: Machine): Promise<boolean> {
 
 // A computer the row calls ready whose door is silent, put back on its
 // feet. The row says not ready until the door answers, so every other
-// door of ours says so too. A machine Fly no longer has is forgotten and
-// another made; one Fly has stopped is started again; and one behind the
+// door of ours says so too. A machine the cloud no longer has is forgotten and
+// another made; one the cloud has stopped is started again; and one behind the
 // image of the day cannot run without the update — the door is in the
 // image — so it takes it at once on its own disk, rather than waiting on
 // a person who cannot reach it to say when. Its lease is renewed either
@@ -539,10 +538,10 @@ async function holdsDisk(c: Computer, m: Machine): Promise<boolean> {
 // of what a lease says.
 async function revive(q: Query, c: Computer, why: string): Promise<void> {
   await setReady(q, c.id, false);
-  const m = c.machineId ? await fly.machine(c.machineId) : null;
-  // Fly answers for a machine it has destroyed for a while after it is
+  const m = c.machineId ? await cloud.machine(c.machineId) : null;
+  // The cloud answers for a machine it has destroyed for a while after it is
   // gone, and a machine gone is a machine gone.
-  if (!m || going(m.state)) {
+  if (!m || m.state === "gone") {
     if (c.machineId) {
       await clearMachine(q, c.id);
       await note(q, {
@@ -551,7 +550,7 @@ async function revive(q: Query, c: Computer, why: string): Promise<void> {
         resource: "machine",
         event: "gone",
         ref: c.machineId,
-        why: "Fly no longer has it; another is made",
+        why: "the cloud no longer has it; another is made",
       });
     }
     return;
@@ -559,10 +558,10 @@ async function revive(q: Query, c: Computer, why: string): Promise<void> {
   // The disk is the person's whole Linux, and the reap takes one a day
   // after its lease lapses while the machine keeps its id. A machine
   // without its disk has nothing to boot and nothing to keep: it is a
-  // machine Fly no longer has, and is paid back so a fresh computer is
+  // machine the cloud no longer has, and is paid back so a fresh computer is
   // made as a first sign-in makes one.
   if (!(await holdsDisk(c, m))) {
-    await fly.destroyMachine(m.id);
+    await cloud.destroyMachine(m.id);
     await note(q, {
       orgId: c.orgId,
       userId: c.userId,
@@ -578,17 +577,17 @@ async function revive(q: Query, c: Computer, why: string): Promise<void> {
         resource: "disk",
         event: "gone",
         ref: c.volumeId,
-        why: "Fly no longer has it; another is made",
+        why: "the cloud no longer has it; another is made",
       });
     await clearVolume(q, c.id);
     return;
   }
-  if (m.config?.image?.split("@")[0] !== IMAGE) {
+  if (m.image !== IMAGE) {
     // A machine that is up and merely slow to answer is not a machine
     // that cannot run: it is asked again over the minute a build pegging
     // its CPU may take, since a remake restarts it and takes with it
     // everything running and any hour the person picked for the update.
-    if (m.state === "started" && (await answersSoon(m.id, PATIENT))) {
+    if (m.state === "running" && (await answersSoon(m.id, PATIENT))) {
       await setReady(q, c.id, true);
       return;
     }
@@ -597,10 +596,9 @@ async function revive(q: Query, c: Computer, why: string): Promise<void> {
     await reopens(q, c, m.id);
     return;
   }
-  if (m.config?.metadata?.lease)
-    await fly.tag(m.id, "lease", new Date().toISOString());
-  if (m.state !== "started") {
-    await fly.start(m.id);
+  if (m.tags.lease) await cloud.tag(m.id, "lease", new Date().toISOString());
+  if (m.state !== "running") {
+    await cloud.start(m.id);
     await note(q, {
       orgId: c.orgId,
       userId: c.userId,
@@ -622,14 +620,11 @@ export type Update = { image: string; readyAt: string };
 
 export const updateOn = (c: Computer | null): Update | null =>
   c?.updateImage === IMAGE && c.updateReadyAt
-    ? {
-        image: IMAGE.split(":").at(-1) ?? IMAGE,
-        readyAt: c.updateReadyAt.toISOString(),
-      }
+    ? { image: IMAGE, readyAt: c.updateReadyAt.toISOString() }
     : null;
 
 // Whether a machine runs an image other than the one of the day.
-const behindOn = (m: Machine) => m.config?.image?.split("@")[0] !== IMAGE;
+const behindOn = (m: Machine) => m.image !== IMAGE;
 
 // A new image is an update, not a restart: written on the person's row
 // as ready and to which image, and waiting for them to take it. A newer
@@ -645,7 +640,7 @@ async function offer(q: Query, c: Computer, m: Machine): Promise<Computer> {
       resource: "update",
       event: "ready",
       ref: IMAGE,
-      detail: { was: m.config?.image ?? null },
+      detail: { was: m.image },
       why: "a new image was built",
     });
     return { ...c, updateImage: IMAGE, updateReadyAt: new Date() };
@@ -657,13 +652,13 @@ async function offer(q: Query, c: Computer, m: Machine): Promise<Computer> {
 
 // The update waiting on this person, asked for by the page every few
 // minutes: the machine is looked at each time, so a new image is offered
-// within minutes of a deploy and nothing pushes it. Fly is asked between
+// within minutes of a deploy and nothing pushes it. The cloud is asked between
 // two transactions, so no pooled connection waits on the round trip.
 export async function updateOf(p: Principal): Promise<Update | null> {
   if (deployment.computers.kind === "none") return null;
   const c = await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   if (!c?.readyAt || !c.machineId) return updateOn(c);
-  const m = await fly.machine(c.machineId);
+  const m = await cloud.machine(c.machineId);
   if (!m) return updateOn(c);
   return updateOn(await asOrg(p.orgId, (q) => offer(q, c, m)));
 }
@@ -681,7 +676,7 @@ export async function take(p: Principal): Promise<boolean> {
       !(await holdComputer(q, c.id))
     )
       return false;
-    const m = await fly.machine(c.machineId);
+    const m = await cloud.machine(c.machineId);
     if (!m) return false;
     // Reshaped and written down, and nothing waited on after it: the page
     // is already asking after the computer every few seconds and says it
@@ -701,8 +696,8 @@ async function remake(
   m: Machine,
   why: string,
 ): Promise<void> {
-  const shape = atLeast(c, m.config?.guest);
-  await fly.reshape(m.id, {
+  const shape = atLeast(c, m.size);
+  await cloud.reshape(m.id, {
     image: IMAGE,
     volumeId: c.volumeId!,
     ...shape,
@@ -834,12 +829,12 @@ async function reconcileOrg(
         if (failed) console.error(`computer ${c.id}: ${failed}`);
         return;
       }
-      // The list from Fly was made before the loop; a machine made since
+      // The list from the cloud was made before the loop; a machine made since
       // is asked after by name before it is given up on.
       const m = c.machineId
-        ? (live.get(c.machineId) ?? (await fly.machine(c.machineId)))
+        ? (live.get(c.machineId) ?? (await cloud.machine(c.machineId)))
         : null;
-      // A machine Fly no longer has is forgotten; a current member gets
+      // A machine the cloud no longer has is forgotten; a current member gets
       // another at the next step.
       if (c.machineId && !m) {
         await clearMachine(q, c.id);
@@ -855,37 +850,33 @@ async function reconcileOrg(
       // hand without the person and their org on it, is remade on the
       // same disk and probed again before it opens. Asked before anything
       // else, so a machine moves at the first sweep after the image does,
-      // however it was left. Fly may name an image with its digest; the
-      // tag is what is compared.
+      // however it was left.
       // A machine given more by hand than the row says keeps it, and one
       // under the floor is lifted to it: the row learns the size, so no
       // sweep or update shrinks it back.
-      const g = m.config?.guest ?? {};
-      const shape = atLeast(c, g);
+      const shape = atLeast(c, m.size);
       if (!sameShape(shape, c)) {
         await setShape(q, c.id, shape);
         c = { ...c, ...shape };
       }
       const sized =
-        g.cpu_kind === c.cpuKind &&
-        g.cpus === c.cpus &&
-        g.memory_mb === c.memoryMb;
+        m.size.cpuKind === c.cpuKind &&
+        m.size.cpus === c.cpus &&
+        m.size.memoryMb === c.memoryMb;
       const who = await whoOf(q, c);
-      const named =
-        m.config?.env?.PERSON === who.person && m.config?.env?.ORG === who.org;
+      const named = m.env.PERSON === who.person && m.env.ORG === who.org;
       // And one made before it could reach the brain: where the address
       // comes or goes, the machine is remade holding the new one.
       const brained =
-        (m.config?.env?.BRAIN_URL ?? null) ===
-        ((await brainOf(q, c))?.url ?? null);
+        (m.env.BRAIN_URL ?? null) === ((await brainOf(q, c))?.url ?? null);
       // A machine carries the way to our models, and never a key: remade
       // when it holds a key of ours, or a gateway address that is not the
       // one modelOf would give it now (none where this deployment mints no
       // keys). modelOf mints the row's key if it has none.
       const want = await modelOf(q, c);
       const modelled =
-        m.config?.env?.MODEL_KEY === undefined &&
-        (m.config?.env?.MODEL_URL ?? null) === (want?.url ?? null);
+        m.env.MODEL_KEY === undefined &&
+        (m.env.MODEL_URL ?? null) === (want?.url ?? null);
       // What the machine cannot run without is put right at once, and the
       // image of the day comes with the restart it already costs.
       if (c.current && (!sized || !named || !brained || !modelled)) {
@@ -904,14 +895,18 @@ async function reconcileOrg(
         await reopens(q, c, m.id);
         return;
       }
-      // A current member's machine that Fly has stopped — the reap took it
-      // while nobody was signed in, or Fly did — is started again and its
+      // A current member's machine that the cloud has stopped — the reap took it
+      // while nobody was signed in, or the cloud did — is started again and its
       // lease renewed, since the member is here to be given it. One behind
       // the image takes the image with the start it already costs: nothing
       // is interrupted by it, and a stopped machine cannot be asked when
       // its person would like a restart.
       if (c.current && m.state === "stopped") {
-        await revive(q, c, "Fly had it stopped and the member is current");
+        await revive(
+          q,
+          c,
+          "the cloud had it stopped and the member is current",
+        );
         return;
       }
       c = await offer(q, c, m);
@@ -921,8 +916,8 @@ async function reconcileOrg(
         await step(q, c, "sweep");
         return;
       }
-      if (!c.current && m.state === "started") {
-        await fly.stop(m.id);
+      if (!c.current && m.state === "running") {
+        await cloud.stop(m.id);
         await note(q, {
           orgId,
           userId: c.userId,
@@ -932,12 +927,12 @@ async function reconcileOrg(
           why: "member is past",
         });
       }
-      if (m.config?.metadata?.lease)
-        await fly.tag(m.id, "lease", new Date().toISOString());
-      if (c.readyAt && c.current && m.state === "started") {
+      if (m.tags.lease)
+        await cloud.tag(m.id, "lease", new Date().toISOString());
+      if (c.readyAt && c.current && m.state === "running") {
         // The numbers once, for the disk and the size; a machine that
         // cannot be read this hour is left for the next.
-        const s = await fly
+        const s = await door
           .stats(c.machineId!, ticket(c, 60))
           .catch(() => null);
         if (s) {
@@ -955,7 +950,7 @@ async function reconcileOrg(
         // The keys and the public ports again every hour, so a machine
         // remade or reset has them.
         if (c.authorizedKeys)
-          await fly
+          await door
             .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
             .catch(() => {});
         await retellPublic(q, c).catch(() => {});
@@ -981,7 +976,7 @@ async function backUp(q: Query, c: Computer): Promise<void> {
   if (store.kind !== "s3") return;
   let last: Backup | null;
   try {
-    last = await fly.lastBackup(c.machineId!, ticket(c, 60));
+    last = await door.lastBackup(c.machineId!, ticket(c, 60));
   } catch {
     return;
   }
@@ -1037,7 +1032,7 @@ async function backUp(q: Query, c: Computer): Promise<void> {
   }
   if (backedUpAt && Date.now() - backedUpAt.getTime() < DAY) return;
   const key = `${prefix}${new Date().toISOString().replace(/[:.]/g, "-")}.tgz`;
-  await fly.askBackup(c.machineId!, ticket(c, 60), {
+  await door.askBackup(c.machineId!, ticket(c, 60), {
     url: presign(store, "PUT", key, 3 * 3600),
     key,
   });
@@ -1065,7 +1060,7 @@ export async function backupsOf(
   if (!c || store.kind !== "s3") return null;
   const [keys, restoring] = await Promise.all([
     list(store, `${store.prefix}backups/${c.id}/`),
-    fly.lastRestore(c.machineId!, ticket(c, 60)).catch(() => null),
+    door.lastRestore(c.machineId!, ticket(c, 60)).catch(() => null),
   ]);
   const kept = await Promise.all(
     keys.reverse().map(async (key) => {
@@ -1096,7 +1091,7 @@ export async function restore(
   const prefix = `${store.prefix}backups/${c.id}/`;
   if (!key.startsWith(prefix) || key.includes("..")) return null;
   if (!(await list(store, prefix)).includes(key)) return null;
-  const name = await fly.askRestore(c.machineId!, ticket(c, 60), {
+  const name = await door.askRestore(c.machineId!, ticket(c, 60), {
     url: presign(store, "GET", key, 3 * 3600),
     key,
     into: madeAt(key).slice(0, 10),
@@ -1120,7 +1115,7 @@ export async function restore(
 const DISK_CEILING_GB = 200;
 
 // Grows a disk before it fills: past four fifths full, by half again, up
-// to the ceiling, while the machine runs. Fly says when a machine must be
+// to the ceiling, while the machine runs. The cloud says when a machine must be
 // restarted to see the room, and then it is, as for a new image. A disk
 // that cannot be read this time is left for the next. True when it grew.
 async function grow(q: Query, c: Computer, s: Stats): Promise<boolean> {
@@ -1153,11 +1148,11 @@ const IDLE_MB = 2048;
 // Grows the disk by half again, up to the ceiling; at the ceiling, says
 // so to us and leaves it. True when it grew.
 async function extend(q: Query, c: Computer, why: string): Promise<boolean> {
-  // From the disk as Fly has it, which is larger than the row says when
-  // it was grown by hand; asking Fly for a size it already has is refused.
+  // From the disk as the cloud has it, which is larger than the row says when
+  // it was grown by hand; asking the cloud for a size it already has is refused.
   const have = Math.max(
     c.diskGb,
-    (await fly.volume(c.volumeId!))?.size_gb ?? 0,
+    (await cloud.volume(c.volumeId!))?.sizeGb ?? 0,
   );
   if (have >= DISK_CEILING_GB) {
     console.error(
@@ -1166,7 +1161,7 @@ async function extend(q: Query, c: Computer, why: string): Promise<boolean> {
     return false;
   }
   const gb = Math.min(DISK_CEILING_GB, Math.ceil(have * 1.5));
-  const { needsRestart } = await fly.extendVolume(c.volumeId!, gb);
+  const { needsRestart } = await cloud.extendVolume(c.volumeId!, gb);
   await setDisk(q, c.id, gb);
   await note(q, {
     orgId: c.orgId,
@@ -1178,7 +1173,7 @@ async function extend(q: Query, c: Computer, why: string): Promise<boolean> {
     why,
   });
   if (needsRestart) {
-    await fly.restart(c.machineId!);
+    await cloud.restart(c.machineId!);
     await setReady(q, c.id, false);
   }
   return true;
@@ -1203,7 +1198,7 @@ export async function growNow(): Promise<number> {
       try {
         await asOrg(orgId, async (q) => {
           if (!(await holdComputer(q, c.id))) return;
-          const s = await fly
+          const s = await door
             .stats(c.machineId!, ticket(c, 60))
             .catch(() => null);
           if (s && (await grow(q, c, s))) grown++;
@@ -1364,7 +1359,7 @@ export async function tellPublic(p: Principal): Promise<boolean> {
 // whether there was a machine to tell.
 async function retellPublic(q: Query, c: Computer): Promise<boolean> {
   if (!c.machineId) return false;
-  await fly.publicPorts(
+  await door.publicPorts(
     c.machineId,
     ticket(c, 60),
     await publicPortsOn(q, c.id),
@@ -1421,15 +1416,15 @@ export async function files(p: Principal): Promise<{
   const m = c.machineId!;
   const t = () => ticket(c, 60);
   return {
-    list: (at) => fly.files.list(m, t(), at),
-    read: (at, range) => fly.files.read(m, t(), at, range),
-    preview: (at) => fly.files.preview(m, t(), at),
-    pdf: (at) => fly.files.pdf(m, t(), at),
+    list: (at) => door.files.list(m, t(), at),
+    read: (at, range) => door.files.read(m, t(), at, range),
+    preview: (at) => door.files.preview(m, t(), at),
+    pdf: (at) => door.files.pdf(m, t(), at),
     write: (at, body, append, opened) =>
-      fly.files.write(m, t(), at, body, append, opened),
-    rename: (at, to) => fly.files.rename(m, t(), at, to),
-    trash: (at) => fly.files.trash(m, t(), at),
-    mkdir: (at, name) => fly.files.mkdir(m, t(), at, name),
+      door.files.write(m, t(), at, body, append, opened),
+    rename: (at, to) => door.files.rename(m, t(), at, to),
+    trash: (at) => door.files.trash(m, t(), at),
+    mkdir: (at, name) => door.files.mkdir(m, t(), at, name),
   };
 }
 
@@ -1503,8 +1498,8 @@ export async function locationTarget(
 export async function reset(p: Principal): Promise<boolean> {
   const c = await ready(p);
   if (!c) return false;
-  await fly.askReset(c.machineId!, ticket(c, 60));
-  await fly.restart(c.machineId!);
+  await door.askReset(c.machineId!, ticket(c, 60));
+  await cloud.restart(c.machineId!);
   await asOrg(p.orgId, async (q) => {
     await setReady(q, c.id, false);
     await note(q, {
@@ -1526,7 +1521,7 @@ const MOVE_LIMIT = 30 * 60 * 1000;
 // never otherwise: the row says so, and the page then asks after it step
 // by step until it runs there or is back where it was. False when there
 // is no ready computer; true at once when it is there already.
-export async function move(p: Principal, to: Region): Promise<boolean> {
+export async function move(p: Principal, to: string): Promise<boolean> {
   return asOrg(p.orgId, async (q) => {
     const c = await computerOf(q, p.userId);
     if (
@@ -1547,7 +1542,7 @@ export async function move(p: Principal, to: Region): Promise<boolean> {
 // a step that failed said, or null. The old disk is the only copy of the
 // person's Linux until the new machine answers its door, so it is
 // stopped, copied and left alone until then, and each id is written the
-// moment Fly hands it back, so a call cut off anywhere is taken up by the
+// moment the cloud hands it back, so a call cut off anywhere is taken up by the
 // next. A step that fails, or a move that has run half an hour, is put
 // back to the machine they had.
 async function moveOn(
@@ -1575,9 +1570,9 @@ async function moveOn(
     });
   try {
     if (m.old) {
-      await fly.destroyMachine(m.old.machineId);
+      await cloud.destroyMachine(m.old.machineId);
       await say("machine", "destroyed", m.old.machineId);
-      await fly.destroyVolume(m.old.volumeId);
+      await cloud.destroyVolume(m.old.volumeId);
       await say("disk", "destroyed", m.old.volumeId, {
         snapshot: m.snapshotId,
         keptDays: 1,
@@ -1588,15 +1583,15 @@ async function moveOn(
     if (Date.now() - Date.parse(m.askedAt) > MOVE_LIMIT)
       throw new Error("it took longer than half an hour");
     if (!m.snapshotId) {
-      const old = await fly.machine(c.machineId!);
+      const old = await cloud.machine(c.machineId!);
       if (!old) throw new Error("the machine is gone");
-      if (old.state === "started") {
-        await fly.stop(old.id);
+      if (old.state === "running") {
+        await cloud.stop(old.id);
         await say("machine", "stopped", old.id);
       }
-      if (!(await fly.stopped(old.id, 20))) return null;
-      await fly.keepSnapshots(c.volumeId!, 1);
-      const s = await fly.snapshot(c.volumeId!);
+      if (!(await cloud.stopped(old.id, 20))) return null;
+      await cloud.keepSnapshots(c.volumeId!, 1);
+      const s = await cloud.snapshot(c.volumeId!);
       await on({ snapshotId: s.id });
       await say("snapshot", "made", s.id, {
         disk: c.volumeId,
@@ -1606,15 +1601,15 @@ async function moveOn(
       return null;
     }
     if (!m.volumeId) {
-      const s = (await fly.snapshots(c.volumeId!)).find(
+      const s = (await cloud.snapshots(c.volumeId!)).find(
         (s) => s.id === m.snapshotId,
       );
       if (!s) throw new Error("the snapshot is gone");
-      if (s.status !== "created") return null;
+      if (!s.ready) return null;
       const v =
-        (await fly.volumes()).find(
+        (await cloud.volumes()).find(
           (v) => v.name === volumeName(c) && v.region === m.to,
-        ) ?? (await fly.restoreVolume(volumeName(c), m.to, c.diskGb, s.id));
+        ) ?? (await cloud.restoreVolume(volumeName(c), m.to, c.diskGb, s.id));
       await on({ volumeId: v.id });
       await say("disk", "made", v.id, {
         region: m.to,
@@ -1624,15 +1619,15 @@ async function moveOn(
       return null;
     }
     if (!m.machineId) {
-      const v = await fly.volume(m.volumeId);
+      const v = await cloud.volume(m.volumeId);
       if (!v) throw new Error("the new disk is gone");
-      if (v.state !== "created") return null;
+      if (v.state !== "ready") return null;
       const name = `${machineName(c)}-${m.to}`;
       const made =
-        (await fly.machines()).find(
-          (x) => x.name === name && x.config?.metadata?.computer === c.id,
+        (await cloud.machines()).find(
+          (x) => x.name === name && x.tags.computer === c.id,
         ) ??
-        (await fly.createMachine({
+        (await cloud.createMachine({
           name,
           region: m.to,
           image: IMAGE,
@@ -1656,7 +1651,7 @@ async function moveOn(
       });
       return null;
     }
-    if (!(await fly.answers(m.machineId))) return null;
+    if (!(await door.answers(m.machineId))) return null;
     await setPlace(q, c.id, {
       region: m.to,
       volumeId: m.volumeId,
@@ -1667,7 +1662,7 @@ async function moveOn(
     return null;
   } catch (err) {
     // Once the row has turned to the new machine the old one is owed to
-    // Fly, and the next call pays it.
+    // the cloud, and the next call pays it.
     if (m.old) throw err;
     const reason = (err as Error).message;
     await moveBack(q, c, reason);
@@ -1687,14 +1682,14 @@ async function moveBack(q: Query, c: Computer, reason: string): Promise<void> {
     ref: string,
   ) => note(q, { orgId: c.orgId, userId: c.userId, resource, event, ref, why });
   if (m.machineId) {
-    await fly.destroyMachine(m.machineId);
+    await cloud.destroyMachine(m.machineId);
     await say("machine", "destroyed", m.machineId);
   }
   if (m.volumeId) {
-    await fly.destroyVolume(m.volumeId);
+    await cloud.destroyVolume(m.volumeId);
     await say("disk", "destroyed", m.volumeId);
   }
-  await fly.start(c.machineId!);
+  await cloud.start(c.machineId!);
   await say("machine", "started", c.machineId!);
   await setMove(q, c.id, null);
 }
@@ -1704,7 +1699,7 @@ async function moveBack(q: Query, c: Computer, reason: string): Promise<void> {
 export async function pushKeys(p: Principal): Promise<void> {
   const c = await ready(p);
   if (!c) return;
-  await fly.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
+  await door.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
 }
 
 // What a person has spent on models, in dollars: this week against their
@@ -1842,7 +1837,7 @@ export async function addSshKey(
   const keys = await asOrg(orgId, (q) => addKey(q, c.id, line));
   if (!keys.includes(line.split(" ").slice(0, 2).join(" "))) return "full";
   try {
-    await fly.pushKeys(c.machineId!, ticket(c, 60), keys);
+    await door.pushKeys(c.machineId!, ticket(c, 60), keys);
   } catch (err) {
     console.error(`keys: ${(err as Error).message}`);
     return "unreached";
@@ -1888,7 +1883,7 @@ export async function tellAnswer(p: Principal, id: string): Promise<void> {
   if (!n?.replyTo || n.answer === null) return;
   const c = await ready(p);
   if (!c) return;
-  await fly
+  await door
     .say(c.machineId!, ticket(c, 60), {
       chat: n.replyTo,
       text: `You asked "${n.title}"; the person answered: ${n.answer}`,
@@ -1902,7 +1897,7 @@ export async function tellAnswer(p: Principal, id: string): Promise<void> {
 export async function statsOf(p: Principal): Promise<Stats | null> {
   const c = await ready(p);
   if (!c) return null;
-  return fly.stats(c.machineId!, ticket(c, 60));
+  return door.stats(c.machineId!, ticket(c, 60));
 }
 
 // How long Maslow takes to reach the computer's door and back, in
@@ -1910,16 +1905,16 @@ export async function statsOf(p: Principal): Promise<Stats | null> {
 export async function pingOf(p: Principal): Promise<number | null> {
   const c = await ready(p);
   if (!c) return null;
-  return fly.ping(c.machineId!);
+  return door.ping(c.machineId!);
 }
 
-// Pays a purged member's or a deleted org's computer back to Fly: the
+// Pays a purged member's or a deleted org's computer back to the cloud: the
 // machine, then the disk, each written to the ledger as it goes. The ref
 // names both; the member is gone, so the row says the org alone.
 export async function destroy(orgId: string, ref: string): Promise<void> {
   const [machineId, volumeId] = ref.split(":");
   if (machineId) {
-    await fly.destroyMachine(machineId);
+    await cloud.destroyMachine(machineId);
     await asOrg(orgId, (q) =>
       note(q, {
         orgId,
@@ -1932,7 +1927,7 @@ export async function destroy(orgId: string, ref: string): Promise<void> {
     );
   }
   if (volumeId) {
-    await fly.destroyVolume(volumeId);
+    await cloud.destroyVolume(volumeId);
     await asOrg(orgId, (q) =>
       note(q, {
         orgId,

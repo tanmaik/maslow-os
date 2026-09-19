@@ -7,7 +7,7 @@ import { deleteKey, storage } from "./storage.ts";
 
 // Pays what removals and purges owe the vendors: deletes pictures from
 // the store, deletes an ended membership's accounts at Composio, destroys
-// a purged member's computer at Fly. Each debt is forgotten only once it
+// a purged member's computer in the cloud. Each debt is forgotten only once it
 // is paid; one that refuses is tried again by the next call, and the
 // sweep calls for every org every hour.
 type Orphan = { id: string; kind: string; ref: string };

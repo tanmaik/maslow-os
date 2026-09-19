@@ -15,8 +15,7 @@ import { StatusDot } from "@/components/base/badges/status-dot";
 import { Button } from "@/components/base/buttons/button";
 import { Progress } from "@/components/ui/progress";
 import type { Kept, MoveStep, State, Update } from "@/lib/computer";
-import type { Restore } from "@/lib/fly";
-import { regionName } from "@/lib/region";
+import type { Restore } from "@/lib/door";
 import type { SizeKey } from "@/lib/sizes";
 import {
   AlertDialog,
@@ -225,7 +224,7 @@ function Ready({
     <div className="flex flex-col gap-5">
       <p className="flex items-center gap-2 px-3 text-body-regular text-text-primary">
         <StatusDot color="green" />
-        Ready in {regionName(region ?? "")}
+        Ready in {where.regions[region ?? ""] ?? region}
         {since ? `, since ${since}` : ""}.
       </p>
       {moveFailed && (
@@ -370,7 +369,7 @@ export function Making({
       />
     );
   if (state.move) {
-    const to = regionName(state.move.to);
+    const to = state.move.toName;
     const [value, step] = MOVE_STEPS[state.move.step];
     return (
       <div className="flex flex-col gap-3">
@@ -396,8 +395,10 @@ export function Making({
       <Progress aria-label={label} value={value} />
       <p className="text-body-regular text-text-secondary">
         {label}
-        {state.region ? ` in ${regionName(state.region)}` : ""}. This takes a
-        minute the first time.
+        {state.region
+          ? ` in ${where.regions[state.region] ?? state.region}`
+          : ""}
+        . This takes a minute the first time.
       </p>
       {moveFailed && (
         <p className="text-body-regular text-text-error-primary">

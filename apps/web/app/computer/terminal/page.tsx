@@ -30,7 +30,7 @@ export default async function TerminalPage() {
       {off ? (
         <ComputerWaiting
           title="Computers are off here"
-          description="This deployment has no Fly token, so there is no terminal to show."
+          description="This deployment has no cloud for computers, so there is no terminal to show."
         />
       ) : !ready ? (
         <ComputerWaiting

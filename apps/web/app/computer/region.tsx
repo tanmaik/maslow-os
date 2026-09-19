@@ -17,11 +17,18 @@ import { Button } from "@/components/base/buttons/button";
 import { Notification } from "@/components/base/notification/notification";
 import { Select, SelectItem } from "@/components/base/select/select";
 import { Row, Rows } from "@/app/settings/row";
-import { BUDGET_MS, REGIONS, regionName, type Region } from "@/lib/region";
-
 // Where the person is, as their request said: the address it came from,
-// the city that address is in when known, and the region nearest it.
-export type From = { ip: string; city: string | null; region: Region };
+// the city that address is in when known, and the region nearest it; and
+// every region a computer can be in, code to name, in the cloud's order.
+export type From = {
+  ip: string;
+  city: string | null;
+  region: string;
+  regions: Record<string, string>;
+};
+
+// A round trip feels like a terminal under this many milliseconds.
+const BUDGET_MS = 40;
 
 // A round trip timed again and again while the pane is open, with the
 // last minute of readings kept: the latest is what it feels like now, and
@@ -122,8 +129,9 @@ export function Where({
     }, []),
     5_000,
   );
-  const [picked, setPicked] = useState<Region>(
-    from.region === current ? (Object.keys(REGIONS)[0] as Region) : from.region,
+  const regionName = (code: string) => from.regions[code] ?? code;
+  const [picked, setPicked] = useState<string>(
+    from.region === current ? Object.keys(from.regions)[0]! : from.region,
   );
   const wire = toComputer.best;
   const far = wire !== null && wire > BUDGET_MS;
@@ -196,12 +204,12 @@ export function Where({
             aria-label="Region to move to"
             size="sm"
             selectedKey={picked}
-            onSelectionChange={(k) => k !== null && setPicked(k as Region)}
+            onSelectionChange={(k) => k !== null && setPicked(String(k))}
             triggerClassName="h-8"
           >
-            {(Object.keys(REGIONS) as Region[]).map((code) => (
+            {Object.entries(from.regions).map(([code, name]) => (
               <SelectItem key={code} id={code} isDisabled={code === current}>
-                {REGIONS[code].name}
+                {name}
                 {code === current ? ", now" : ""}
               </SelectItem>
             ))}

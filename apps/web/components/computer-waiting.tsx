@@ -11,7 +11,7 @@ import { Announcement } from "@/components/base/announcement/announcement";
 // either the deployment has none at all, or this person's is still coming
 // up, in which case the page asks after it every few seconds, so nobody
 // has to reload to find out it arrived. Asking is what moves it on: the
-// ask makes what is missing, starts a machine Fly stopped, and takes an
+// ask makes what is missing, starts a machine the cloud stopped, and takes an
 // image its door cannot answer without.
 export function ComputerWaiting({
   title,

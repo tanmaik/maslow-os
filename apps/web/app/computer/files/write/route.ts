@@ -1,5 +1,5 @@
 import { files } from "@/lib/computer";
-import { Changed } from "@/lib/fly";
+import { Changed } from "@/lib/door";
 import { principal } from "@/lib/session";
 
 // A small file written whole: what an edit in the Preview window saves.

@@ -16,7 +16,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import type { Update } from "@/lib/computer";
-import type { Stats } from "@/lib/fly";
+import type { Stats } from "@/lib/door";
 
 // The person told to update: what is on their computer this moment, asked
 // of its door as the dialog opens, so the restart names what it stops

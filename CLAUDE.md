@@ -343,7 +343,13 @@ must never be lost; the machine, CPU and memory rented by the second, on
 which nothing matters; and our image, the base Linux with our tools in it,
 which the person cannot change because it is not on their disk. The
 settled design is `docs/decisions/2026-09-07-the-computer-returns.md`,
-built in its order, one pull request at a time.
+built in its order, one pull request at a time. What the app asks of
+the cloud a computer runs in is one interface of ours, in our own words,
+each cloud a file under `apps/web/lib/clouds/` that implements it, Fly
+the one today, and images called by their label; `pnpm check` refuses
+an import of a cloud anywhere but the one line that picks it. That
+decision is
+`docs/decisions/2026-09-18-computers-behind-one-interface.md`.
 
 It is per membership, claimed at sign-in in the person's region and made
 as the page asks after it, and it never sleeps; while it is being made,

@@ -25,7 +25,7 @@ export default async function AgentPage() {
       {off ? (
         <ComputerWaiting
           title="Computers are off here"
-          description="This deployment has no Fly token, so there is no agent to talk to."
+          description="This deployment has no cloud for computers, so there is no agent to talk to."
         />
       ) : !ready ? (
         <ComputerWaiting
