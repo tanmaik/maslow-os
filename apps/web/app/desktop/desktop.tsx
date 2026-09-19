@@ -1311,11 +1311,21 @@ export function Desktop({
         onEnd={end}
         onPick={pick}
         onArrange={(hrefs) =>
-          void fetch("/desktop/shelf", {
+          fetch("/desktop/shelf", {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify(hrefs),
-          }).catch(() => {})
+          })
+            .then((res) => {
+              if (!res.ok)
+                throw new Error(`the shelf was refused: ${res.status}`);
+              return true;
+            })
+            // Said, and the dock draws the shelf as the server has it.
+            .catch((err: Error) => {
+              console.error(err.message);
+              return false;
+            })
         }
         onFront={raise}
         onClose={(w) => void close(w.card.id)}

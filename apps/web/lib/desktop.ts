@@ -358,10 +358,12 @@ async function nameOf(
   }
   const c = await computerOf(q, userId);
   if (!c?.machineId) throw new Invalid("the person has no computer yet");
+  // Only an app lies on the desktop: a port never published is a port.
   const own = (await appsOn(q, c.id)).find((a) => a.port === shown.port);
+  if (!own) throw new NotFound(`port ${shown.port} is not published as an app`);
   return {
     kind: "port",
-    title: title || own?.name || `Port ${shown.port}`,
+    title: title || own.name,
     href: `/port/${c.machineId}/${shown.port}`,
   };
 }

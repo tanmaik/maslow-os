@@ -31,7 +31,10 @@ follows the person; the built-in blocks keep the order each device has,
 since those rarely move. A colleague reached by a share of the port sees
 the app under its published name and face, through the same row, which
 their read of it is allowed by the share and no more; a shared port never
-published stays "Port N · owner's".
+published stays "Port N · owner's". A colleague's dock is not asked after
+the owner's machine every two seconds, so what is shared with them stays
+in their dock while the share stands, alive or not; opening one that is
+down says so in the window, as it did before.
 
 ## Widgets on a phone
 

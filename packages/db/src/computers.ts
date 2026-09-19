@@ -587,15 +587,21 @@ export async function unpublishApp(
   );
 }
 
-// The shelf in the order given, by port; one not named keeps its place
-// after those that were.
+// The shelf in the order given, by port, first to last; an app not named,
+// one whose port was not listening as the shelf was dragged, keeps its
+// order among the others after them.
 export async function arrangeApps(
   q: Query,
   computerId: string,
   ports: number[],
 ): Promise<void> {
   await q.query(
-    `update published_apps a set position = p.at
+    `update published_apps a set position = $3 + a.position
+     where a.computer_id = $1 and a.port <> all($2::int[])`,
+    [computerId, ports, ports.length],
+  );
+  await q.query(
+    `update published_apps a set position = p.at - 1
      from unnest($2::int[]) with ordinality as p (port, at)
      where a.computer_id = $1 and a.port = p.port`,
     [computerId, ports],

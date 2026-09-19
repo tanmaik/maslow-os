@@ -562,8 +562,9 @@ export function Dock({
   onPick: (b: Dragged) => void;
   // A port put on the desktop as a widget.
   onPin: (b: Dragged) => void;
-  // The shelf of apps from ports in a new order, by address.
-  onArrange: (hrefs: string[]) => void;
+  // The shelf of apps from ports in a new order, by address; whether the
+  // server kept it.
+  onArrange: (hrefs: string[]) => Promise<boolean>;
   // A window brought to the front, back from the dock if it was minimized.
   onFront: (w: Held) => void;
   onClose: (w: Held) => void;
@@ -743,8 +744,14 @@ export function Dock({
     }
   }, []);
   const apps = arrange(APPS, order);
-  // The apps from ports arrive in the order the server keeps for them.
-  const shown = ports;
+  // The apps from ports arrive in the order the server keeps for them; a
+  // drag under way is drawn from here until the server has it, and what
+  // the server then sends stands.
+  const [dragged, setDragged] = useState<string[]>([]);
+  const asked = useRef(0);
+  const arrived = ports.map((p) => p.href).join(" ");
+  useEffect(() => setDragged([]), [arrived]);
+  const shown = arrange(ports, dragged);
   const live = useRef(order);
   live.current = order;
   // An icon put in another place, and the whole shelf's order with it.
@@ -756,7 +763,18 @@ export function Dock({
     const next = moved(mine, from, to);
     // The apps from ports are the person's shelf, kept on the server so
     // it follows them; the built-in ones stay as this device has them.
-    if (port) return void (keep && onArrange(next));
+    if (port) {
+      setDragged(next);
+      // A shelf the server refuses is drawn as the server has it again,
+      // unless a later move is already on its way.
+      if (keep) {
+        const n = ++asked.current;
+        void onArrange(next).then((kept) => {
+          if (!kept && asked.current === n) setDragged([]);
+        });
+      }
+      return;
+    }
     live.current = next;
     setOrder(next);
     if (keep) localStorage.setItem(ORDER, JSON.stringify(next));

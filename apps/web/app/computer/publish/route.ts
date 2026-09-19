@@ -1,8 +1,10 @@
 import { publish } from "@/lib/computer";
 import { principal } from "@/lib/session";
 
-// The most a face may weigh, as the bytes of the picture itself.
-const HEAVIEST_FACE = 48 * 1024;
+// The most a face may weigh, as the bytes of the picture itself: forty
+// kilobytes, which as the base64 address the row keeps is under the
+// sixty-four thousand characters it allows.
+const HEAVIEST_FACE = 40 * 1024;
 
 // Publishes one port of the person's own computer as an app, named and
 // wearing the face the sheet sent, a picture they chose or the port's own,

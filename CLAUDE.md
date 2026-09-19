@@ -551,8 +551,9 @@ One agent is in view at a time and the rest stand open behind it,
 each with its own Claude Code process, running on; a new one is handed
 over at once, since the door keeps one warm; one quiet for three minutes
 is closed, its process freed, and opens again whole when wanted. A
-computer with no agent at all is given its first, Heartbeat, the moment
-its agent starts; every other agent is made only by the person, who
+computer with no agent it can open, none kept or none that loads, is
+given its first, Heartbeat, the moment its agent starts; every other
+agent is made only by the person, who
 names it as they make it, and
 renamed with a click on the name; nothing makes another on its own,
 and the window opens on the last one spoken to, never on an empty one. The
@@ -698,7 +699,10 @@ it as an app, one at a time from the ports on the Access pane: the
 port's own favicon and name are offered and either is changed there,
 and from then on the app is in the dock, the command bar and on the
 desktop by that name and that face, while its port is listening, and
-nowhere at all while it is not; a bare port is in none of them. The
+nowhere at all while it is not, on its owner's desktop, whose computer
+is asked after every two seconds; a colleague's keeps what is shared
+with them while the share stands, since their machine is not asked
+after another's. A bare port is in none of them. The
 dock's run of apps is the person's shelf, kept on the server in the
 order they dragged it into, so it follows them; the built-in blocks
 keep the order each device has. A port shared with a colleague reaches

@@ -887,6 +887,23 @@ export async function smokeMcp(stack, signIn) {
   // and taken off. A colleague's desktop is their own.
   const noDesk = await call(grant.access_token, "desktop", {});
   const noShown = await call(grant.access_token, "place", { x: 0.5 });
+  // Only an app lies on the desktop: a port never published is refused,
+  // and Wile publishes port 3000 as one before it is placed.
+  const bare = await call(grant.access_token, "place", {
+    port: 3000,
+    x: 0.1,
+    y: 0.05,
+  });
+  const published = await fetch(`${stack.url}/computer/publish`, {
+    method: "POST",
+    headers: { cookie: wile },
+    body: new URLSearchParams({ port: "3000", name: "Launch board" }),
+  });
+  check(
+    "a bare port is not placed; published, it is an app",
+    /not published as an app/.test(bare.text) && published.status === 204,
+    `${bare.text} / ${published.status} ${await published.text()}`,
+  );
   const putDown = await call(grant.access_token, "place", {
     port: 3000,
     title: "Launch board",

@@ -1340,9 +1340,10 @@ export async function publish(
   if (as && !name) return "An app has a name.";
   if (as?.icon && (as.icon.length > 65536 || !/^data:image\//.test(as.icon)))
     return "That is not a picture an app can wear.";
+  // A name for a port needs no door: a computer claimed is enough.
   return asPerson(p, async (q) => {
     const c = await computerOf(q, p.userId);
-    if (!c?.readyAt || !c.machineId) return "Your computer is not ready.";
+    if (!c?.machineId) return "You have no computer yet.";
     if (as) await publishApp(q, c.id, port, name, as.icon);
     else await unpublishApp(q, c.id, port);
     return null;
