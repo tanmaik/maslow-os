@@ -691,10 +691,21 @@ let down, and a window opened while one fills the screen opens on the
 desktop the filled one came from, which comes into view. Which desktop
 is in view is the device's own; the windows and their desktops are the
 person's on every device. A snapped window fills exactly the screen
-under the menu bar and up to the dock, edge to edge. A port can be put
+under the menu bar and up to the dock, edge to edge. A port is a port until its owner publishes
+it as an app, one at a time from the ports on the Access pane: the
+port's own favicon and name are offered and either is changed there,
+and from then on the app is in the dock, the command bar and on the
+desktop by that name and that face, while its port is listening, and
+nowhere at all while it is not; a bare port is in none of them. The
+dock's run of apps is the person's shelf, kept on the server in the
+order they dragged it into, so it follows them; the built-in blocks
+keep the order each device has. A port shared with a colleague reaches
+them under the name and face its owner published it as, or as "Port N
+· owner's" where it was never published. An app can be put
 on the desktop itself, from its icon's menu: a widget, with no bar, under
 every window, moved by the grip along its top and resized by its
-edges, kept where it was left, and made a window again or taken off
+edges, kept where it was left, on a phone in a place of its own apart
+from its place on a laptop, and made a window again or taken off
 from the grip's menu. The desktop is the ground under the windows, and the agent arranges it:
 `desktop`, `place` and `unplace` on the brain's MCP put a widget down at a
 place and size, move one, or take one off, and say what lies there and

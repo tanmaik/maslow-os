@@ -34,9 +34,14 @@ import {
   sharePort,
   publicPortsOn,
   spentByDay,
+  appsOn,
+  publishApp,
+  unpublishApp,
+  arrangeApps,
   type Computer,
   type Move,
   type PortShare,
+  type PublishedApp,
   type SharedPort,
 } from "@maslow/db/computers";
 
@@ -1311,6 +1316,54 @@ export async function sharedWithMe(p: Principal): Promise<SharedPort[]> {
 // on the internet, everyone in the org, or some groups and some people.
 // Nobody outside the org can be named, since the database refuses a member
 // or a group of another org, and there is no level to give, only the port.
+// The apps the person has published from their computer's ports, in the
+// order of their shelf; none where they have no computer.
+export async function publishedOf(p: Principal): Promise<PublishedApp[]> {
+  if (deployment.computers.kind === "none") return [];
+  return asPerson(p, async (q) => {
+    const c = await computerOf(q, p.userId);
+    return c ? appsOn(q, c.id) : [];
+  });
+}
+
+// Publishes one of the person's ports as an app, with the name and face
+// they settled on, or takes one off; arranges their shelf. Each refuses,
+// in words, what it cannot do.
+export async function publish(
+  p: Principal,
+  port: number,
+  as: { name: string; icon: string | null } | null,
+): Promise<string | null> {
+  if (!Number.isInteger(port) || port < 1 || port > 65535)
+    return "That is not a port.";
+  const name = as?.name.trim().slice(0, 120) ?? "";
+  if (as && !name) return "An app has a name.";
+  if (as?.icon && (as.icon.length > 65536 || !/^data:image\//.test(as.icon)))
+    return "That is not a picture an app can wear.";
+  return asPerson(p, async (q) => {
+    const c = await computerOf(q, p.userId);
+    if (!c?.readyAt || !c.machineId) return "Your computer is not ready.";
+    if (as) await publishApp(q, c.id, port, name, as.icon);
+    else await unpublishApp(q, c.id, port);
+    return null;
+  });
+}
+export async function arrange(
+  p: Principal,
+  hrefs: string[],
+): Promise<string | null> {
+  return asPerson(p, async (q) => {
+    const c = await computerOf(q, p.userId);
+    if (!c?.machineId) return "You have no computer yet.";
+    const own = new RegExp(`^/port/${c.machineId}/(\\d{1,5})$`);
+    const ports = hrefs
+      .map((h) => Number(own.exec(h)?.[1]))
+      .filter((n) => Number.isInteger(n) && n > 0 && n < 65536);
+    await arrangeApps(q, c.id, ports);
+    return null;
+  });
+}
+
 export async function share(
   p: Principal,
   port: number,

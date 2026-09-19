@@ -54,6 +54,8 @@ export type Dragged = {
   kind: Card["kind"];
   title: string;
   href: string;
+  // The face it wears, where an app has one of its own.
+  face?: string;
   box: Box;
 };
 
@@ -535,6 +537,7 @@ export function Dock({
   onEnd,
   onPick,
   onPin,
+  onArrange,
   onFront,
   onClose,
 }: {
@@ -559,6 +562,8 @@ export function Dock({
   onPick: (b: Dragged) => void;
   // A port put on the desktop as a widget.
   onPin: (b: Dragged) => void;
+  // The shelf of apps from ports in a new order, by address.
+  onArrange: (hrefs: string[]) => void;
   // A window brought to the front, back from the dock if it was minimized.
   onFront: (w: Held) => void;
   onClose: (w: Held) => void;
@@ -738,7 +743,8 @@ export function Dock({
     }
   }, []);
   const apps = arrange(APPS, order);
-  const shown = arrange(ports, order);
+  // The apps from ports arrive in the order the server keeps for them.
+  const shown = ports;
   const live = useRef(order);
   live.current = order;
   // An icon put in another place, and the whole shelf's order with it.
@@ -747,12 +753,13 @@ export function Dock({
   const rearrange = (port: boolean, from: number, to: number, keep = false) => {
     if (from === to || from < 0) return;
     const mine = (port ? shown : apps).map((x) => x.href);
-    const rest = (port ? apps : shown).map((x) => x.href);
     const next = moved(mine, from, to);
-    const all = port ? [...rest, ...next] : [...next, ...rest];
-    live.current = all;
-    setOrder(all);
-    if (keep) localStorage.setItem(ORDER, JSON.stringify(all));
+    // The apps from ports are the person's shelf, kept on the server so
+    // it follows them; the built-in ones stay as this device has them.
+    if (port) return void (keep && onArrange(next));
+    live.current = next;
+    setOrder(next);
+    if (keep) localStorage.setItem(ORDER, JSON.stringify(next));
   };
   const remember = () =>
     localStorage.setItem(ORDER, JSON.stringify(live.current));

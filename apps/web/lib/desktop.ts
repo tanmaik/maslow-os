@@ -1,7 +1,7 @@
 import { Invalid, NotFound } from "@maslow/brain";
 import { asPerson, type Query } from "@maslow/db";
 import type { Principal } from "@maslow/db/auth";
-import { computerOf, portsReaching } from "@maslow/db/computers";
+import { appsOn, computerOf, portsReaching } from "@maslow/db/computers";
 import {
   addDesktop,
   desktopsOf,
@@ -25,7 +25,7 @@ import {
   type Port,
 } from "@/app/desktop/tiles";
 
-import { sharedWithMe, sharingOf, statsOf } from "./computer.ts";
+import { publishedOf, sharedWithMe, sharingOf, statsOf } from "./computer.ts";
 
 // The room as the person left it, one desktop at least, the wallpaper it
 // lies on, and the ports they could place: their own open ones and those
@@ -74,25 +74,34 @@ export async function desktopOf(p: Principal): Promise<{
   return { desktops, ports, wallpaper };
 }
 
-// The ports a person can open: their own, as their computer reports them
-// this moment, and those other people have opened to them, which say whose
-// they are.
+// The apps a person can open: the ports of their own computer they have
+// published, each as they named it, only while it is listening this
+// moment; and the ports other people opened to them, wearing the name and
+// face their owner published them under, or saying whose they are.
 export async function portsOf(p: Principal): Promise<Port[]> {
-  const [mine, shared] = await Promise.all([sharingOf(p), sharedWithMe(p)]);
+  const [mine, shared, published] = await Promise.all([
+    sharingOf(p),
+    sharedWithMe(p),
+    publishedOf(p),
+  ]);
   // A computer that does not answer is not one with no ports: the ask
   // fails, and the room keeps what it knew.
   const stats = mine ? await statsOf(p) : null;
+  const live = new Map((stats?.ports ?? []).map((x) => [x.port, x]));
   return [
     ...(mine
-      ? (stats?.ports ?? []).map((x) => ({
-          title: `Port ${x.port}${x.name ? ` · ${x.name}` : ""}`,
-          href: `/port/${mine.machineId}/${x.port}`,
-          face: x.face,
-        }))
+      ? published
+          .filter((a) => live.has(a.port))
+          .map((a) => ({
+            title: a.name,
+            href: `/port/${mine.machineId}/${a.port}`,
+            face: a.icon ?? live.get(a.port)?.face,
+          }))
       : []),
     ...shared.map((s) => ({
-      title: `Port ${s.port} · ${s.owner}'s`,
+      title: s.name ?? `Port ${s.port} · ${s.owner}'s`,
       href: `/port/${s.machineId}/${s.port}`,
+      ...(s.icon ? { face: s.icon } : {}),
     })),
   ];
 }
@@ -154,6 +163,13 @@ function fromBefore(layout: unknown): Screen | null {
 // desktop at no less than the smallest size, no two windows of one name, and
 // not too many. Nothing can be parked in the table.
 const KINDS = new Set<Kind>(["port", "record", "brain", "settings", "page"]);
+// A place on a phone's desktop: four shares.
+const spot = (p: unknown) =>
+  !!p &&
+  typeof p === "object" &&
+  (["x", "y", "w", "h"] as const).every((k) =>
+    share((p as Record<string, unknown>)[k]),
+  );
 // A desktop's place among the person's: a small whole number.
 const among = (n: unknown) =>
   typeof n === "number" && Number.isInteger(n) && n >= 0 && n <= 64;
@@ -187,6 +203,7 @@ function wellFormed(layout: unknown): layout is Screen | null {
       (c.pinned === undefined || typeof c.pinned === "boolean") &&
       (c.desk === undefined || among(c.desk)) &&
       (c.home === undefined || among(c.home)) &&
+      (c.phone === undefined || spot(c.phone)) &&
       !seen.has(c.id);
     if (!ok) return false;
     seen.add(c.id as string);
@@ -335,15 +352,16 @@ async function nameOf(
       );
     return {
       kind: "port",
-      title: title || `Port ${shown.port} · ${theirs.owner}'s`,
+      title: title || theirs.name || `Port ${shown.port} · ${theirs.owner}'s`,
       href: `/port/${theirs.machineId}/${theirs.port}`,
     };
   }
   const c = await computerOf(q, userId);
   if (!c?.machineId) throw new Invalid("the person has no computer yet");
+  const own = (await appsOn(q, c.id)).find((a) => a.port === shown.port);
   return {
     kind: "port",
-    title: title || `Port ${shown.port}`,
+    title: title || own?.name || `Port ${shown.port}`,
     href: `/port/${c.machineId}/${shown.port}`,
   };
 }

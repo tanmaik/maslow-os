@@ -7,7 +7,13 @@ import { headers } from "next/headers";
 
 import { Command, Head } from "@/app/computer/making";
 import { Button, ButtonLink } from "@/components/base/buttons/button";
-import { sharedWithMe, sharingOf, sshKeysOf, sshOf } from "@/lib/computer";
+import {
+  publishedOf,
+  sharedWithMe,
+  sharingOf,
+  sshKeysOf,
+  sshOf,
+} from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 
 import { Agents } from "./agents";
@@ -88,11 +94,12 @@ export async function AccessPane({
   const d = deployment.computers;
   const h = await headers();
   const site = `${h.get("x-forwarded-proto") ?? "http"}://${h.get("host")}`;
-  const [c, ssh, shares, shared] = await Promise.all([
+  const [c, ssh, shares, shared, published] = await Promise.all([
     d.kind === "none" ? null : asOrg(p.orgId, (q) => computerOf(q, p.userId)),
     d.kind === "none" ? null : sshOf(p, site),
     d.kind === "none" ? null : sharing(p),
     d.kind === "none" ? [] : sharedWithMe(p),
+    publishedOf(p),
   ]);
   return (
     <div className="flex flex-col gap-5">
@@ -125,7 +132,9 @@ export async function AccessPane({
           <Said {...saidKeys} />
         </div>
       )}
-      {d.kind !== "none" && <LivePorts sharing={shares} />}
+      {d.kind !== "none" && (
+        <LivePorts sharing={shares} published={published} />
+      )}
       <Shared ports={shared} />
       <div className="flex flex-col gap-2">
         <Head>Agents on your brain</Head>

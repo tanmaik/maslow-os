@@ -831,7 +831,24 @@ export function Desktop({
     else gripped.current.add(key);
     setScreen(
       (l) => ({
-        cards: l.cards.map((c) => (c.id === key ? clamp({ ...c, ...to }) : c)),
+        cards: l.cards.map((c) => {
+          if (c.id !== key) return c;
+          // A widget moved on a phone moves on phones alone: the place it
+          // has on a laptop is another.
+          const placing = "x" in to || "y" in to || "w" in to || "h" in to;
+          if (!medium && c.pinned && placing) {
+            const { x, y, w, h, ...rest } = to;
+            const was = c.phone ?? { x: c.x, y: c.y, w: c.w, h: c.h };
+            const phone = clamp({
+              x: x ?? was.x,
+              y: y ?? was.y,
+              w: w ?? was.w,
+              h: h ?? was.h,
+            });
+            return { ...c, ...rest, phone };
+          }
+          return clamp({ ...c, ...to });
+        }),
       }),
       save,
     );
@@ -1293,6 +1310,13 @@ export function Desktop({
         onBegin={begin}
         onEnd={end}
         onPick={pick}
+        onArrange={(hrefs) =>
+          void fetch("/desktop/shelf", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(hrefs),
+          }).catch(() => {})
+        }
         onFront={raise}
         onClose={(w) => void close(w.card.id)}
       />
@@ -1538,8 +1562,13 @@ function DesktopPage({
   };
   // Where something sits on the desktop, in pixels: its share of the desktop,
   // held to the sizes its surface is worth being.
-  const rectOf = (c: Box & Point, bounds?: Bounds) => {
+  const rectOf = (
+    c: Box & Point & Pick<Card, "phone" | "pinned">,
+    bounds?: Bounds,
+  ) => {
     if (narrow) {
+      // A widget lies where the phone last left it.
+      if (c.pinned && c.phone) c = { ...c, ...c.phone };
       // The full width, 8 in from either side (ryOS WindowFrame.tsx:268,277);
       // never above the top, at least 80 of it on screen
       // (useWindowManager.ts:298-306), and no taller than the app is worth

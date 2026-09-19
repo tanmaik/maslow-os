@@ -535,7 +535,82 @@ export async function computerByMachine(
   );
 }
 
-export type SharedPort = { machineId: string; port: number; owner: string };
+// A port its owner published: what it is called and what it wears, and
+// its place on their shelf.
+export type PublishedApp = {
+  port: number;
+  name: string;
+  icon: string | null;
+  position: number;
+};
+
+// The apps a computer's owner has published, in the order of their shelf.
+export async function appsOn(
+  q: Query,
+  computerId: string,
+): Promise<PublishedApp[]> {
+  return (
+    await q.query<PublishedApp>(
+      `select port, name, icon, position from published_apps
+       where computer_id = $1 order by position, port`,
+      [computerId],
+    )
+  ).rows;
+}
+
+// Publishes a port as an app, or renames one already published: after the
+// last on the shelf when new, where it was when not.
+export async function publishApp(
+  q: Query,
+  computerId: string,
+  port: number,
+  name: string,
+  icon: string | null,
+): Promise<void> {
+  await q.query(
+    `insert into published_apps (computer_id, port, name, icon, position)
+     values ($1, $2, $3, $4,
+       (select coalesce(max(position) + 1, 0) from published_apps where computer_id = $1))
+     on conflict (computer_id, port) do update set name = $3, icon = $4`,
+    [computerId, port, name, icon],
+  );
+}
+
+export async function unpublishApp(
+  q: Query,
+  computerId: string,
+  port: number,
+): Promise<void> {
+  await q.query(
+    "delete from published_apps where computer_id = $1 and port = $2",
+    [computerId, port],
+  );
+}
+
+// The shelf in the order given, by port; one not named keeps its place
+// after those that were.
+export async function arrangeApps(
+  q: Query,
+  computerId: string,
+  ports: number[],
+): Promise<void> {
+  await q.query(
+    `update published_apps a set position = p.at
+     from unnest($2::int[]) with ordinality as p (port, at)
+     where a.computer_id = $1 and a.port = p.port`,
+    [computerId, ports],
+  );
+}
+
+// A port opened to the member reading, with what its owner published it
+// as where they did: a name and a face that travel with it.
+export type SharedPort = {
+  machineId: string;
+  port: number;
+  owner: string;
+  name: string | null;
+  icon: string | null;
+};
 
 // The ports other people opened to the member reading, by name, by a group
 // they are in, or to everyone in the org, with whose each is. Their own
@@ -543,17 +618,19 @@ export type SharedPort = { machineId: string; port: number; owner: string };
 export async function portsReaching(q: Query): Promise<SharedPort[]> {
   return (
     await q.query<SharedPort>(
-      `select c.machine_id as "machineId", s.port, u.name as owner
+      `select c.machine_id as "machineId", s.port, u.name as owner,
+              a.name as name, a.icon as icon
        from port_shares s
        join computers c on c.id = s.computer_id
        join users u on u.id = c.user_id
+       left join published_apps a on a.computer_id = s.computer_id and a.port = s.port
        where c.user_id <> current_member() and c.machine_id is not null
          and (s.subject in ('everyone', 'public')
            or s.member_id = current_member()
            or exists (select 1 from group_members m
                       where m.group_id = s.group_id
                         and m.member_id = current_member()))
-       group by c.machine_id, s.port, u.name
+       group by c.machine_id, s.port, u.name, a.name, a.icon
        order by u.name, s.port`,
     )
   ).rows;

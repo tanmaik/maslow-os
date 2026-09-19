@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { PublishSheet } from "@/app/computer/publish-sheet";
 import { ShareSheet, type Reach } from "@/app/computer/share-sheet";
 import { Row, Rows } from "@/app/settings/row";
 import { StatusDot } from "@/components/base/badges/status-dot";
@@ -14,7 +15,14 @@ import {
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 
-export type Port = { port: number; name: string; ran?: string };
+export type Port = {
+  port: number;
+  name: string;
+  ran?: string;
+  face?: string;
+};
+// A port published as an app: its name and the face it wears.
+export type Published = { port: number; name: string; icon: string | null };
 type Share = {
   port: number;
   subject: "everyone" | "group" | "member" | "public";
@@ -52,12 +60,16 @@ function reach(shares: Share[]): string | null {
 export function Ports({
   ports,
   sharing,
+  published,
 }: {
   ports: Port[];
   sharing: Sharing | null;
+  published: Published[];
 }) {
   // The port whose sheet is open, if any.
   const [sharingPort, setSharingPort] = useState<number | null>(null);
+  const [publishingPort, setPublishingPort] = useState<number | null>(null);
+  const appOf = (port: number) => published.find((a) => a.port === port);
   const router = useRouter();
   if (ports.length === 0) return null;
   const on = (port: number) =>
@@ -89,13 +101,21 @@ export function Ports({
                       <span className="tabular-nums">{p.port}</span>
                     </span>
                   }
-                  description={p.ran || p.name}
+                  description={appOf(p.port)?.name ?? (p.ran || p.name)}
                 >
                   {said && (
                     <span className="text-caption-1-regular text-text-secondary">
                       {said}
                     </span>
                   )}
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    disabled={!sharing}
+                    onClick={() => setPublishingPort(p.port)}
+                  >
+                    {appOf(p.port) ? "App…" : "Publish…"}
+                  </Button>
                   <Button
                     variant="secondary"
                     size="xs"
@@ -131,6 +151,12 @@ export function Ports({
                 </ContextMenuItem>
                 <ContextMenuItem
                   disabled={!sharing}
+                  onClick={() => setPublishingPort(p.port)}
+                >
+                  {appOf(p.port) ? "As an app…" : "Publish…"}
+                </ContextMenuItem>
+                <ContextMenuItem
+                  disabled={!sharing}
                   onClick={() => setSharingPort(p.port)}
                 >
                   Share…
@@ -152,6 +178,22 @@ export function Ports({
           );
         })}
       </Rows>
+      {sharing && publishingPort !== null && (
+        <PublishSheet
+          port={publishingPort}
+          name={
+            appOf(publishingPort)?.name ??
+            ports.find((p) => p.port === publishingPort)?.name ??
+            `Port ${publishingPort}`
+          }
+          face={
+            appOf(publishingPort)?.icon ??
+            ports.find((p) => p.port === publishingPort)?.face
+          }
+          published={!!appOf(publishingPort)}
+          onClose={() => setPublishingPort(null)}
+        />
+      )}
       {sharing && (
         <ShareSheet
           open={sharingPort !== null}

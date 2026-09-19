@@ -227,6 +227,7 @@ export function CommandBar({
     kind: "port",
     title: p.title,
     href: p.href,
+    face: p.face,
     box: boxOf({ kind: "port", href: p.href }),
   });
   const typed = q.trim().length > 0;
@@ -261,7 +262,7 @@ export function CommandBar({
           autoFocus
           value={q}
           onValueChange={setQ}
-          placeholder="Search your brain, files, ports, apps and settings"
+          placeholder="Search your brain, files, apps and settings"
         />
         <CommandList>
           <CommandEmpty>Nothing matches</CommandEmpty>
@@ -310,7 +311,7 @@ export function CommandBar({
             </CommandGroup>
           )}
           {ports.length > 0 && (
-            <CommandGroup heading="Ports">
+            <CommandGroup heading="Apps">
               {ports.map((p) => (
                 <CommandItem
                   key={p.href}

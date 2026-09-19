@@ -29,6 +29,9 @@ export type Card = {
   // The desktop a window filling the screen came from: a filled window is
   // a desktop of its own, and goes back when it is let down.
   home?: number;
+  // Where a widget lies on a phone, apart from where it lies on a laptop,
+  // since the two desktops are not the same shape.
+  phone?: { x: number; y: number; w: number; h: number };
 };
 
 // A desktop: the windows on it, in the order they stack. A desktop is the size
