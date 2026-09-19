@@ -19,6 +19,28 @@ The key is still minted per computer against the weekly cap in dollars,
 and OpenRouter still enforces the cap on the key. What changes is where
 the key lives: on the row, and nowhere else.
 
+## The week is the person's own
+
+2026-09-19. OpenRouter's weekly reset turns for everyone on Monday at
+00:00 UTC, and a ceiling we raised by hand was put back by the next
+sweep, so there was no way to give a person their week again. Tanmai: "i
+would rather just have resets without the timing changing. and lets just
+have the weeks start with 7 day rotations from the day that they create
+their account."
+
+The key no longer resets at OpenRouter at all. Its ceiling is a number of
+dollars of everything it ever spent, and the app moves it: a person's
+week is seven days counted from the day their computer was claimed, the
+row holds which of those weeks the ceiling was last set for
+(`model_week`), and when that is not this week, at the hourly sweep or
+when the person looks at their spend, the ceiling becomes what the key
+has spent plus the cap. What they have spent this week is the cap less
+what the ceiling leaves. Within a week the app leaves the ceiling alone,
+so a reset is one call to OpenRouter that sets it to spent plus cap
+again: `pnpm model:reset production`, or with part of a key's name for
+one person. It touches no database and moves no week. A cap changed on a
+row takes hold when that person's week next turns.
+
 Where a machine cannot dial the deployment, as on a laptop, the call goes
 to the machine's own door, up the line the laptop's stack already holds
 open for the brain, and streams back down it as a head, its chunks and

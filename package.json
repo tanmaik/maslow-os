@@ -25,6 +25,7 @@
     "env:set": "dotenvx set -f .env.development",
     "env:get": "dotenvx get -f .env.development",
     "env:pull": "node scripts/env-pull.mjs",
+    "model:reset": "dotenvx run -q -f .env.development -- node scripts/model-reset.mjs",
     "migration:new": "node scripts/migration-new.mjs",
     "teardown": "node scripts/teardown.mjs"
   },

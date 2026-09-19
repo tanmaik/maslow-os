@@ -23,6 +23,7 @@ import {
   setMachine,
   setModelKey,
   setModelSpent,
+  setModelWeek,
   setMove,
   setPlace,
   setReady,
@@ -59,7 +60,7 @@ import {
   type Stats,
 } from "./door.ts";
 import { ownerPrincipal, refreshShares } from "./shares.ts";
-import { openrouter } from "./openrouter.ts";
+import { openrouter, type Spend } from "./openrouter.ts";
 import { isRegion, regionName } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
 import { SIZES } from "./sizes.ts";
@@ -425,6 +426,7 @@ async function modelKeyOf(q: Query, c: Computer): Promise<string | null> {
   const capUsd = c.modelCapUsd ?? m.capUsd;
   const minted = await openrouter.mint(`${keyPrefix()}${c.id}`, capUsd);
   await setModelKey(q, c.id, minted.key, minted.hash, capUsd);
+  await setModelWeek(q, c.id, weekOf(c).n);
   await note(q, {
     orgId: c.orgId,
     userId: c.userId,
@@ -755,10 +757,47 @@ async function stray(held: Set<string>): Promise<void> {
     }
 }
 
+// A week of the person's own: seven days, counted from the day their
+// computer was claimed, so everyone's turns on their own day and hour.
+const WEEK = 7 * 24 * 3600_000;
+const weekOf = (c: Computer): { n: number; turns: Date } => {
+  const n = Math.floor((Date.now() - c.createdAt.getTime()) / WEEK);
+  return { n, turns: new Date(c.createdAt.getTime() + (n + 1) * WEEK) };
+};
+
+// The key's ceiling as it stands for this week of the person's. The key
+// never resets on its own: when their week turns, or the key still resets
+// by OpenRouter's calendar, the ceiling is set to what it has spent plus
+// the cap, which is a fresh week's allowance. Within a week it is left
+// alone, so one raised by hand, a reset, stands until the week turns and
+// moves no week.
+async function allowance(
+  q: Query,
+  c: Computer,
+  read: Spend,
+  capUsd: number,
+): Promise<number> {
+  const { n } = weekOf(c);
+  if (c.modelWeek === n && read.every === null && read.limit !== null)
+    return read.limit;
+  const limit = read.usage + capUsd;
+  await openrouter.cap(c.modelKeyHash!, limit);
+  await setModelWeek(q, c.id, n);
+  await note(q, {
+    orgId: c.orgId,
+    userId: c.userId,
+    resource: "key",
+    event: "capped",
+    ref: c.modelKeyHash!,
+    detail: { capUsd, week: n, limit, was: read.limit, wasEvery: read.every },
+    why: "their week turned",
+  });
+  return limit;
+}
+
 // The key's spend since the last sweep, into the ledger, and its ceiling
-// set again where the key carries a different cap than the row's or still
-// resets by the month. A key OpenRouter no longer has is forgotten and
-// the machine remade with a fresh one.
+// moved on when the person's week has turned. A key OpenRouter no longer
+// has is forgotten and the machine remade with a fresh one.
 async function spend(q: Query, c: Computer, m: Machine): Promise<void> {
   const models = deployment.models;
   if (models.kind !== "openrouter" || !c.modelKeyHash) return;
@@ -767,20 +806,7 @@ async function spend(q: Query, c: Computer, m: Machine): Promise<void> {
   try {
     const read = await openrouter.spent(c.modelKeyHash);
     total = read.usage;
-    const off = read.limit !== capUsd;
-    const monthly = read.every !== "weekly";
-    if (off || monthly) {
-      await openrouter.cap(c.modelKeyHash, capUsd);
-      await note(q, {
-        orgId: c.orgId,
-        userId: c.userId,
-        resource: "key",
-        event: "capped",
-        ref: c.modelKeyHash,
-        detail: { capUsd, was: read.limit, wasEvery: read.every },
-        why: monthly ? "the cap is weekly now" : "the cap changed",
-      });
-    }
+    await allowance(q, c, read, capUsd);
   } catch (err) {
     if (/ answered 404:/.test((err as Error).message)) {
       await clearModelKey(q, c.id);
@@ -1768,17 +1794,6 @@ export type Usage = {
   models: { model: string; usd: number }[];
 };
 
-// OpenRouter's weekly window turns on Monday at 00:00 UTC; the ceiling on
-// the key resets with it.
-function nextMonday(): Date {
-  const now = new Date();
-  const d = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
-  );
-  d.setUTCDate(d.getUTCDate() + ((8 - d.getUTCDay()) % 7 || 7));
-  return d;
-}
-
 // The vendor is asked once a minute for each person; a pane opened twice
 // in that minute reads the same answer.
 const usages = new Map<string, { at: number; usage: Promise<Usage | null> }>();
@@ -1801,9 +1816,14 @@ async function readUsage(p: Principal): Promise<Usage | null> {
       ? null
       : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   const capUsd = c?.modelCapUsd ?? m.capUsd;
-  const resetsAt = nextMonday().toISOString();
   if (!c?.modelKeyHash)
-    return { spentUsd: 0, capUsd, resetsAt, days: [], models: [] };
+    return {
+      spentUsd: 0,
+      capUsd,
+      resetsAt: new Date(Date.now() + WEEK).toISOString(),
+      days: [],
+      models: [],
+    };
   const year = new Date();
   year.setUTCFullYear(year.getUTCFullYear() - 1);
   const [read, days, called] = await Promise.all([
@@ -1815,10 +1835,13 @@ async function readUsage(p: Principal): Promise<Usage | null> {
   const byModel = new Map<string, number>();
   for (const a of called)
     byModel.set(a.model, (byModel.get(a.model) ?? 0) + a.usd);
+  // What is left of the week's allowance is what the ceiling leaves, so a
+  // reset shows as a week begun again.
+  const limit = await asOrg(p.orgId, (q) => allowance(q, c, read, capUsd));
   return {
-    spentUsd: read.week,
-    capUsd: read.limit ?? capUsd,
-    resetsAt,
+    spentUsd: Math.max(0, capUsd - (limit - read.usage)),
+    capUsd,
+    resetsAt: weekOf(c).turns.toISOString(),
     days,
     models: [...byModel]
       .map(([model, usd]) => ({ model, usd }))

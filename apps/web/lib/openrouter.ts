@@ -8,7 +8,6 @@ export type MintedKey = { key: string; hash: string };
 // What a key has spent, in dollars, and the ceiling it spends against.
 export type Spend = {
   usage: number;
-  week: number;
   limit: number | null;
   // How often the ceiling resets: "weekly", "monthly", or null for none.
   every: string | null;
@@ -46,42 +45,41 @@ async function call<T>(
 }
 
 export const openrouter = {
-  // A key named for the environment and the person, capped in dollars a
-  // week. The key itself is answered once, here; after that only its hash.
+  // A key named for the environment and the person, with a ceiling in
+  // dollars that never resets on its own: the app moves it as the person's
+  // weeks turn. The key itself is answered once, here; after that only its
+  // hash.
   async mint(name: string, capUsd: number): Promise<MintedKey> {
     const r = await call<{ key: string; data: { hash: string } }>(
       "POST",
       "/keys",
-      { name, limit: capUsd, limit_reset: "weekly" },
+      { name, limit: capUsd, limit_reset: null },
     );
     return { key: r.key, hash: r.data.hash };
   },
 
-  // What the key has spent, in dollars, since it was made and since the
-  // week turned, with the ceiling it carries. OpenRouter's weekly window
-  // turns on Monday at 00:00 UTC.
+  // What the key has spent, in dollars, since it was made, with the
+  // ceiling it carries.
   async spent(hash: string): Promise<Spend> {
     const r = await call<{
       data: {
         usage: number;
-        usage_weekly: number;
         limit: number | null;
         limit_reset: string | null;
       };
     }>("GET", `/keys/${hash}`);
     return {
       usage: r.data.usage,
-      week: r.data.usage_weekly,
       limit: r.data.limit,
       every: r.data.limit_reset,
     };
   },
 
-  // The key's ceiling, in dollars a week, set again.
-  async cap(hash: string, capUsd: number): Promise<void> {
+  // The key's ceiling, in dollars of everything it ever spent, set again.
+  async cap(hash: string, limitUsd: number): Promise<void> {
     await call("PATCH", `/keys/${hash}`, {
-      limit: capUsd,
-      limit_reset: "weekly",
+      limit: limitUsd,
+      limit_reset: null,
     });
   },
 

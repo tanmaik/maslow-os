@@ -513,7 +513,13 @@ call goes through us: the agent on the machine sends it to this
 deployment's gateway, `/model`, carrying a token of its computer's and
 no key, and the gateway sends it on with the OpenRouter key that
 computer's row holds, minted per person with a cap of five dollars a
-week. The key never leaves our server. What a person spent is shown to
+week. The week is the person's own: seven days counted from the day their
+computer was claimed, so everyone's turns on their own day. The key never
+resets on its own; when a person's week turns the app sets its ceiling to
+what it has spent plus the cap, at the hourly sweep or when they next look
+at what they spent. A reset is ours to give, `pnpm model:reset`, which
+gives a key its cap again at OpenRouter and moves no week. The key never
+leaves our server. What a person spent is shown to
 them in dollars, in the Agent window and on the Agent pane; OpenRouter
 holds the record, the sweep copies it, and reaching the cap stops the
 calls and nothing else. Where a machine cannot dial the deployment, as

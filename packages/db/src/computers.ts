@@ -29,6 +29,10 @@ export type Computer = {
   // What this person may spend on models in a week, in dollars; null for a
   // key minted before the column, which the deployment's default covers.
   modelCapUsd: number | null;
+  // Which week of their own the key's allowance was last set for, and the
+  // day the weeks are counted from.
+  modelWeek: number | null;
+  createdAt: Date;
   // The owner's session the machine holds to reach the brain, if any.
   sessionId: string | null;
   // Whether its member is current; a past member's machine is stopped.
@@ -69,6 +73,7 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.backed_up_at as "backedUpAt", c.authorized_keys as "authorizedKeys",
   c.model_key as "modelKey", c.model_key_hash as "modelKeyHash",
   c.model_spent_usd::float as "modelSpentUsd", c.model_cap_usd::float as "modelCapUsd",
+  c.model_week as "modelWeek", c.created_at as "createdAt",
   c.session_id as "sessionId", c.move,
   c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
   c.memory_used_mb as "memoryUsedMb", c.memory_peak_mb as "memoryPeakMb",
@@ -120,9 +125,17 @@ export async function setModelKey(
 // another.
 export async function clearModelKey(q: Query, id: string) {
   await q.query(
-    "update computers set model_key = null, model_key_hash = null, model_spent_usd = 0 where id = $1",
+    "update computers set model_key = null, model_key_hash = null, model_spent_usd = 0, model_week = null where id = $1",
     [id],
   );
+}
+
+// The week of the person's own the key's allowance now stands for.
+export async function setModelWeek(q: Query, id: string, week: number) {
+  await q.query("update computers set model_week = $2 where id = $1", [
+    id,
+    week,
+  ]);
 }
 
 // How much of the key's spend the ledger holds now.
