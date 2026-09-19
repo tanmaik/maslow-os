@@ -64,6 +64,8 @@ export type PermissionOption = {
 export type Past = {
   sessionId: string;
   title: string | null;
+  // The last thing the agent said in it, as one line.
+  preview?: string | null;
   updatedAt?: string;
 };
 
@@ -136,6 +138,8 @@ type ChatSaid = {
   running: boolean;
   modes: { currentModeId: string; availableModes: Mode[] } | null;
   title: string | null;
+  // The last thing the agent said in it, as one line.
+  preview: string | null;
 };
 
 // How full a conversation is, as the door reckons it from Claude Code's

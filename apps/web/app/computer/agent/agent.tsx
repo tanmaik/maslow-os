@@ -11,6 +11,18 @@ import { useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { PhoneSheet, SheetRow } from "@/app/desktop/sheet";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Button } from "@/components/base/buttons/button";
+import { InputBase } from "@/components/base/input/input";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import type { Content, Past } from "@/app/computer/agent/acp";
 import { useChats } from "@/app/computer/agent/chats";
@@ -68,6 +80,22 @@ function kindOf(name: string, type: string): ComposerAttachmentKind {
 // is missing.
 const join = (typed: string, heard: string) =>
   heard ? `${typed}${typed && !typed.endsWith(" ") ? " " : ""}${heard}` : typed;
+
+// An agent's mark: its initial on a colour of its own, the same colour
+// every time from its name.
+const COLOURS = ["blue", "lime", "pink"] as const;
+function Mark({ name, size = "sm" }: { name: string; size?: "xs" | "sm" }) {
+  let n = 0;
+  for (const ch of name) n = (n * 31 + ch.codePointAt(0)!) % 9973;
+  return (
+    <Avatar
+      size={size}
+      color={COLOURS[n % COLOURS.length]}
+      initials={(name.trim()[0] ?? "?").toUpperCase()}
+      className="shrink-0"
+    />
+  );
+}
 
 // When a conversation was last worked on, short enough for the rail's chip.
 function when(at: string | undefined): string {
@@ -138,15 +166,31 @@ export function Agent({ href }: { href?: string } = {}) {
   const [held, setHeld] = useState<Held[]>([]);
   const ear = useEar();
   const folded = useFolded();
-  // On a phone a chat opens in voice mode, the keyboard one tap away, and
-  // on the last conversation rather than a new one.
+  // On a phone a chat opens in voice mode, the keyboard one tap away. On
+  // every device the window opens on the last agent spoken to, never on
+  // an empty one.
   const [typing, setTyping] = useState(false);
   useEffect(() => {
-    if (folded && !current && ids.length === 0 && past[0]) {
+    if (!current && ids.length === 0 && past[0]) {
       open(past[0].sessionId);
       setCurrent(past[0].sessionId);
     }
-  }, [folded, current, ids.length, past, open]);
+  }, [current, ids.length, past, open]);
+  // The name the person typed for the agent they are making, given to the
+  // conversation the moment the door hands it over.
+  const [naming, setNaming] = useState(false);
+  const christening = useRef<string | null>(null);
+  useEffect(() => {
+    if (newest && christening.current) {
+      name(newest, christening.current);
+      christening.current = null;
+    }
+  }, [newest, name]);
+  const make = (title: string) => {
+    christening.current = title;
+    setNaming(false);
+    begin();
+  };
   // Why a file could not be attached.
   const [failed, setFailed] = useState<string | null>(null);
   const why = failed ?? refused;
@@ -293,9 +337,14 @@ export function Agent({ href }: { href?: string } = {}) {
     setPins(next);
     localStorage.setItem(PINS, JSON.stringify(next));
   };
+  const nameOf = (p: Past) => chats[p.sessionId]?.title ?? p.title ?? "Agent";
   const row = (p: Past) => ({
     id: p.sessionId,
-    label: chats[p.sessionId]?.title ?? p.title ?? "New chat",
+    label: nameOf(p),
+    avatar: <Mark name={nameOf(p)} />,
+    preview: chats[p.sessionId]?.running
+      ? "Working…"
+      : (chats[p.sessionId]?.preview ?? p.preview ?? ""),
     time: when(p.updatedAt),
     pinned: pins.includes(p.sessionId),
   });
@@ -311,6 +360,13 @@ export function Agent({ href }: { href?: string } = {}) {
       threads: rest.map(row),
     },
   ];
+
+  const title =
+    chat?.title ?? past.find((p) => p.sessionId === here)?.title ?? "Agent";
+  // The sheet a new agent is named on, since one is never made unnamed.
+  const christen = (
+    <Christen open={naming} onMake={make} onClose={() => setNaming(false)} />
+  );
 
   const running = chat?.running ?? false;
   const transcript = chat ? (
@@ -394,7 +450,7 @@ export function Agent({ href }: { href?: string } = {}) {
           // The loader paints the pill and orbits its rim; a pill painting
           // its own ground would cover the light.
           className="bg-transparent shadow-none dark:bg-transparent"
-          placeholder={away ?? "Ask your agent to do something"}
+          placeholder={away ?? (here ? `Message ${title}` : "Make an agent")}
         />
       </ComposerLoader>
       {why !== null && (
@@ -413,8 +469,6 @@ export function Agent({ href }: { href?: string } = {}) {
     </div>
   );
 
-  const title =
-    chat?.title ?? past.find((p) => p.sessionId === here)?.title ?? "New chat";
   // Whether the list of chats is open on a phone.
   const [picking, setPicking] = useState(false);
   // On a phone the window is the conversation alone: the chats as a
@@ -431,31 +485,37 @@ export function Agent({ href }: { href?: string } = {}) {
             onClick={() => setPicking(true)}
             className="flex min-w-0 flex-1 cursor-pointer items-center gap-1 rounded-lg text-left text-body-medium text-text-primary outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
           >
+            <Mark name={title} size="xs" />
             <span className="truncate">{title}</span>
             <RiArrowDownSLine
               className="size-4 shrink-0 text-foreground-icon-secondary"
               aria-hidden
             />
           </button>
-          <BarButton icon={RiChatNewLine} label="New chat" onClick={begin} />
+          <BarButton
+            icon={RiChatNewLine}
+            label="New agent"
+            onClick={() => setNaming(true)}
+          />
         </InBar>
+        {christen}
         <PhoneSheet
           open={picking}
           onClose={() => setPicking(false)}
-          label="Chats"
+          label="Agents"
         >
           <SheetRow
             onClick={() => {
               setPicking(false);
-              begin();
+              setNaming(true);
             }}
           >
-            New chat
+            New agent
           </SheetRow>
           {here && !past.some((p) => p.sessionId === here) && (
             <SheetRow onClick={() => setPicking(false)}>
               <span className="text-text-primary">
-                {chat?.title ?? "New chat"}
+                {chat?.title ?? "Agent"}
               </span>
             </SheetRow>
           )}
@@ -475,7 +535,7 @@ export function Agent({ href }: { href?: string } = {}) {
                   p.sessionId === here ? "text-text-primary" : undefined
                 }
               >
-                {chats[p.sessionId]?.title ?? p.title ?? "New chat"}
+                {nameOf(p)}
               </span>
             </SheetRow>
           ))}
@@ -501,59 +561,119 @@ export function Agent({ href }: { href?: string } = {}) {
       </div>
     );
   return (
-    <AiChatShell
-      className="h-full"
-      composer={composer}
-      wired={{
-        repos,
-        groupLabel: "Chats",
-        head: null,
-        actions: [
-          {
-            label: "New chat",
-            icon: RiAddFill,
-            onClick: begin,
+    <>
+      {christen}
+      <AiChatShell
+        className="h-full"
+        composer={composer}
+        wired={{
+          repos,
+          groupLabel: "Agents",
+          head: null,
+          actions: [
+            {
+              label: "New agent",
+              icon: RiAddFill,
+              onClick: () => setNaming(true),
+            },
+          ],
+          sidebarFooter: null,
+          sidebar: rail,
+          activeThreadId: here ?? undefined,
+          onThreadSelect: (id: string) => {
+            if (id !== here) {
+              open(id);
+              setCurrent(id);
+            }
           },
-        ],
-        sidebarFooter: null,
-        sidebar: rail,
-        activeThreadId: here ?? undefined,
-        onThreadSelect: (id: string) => {
-          if (id !== here) {
-            open(id);
-            setCurrent(id);
-          }
-        },
-        onThreadPin: (id, on) =>
-          keep(
-            on
-              ? [...pins.filter((p) => p !== id), id]
-              : pins.filter((p) => p !== id),
+          onThreadPin: (id, on) =>
+            keep(
+              on
+                ? [...pins.filter((p) => p !== id), id]
+                : pins.filter((p) => p !== id),
+            ),
+          thread: transcript,
+          title: (
+            <span className="flex min-w-0 items-center gap-2">
+              <Mark name={title} size="xs" />
+              <Named title={title} onName={(t) => here && name(here, t)} />
+            </span>
           ),
-        thread: transcript,
-        title: <Named title={title} onName={(t) => here && name(here, t)} />,
-        headerActions: (
-          <div className="flex shrink-0 items-center gap-1">
-            <IconButton
-              size="small"
-              icon={RiSideBarLine}
-              aria-label={rail ? "Hide the chats" : "Show the chats"}
-              title={rail ? "Hide the chats" : "Show the chats"}
-              aria-pressed={rail}
-              onClick={() => showRail(!rail)}
-            />
-            <IconButton
-              size="small"
-              icon={RiChatNewLine}
-              aria-label="New chat"
-              title="New chat"
-              onClick={begin}
-            />
-          </div>
-        ),
-        working: false,
-      }}
-    />
+          headerActions: (
+            <div className="flex shrink-0 items-center gap-1">
+              <IconButton
+                size="small"
+                icon={RiSideBarLine}
+                aria-label={rail ? "Hide the agents" : "Show the agents"}
+                title={rail ? "Hide the agents" : "Show the agents"}
+                aria-pressed={rail}
+                onClick={() => showRail(!rail)}
+              />
+            </div>
+          ),
+          working: false,
+        }}
+      />
+    </>
+  );
+}
+
+// Where a new agent gets its name before it exists: the name is the one
+// thing asked, and Return makes it.
+function Christen({
+  open,
+  onMake,
+  onClose,
+}: {
+  open: boolean;
+  onMake: (name: string) => void;
+  onClose: () => void;
+}) {
+  const [draft, setDraft] = useState("");
+  useEffect(() => {
+    if (open) setDraft("");
+  }, [open]);
+  const make = () => {
+    const t = draft.trim();
+    if (t) onMake(t.slice(0, 60));
+  };
+  return (
+    <Dialog open={open} onOpenChange={(now) => !now && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>New agent</DialogTitle>
+          <DialogDescription>
+            Name it for what it does. It stays in the rail, and you talk to it
+            by name.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="contents"
+          onSubmit={(e) => {
+            e.preventDefault();
+            make();
+          }}
+        >
+          <InputBase
+            autoFocus
+            aria-label="Name"
+            placeholder="Sales Outbound"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+          />
+          <DialogFooter>
+            <DialogClose
+              render={<Button variant="secondary" size="small" type="button" />}
+            >
+              Cancel
+            </DialogClose>
+            <Button size="small" type="submit" disabled={!draft.trim()}>
+              Make
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 

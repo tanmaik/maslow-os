@@ -603,6 +603,26 @@ export const fly = {
     });
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
   },
+  // Tells the machine's door which of its ports are open to anyone, the
+  // whole list each time, with a ticket it takes.
+  async publicPorts(
+    machineId: string,
+    ticket: string,
+    ports: number[],
+  ): Promise<void> {
+    const res = await fetch(`https://${config().app}.fly.dev/maslow/public`, {
+      method: "PUT",
+      headers: {
+        "fly-force-instance-id": machineId,
+        "x-maslow-ticket": ticket,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(ports),
+      signal: AbortSignal.timeout(8_000),
+    });
+    if (!res.ok) throw new Error(`the door answered ${res.status}`);
+  },
+
   // Asks the machine's door to start the person's Linux over at the next
   // boot, with a ticket it takes.
   async askReset(machineId: string, ticket: string): Promise<void> {

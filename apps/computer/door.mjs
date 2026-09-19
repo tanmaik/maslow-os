@@ -70,10 +70,30 @@ function scopeOf(ticket) {
 // take: nothing about a person's ports reaches them.
 const ours = (ticket) => scopeOf(ticket) === "";
 
-// Whether a ticket opens what is being asked for. A ticket for one port
-// opens that port and nothing else, so a port shared with somebody does not
-// hand them the machine it runs on.
+// The ports open to anyone on the internet, as our server last said. Kept
+// on the disk outside the person's Linux, so a door that comes back still
+// knows them and nothing inside can add one.
+const PUBLIC_PORTS = "/data/public-ports.json";
+const portsList = (said) =>
+  Array.isArray(said)
+    ? said.filter((n) => Number.isInteger(n) && n > 0 && n < 65536)
+    : null;
+let PUBLIC = new Set(
+  (() => {
+    try {
+      return portsList(JSON.parse(fs.readFileSync(PUBLIC_PORTS, "utf8"))) ?? [];
+    } catch {
+      return [];
+    }
+  })(),
+);
+
+// Whether a ticket opens what is being asked for. A public port opens to
+// anyone; otherwise a ticket for one port opens that port and nothing
+// else, so a port shared with somebody does not hand them the machine it
+// runs on.
 function opens(ticket, to) {
+  if (to.theirs === true && PUBLIC.has(to.port)) return true;
   const scope = scopeOf(ticket);
   if (scope === null) return false;
   return scope === "" || (to.theirs === true && String(to.port) === scope);
@@ -769,6 +789,17 @@ const server = http.createServer(async (req, res) => {
       return res.end(JSON.stringify({ name }));
     }
   }
+  // The ports open to anyone, for our server alone: the whole list each
+  // time, kept on the disk.
+  if (to.mine && url.pathname === "/maslow/public" && req.method === "PUT") {
+    if (!ours(req.headers["x-maslow-ticket"]))
+      return say(res, 401, "That ticket is not good here.");
+    const ports = portsList(parse(await bodyOf(req)));
+    if (!ports) return say(res, 400, "Say which ports, by number.");
+    PUBLIC = new Set(ports);
+    fs.writeFileSync(PUBLIC_PORTS, JSON.stringify([...PUBLIC]));
+    return say(res, 200, "public ports written");
+  }
   // The keys that open SSH, for our server alone: written beside the
   // server's own, outside the person's Linux.
   if (to.mine && url.pathname === "/maslow/keys" && req.method === "PUT") {
@@ -856,9 +887,9 @@ const server = http.createServer(async (req, res) => {
   // The machine itself has no page: its terminal, its view and its files
   // each have a road of their own above.
   if (to.mine) return say(res, 200, "ok");
-  // A request on a port of theirs is the person at work here, whoever
-  // sent it.
-  if (to.theirs) seen();
+  // A request on a port of theirs is the person at work here, whoever in
+  // the org sent it; a stranger on a public port is not.
+  if (to.theirs && scopeOf(cookieOf(req)) !== null) seen();
   const onward = http.request(
     {
       host: to.host,
@@ -954,7 +985,7 @@ server.on("upgrade", (req, socket, head) => {
     socket.end("HTTP/1.1 401 Unauthorized\r\n\r\n");
     return;
   }
-  if (to.theirs) seen();
+  if (to.theirs && scopeOf(cookieOf(req)) !== null) seen();
   const onward = net.connect(to.port, to.host, () => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
     for (const [k, v] of Object.entries(forwarded(req)))
@@ -1962,6 +1993,7 @@ const chatSaid = (chat) => ({
   running: chat.running,
   modes: chat.session?.modes ?? null,
   title: titles[chat.id] ?? null,
+  preview: previews[chat.id] ?? null,
 });
 
 // The way to Maslow's models this machine holds: the gateway's address
@@ -2050,92 +2082,68 @@ async function contextOf(id) {
     ],
   };
 }
-// What a conversation is called: a few plain words from its first
-// exchange, asked of the model the key runs once the first answer is in,
-// kept on the disk beside the session id, and laid over the first-prompt
-// names Claude Code's own list gives.
+// An agent's name is the person's, given when it is made and changed with
+// a click on it, kept on the disk beside the session id and laid over the
+// first-prompt names Claude Code's own list gives. Beside it, the last
+// thing each agent said, for the rail's one line under the name.
 const TITLES = "/data/.agent-titles.json";
-let titles = {};
-try {
-  titles = JSON.parse(fs.readFileSync(TITLES, "utf8"));
-} catch {
-  titles = {};
-}
-const naming = new Set();
-// A conversation's name, whoever gave it: kept on the disk and told to
-// every socket.
-function entitled(id, title) {
-  titles[id] = title;
+const PREVIEWS = "/data/.agent-previews.json";
+const onDisk = (at) => {
   try {
-    fs.writeFileSync(TITLES, JSON.stringify(titles));
+    const j = JSON.parse(fs.readFileSync(at, "utf8"));
+    return j && typeof j === "object" ? j : {};
+  } catch {
+    return {};
+  }
+};
+let titles = onDisk(TITLES);
+let previews = onDisk(PREVIEWS);
+const written = (at, what) => {
+  try {
+    fs.writeFileSync(at, JSON.stringify(what));
   } catch {
     // The disk keeps it next time.
   }
+};
+// A conversation's name, as the person gave it: kept on the disk and told
+// to every socket.
+function entitled(id, title) {
+  titles[id] = title;
+  written(TITLES, titles);
   toWatchers({ maslow: { chat: { id, title } } });
 }
 
-async function entitle(chat) {
-  const id = chat.id;
-  if (!id || titles[id] || naming.has(id) || !process.env.MODEL_TOKEN) return;
-  const words = (kind) =>
-    chat.ring
-      .filter(
-        (m) =>
-          m.method === "session/update" &&
-          m.params?.update?.sessionUpdate === kind,
-      )
-      .map((m) => m.params.update.content?.text ?? "")
-      .join("")
-      .trim();
-  const person = words("user_message_chunk");
-  const agent = words("agent_message_chunk");
-  if (!person) return;
-  naming.add(id);
-  try {
-    const res = await fetch(`${process.env.MODEL_URL}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${process.env.MODEL_TOKEN}`,
-        "content-type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "z-ai/glm-5.3-flash:nitro",
-        max_tokens: 400,
-        messages: [
-          {
-            role: "system",
-            content:
-              "Name this conversation in at most five plain words, as a title. No quotes, no full stop, no word 'conversation'. Answer with the title alone.",
-          },
-          {
-            role: "user",
-            content: `Person: ${person.slice(0, 600)}\n\nAgent: ${agent.slice(0, 600)}`,
-          },
-        ],
-      }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const j = await res.json();
-    const title = String(j?.choices?.[0]?.message?.content ?? "")
-      .trim()
-      .split("\n")[0]
-      .replace(/^["'“]|["'”.]$/g, "")
-      .slice(0, 60);
-    if (title) entitled(id, title);
-  } catch (err) {
-    // Unnamed is what Claude Code's own list calls it, and that stands.
-    console.error("naming a conversation:", err?.message ?? err);
-  } finally {
-    naming.delete(id);
-  }
+// The last thing the agent said in the turn that just ended, cut to a
+// line, kept on the disk and told to every socket.
+function previewed(chat) {
+  const said = chat.ring
+    .filter(
+      (m) =>
+        m.method === "session/update" &&
+        m.params?.update?.sessionUpdate === "agent_message_chunk",
+    )
+    .map((m) => m.params.update.content?.text ?? "")
+    .join("")
+    .trim()
+    .split("\n")
+    .filter((line) => line.trim())
+    .at(-1)
+    ?.trim()
+    .slice(0, 120);
+  if (!said) return;
+  previews[chat.id] = said;
+  written(PREVIEWS, previews);
+  toWatchers({ maslow: { chat: { id: chat.id, preview: said } } });
 }
 const titled = (result) =>
   result?.sessions
     ? {
         ...result,
-        sessions: result.sessions.map((s) =>
-          titles[s.sessionId] ? { ...s, title: titles[s.sessionId] } : s,
-        ),
+        sessions: result.sessions.map((s) => ({
+          ...s,
+          ...(titles[s.sessionId] ? { title: titles[s.sessionId] } : {}),
+          preview: previews[s.sessionId] ?? null,
+        })),
       }
     : result;
 
@@ -2188,7 +2196,7 @@ function chatRunning(room, chat, on) {
   if (on) return;
   moveOn(room, chat);
   void tellContext(chat);
-  void entitle(chat);
+  previewed(chat);
   nap(room, chat);
 }
 

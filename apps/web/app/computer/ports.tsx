@@ -17,12 +17,14 @@ import {
 export type Port = { port: number; name: string; ran?: string };
 type Share = {
   port: number;
-  subject: "everyone" | "group" | "member";
+  subject: "everyone" | "group" | "member" | "public";
   memberId: string | null;
   groupId: string | null;
 };
 export type Sharing = {
   machineId: string;
+  // The domain the machine's ports are reached under.
+  domain: string;
   members: { id: string; name: string }[];
   groups: { id: string; name: string }[];
   shares: Share[];
@@ -32,6 +34,7 @@ export type Sharing = {
 // still true.
 function reach(shares: Share[]): string | null {
   if (shares.length === 0) return null;
+  if (shares.some((s) => s.subject === "public")) return "public";
   if (shares.some((s) => s.subject === "everyone")) return "everyone";
   const groups = shares.filter((s) => s.subject === "group").length;
   const people = shares.filter((s) => s.subject === "member").length;
@@ -44,7 +47,8 @@ function reach(shares: Share[]): string | null {
 // The ports listening inside the person's computer. Each is an address of
 // its own, opened here by its owner, and given away with Share, on the row
 // or on a right-click. A port nobody was given is theirs alone: the
-// address is not there for anybody else.
+// address is not there for anybody else. A public one is there for
+// anyone, with no sign-in.
 export function Ports({
   ports,
   sharing,
@@ -143,17 +147,23 @@ export function Ports({
         <ShareSheet
           open={sharingPort !== null}
           title={`Share port ${sharingPort ?? ""}`}
-          description="Whoever you pick opens the link below while signed in to Maslow. For everybody else the address is not there at all."
+          description="Whoever you pick opens the link below while signed in to Maslow. For everybody else the address is not there at all, unless you make it public."
           link={
             sharingPort === null
               ? ""
               : `${window.location.origin}/port/${sharing.machineId}/${sharingPort}`
+          }
+          publicLink={
+            sharingPort === null
+              ? ""
+              : `https://${sharingPort}-${sharing.machineId}.${sharing.domain}/`
           }
           parties={sharing}
           on={reachOf(sharingPort === null ? [] : on(sharingPort))}
           onSave={async (to) => {
             const form = new FormData();
             form.set("port", String(sharingPort));
+            if (to.public) form.set("public", "on");
             if (to.everyone) form.set("everyone", "on");
             for (const g of to.groupIds) form.append("group", g);
             for (const m of to.memberIds) form.append("member", m);
@@ -174,6 +184,7 @@ export function Ports({
 
 // The rows a port's shares are, as the sheet takes them.
 const reachOf = (on: Share[]): Reach => ({
+  public: on.some((s) => s.subject === "public"),
   everyone: on.some((s) => s.subject === "everyone"),
   groupIds: on.flatMap((s) => (s.groupId ? [s.groupId] : [])),
   memberIds: on.flatMap((s) => (s.memberId ? [s.memberId] : [])),

@@ -18,8 +18,10 @@ import {
 } from "@/components/ui/dialog";
 
 // Who one shared thing reaches, as the sheet sets it whole, and at what
-// level where the thing has one.
+// level where the thing has one. Public is anyone on the internet with the
+// address, which only a port can be.
 export type Reach = {
+  public: boolean;
   everyone: boolean;
   groupIds: string[];
   memberIds: string[];
@@ -33,15 +35,17 @@ export type Parties = {
 };
 
 // The one sheet every shared thing has: a port, a file or a folder.
-// Everyone in the org, or the groups and people ticked; at view or edit
-// where there is a level to choose; the link to copy. Everything ticked
-// is sent, so whatever is unticked is taken away in the same act. Saving
-// answers with what went wrong, or nothing.
+// Anyone on the internet where the thing can be public; everyone in the
+// org, or the groups and people ticked; at view or edit where there is a
+// level to choose; the link to copy. Everything ticked is sent, so
+// whatever is unticked is taken away in the same act. Saving answers with
+// what went wrong, or nothing.
 export function ShareSheet({
   open,
   title,
   description,
   link,
+  publicLink,
   parties,
   on,
   levels = false,
@@ -52,6 +56,9 @@ export function ShareSheet({
   title: string;
   description: string;
   link: string;
+  // The bare address anyone can open, where the thing can be public; the
+  // sheet offers public only when this is given.
+  publicLink?: string;
   parties: Parties;
   on: Reach;
   // Whether view and edit are on offer; a port opens or is not there.
@@ -95,7 +102,9 @@ export function ShareSheet({
         </DialogHeader>
         <div className="flex items-center gap-2">
           <p className="min-w-0 flex-1 truncate rounded-2lg bg-background-tertiary-default px-3 py-2 font-mono text-caption-1-regular text-text-secondary">
-            {link || "The link appears once it is shared."}
+            {(to.public && publicLink) ||
+              link ||
+              "The link appears once it is shared."}
           </p>
           <Button
             variant="secondary"
@@ -104,7 +113,9 @@ export function ShareSheet({
             disabled={!link}
             leadingIcon={copied ? RiCheckLine : RiFileCopyLine}
             onClick={() => {
-              void navigator.clipboard.writeText(link);
+              void navigator.clipboard.writeText(
+                (to.public && publicLink) || link,
+              );
               setCopied(true);
               setTimeout(() => setCopied(false), 2000);
             }}
@@ -113,6 +124,24 @@ export function ShareSheet({
           </Button>
         </div>
         <div className="flex max-h-72 flex-col gap-3 overflow-y-auto py-2">
+          {publicLink !== undefined && (
+            <>
+              <Checkbox
+                size="sm"
+                isSelected={to.public}
+                onChange={(on) => setTo((was) => ({ ...was, public: on }))}
+              >
+                Anyone on the internet with the address
+              </Checkbox>
+              {to.public && (
+                <p className="text-caption-1-regular text-text-secondary">
+                  No sign-in: whatever runs on this port must check who is
+                  calling itself, and the address will be found.
+                </p>
+              )}
+              <Divider />
+            </>
+          )}
           <Checkbox
             size="sm"
             isSelected={to.everyone}

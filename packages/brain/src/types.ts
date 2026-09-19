@@ -9,6 +9,8 @@ export type Access = "view" | "edit" | "owner";
 // Who a share is for: one member, one group, or everyone in the org.
 export type Subject =
   | { who: "everyone" }
+  // Anyone on the internet, with no sign-in: what only a port can be given to.
+  | { who: "public" }
   | { who: "group"; id: string }
   | { who: "member"; id: string };
 

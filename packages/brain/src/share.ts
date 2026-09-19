@@ -109,6 +109,9 @@ export async function share(
   if (subject.who === "everyone" && level !== "view") {
     throw new Invalid("everyone can only be given view");
   }
+  if (subject.who === "public") {
+    throw new Invalid("only a port can be made public");
+  }
   const { rows } = await q
     .query<ShareRow>(
       `insert into shares

@@ -47,10 +47,12 @@ export function Asks({
                 a.subjects.map((s) =>
                   s.who === "everyone"
                     ? "everyone in the org"
-                    : s.who === "group"
-                      ? (groups.find((g) => g.id === s.id)?.name ??
-                        "a group no longer here")
-                      : (people.get(s.id) ?? "someone no longer here"),
+                    : s.who === "public"
+                      ? "anyone on the internet"
+                      : s.who === "group"
+                        ? (groups.find((g) => g.id === s.id)?.name ??
+                          "a group no longer here")
+                        : (people.get(s.id) ?? "someone no longer here"),
                 ),
               )}
             </b>{" "}

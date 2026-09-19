@@ -30,6 +30,7 @@ import {
   shares,
   sharesOn,
   sharePort,
+  publicPortsOn,
   spentByDay,
   type Computer,
   type Move,
@@ -62,7 +63,7 @@ import { SIZES } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 20 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-71";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-74";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -922,11 +923,13 @@ async function reconcileOrg(
         } catch (err) {
           console.error(`computer ${c.id}: shares: ${(err as Error).message}`);
         }
-        // The keys again every hour, so a machine remade or reset has them.
+        // The keys and the public ports again every hour, so a machine
+        // remade or reset has them.
         if (c.authorizedKeys)
           await fly
             .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
             .catch(() => {});
+        await tellPublic(q, c).catch(() => {});
         await spend(q, c, m);
       }
     });
@@ -1233,15 +1236,22 @@ export async function sharedLink(
   });
 }
 
-// The person's own machine and who they have given each of its ports to,
-// for the Computer page. Null where they have no ready computer.
+// The person's own machine, the domain its ports are reached under, and
+// who they have given each port to, for the Computer page. Null where they
+// have no ready computer.
 export async function sharingOf(
   p: Principal,
-): Promise<{ machineId: string; shares: PortShare[] } | null> {
+): Promise<{ machineId: string; domain: string; shares: PortShare[] } | null> {
+  const d = deployment.computers;
+  if (d.kind === "none") return null;
   return asPerson(p, async (q) => {
     const c = await computerOf(q, p.userId);
     if (!c?.readyAt || !c.machineId) return null;
-    return { machineId: c.machineId, shares: await sharesOn(q, c.id) };
+    return {
+      machineId: c.machineId,
+      domain: d.domain,
+      shares: await sharesOn(q, c.id),
+    };
   });
 }
 
@@ -1253,14 +1263,19 @@ export async function sharedWithMe(p: Principal): Promise<SharedPort[]> {
   return asPerson(p, portsReaching);
 }
 
-// Makes what one of the person's own ports reaches exactly this: everyone
-// in the org, or some groups and some people. Nobody outside the org can be
-// named, since the database refuses a member or a group of another org, and
-// there is no level to give, only the port.
+// Makes what one of the person's own ports reaches exactly this: anyone
+// on the internet, everyone in the org, or some groups and some people.
+// Nobody outside the org can be named, since the database refuses a member
+// or a group of another org, and there is no level to give, only the port.
 export async function share(
   p: Principal,
   port: number,
-  to: { everyone: boolean; groupIds: string[]; memberIds: string[] },
+  to: {
+    public: boolean;
+    everyone: boolean;
+    groupIds: string[];
+    memberIds: string[];
+  },
 ): Promise<boolean> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
   return asPerson(p, async (q) => {
@@ -1269,8 +1284,21 @@ export async function share(
     // away before there is a machine to open at all.
     if (!c?.readyAt || !c.machineId) return false;
     await sharePort(q, c.id, port, to);
+    await tellPublic(q, c);
     return true;
   });
+}
+
+// Tells the computer's door which of its ports are open to anyone: the
+// door lets those through with no ticket, so it has to hear of every
+// change, and hears the whole list each time.
+export async function tellPublic(q: Query, c: Computer): Promise<void> {
+  if (!c.machineId) return;
+  await fly.publicPorts(
+    c.machineId,
+    ticket(c, 60),
+    await publicPortsOn(q, c.id),
+  );
 }
 
 // Where signing out goes on its way home, so the ticket a browser keeps on

@@ -397,10 +397,11 @@ export async function spentByDay(
   return r.rows;
 }
 
-// A port on a computer and a member who may reach it.
+// A port on a computer and who may reach it: a member, a group, everyone
+// in the org, or the public, which is anyone with the address.
 export type PortShare = {
   port: number;
-  subject: "everyone" | "group" | "member";
+  subject: "everyone" | "group" | "member" | "public";
   memberId: string | null;
   groupId: string | null;
 };
@@ -422,28 +423,36 @@ export async function sharesOn(
   ).rows;
 }
 
-// Makes what one port reaches exactly this and nothing else: everyone in
-// the org, or some groups and some people. Everyone is not a row anywhere,
-// so it is a subject of its own rather than a group's id.
+// Makes what one port reaches exactly this and nothing else: the public,
+// everyone in the org, or some groups and some people. Everyone and the
+// public are not rows anywhere, so each is a subject of its own rather
+// than a group's id.
 export async function sharePort(
   q: Query,
   computerId: string,
   port: number,
-  to: { everyone: boolean; groupIds: string[]; memberIds: string[] },
+  to: {
+    public: boolean;
+    everyone: boolean;
+    groupIds: string[];
+    memberIds: string[];
+  },
 ): Promise<void> {
   await q.query(
     `delete from port_shares
      where computer_id = $1 and port = $2
        and not (subject = 'everyone' and $3)
+       and not (subject = 'public' and $6)
        and (group_id is null or group_id <> all($4::uuid[]))
        and (member_id is null or member_id <> all($5::uuid[]))`,
-    [computerId, port, to.everyone, to.groupIds, to.memberIds],
+    [computerId, port, to.everyone, to.groupIds, to.memberIds, to.public],
   );
-  if (to.everyone) {
+  for (const subject of ["everyone", "public"] as const) {
+    if (!to[subject]) continue;
     await q.query(
       `insert into port_shares (computer_id, port, subject)
-       values ($1, $2, 'everyone') on conflict do nothing`,
-      [computerId, port],
+       values ($1, $2, $3) on conflict do nothing`,
+      [computerId, port, subject],
     );
   }
   if (to.groupIds.length > 0) {
@@ -511,7 +520,7 @@ export async function portsReaching(q: Query): Promise<SharedPort[]> {
        join computers c on c.id = s.computer_id
        join users u on u.id = c.user_id
        where c.user_id <> current_member() and c.machine_id is not null
-         and (s.subject = 'everyone'
+         and (s.subject in ('everyone', 'public')
            or s.member_id = current_member()
            or exists (select 1 from group_members m
                       where m.group_id = s.group_id
@@ -529,7 +538,7 @@ export async function givePort(
   q: Query,
   computerId: string,
   port: number,
-  to: { who: "everyone" } | { who: "group" | "member"; id: string },
+  to: { who: "everyone" | "public" } | { who: "group" | "member"; id: string },
 ): Promise<void> {
   await q.query(
     `insert into port_shares (computer_id, port, subject, member_id, group_id)
@@ -544,8 +553,22 @@ export async function givePort(
   );
 }
 
+// The ports of one computer open to anyone on the internet.
+export async function publicPortsOn(
+  q: Query,
+  computerId: string,
+): Promise<number[]> {
+  return (
+    await q.query<{ port: number }>(
+      `select port from port_shares
+       where computer_id = $1 and subject = 'public' order by port`,
+      [computerId],
+    )
+  ).rows.map((r) => r.port);
+}
+
 // Whether one port of one computer reaches the member reading: by name, by
-// a group they are in, or by being open to everyone in the org.
+// a group they are in, by being open to everyone in the org, or to anyone.
 export async function shares(
   q: Query,
   computerId: string,
@@ -554,7 +577,7 @@ export async function shares(
   const said = await q.query(
     `select 1 from port_shares
      where computer_id = $1 and port = $2
-       and (subject = 'everyone'
+       and (subject in ('everyone', 'public')
          or member_id = current_member()
          or exists (select 1 from group_members m
                     where m.group_id = port_shares.group_id

@@ -109,6 +109,7 @@ type Sharing = Parties & {
 const reachOf = (sharing: Sharing | null, id: string | undefined): Reach => {
   const on = id ? (sharing?.shares.filter((s) => s.fileId === id) ?? []) : [];
   return {
+    public: false,
     everyone: on.some((s) => s.subject === "everyone"),
     groupIds: on.flatMap((s) => (s.groupId ? [s.groupId] : [])),
     memberIds: on.flatMap((s) => (s.memberId ? [s.memberId] : [])),

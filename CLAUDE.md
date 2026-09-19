@@ -389,8 +389,12 @@ dated folder of its own in the home and over nothing, and then its
 numbers, size, where, SSH and reset in the open; About This Computer
 in the Maslow menu is its face on the desktop. A port is the person's until they share it
 with a person, a group or everyone in the org, and it opens or is a 404;
-the agent asks for a port through the same share tool it asks for a
-record with, and never shares one itself. A file or a folder in their
+or they make it public, and it opens to anyone on the internet with the
+address, no sign-in, the door letting it through and whatever runs on it
+checking who is calling and keeping its own limits, which is how an API
+or a site of the person's own is hosted; the agent asks for a port, the
+public included, through the same share tool it asks for a record with,
+and never shares one itself. A file or a folder in their
 home is shared the same way, at view or edit, from a right-click in
 Files or through that share tool, and it is the one thing on the machine
 that carries a mark: an extended attribute holding the id the share is
@@ -496,7 +500,9 @@ model and that much thought on every call whatever was asked for, so no
 Claude model is reachable on what Maslow pays for — and the app is the
 one way to it.
 The settled design is `docs/decisions/2026-09-16-the-model-gateway.md`. The Agent window is BoardUI's AI Chat template wired
-to it: a rail of chats with no folders, pinned ones first; the thread in
+to it: a rail of the person's agents, each a named conversation that
+stays, with a mark of its own colour, the last thing it said under its
+name and when, pinned ones first and no folders; the thread in
 its user and assistant turns, with what the agent did as its task list,
 a thought one step among the steps it came with and folded with them,
 what it asks before it acts as a notification, the kind of thing named, the
@@ -516,13 +522,15 @@ stands and prompted on with the word, as Claude Code's own terminal does;
 and under
 it how the agent acts and how full the conversation is, with the week's
 spend behind that ring; the spend is said in the open on the Agent pane.
-One conversation is in view at a time and the rest stand open behind it,
+One agent is in view at a time and the rest stand open behind it,
 each with its own Claude Code process, running on; a new one is handed
 over at once, since the door keeps one warm; one quiet for three minutes
-is closed, its process freed, and opens again whole when wanted. A chat
-is named by the same model after its first exchange, or by the person
-with a click on the name, and the name is the door's, kept on the disk.
-A conversation picked in the rail is in view at once, whole from the
+is closed, its process freed, and opens again whole when wanted. An
+agent is made only by the person, who names it as they make it, and
+renamed with a click on the name; nothing makes one on its own, and
+the window opens on the last one spoken to, never on an empty one. The
+name and the last line each agent said are the door's, kept on the disk.
+An agent picked in the rail is in view at once, whole from the
 door's own record when it was open before, and Claude Code loads it
 behind. Two tools are the door's own, handed to every
 conversation as a small MCP server started beside it under a token of

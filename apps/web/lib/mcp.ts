@@ -531,7 +531,7 @@ export function brainServer(
     "share",
     {
       description:
-        "Asks the person to share records or types of theirs, or ports, files or folders on their computer, with colleagues: what, with whom (everyone, a colleague's email, or a group's name), at what level, and why. Nothing is shared until the person accepts the ask on their pages; they see the reason. One ask carries many items to many people. A port is only ever looked at, so it is asked for at view; a file or folder is asked for at view or edit.",
+        "Asks the person to share records or types of theirs, or ports, files or folders on their computer, with colleagues: what, with whom (everyone, a colleague's email, or a group's name), at what level, and why. A port alone may also be asked for the public: anyone on the internet with its address, no sign-in, for an API or a site of its own. Nothing is shared until the person accepts the ask on their pages; they see the reason. One ask carries many items to many people. A port is only ever looked at, so it is asked for at view; a file or folder is asked for at view or edit.",
       inputSchema: {
         records: ids.optional(),
         types: z
@@ -556,7 +556,7 @@ export function brainServer(
           .min(1)
           .max(20)
           .describe(
-            "emails from the catalog, group names, or the word everyone for the org",
+            "emails from the catalog, group names, the word everyone for the org, or the word public for anyone on the internet (ports only)",
           ),
         level: z.enum(["view", "edit", "owner"]),
         reason: z

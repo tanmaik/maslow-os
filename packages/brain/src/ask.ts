@@ -46,13 +46,13 @@ const columns = "id, items, subjects, level, reason";
 const LEVELS = new Set<string>(["view", "edit", "owner"]);
 
 // Resolves the people named to subjects in this org, refusing a name that
-// is nobody's. The word everyone is the org; an email is a member; any other
-// name is a group.
+// is nobody's. The word everyone is the org; the word public is anyone on
+// the internet; an email is a member; any other name is a group.
 async function whom(q: Query, to: Whom[]): Promise<Subject[]> {
   const out: Subject[] = [];
   for (const name of new Set(to.map((s) => s.trim()))) {
-    if (name === "everyone") {
-      out.push({ who: "everyone" });
+    if (name === "everyone" || name === "public") {
+      out.push({ who: name });
       continue;
     }
     const who = name.includes("@") ? "member" : "group";
@@ -129,6 +129,12 @@ export async function askToShare(
   if (subjects.some((s) => s.who === "everyone") && ask.level !== "view") {
     throw new Invalid("everyone can only be given view");
   }
+  if (
+    subjects.some((s) => s.who === "public") &&
+    !items.every((i) => "port" in i)
+  ) {
+    throw new Invalid("only a port can be made public");
+  }
   const { rows } = await q.query<Row>(
     `insert into share_requests (items, subjects, level, reason)
      values ($1::jsonb, $2::jsonb, $3, $4) returning ${columns}`,
@@ -200,7 +206,7 @@ async function stillHere(q: Query, subjects: Subject[]): Promise<Subject[]> {
     [members, groups],
   );
   const here = new Set(rows.map((r) => r.id));
-  return subjects.filter((s) => s.who === "everyone" || here.has(s.id));
+  return subjects.filter((s) => !("id" in s) || here.has(s.id));
 }
 
 // Accepts an ask: everything it still names, to everyone it still names, at

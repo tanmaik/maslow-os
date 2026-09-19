@@ -13,9 +13,9 @@ import { FormDialog } from "@/components/form-dialog";
 
 import { FIELD } from "./format";
 
-// A subject as a form value and back: "everyone", "group:<id>", "member:<id>".
-const value = (s: Subject) =>
-  s.who === "everyone" ? "everyone" : `${s.who}:${s.id}`;
+// A subject as a form value and back: "everyone", "public", "group:<id>",
+// "member:<id>".
+const value = (s: Subject) => ("id" in s ? `${s.who}:${s.id}` : s.who);
 
 // The three levels, in the one set of words the brain uses for them
 // everywhere: the dialog, the chips and the agent's asks.
@@ -111,10 +111,13 @@ export function Sharing({
   const name = (s: Subject) =>
     s.who === "everyone"
       ? "Everyone"
-      : s.who === "group"
-        ? (groups.find((g) => g.id === s.id)?.name ?? "a group no longer here")
-        : (members.find((m) => m.id === s.id)?.name ??
-          "someone no longer here");
+      : s.who === "public"
+        ? "Anyone"
+        : s.who === "group"
+          ? (groups.find((g) => g.id === s.id)?.name ??
+            "a group no longer here")
+          : (members.find((m) => m.id === s.id)?.name ??
+            "someone no longer here");
   const inside = (
     <div className="flex flex-col gap-4">
       <form action="/brain/share" method="post" className="grid gap-4">

@@ -80,6 +80,8 @@ export type Chat = {
   commands: Command[];
   context: Context | null;
   title: string | null;
+  // The last thing the agent said, as one line.
+  preview: string | null;
 };
 
 const fresh = (id: string): Chat => ({
@@ -92,6 +94,7 @@ const fresh = (id: string): Chat => ({
   commands: [],
   context: null,
   title: null,
+  preview: null,
 });
 
 type Chats = {
@@ -208,6 +211,13 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           void ask("session/set_mode", { sessionId: c.id, modeId: to });
         patch(c.id, (was) => ({ ...was, modes: offered, mode: to }));
       }
+      if (c.preview !== undefined) {
+        const preview = c.preview;
+        patch(c.id, (was) => ({ ...was, preview }));
+        setPast((was) =>
+          was.map((p) => (p.sessionId === c.id ? { ...p, preview } : p)),
+        );
+      }
       if (c.title !== undefined) {
         const title = c.title;
         patch(c.id, (was) => ({ ...was, title }));
@@ -242,7 +252,11 @@ export function ChatsProvider({ children }: { children: ReactNode }) {
           const arrived = !known.current.has(c.id);
           known.current.add(c.id);
           apply(c);
-          if (arrived || c.title !== undefined) void list();
+          // The list again when one arrives, is named, or has just said
+          // something, so a new agent stands in the rail from its first
+          // exchange.
+          if (arrived || c.title !== undefined || c.preview !== undefined)
+            void list();
           if (arrived && c.clear && asking.current) {
             asking.current = false;
             setNewest(c.id);
