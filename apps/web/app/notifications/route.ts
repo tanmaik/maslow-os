@@ -81,7 +81,8 @@ export async function POST(request: Request) {
       return { files: [], opened: false };
     });
     after(() => told(p, made.files));
-    // The door hears of a port made public once the answer has landed.
+    // The door hears of a port made public once the answer has landed; a
+    // door that could not be reached hears within the hour.
     if (made.opened) after(() => tellPublic(p));
   } catch (err) {
     if (

@@ -70,20 +70,21 @@ function scopeOf(ticket) {
 // take: nothing about a person's ports reaches them.
 const ours = (ticket) => scopeOf(ticket) === "";
 
-// The ports open to anyone on the internet, as our server last said, and
-// when it read them, so a list that arrives late never overwrites a newer
-// one. Kept on the disk outside the person's Linux, so a door that comes
-// back still knows them and nothing inside can add one.
+// The ports open to anyone on the internet, as our server last said, with
+// the number of the change they came from, so a list that arrives late
+// never overwrites a newer one. Kept on the disk outside the person's
+// Linux, so a door that comes back still knows them and nothing inside can
+// add one.
 const PUBLIC_PORTS = "/data/public-ports.json";
 const publicSaid = (said) => {
-  // A list kept before it carried its time is as good as the oldest.
-  if (Array.isArray(said)) said = { at: 0, ports: said };
+  // A list kept before it carried a number is as good as the oldest.
+  if (Array.isArray(said)) said = { version: 0, ports: said };
   const ports = Array.isArray(said?.ports) ? said.ports : null;
-  const at = Number(said?.at);
-  if (!ports || !Number.isFinite(at)) return null;
+  const version = said?.version === undefined ? 0 : Number(said.version);
+  if (!ports || !Number.isInteger(version) || version < 0) return null;
   if (!ports.every((n) => Number.isInteger(n) && n > 0 && n < 65536))
     return null;
-  return { at, ports };
+  return { version, ports };
 };
 let PUBLIC = (() => {
   try {
@@ -91,7 +92,7 @@ let PUBLIC = (() => {
   } catch {
     return null;
   }
-})() ?? { at: 0, ports: [] };
+})() ?? { version: 0, ports: [] };
 
 // Whether a ticket opens what is being asked for. A public port opens to
 // anyone; otherwise a ticket for one port opens that port and nothing
@@ -795,14 +796,15 @@ const server = http.createServer(async (req, res) => {
     }
   }
   // The ports open to anyone, for our server alone: the whole list each
-  // time with when it was read, kept on the disk; one older than the last
-  // taken is left alone.
+  // time with its number, kept on the disk; one behind the last taken is
+  // left alone.
   if (to.mine && url.pathname === "/maslow/public" && req.method === "PUT") {
     if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
     const said = publicSaid(parse(await bodyOf(req)));
-    if (!said) return say(res, 400, "Say which ports, by number, and when.");
-    if (said.at <= PUBLIC.at) return say(res, 200, "a newer list is kept");
+    if (!said) return say(res, 400, "Say which ports, and the list's number.");
+    if (said.version < PUBLIC.version)
+      return say(res, 200, "a newer list is kept");
     PUBLIC = said;
     fs.writeFileSync(PUBLIC_PORTS, JSON.stringify(PUBLIC));
     return say(res, 200, "public ports written");

@@ -63,7 +63,7 @@ import { SIZES } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 20 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-75";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-76";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -1276,7 +1276,10 @@ export async function share(
     groupIds: string[];
     memberIds: string[];
   },
-): Promise<boolean> {
+  // Answers whether the share landed and, where the door could not be told
+  // of a public port, says so, since the share stands and the door hears of
+  // it within the hour.
+): Promise<"told" | "untold" | false> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
   const shared = await asPerson(p, async (q) => {
     const c = await computerOf(q, p.userId);
@@ -1286,22 +1289,30 @@ export async function share(
     await sharePort(q, c.id, port, to);
     return true;
   });
-  if (shared) await tellPublic(p);
-  return shared;
+  if (!shared) return false;
+  return (await tellPublic(p)) ? "told" : "untold";
 }
 
 // Tells the person's computer's door which of its ports are open to
 // anyone: the door lets those through with no ticket, so it has to hear
 // of every change, and hears the whole list each time, read after the
-// change committed so a change still in flight is never told.
-export async function tellPublic(p: Principal): Promise<void> {
-  await asPerson(p, async (q) => {
-    const c = await computerOf(q, p.userId);
-    if (c) await retellPublic(q, c);
-  });
+// change committed so a change still in flight is never told. Whether
+// the door took it; a door that could not be reached hears within the
+// hour.
+export async function tellPublic(p: Principal): Promise<boolean> {
+  try {
+    await asPerson(p, async (q) => {
+      const c = await computerOf(q, p.userId);
+      if (c) await retellPublic(q, c);
+    });
+    return true;
+  } catch (err) {
+    console.error(`public ports: ${(err as Error).message}`);
+    return false;
+  }
 }
 
-// The whole list to the door, as the rows have it now.
+// The whole list to the door, as the rows have it now, with its number.
 async function retellPublic(q: Query, c: Computer): Promise<void> {
   if (!c.machineId) return;
   await fly.publicPorts(

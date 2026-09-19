@@ -29,7 +29,8 @@ export async function POST(request: Request) {
   try {
     const made = await asPerson(p, (db) => answerShareAsk(db, p, id, intent));
     after(() => told(p, made.files));
-    // The door hears of a port made public once the answer has landed.
+    // The door hears of a port made public once the answer has landed; a
+    // door that could not be reached hears within the hour.
     if (made.opened) after(() => tellPublic(p));
     const answered = made.notification;
     if (answered) after(() => tellAnswer(p, answered));

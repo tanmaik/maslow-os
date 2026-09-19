@@ -455,6 +455,7 @@ export async function sharePort(
       [computerId, port, subject],
     );
   }
+  await bumpPublic(q, computerId);
   if (to.groupIds.length > 0) {
     await q.query(
       `insert into port_shares (computer_id, port, subject, group_id)
@@ -551,20 +552,32 @@ export async function givePort(
       to.who === "group" ? to.id : null,
     ],
   );
+  if (to.who === "public") await bumpPublic(q, computerId);
 }
 
-// The ports of one computer open to anyone on the internet.
+// A change to which ports are public, counted on the computer in the same
+// transaction, so the list told to the door carries a number that orders it.
+async function bumpPublic(q: Query, computerId: string): Promise<void> {
+  await q.query(
+    `update computers set public_version = public_version + 1 where id = $1`,
+    [computerId],
+  );
+}
+
+// The ports of one computer open to anyone on the internet, with the
+// number of the change that last touched them.
 export async function publicPortsOn(
   q: Query,
   computerId: string,
-): Promise<number[]> {
-  return (
-    await q.query<{ port: number }>(
-      `select port from port_shares
-       where computer_id = $1 and subject = 'public' order by port`,
-      [computerId],
-    )
-  ).rows.map((r) => r.port);
+): Promise<{ version: number; ports: number[] }> {
+  const { rows } = await q.query<{ version: number; ports: number[] | null }>(
+    `select c.public_version as version,
+            (select array_agg(s.port order by s.port) from port_shares s
+              where s.computer_id = c.id and s.subject = 'public') as ports
+     from computers c where c.id = $1`,
+    [computerId],
+  );
+  return { version: rows[0]?.version ?? 0, ports: rows[0]?.ports ?? [] };
 }
 
 // Whether one port of one computer reaches the member reading: by name, by

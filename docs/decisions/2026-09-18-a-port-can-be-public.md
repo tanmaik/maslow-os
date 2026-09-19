@@ -25,9 +25,14 @@ A stranger on a public port does not count as the person at work at their
 computer, so an update waiting on an idle machine still gets its turn.
 
 The door learns which ports are public from our server, the whole list
-each time a share changes and again every hour with the SSH keys, and
-keeps it on the disk outside the person's Linux, so a door that comes back
-still knows and nothing inside the Linux can add one. The agent asks for a
+each time a share changes, read once the change has committed, and again
+every hour with the SSH keys. Every change bumps a number on the
+computer in the same transaction, the list carries it, and the door keeps
+only a list at least as new as the one it holds, so two changes at once
+cannot leave an old list in place. The door keeps the list on the disk
+outside the person's Linux, so a door that comes back still knows and
+nothing inside the Linux can add one. A door that cannot be reached when
+a share is saved is said so on the sheet, and hears within the hour. The agent asks for a
 public port with the word `public` in the same share tool, a port alone,
 at view, and the person accepts or declines it where every ask waits.
 

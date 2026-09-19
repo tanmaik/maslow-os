@@ -17,7 +17,13 @@ export async function POST(request: Request) {
     groupIds: named("group"),
     memberIds: named("member"),
   };
-  if (!(await share(p, port, to)))
+  const shared = await share(p, port, to);
+  if (!shared)
     return new Response("Your computer is not ready.", { status: 409 });
+  if (shared === "untold")
+    return new Response(
+      "Saved, but your computer's door could not be told; it hears within the hour. Save again to try now.",
+      { status: 502 },
+    );
   return new Response(null, { status: 204 });
 }

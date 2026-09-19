@@ -604,12 +604,13 @@ export const fly = {
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
   },
   // Tells the machine's door which of its ports are open to anyone, the
-  // whole list each time and when it was read, so a list that arrives
-  // late never overwrites a newer one; with a ticket it takes.
+  // whole list each time with the number of the change it came from, so a
+  // list that arrives late never overwrites a newer one; with a ticket it
+  // takes.
   async publicPorts(
     machineId: string,
     ticket: string,
-    ports: number[],
+    list: { version: number; ports: number[] },
   ): Promise<void> {
     const res = await fetch(`https://${config().app}.fly.dev/maslow/public`, {
       method: "PUT",
@@ -618,7 +619,7 @@ export const fly = {
         "x-maslow-ticket": ticket,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ at: Date.now(), ports }),
+      body: JSON.stringify(list),
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
