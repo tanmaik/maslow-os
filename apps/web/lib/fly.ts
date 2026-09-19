@@ -604,7 +604,8 @@ export const fly = {
     if (!res.ok) throw new Error(`the door answered ${res.status}`);
   },
   // Tells the machine's door which of its ports are open to anyone, the
-  // whole list each time, with a ticket it takes.
+  // whole list each time and when it was read, so a list that arrives
+  // late never overwrites a newer one; with a ticket it takes.
   async publicPorts(
     machineId: string,
     ticket: string,
@@ -617,7 +618,7 @@ export const fly = {
         "x-maslow-ticket": ticket,
         "content-type": "application/json",
       },
-      body: JSON.stringify(ports),
+      body: JSON.stringify({ at: Date.now(), ports }),
       signal: AbortSignal.timeout(8_000),
     });
     if (!res.ok) throw new Error(`the door answered ${res.status}`);

@@ -14,7 +14,6 @@ import type {
   Subject as FileSubject,
 } from "@maslow/db/shared-files";
 
-import { tellPublic } from "./computer.ts";
 import { giveSharedFile, unmarked } from "./shares.ts";
 
 // Answering an ask to share, wherever the person answers it: the brain's
@@ -34,6 +33,9 @@ export async function answerShareAsk(
   shared: Target[];
   subjects: Subject[];
   files: { file: SharedFile; to: FileSubject }[];
+  // Whether a port was made public, which the door has to hear of once
+  // this has committed.
+  opened: boolean;
 }> {
   // The notification is marked first: answering takes the request away, and a
   // notification pointing at a request that is gone no longer knows which one it
@@ -44,6 +46,7 @@ export async function answerShareAsk(
     said === "accept" ? "Accept" : "Decline",
   );
   const files: { file: SharedFile; to: FileSubject }[] = [];
+  let opened = false;
   // The marks an ask makes on the disk outlive a transaction that rolls
   // back, so those made for nothing are undone before the refusal is
   // passed on.
@@ -57,8 +60,7 @@ export async function answerShareAsk(
           const c = await computerOf(q, p.userId);
           if (!c) throw new Invalid("you have no computer to give a port of");
           await givePort(q, c.id, port, to);
-          // A port made public opens at the door, which has to hear of it.
-          if (to.who === "public") await tellPublic(q, c);
+          if (to.who === "public") opened = true;
         },
         async (path, to, level) => {
           const at = pathOnHome(path);
@@ -70,14 +72,14 @@ export async function answerShareAsk(
           files.push({ file: gave.file, to });
         },
       );
-      return { notification, ...made, files };
+      return { notification, ...made, files, opened };
     } catch (err) {
       await unmarked(p, marked);
       throw err;
     }
   }
   await declineRequest(q, request);
-  return { notification, shared: [], subjects: [], files: [] };
+  return { notification, shared: [], subjects: [], files: [], opened: false };
 }
 
 // A path as the agent names it, `/home/me/…` or one under the home,

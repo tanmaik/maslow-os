@@ -63,7 +63,7 @@ import { SIZES } from "./sizes.ts";
 const FLOOR = { ...SIZES.small, diskGb: 20 };
 
 // The image every machine boots: apps/computer, built and pushed by hand.
-export const IMAGE = "registry.fly.io/maslow-computers-dev:door-74";
+export const IMAGE = "registry.fly.io/maslow-computers-dev:door-75";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -929,7 +929,7 @@ async function reconcileOrg(
           await fly
             .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
             .catch(() => {});
-        await tellPublic(q, c).catch(() => {});
+        await retellPublic(q, c).catch(() => {});
         await spend(q, c, m);
       }
     });
@@ -1278,21 +1278,31 @@ export async function share(
   },
 ): Promise<boolean> {
   if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
-  return asPerson(p, async (q) => {
+  const shared = await asPerson(p, async (q) => {
     const c = await computerOf(q, p.userId);
     // A port is shared only once the computer is ready, so nothing is given
     // away before there is a machine to open at all.
     if (!c?.readyAt || !c.machineId) return false;
     await sharePort(q, c.id, port, to);
-    await tellPublic(q, c);
     return true;
+  });
+  if (shared) await tellPublic(p);
+  return shared;
+}
+
+// Tells the person's computer's door which of its ports are open to
+// anyone: the door lets those through with no ticket, so it has to hear
+// of every change, and hears the whole list each time, read after the
+// change committed so a change still in flight is never told.
+export async function tellPublic(p: Principal): Promise<void> {
+  await asPerson(p, async (q) => {
+    const c = await computerOf(q, p.userId);
+    if (c) await retellPublic(q, c);
   });
 }
 
-// Tells the computer's door which of its ports are open to anyone: the
-// door lets those through with no ticket, so it has to hear of every
-// change, and hears the whole list each time.
-export async function tellPublic(q: Query, c: Computer): Promise<void> {
+// The whole list to the door, as the rows have it now.
+async function retellPublic(q: Query, c: Computer): Promise<void> {
   if (!c.machineId) return;
   await fly.publicPorts(
     c.machineId,

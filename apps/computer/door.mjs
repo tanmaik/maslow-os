@@ -70,30 +70,35 @@ function scopeOf(ticket) {
 // take: nothing about a person's ports reaches them.
 const ours = (ticket) => scopeOf(ticket) === "";
 
-// The ports open to anyone on the internet, as our server last said. Kept
-// on the disk outside the person's Linux, so a door that comes back still
-// knows them and nothing inside can add one.
+// The ports open to anyone on the internet, as our server last said, and
+// when it read them, so a list that arrives late never overwrites a newer
+// one. Kept on the disk outside the person's Linux, so a door that comes
+// back still knows them and nothing inside can add one.
 const PUBLIC_PORTS = "/data/public-ports.json";
-const portsList = (said) =>
-  Array.isArray(said)
-    ? said.filter((n) => Number.isInteger(n) && n > 0 && n < 65536)
-    : null;
-let PUBLIC = new Set(
-  (() => {
-    try {
-      return portsList(JSON.parse(fs.readFileSync(PUBLIC_PORTS, "utf8"))) ?? [];
-    } catch {
-      return [];
-    }
-  })(),
-);
+const publicSaid = (said) => {
+  // A list kept before it carried its time is as good as the oldest.
+  if (Array.isArray(said)) said = { at: 0, ports: said };
+  const ports = Array.isArray(said?.ports) ? said.ports : null;
+  const at = Number(said?.at);
+  if (!ports || !Number.isFinite(at)) return null;
+  if (!ports.every((n) => Number.isInteger(n) && n > 0 && n < 65536))
+    return null;
+  return { at, ports };
+};
+let PUBLIC = (() => {
+  try {
+    return publicSaid(JSON.parse(fs.readFileSync(PUBLIC_PORTS, "utf8")));
+  } catch {
+    return null;
+  }
+})() ?? { at: 0, ports: [] };
 
 // Whether a ticket opens what is being asked for. A public port opens to
 // anyone; otherwise a ticket for one port opens that port and nothing
 // else, so a port shared with somebody does not hand them the machine it
 // runs on.
 function opens(ticket, to) {
-  if (to.theirs === true && PUBLIC.has(to.port)) return true;
+  if (to.theirs === true && PUBLIC.ports.includes(to.port)) return true;
   const scope = scopeOf(ticket);
   if (scope === null) return false;
   return scope === "" || (to.theirs === true && String(to.port) === scope);
@@ -790,14 +795,16 @@ const server = http.createServer(async (req, res) => {
     }
   }
   // The ports open to anyone, for our server alone: the whole list each
-  // time, kept on the disk.
+  // time with when it was read, kept on the disk; one older than the last
+  // taken is left alone.
   if (to.mine && url.pathname === "/maslow/public" && req.method === "PUT") {
     if (!ours(req.headers["x-maslow-ticket"]))
       return say(res, 401, "That ticket is not good here.");
-    const ports = portsList(parse(await bodyOf(req)));
-    if (!ports) return say(res, 400, "Say which ports, by number.");
-    PUBLIC = new Set(ports);
-    fs.writeFileSync(PUBLIC_PORTS, JSON.stringify([...PUBLIC]));
+    const said = publicSaid(parse(await bodyOf(req)));
+    if (!said) return say(res, 400, "Say which ports, by number, and when.");
+    if (said.at <= PUBLIC.at) return say(res, 200, "a newer list is kept");
+    PUBLIC = said;
+    fs.writeFileSync(PUBLIC_PORTS, JSON.stringify(PUBLIC));
     return say(res, 200, "public ports written");
   }
   // The keys that open SSH, for our server alone: written beside the

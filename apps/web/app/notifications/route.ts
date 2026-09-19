@@ -12,7 +12,7 @@ import {
 import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
-import { tellAnswer } from "@/lib/computer";
+import { tellAnswer, tellPublic } from "@/lib/computer";
 import { principal } from "@/lib/session";
 import { Refused, told } from "@/lib/shares";
 
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
   } | null;
   if (!said) return new Response(null, { status: 400 });
   try {
-    const files = await asPerson(p, async (q) => {
+    const made = await asPerson(p, async (q) => {
       if (said.read) await markRead(q);
       if (said.clear) await clearDone(q);
       if (said.id && said.answer !== undefined) {
@@ -66,22 +66,23 @@ export async function POST(request: Request) {
         if (notification.request) {
           if (said.answer !== "Accept" && said.answer !== "Decline")
             throw new Unanswerable("answer with Accept or Decline");
-          return (
-            await answerShareAsk(
-              q,
-              p,
-              notification.request,
-              said.answer === "Accept" ? "accept" : "decline",
-            )
-          ).files;
+          const { files, opened } = await answerShareAsk(
+            q,
+            p,
+            notification.request,
+            said.answer === "Accept" ? "accept" : "decline",
+          );
+          return { files, opened };
         } else await answerNotification(q, said.id, said.answer);
         // The answer goes back to the conversation it came from, once
         // this answer has landed.
         after(() => tellAnswer(p, said.id!));
       }
-      return [];
+      return { files: [], opened: false };
     });
-    after(() => told(p, files));
+    after(() => told(p, made.files));
+    // The door hears of a port made public once the answer has landed.
+    if (made.opened) after(() => tellPublic(p));
   } catch (err) {
     if (
       err instanceof Unanswerable ||
