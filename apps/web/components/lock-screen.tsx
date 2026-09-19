@@ -285,9 +285,13 @@ export function LockScreen({
   made,
   landings = [],
   you,
+  plain = false,
 }: {
   // Which leg of the way in this is: who you are, the code, or where to land.
   step: "who" | "code" | "choose";
+  // The column alone on the bare ground, with no wallpaper and no clock:
+  // what production wears for now.
+  plain?: boolean;
   // The address a code went to, on the code step.
   email?: string;
   // What the last leg left to say, and whether it stopped the sign-in.
@@ -498,11 +502,17 @@ export function LockScreen({
 
   return (
     // Chrome over a wallpaper is the dark look, whichever look the desktop
-    // wears: the words are on a picture, not on paper.
-    <div className="dark fixed inset-0 z-50 overflow-y-auto">
-      <Paper />
+    // wears: the words are on a picture, not on paper. Plain, the column
+    // lies on the bare ground in the desktop's own look.
+    <div
+      className={cx(
+        "fixed inset-0 z-50 overflow-y-auto",
+        plain ? "bg-canvas" : "dark",
+      )}
+    >
+      {!plain && <Paper />}
       <div className="relative flex min-h-full flex-col items-center gap-12 px-6 py-12">
-        <Clock />
+        {!plain && <Clock />}
         <motion.div
           key={step}
           initial={still ? false : { opacity: 0, y: 4 }}

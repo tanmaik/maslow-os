@@ -75,6 +75,7 @@ export async function SignIn({
       emails={emails}
       noMail={deployment.mail.kind === "none"}
       made={deployment.seededSignIn ? made() : undefined}
+      plain={deployment.production}
     />
   );
 }

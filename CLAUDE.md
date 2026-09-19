@@ -766,7 +766,9 @@ settled designs are
 in `docs/decisions/2026-09-12-the-look-is-warm.md`.
 
 The way in is a lock screen: the desktop's own wallpaper, darkened, with the
-clock and the date over it and one column in the middle. It asks for an
+clock and the date over it and one column in the middle; in production,
+for now, the same column alone on the bare ground, with no wallpaper and
+no clock. It asks for an
 address, and offers the faces of whoever has signed in on this device — kept
 on the device, nowhere else, five at most, and forgotten one by one from the
 face itself; picking one goes straight to the code. The code is six boxes and

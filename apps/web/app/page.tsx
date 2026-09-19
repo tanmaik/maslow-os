@@ -37,7 +37,14 @@ export default async function Page({
   // Just signed in with a code, and in more than one org: the last leg of
   // the way in is which one to land in.
   if (asked.orgs && you && memberships.length > 1)
-    return <LockScreen step="choose" landings={memberships} you={you} />;
+    return (
+      <LockScreen
+        step="choose"
+        landings={memberships}
+        you={you}
+        plain={deployment.production}
+      />
+    );
   return (
     <main>
       <h1 className="sr-only">{org.name}</h1>
