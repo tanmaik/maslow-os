@@ -226,7 +226,11 @@ export async function restore(tmux) {
   if (there === false) return;
   const folder = (p) => (fs.existsSync(OS + p) ? p : HOME);
   const runs = w.windows ?? [];
+  // The windows in their order first, which takes a moment, then every
+  // command typed at once, each when its own prompt is up, so however
+  // many windows there were the whole of it is one prompt's wait long.
   let made = 0;
+  const typed = [];
   for (const r of runs) {
     const opened =
       made === 0 && there === null
@@ -236,11 +240,14 @@ export async function restore(tmux) {
     made++;
     const at = `main:${made + (there ? 1 : 0)}`;
     if (r.name) await tmux("rename-window", "-t", at, r.name);
-    if (r.command?.argv?.length) {
-      await prompted(tmux, at);
-      await tmux("send-keys", "-t", at, line(r.command), "Enter");
-    }
+    if (r.command?.argv?.length)
+      typed.push(
+        prompted(tmux, at).then(() =>
+          tmux("send-keys", "-t", at, line(r.command), "Enter"),
+        ),
+      );
   }
+  await Promise.all(typed);
   if (made === runs.length) is({ ...w, boot: booted() });
   console.log(
     made === runs.length

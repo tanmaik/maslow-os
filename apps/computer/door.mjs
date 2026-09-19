@@ -2973,8 +2973,10 @@ server.listen(8080, "::", () => console.log("the door is open on 8080"));
 // Once the browser is up, or after a while if nobody asks: weighed as it
 // stands, then the terminal put back as it was, and from then on
 // remembered every half minute. The door says ready only once the
-// terminal is back, so the desktop stays greyed until then, and not past
-// SETTLED, since a machine silent for a minute is taken for a dead one.
+// terminal is back, so the desktop stays off until then. The windows'
+// commands are typed side by side, so that is a prompt's wait, ten
+// seconds at most; SETTLED is the backstop for a tmux that hangs, since a
+// machine silent for a minute is taken for a dead one.
 const SETTLED = 20_000;
 let arrival = null;
 let arrived = false;

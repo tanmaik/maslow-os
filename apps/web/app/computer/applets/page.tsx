@@ -1,12 +1,10 @@
 import type { Principal } from "@maslow/db/auth";
-import type { SharedPort } from "@maslow/db/computers";
 import { groupsOf } from "@maslow/db/groups";
 import { orgOf } from "@maslow/db/settings";
 import { redirect } from "next/navigation";
 
 import { LivePorts } from "@/app/computer/applets/live-ports";
-import { Row, Rows } from "@/app/settings/row";
-import { ButtonLink } from "@/components/base/buttons/button";
+import { Shared } from "@/app/computer/applets/shared";
 import { ComputerWaiting } from "@/components/computer-waiting";
 import { publishedOf, sharedWithMe, sharingOf } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
@@ -30,36 +28,6 @@ async function sharing(p: Principal) {
       .filter((g) => !g.everyone)
       .map((g) => ({ id: g.id, name: g.name })),
   };
-}
-
-// The ports others opened to this person, each a window a click away.
-function Shared({ ports }: { ports: SharedPort[] }) {
-  if (ports.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-2">
-      <p className="px-3 text-caption-1-medium text-text-secondary">
-        Shared with you
-      </p>
-      <Rows>
-        {ports.map((s) => (
-          <Row
-            key={`${s.machineId}:${s.port}`}
-            label={s.name ?? `${s.owner}'s port ${s.port}`}
-          >
-            <ButtonLink
-              variant="secondary"
-              size="xs"
-              href={`/port/${s.machineId}/${s.port}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open
-            </ButtonLink>
-          </Row>
-        ))}
-      </Rows>
-    </div>
-  );
 }
 
 // Applets: every port listening on the person's computer, as a window,

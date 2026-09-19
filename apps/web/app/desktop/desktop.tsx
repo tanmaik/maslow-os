@@ -996,9 +996,19 @@ export function Desktop({
   // the window already showing it comes forward, or a first one opens.
   // A server started a moment ago is not in the list until the next look,
   // so the ask waits for it rather than being lost.
-  const awaited = useRef<{ port: number; until: number } | null>(null);
-  const portNamed = (n: number) =>
-    listening.find((x) => x.href.split("/").at(-1) === String(n));
+  const awaited = useRef<{
+    port: number;
+    machine?: string;
+    until: number;
+  } | null>(null);
+  // A port by its number: on the machine named, a colleague's, or on the
+  // person's own, which come first among those listening.
+  const portNamed = (n: number, machine?: string) =>
+    listening.find((x) =>
+      machine
+        ? x.href === `/port/${machine}/${n}`
+        : x.href.split("/").at(-1) === String(n),
+    );
   const show = (it: Port) =>
     open({
       kind: "port",
@@ -1006,16 +1016,16 @@ export function Desktop({
       href: it.href,
       box: boxOf({ kind: "port", href: it.href }),
     });
-  const openPort = (n: number) => {
-    const it = portNamed(n);
+  const openPort = (n: number, machine?: string) => {
+    const it = portNamed(n, machine);
     if (it) show(it);
-    else awaited.current = { port: n, until: Date.now() + 30_000 };
+    else awaited.current = { port: n, machine, until: Date.now() + 30_000 };
   };
   useEffect(() => {
     const want = awaited.current;
     if (!want) return;
     if (Date.now() > want.until) return void (awaited.current = null);
-    const it = portNamed(want.port);
+    const it = portNamed(want.port, want.machine);
     if (!it) return;
     awaited.current = null;
     show(it);
@@ -1170,6 +1180,7 @@ export function Desktop({
         href?: unknown;
         title?: unknown;
         port?: unknown;
+        machine?: unknown;
         path?: unknown;
         view?: unknown;
         share?: unknown;
@@ -1197,7 +1208,11 @@ export function Desktop({
       // theirs, which is a window on the desktop, or a file of theirs, which
       // is Files at its folder.
       if (asked?.maslow === "open") {
-        if (typeof asked.port === "number") openPort(asked.port);
+        if (typeof asked.port === "number")
+          openPort(
+            asked.port,
+            typeof asked.machine === "string" ? asked.machine : undefined,
+          );
         else if (typeof asked.view === "string")
           openView(
             asked.view,

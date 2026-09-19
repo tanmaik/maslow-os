@@ -20,9 +20,10 @@ its foreground process group, with the variables that job holds and its
 shell does not, since those were on the line. At the first boot after, once the
 machine is ready, the door makes the session again, or adds to one that
 holds nothing but the bare shell a terminal opens with, a window per
-entry in its folder, names the named ones, waits for each window's
-prompt, and types each command back in with `send-keys` so it runs in view
-as if the person had. A `claude` that was running comes back as `claude
+entry in its folder, names the named ones, and then, every window at
+once, waits for its prompt and types its command back in with `send-keys`
+so it runs in view as if the person had; however many windows there were,
+the whole of it is one prompt's wait, ten seconds at most. A `claude` that was running comes back as `claude
 --continue`. The file carries the boot id, written only once every window
 was made, so a door that restarts without the machine puts nothing back
 over a terminal that is still there, and a restore cut short is tried
@@ -45,8 +46,9 @@ are waiting. The desktop asks after the ports every two seconds; a door
 that does not answer, or a row that is not ready, covers the desktop
 under one solid card that says what the computer is doing, in the
 Computer pane's own words and progress. The door says ready, and answers
-for its numbers, only once the terminal is back, and not past twenty
-seconds, since a machine silent for a minute is taken for a dead one.
+for its numbers, only once the terminal is back; twenty seconds is the
+backstop for a tmux that hangs, since a machine silent for a minute is
+taken for a dead one.
 When it answers, every window of the computer is opened afresh under the
 card, which says the computer is back and lifts a moment and a half
 later, so what the person returns to is connected. The card is
