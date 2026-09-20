@@ -195,10 +195,16 @@ try {
 
   // Filled, the window keeps its insets, the dock goes, and a grip at the
   // bottom edge brings it back.
-  await press(
-    page.locator('[data-window] button[aria-label="Fill the screen"]').last(),
-  );
-  await page.waitForTimeout(600);
+  // Pressed until it takes, as the dock's icon is: on a slow runner the
+  // window is still arriving and a first tap lands where the light was. A
+  // filled window's light reads otherwise, so it is never pressed twice.
+  const light = page
+    .locator('[data-window] button[aria-label="Fill the screen"]')
+    .last();
+  for (let i = 0; i < 4 && (await light.count()) > 0; i++) {
+    await press(light);
+    await page.waitForTimeout(1000);
+  }
   const full = await rect("[data-window]");
   check(
     "a filled window keeps its insets",

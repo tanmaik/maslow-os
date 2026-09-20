@@ -53,9 +53,8 @@ export async function desktopOf(p: Principal): Promise<{
 // The apps a person can open: the ports of their own computer they have
 // published, each as they named it, only while it is listening this
 // moment; and the ports other people opened to them, wearing the name and
-// face their owner published them under, or saying whose they are. Their
-// own listening ports never published come too, marked bare, so one asked
-// for by number still opens.
+// face their owner published them under, or saying whose they are. A port
+// never published is none of them: it opens in a browser tab, from Applets.
 export async function portsOf(p: Principal): Promise<Port[]> {
   const [mine, shared, published] = await Promise.all([
     sharingOf(p),
@@ -75,17 +74,6 @@ export async function portsOf(p: Principal): Promise<Port[]> {
             href: `/port/${mine.machineId}/${a.port}`,
             face: a.icon ?? live.get(a.port)?.face,
             ...(a.tab || live.get(a.port)?.tab ? { tab: true as const } : {}),
-          }))
-      : []),
-    ...(mine
-      ? [...live.values()]
-          .filter((x) => !published.some((a) => a.port === x.port))
-          .map((x) => ({
-            title: `Port ${x.port}`,
-            href: `/port/${mine.machineId}/${x.port}`,
-            ...(x.face ? { face: x.face } : {}),
-            ...(x.tab ? { tab: true as const } : {}),
-            bare: true as const,
           }))
       : []),
     ...shared.map((s) => ({

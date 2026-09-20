@@ -10,7 +10,13 @@ import {
   asSelf,
   Gone,
 } from "../packages/db/src/index.ts";
-import { portsReaching, sharePort } from "../packages/db/src/computers.ts";
+import {
+  forgetPort,
+  markStopped,
+  portsReaching,
+  sharePort,
+  stoppedOn,
+} from "../packages/db/src/computers.ts";
 import {
   copyAt,
   filesReaching,
@@ -318,6 +324,61 @@ export async function smokeDb({ pgPort }) {
           "smoke-machine:4000",
           "smoke-machine:4001",
         ]);
+        // An app's name and face go where its port goes: its owner reads
+        // every app of theirs, a colleague the one on a port that reaches
+        // them and never the one that is only public.
+        await asPerson(mine, (q) =>
+          q.query(
+            `insert into published_apps (computer_id, port, name)
+             values ($1, 4000, 'Reaches them'), ($1, 4002, 'Only public')`,
+            [computer],
+          ),
+        );
+        const named = (who) =>
+          asPerson(who, async (q) =>
+            (
+              await q.query("select name from published_apps order by port")
+            ).rows.map((r) => r.name),
+          );
+        assert.deepEqual(await named(mine), ["Reaches them", "Only public"]);
+        assert.deepEqual(await named(theirs), ["Reaches them"]);
+        // A port that stopped is its owner's alone to know, and forgetting
+        // it takes its app and its every share with it.
+        await asPerson(mine, (q) => markStopped(q, computer, [4000, 4002], []));
+        assert.equal(
+          (await asPerson(theirs, (q) => stoppedOn(q, computer))).length,
+          0,
+        );
+        // Not before it has been gone ten minutes, and then in one act.
+        assert.equal(
+          await asPerson(mine, (q) => forgetPort(q, computer, 4002)),
+          null,
+        );
+        await asPerson(mine, (q) =>
+          q.query(
+            "update stopped_ports set stopped_at = now() - interval '11 minutes'",
+          ),
+        );
+        assert.equal(
+          await asPerson(mine, (q) => forgetPort(q, computer, 4002)),
+          true,
+        );
+        assert.equal(
+          await asPerson(mine, (q) => forgetPort(q, computer, 4000)),
+          false,
+        );
+        assert.deepEqual(await named(mine), []);
+        assert.deepEqual(await reaching(theirs), ["smoke-machine:4001"]);
+        assert.equal(
+          (await asPerson(mine, (q) => stoppedOn(q, computer))).length,
+          0,
+        );
+        await asPerson(mine, (q) =>
+          q.query(
+            "insert into port_shares (computer_id, port, subject) values ($1, 4000, 'everyone')",
+            [computer],
+          ),
+        );
         assert.equal(via[1].length, 1);
         assert.match(via[1][0], /^group:./);
         assert.deepEqual(await reaching(others), []);

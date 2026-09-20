@@ -11,9 +11,6 @@ export type Port = {
   title: string;
   href: string;
   face?: string;
-  // A port never published: opened when asked for by number, and in no
-  // dock and no command bar.
-  bare?: true;
   // Opens in a browser tab of its own and not as a window: its page
   // refuses to be framed, or its owner said so.
   tab?: true;

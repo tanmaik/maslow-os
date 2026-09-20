@@ -104,20 +104,6 @@ export function Ports({
     sharing?.shares.filter((s) => s.port === port) ?? [];
   const link = (port: number) =>
     sharing ? `/port/${sharing.machineId}/${port}` : null;
-  // Whether a port opens in a browser tab: its page refuses a window, or
-  // its owner said so when they made it an app.
-  const inTab = (p: Port) => !!p.tab || !!appOf(p.port)?.tab;
-  // In a window on the desktop a port opens as a window there, which on a
-  // phone's home-screen app keeps the person in the app; one that opens in
-  // a tab is left to the link.
-  const openHere = (e: React.MouseEvent, p: Port) => {
-    if (window.self === window.top || inTab(p)) return;
-    e.preventDefault();
-    window.parent.postMessage(
-      { maslow: "open", port: p.port },
-      location.origin,
-    );
-  };
   return (
     <div className="flex flex-col gap-2">
       <p className="px-3 text-caption-1-medium text-text-secondary">
@@ -165,7 +151,6 @@ export function Ports({
                     href={`/computer/open?port=${p.port}`}
                     target="_blank"
                     rel="noreferrer"
-                    onClick={(e) => openHere(e, p)}
                   >
                     Open
                   </ButtonLink>
@@ -178,22 +163,10 @@ export function Ports({
                       href={`/computer/open?port=${p.port}`}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={(e) => openHere(e, p)}
                     />
                   }
                 >
                   Open
-                </ContextMenuItem>
-                <ContextMenuItem
-                  render={
-                    <a
-                      href={`/computer/open?port=${p.port}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    />
-                  }
-                >
-                  Open in a new tab
                 </ContextMenuItem>
                 <ContextMenuItem
                   disabled={!sharing}

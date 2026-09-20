@@ -82,18 +82,17 @@ const faces = new Map();
 // Whether the page a port serves refuses to be shown in a frame, by the
 // same key: such a port cannot be a window and opens in a tab instead.
 const unframed = new Map();
-// A browser heeds two words of X-Frame-Options and no others, and a
-// frame-ancestors that names anything short of every site leaves out the
-// desktop, which is a site of its own to the port.
+// A frame-ancestors that names anything short of every site leaves out
+// the desktop, which is a site of its own to the port; where a page sends
+// one, a browser heeds it and not X-Frame-Options, of which it heeds two
+// words and no others.
 const refuses = (headers) => {
-  if (/^\s*(deny|sameorigin)\s*$/i.test(String(headers["x-frame-options"])))
-    return true;
   const named = /frame-ancestors\s+([^;]*)/i.exec(
     String(headers["content-security-policy"] ?? ""),
   );
-  return (
-    !!named && !named[1].split(/\s+/).some((w) => w === "*" || w === "https:")
-  );
+  if (named)
+    return !named[1].split(/\s+/).some((w) => w === "*" || w === "https:");
+  return /^\s*(deny|sameorigin)\s*$/i.test(String(headers["x-frame-options"]));
 };
 
 // One read of an address on the port, given this long and this much and

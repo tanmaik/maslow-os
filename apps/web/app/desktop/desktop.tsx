@@ -11,7 +11,6 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
-  useMemo,
   useRef,
   useState,
   type ComponentType,
@@ -247,9 +246,7 @@ export function Desktop({
   }, [you?.email, you?.name, you?.picture]);
   // What is listening, kept current while the desktop is open. Nothing is
   // asked while the tab is not being looked at.
-  const [listening, setListening] = useState(ports);
-  // The apps among them: what the dock and the command bar offer.
-  const live = useMemo(() => listening.filter((x) => !x.bare), [listening]);
+  const [live, setLive] = useState(ports);
   // Whether the computer is out of action: its row not ready, or its door
   // silent to an ask, and the whole desktop greyed until both say
   // otherwise.
@@ -285,7 +282,7 @@ export function Desktop({
         if (now && !stopped) {
           if (now.ports) {
             const ports = now.ports;
-            setListening((was) => (same(was, ports) ? was : ports));
+            setLive((was) => (same(was, ports) ? was : ports));
             setLooks((n) => n + 1);
           }
           // Off from the moment a restart was asked for, until the asks
@@ -341,7 +338,7 @@ export function Desktop({
   const [afresh, setAfresh] = useState<Record<string, number>>({});
   // A window is worth keeping only while what it shows is still there.
   useEffect(() => {
-    const serving = new Set(listening.map((x) => x.href));
+    const serving = new Set(live.map((x) => x.href));
     for (const c of screen.cards) {
       if (c.kind !== "port") continue;
       const missed = doubted.current.get(c.id) ?? 0;
@@ -725,7 +722,7 @@ export function Desktop({
     if (
       item.kind === "port" &&
       !pinned &&
-      listening.find((x) => x.href === item.href)?.tab
+      live.find((x) => x.href === item.href)?.tab
     ) {
       const tab = window.open(item.href, "_blank");
       if (tab) {
@@ -934,37 +931,29 @@ export function Desktop({
     }
     pick({ kind: "record", title, href, box: boxOf({ kind: "record", href }) });
   };
-  // A port of the person's own that the computer asked the desktop to open:
-  // the window already showing it comes forward, or a first one opens.
-  // A server started a moment ago is not in the list until the next look,
-  // so the ask waits for it rather than being lost.
-  const awaited = useRef<{
-    port: number;
-    machine?: string;
-    until: number;
-  } | null>(null);
-  // A port by its number: on the machine named, a colleague's, or on the
-  // person's own, which come first among those listening.
-  const portNamed = (n: number, machine?: string) =>
-    listening.find((x) =>
-      machine
-        ? x.href === `/port/${machine}/${n}`
-        : x.href.split("/").at(-1) === String(n),
-    );
+  // A port of the person's own that a program on the computer asked to
+  // open. An app is a window: the one already showing it comes forward, or
+  // a first one opens, and one started a moment ago is waited on for a few
+  // looks, since it is not in the list until the next. A port that is no
+  // app is no window: it is shown in the computer's own browser, which
+  // reaches it where it listens.
+  const awaited = useRef<{ port: number; until: number } | null>(null);
+  const appOn = (n: number) =>
+    live.find((x) => x.href.split("/").at(-1) === String(n));
   const show = (it: Port) => open(portItem(it));
-  const openPort = (n: number, machine?: string) => {
-    const it = portNamed(n, machine);
+  const openPort = (n: number) => {
+    const it = appOn(n);
     if (it) show(it);
-    else awaited.current = { port: n, machine, until: Date.now() + 30_000 };
+    else awaited.current = { port: n, until: Date.now() + 6_000 };
   };
   useEffect(() => {
     const want = awaited.current;
     if (!want) return;
-    if (Date.now() > want.until) return void (awaited.current = null);
-    const it = portNamed(want.port, want.machine);
-    if (!it) return;
+    const it = appOn(want.port);
+    if (!it && Date.now() < want.until) return;
     awaited.current = null;
-    show(it);
+    if (it) show(it);
+    else openBrowser(`http://localhost:${want.port}`);
   }, [looks]);
   // A folder of theirs, named as their home has it: Files, at that
   // folder.
@@ -1114,7 +1103,6 @@ export function Desktop({
         href?: unknown;
         title?: unknown;
         port?: unknown;
-        machine?: unknown;
         path?: unknown;
         view?: unknown;
         share?: unknown;
@@ -1134,11 +1122,7 @@ export function Desktop({
       // theirs, which is a window on the desktop, or a file of theirs, which
       // is Files at its folder.
       if (asked?.maslow === "open") {
-        if (typeof asked.port === "number")
-          openPort(
-            asked.port,
-            typeof asked.machine === "string" ? asked.machine : undefined,
-          );
+        if (typeof asked.port === "number") openPort(asked.port);
         else if (typeof asked.view === "string")
           openView(
             asked.view,
@@ -1295,23 +1279,6 @@ export function Desktop({
           onBegin={begin}
           onEnd={end}
           onPick={pick}
-          onArrange={(hrefs) =>
-            fetch("/desktop/shelf", {
-              method: "POST",
-              headers: { "content-type": "application/json" },
-              body: JSON.stringify(hrefs),
-            })
-              .then((res) => {
-                if (!res.ok)
-                  throw new Error(`the shelf was refused: ${res.status}`);
-                return true;
-              })
-              // Said, and the dock draws the shelf as the server has it.
-              .catch((err: Error) => {
-                console.error(err.message);
-                return false;
-              })
-          }
           onFront={raise}
           onClose={(w) => void close(w.card.id)}
         />

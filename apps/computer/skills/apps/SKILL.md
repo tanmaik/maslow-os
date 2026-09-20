@@ -21,7 +21,11 @@ the desktop itself. Read `boardui` before you write any of its screens.
    Then `curl -s http://127.0.0.1:4310 | head -3` to see it answers.
 3. Look at it before you show it: `navigate` to `http://127.0.0.1:4310`,
    then `screenshot`, and fix what is wrong. Nothing restarts it after
-   the machine restarts; say so, or leave a `start.sh` beside it.
+   the machine restarts; say so, or leave a `start.sh` beside it. An app
+   added to the Dock or shared, whose server is found down for ten
+   minutes, is forgotten: its name, its place in the dock, its shares and
+   its public address. Keep a rebuild shorter than that, or tell the
+   person.
 4. Show it. As a window: `open :4310` from the shell puts the port's
    window on the person's desktop. As a widget: the brain's `place` with
    the `port`, a `title`, and where it lies as shares of the desktop,

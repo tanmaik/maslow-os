@@ -36,9 +36,11 @@ import {
   publicPortsOn,
   spentByDay,
   appsOn,
+  forgetPort,
+  markStopped,
   publishApp,
+  stoppedOn,
   unpublishApp,
-  arrangeApps,
   type Computer,
   type Move,
   type PortShare,
@@ -84,7 +86,7 @@ const sameShape = (a: Shape, b: Shape) =>
 
 // The image every machine boots, by its label: apps/computer, built and
 // pushed by hand to where the cloud keeps images.
-export const IMAGE = "door-89";
+export const IMAGE = "door-92";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -1363,24 +1365,6 @@ export async function publish(
   });
 }
 
-// Puts the person's shelf of published apps in the order they dragged it
-// into, each named by its port's address on the desktop.
-export async function arrange(
-  p: Principal,
-  hrefs: string[],
-): Promise<string | null> {
-  return asPerson(p, async (q) => {
-    const c = await computerOf(q, p.userId);
-    if (!c?.machineId) return "You have no computer yet.";
-    const own = new RegExp(`^/port/${c.machineId}/(\\d{1,5})$`);
-    const ports = hrefs
-      .map((h) => Number(own.exec(h)?.[1]))
-      .filter((n) => Number.isInteger(n) && n > 0 && n < 65536);
-    await arrangeApps(q, c.id, ports);
-    return null;
-  });
-}
-
 // Makes what one of the person's own ports reaches exactly this: anyone
 // on the internet, everyone in the org, or some groups and some people.
 // Nobody outside the org can be named, since the database refuses a member
@@ -1954,7 +1938,61 @@ export async function tellAnswer(p: Principal, id: string): Promise<void> {
 export async function statsOf(p: Principal): Promise<Stats | null> {
   const c = await ready(p);
   if (!c) return null;
-  return door.stats(c.machineId!, ticket(c, 60));
+  const stats = await door.stats(c.machineId!, ticket(c, 60));
+  await settle(p, c, stats).catch((err: Error) =>
+    console.error(`stopped ports: ${err.message}`),
+  );
+  return stats;
+}
+
+// How often a computer's ports that matter are looked over.
+const LOOKED_OVER = 15_000;
+const lookedOver = new Map<string, number>();
+
+// What the door's word on what is listening means for the ports that
+// matter, the apps and the shared: one found gone is written down, one
+// back goes on as it was, and one watched gone for ten minutes is
+// forgotten, its app, its shares and its public address with it, so it is
+// a new port when it next listens. Judged while its owner is looking,
+// since that is when the door is asked, and the door hears of a public
+// port gone once that has been kept.
+async function settle(p: Principal, c: Computer, stats: Stats): Promise<void> {
+  const last = lookedOver.get(c.id) ?? 0;
+  if (Date.now() - last < LOOKED_OVER) return;
+  lookedOver.set(c.id, Date.now());
+  const up = new Set(stats.ports.map((x) => x.port));
+  const [wasPublic, behind] = await asPerson(p, async (q) => {
+    const [apps, shares, stopped] = await Promise.all([
+      appsOn(q, c.id),
+      sharesOn(q, c.id),
+      stoppedOn(q, c.id),
+    ]);
+    const matter = new Set([
+      ...apps.map((a) => a.port),
+      ...shares.map((x) => x.port),
+    ]);
+    await markStopped(
+      q,
+      c.id,
+      [...matter].filter((n) => !up.has(n)),
+      stopped
+        .filter((x) => up.has(x.port) || !matter.has(x.port))
+        .map((x) => x.port),
+    );
+    let wasPublic = false;
+    for (const x of stopped)
+      if (matter.has(x.port) && !up.has(x.port))
+        wasPublic = (await forgetPort(q, c.id, x.port)) === true || wasPublic;
+    // A door holding an older public list than the one kept, one it could
+    // not be told of when it changed, is told again now and not within
+    // the hour: what it holds decides who gets in with no ticket.
+    const kept = (await publicPortsOn(q, c.id)).version;
+    return [
+      wasPublic,
+      stats.publicVersion !== undefined && stats.publicVersion < kept,
+    ] as const;
+  });
+  if (wasPublic || behind) await tellPublic(p);
 }
 
 // How long Maslow takes to reach the computer's door and back, in

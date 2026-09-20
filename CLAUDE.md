@@ -717,11 +717,19 @@ after another's. A bare port is in none of them. An app opens as a
 window, or in a browser tab of its own where its owner says so as they
 add it to the dock, or where its page refuses to be shown in a frame,
 which the door notes as it looks for the favicon; an app that opens in a
-tab is no widget, a tab the browser will not open is a window after all,
-and any row in Applets opens in a new tab from its menu. The
-dock's run of apps is the person's shelf, kept on the server in the
-order they dragged it into, so it follows them; the built-in blocks
-keep the order each device has. A port shared with a colleague reaches
+tab is no widget, and a tab the browser will not open is a window after
+all. Only an app is a window: Open on a row in Applets is a browser tab
+of the port's own, an app opens as a window from the dock, and a port
+that is no app, asked for by a program on the machine, is shown in the
+computer's own browser. A
+port that matters, an app or one shared, found not listening is said so
+in Applets and kept as it was for ten minutes: back within them, it goes
+on as it was; gone longer, its app, its shares and its public address are
+forgotten, and it is a new port when it next listens. That is judged
+while its owner is looking, since that is when the door is asked. The
+dock's run of apps stands in the order they were added, the same on
+every device; the built-in blocks keep the order each device dragged
+them into. A port shared with a colleague reaches
 them under the name and face its owner published it as, or as "Port N
 · owner's" where it was never published. An app can be put
 on the desktop itself, from its icon's menu: a widget, with no bar, under

@@ -746,6 +746,9 @@ const server = http.createServer(async (req, res) => {
       JSON.stringify({
         ...numbers,
         running: programs,
+        // The number of the public list the door holds, so a change it
+        // never heard is told again at the next look.
+        publicVersion: PUBLIC.version,
       }),
     );
   }

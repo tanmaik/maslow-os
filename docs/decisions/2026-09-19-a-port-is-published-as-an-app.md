@@ -3,8 +3,7 @@
 2026-09-19. Tanmai, after a study of ryOS's applets: a port becomes an
 app only when the person publishes it; publishing offers the port's own
 favicon and name, adjustable right there; a port that is not alive is
-not there at all; the dock's order is kept on the server, and the dock
-never again shows every port; a shared app carries its name and icon to
+not there at all; the dock never again shows every port; a shared app carries its name and icon to
 the colleague; widgets keep separate placements on a phone and a laptop.
 
 ## The noun
@@ -25,10 +24,9 @@ renamed and unpublished from the same dialog.
 Only apps are in the dock, the command bar and the widgets' menus, and an
 app whose port is not listening this moment is nowhere at all, since the
 dock is asked after the ports every two seconds and the list is the
-published rows met with the live ones. The dock's run of apps arrives in
-the order the server keeps and a drag on it is posted back, so the shelf
-follows the person; the built-in blocks keep the order each device has,
-since those rarely move. A colleague reached by a share of the port sees
+published rows met with the live ones. The dock's run of apps stands in
+the order they were added, the same on every device; the built-in blocks
+keep the order each device dragged them into. A colleague reached by a share of the port sees
 the app under its published name and face, through the same row, which
 their read of it is allowed by the share and no more; a shared port never
 published stays "Port N · owner's". A colleague's dock is not asked after
@@ -55,3 +53,30 @@ The owner may ask for the same of any app, a switch where they add it to
 the Dock, kept on its row (`published_apps.tab`), and every row's menu has
 "Open in a new tab". A bare port that may be framed opens as a window, as
 before.
+
+## Gone means gone, after ten minutes
+
+2026-09-20. Tanmai: a program that stops should leave nothing behind, "it
+should just be new", and then, on hearing what a crash or a restart would
+cost, "let's do like 10 minutes, but if it auto-recovers it can stay". A
+port that matters, one with an app or a share, found not listening is
+written down with the time (`stopped_ports`), shown as stopped in
+Applets, and nowhere else, as before. Listening again within ten minutes,
+the note goes and everything is as it was. Gone longer, the app, every
+share and the public address go with the note, the door is told its
+public list again, and the port is a new one when it next listens. The
+judging rides the owner's own asks after their computer, at most every
+fifteen seconds, since that is when the door is asked; a computer nobody
+is looking at is judged at its owner's next look.
+
+Only an app is a window. Open on a row in Applets is a browser tab; an
+app opens as a window from the dock; and a port that is no app, asked for
+with `open :PORT` on the machine, is shown in the computer's own browser
+at `localhost`, which needs no ticket. The run of apps in the dock stands
+in the order they were added: dragging them into an order, kept on the
+server, was built on 2026-09-19 and taken out the next day, with the
+bare-port windows of the same week, to keep what an app is small.
+
+A door that could not be told of a public list when it changed says which
+one it holds with its numbers, and is told again at the owner's next
+look rather than within the hour.

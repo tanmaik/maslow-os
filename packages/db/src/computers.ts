@@ -451,6 +451,78 @@ export type PortShare = {
   groupId: string | null;
 };
 
+// The ports of a computer seen not listening, and when each first was.
+export async function stoppedOn(
+  q: Query,
+  computerId: string,
+): Promise<{ port: number; stoppedAt: Date }[]> {
+  return (
+    await q.query<{ port: number; stoppedAt: Date }>(
+      `select port, stopped_at as "stoppedAt" from stopped_ports
+       where computer_id = $1 order by port`,
+      [computerId],
+    )
+  ).rows;
+}
+
+// Ports found not listening at this look, and ports listening again. One
+// already noted keeps its time while it is being watched; a note nobody
+// looked at for a minute starts again, since what the port did meanwhile
+// was not seen.
+export async function markStopped(
+  q: Query,
+  computerId: string,
+  stopped: number[],
+  back: number[],
+): Promise<void> {
+  if (stopped.length > 0)
+    await q.query(
+      `insert into stopped_ports (computer_id, port)
+       select $1, unnest($2::int[])
+       on conflict (computer_id, port) do update set
+         stopped_at = case
+           when stopped_ports.seen_at < now() - interval '1 minute' then now()
+           else stopped_ports.stopped_at end,
+         seen_at = now()`,
+      [computerId, stopped],
+    );
+  if (back.length > 0)
+    await q.query(
+      "delete from stopped_ports where computer_id = $1 and port = any($2::int[])",
+      [computerId, back],
+    );
+}
+
+// A port forgotten once its note is ten minutes old, by the database's
+// clock and in one act, so two looks at once forget it once and one that
+// just came back not at all: its app, its every share and the note, so it
+// is a new port when it next listens. Null where it is not yet due;
+// otherwise whether it was public, which its door has to hear.
+export async function forgetPort(
+  q: Query,
+  computerId: string,
+  port: number,
+): Promise<boolean | null> {
+  const due = await q.query(
+    `delete from stopped_ports
+     where computer_id = $1 and port = $2
+       and stopped_at < now() - interval '10 minutes'`,
+    [computerId, port],
+  );
+  if ((due.rowCount ?? 0) === 0) return null;
+  await q.query(
+    "delete from published_apps where computer_id = $1 and port = $2",
+    [computerId, port],
+  );
+  const shares = await q.query<{ subject: string }>(
+    "delete from port_shares where computer_id = $1 and port = $2 returning subject",
+    [computerId, port],
+  );
+  const wasPublic = shares.rows.some((r) => r.subject === "public");
+  if (wasPublic) await bumpPublic(q, computerId);
+  return wasPublic;
+}
+
 // Every share on a computer. An org scope shows its owner all of them and
 // everyone else only what reaches them, so nobody learns what another has
 // open.
@@ -564,7 +636,7 @@ export type PublishedApp = {
   position: number;
 };
 
-// The apps a computer's owner has published, in the order of their shelf.
+// The apps a computer's owner has published, in the order they were added.
 export async function appsOn(
   q: Query,
   computerId: string,
@@ -605,27 +677,6 @@ export async function unpublishApp(
   await q.query(
     "delete from published_apps where computer_id = $1 and port = $2",
     [computerId, port],
-  );
-}
-
-// The shelf in the order given, by port, first to last; an app not named,
-// one whose port was not listening as the shelf was dragged, keeps its
-// order among the others after them.
-export async function arrangeApps(
-  q: Query,
-  computerId: string,
-  ports: number[],
-): Promise<void> {
-  await q.query(
-    `update published_apps a set position = $3 + a.position
-     where a.computer_id = $1 and a.port <> all($2::int[])`,
-    [computerId, ports, ports.length],
-  );
-  await q.query(
-    `update published_apps a set position = p.at - 1
-     from unnest($2::int[]) with ordinality as p (port, at)
-     where a.computer_id = $1 and a.port = p.port`,
-    [computerId, ports],
   );
 }
 
