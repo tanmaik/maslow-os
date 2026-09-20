@@ -8,6 +8,7 @@ const HEAVIEST_FACE = 40 * 1024;
 
 // Publishes one port of the person's own computer as an app, named and
 // wearing the face the sheet sent, a picture they chose or the port's own,
+// and opening as a window or in a tab of its own as the sheet says,
 // or takes one off the shelf when the sheet says so. What cannot be done
 // is said in words.
 export async function POST(request: Request) {
@@ -36,6 +37,7 @@ export async function POST(request: Request) {
   const refused = await publish(p, port, {
     name: typeof name === "string" ? name : "",
     icon,
+    tab: form.get("tab") === "on",
   });
   if (refused) return new Response(refused, { status: 409 });
   return new Response(null, { status: 204 });

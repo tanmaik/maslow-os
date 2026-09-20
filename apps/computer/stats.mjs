@@ -79,12 +79,29 @@ const BIGGEST_FACE = 16 * 1024;
 const BIGGEST_PAGE = 64 * 1024;
 const ASK_AGAIN = 60_000;
 const faces = new Map();
+// Whether the page a port serves refuses to be shown in a frame, by the
+// same key: such a port cannot be a window and opens in a tab instead.
+const unframed = new Map();
+// A browser heeds two words of X-Frame-Options and no others, and a
+// frame-ancestors that names anything short of every site leaves out the
+// desktop, which is a site of its own to the port.
+const refuses = (headers) => {
+  if (/^\s*(deny|sameorigin)\s*$/i.test(String(headers["x-frame-options"])))
+    return true;
+  const named = /frame-ancestors\s+([^;]*)/i.exec(
+    String(headers["content-security-policy"] ?? ""),
+  );
+  return (
+    !!named && !named[1].split(/\s+/).some((w) => w === "*" || w === "https:")
+  );
+};
 
 // One read of an address on the port, given this long and this much and
 // no more; what came, with its type, or nothing.
-function read(port, path, most, then) {
+function read(port, path, most, then, heard) {
   const req = http.get({ host: "127.0.0.1", port, path }, (res) => {
     const type = (res.headers["content-type"] ?? "").split(";")[0].trim();
+    heard?.(res.headers);
     if (res.statusCode !== 200) {
       req.destroy();
       return then(null);
@@ -121,31 +138,42 @@ function iconOf(html, port) {
 }
 
 function ask(port, key) {
-  faces.set(key, { face: null, at: Date.now() });
+  // A face already known is kept while the page is asked about frames.
+  const known = faces.get(key)?.face ?? null;
+  faces.set(key, { face: known, at: Date.now() });
   const done = (face) => faces.set(key, { face, at: Date.now() });
   const take = (got) => {
     if (!got || !FACE_TYPES.test(got.type) || !got.body.length) return false;
     done(`data:${got.type};base64,${got.body.toString("base64")}`);
     return true;
   };
+  // The page itself says whether it may be framed, and may say where its
+  // face is when the usual place has none.
   read(port, "/favicon.ico", BIGGEST_FACE, (got) => {
-    if (take(got)) return;
-    // The page itself may say where its face is.
-    read(port, "/", BIGGEST_PAGE, (page) => {
-      if (!page || !/^text\/html$/.test(page.type)) return;
-      const path = iconOf(page.body.toString("utf8"), port);
-      if (path && path !== "/favicon.ico")
-        read(port, path, BIGGEST_FACE, (icon) => void take(icon));
-    });
+    const faced = known !== null || take(got);
+    read(
+      port,
+      "/",
+      BIGGEST_PAGE,
+      (page) => {
+        if (faced || !page || !/^text\/html$/.test(page.type)) return;
+        const path = iconOf(page.body.toString("utf8"), port);
+        if (path && path !== "/favicon.ico")
+          read(port, path, BIGGEST_FACE, (icon) => void take(icon));
+      },
+      (headers) => unframed.set(key, refuses(headers)),
+    );
   });
 }
 
-// The face known for the process serving there, asked for when it is new
-// or when the last ask came back with nothing. Answers at once.
+// The face known for the process serving there, asked for when it is new,
+// or again when the last ask came back with no face or no word on frames,
+// as a server still compiling its first page gives. Answers at once.
 function face(port, pid) {
   const key = `${port}:${pid}`;
   const had = faces.get(key);
-  if (!had || (!had.face && Date.now() - had.at > ASK_AGAIN)) ask(port, key);
+  const wanting = had && (!had.face || !unframed.has(key));
+  if (!had || (wanting && Date.now() - had.at > ASK_AGAIN)) ask(port, key);
   return faces.get(key)?.face ?? undefined;
 }
 
@@ -219,8 +247,13 @@ async function ports() {
   // What is no longer serving keeps no face here.
   const here = new Set(out.map((o) => `${o.port}:${o.pid}`));
   for (const key of faces.keys()) if (!here.has(key)) faces.delete(key);
+  for (const key of unframed.keys()) if (!here.has(key)) unframed.delete(key);
   return out
-    .map(({ pid, ...o }) => ({ ...o, face: face(o.port, pid) }))
+    .map(({ pid, ...o }) => ({
+      ...o,
+      face: face(o.port, pid),
+      ...(unframed.get(`${o.port}:${pid}`) ? { tab: true } : {}),
+    }))
     .sort((a, b) => a.port - b.port);
 }
 

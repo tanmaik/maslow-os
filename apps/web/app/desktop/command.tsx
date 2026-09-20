@@ -314,19 +314,21 @@ export function CommandBar({
                 </CommandItem>
               ))}
               {typed &&
-                ports.map((p) => (
-                  <CommandItem
-                    key={`${p.href} desktop`}
-                    value={`port ${p.title} on the desktop`}
-                    onSelect={() => go(() => onPin(portItem(p)))}
-                  >
-                    <RiLayoutGridLine aria-hidden />
-                    {p.title}
-                    <span className="text-caption-1-regular text-text-tertiary">
-                      put on the desktop
-                    </span>
-                  </CommandItem>
-                ))}
+                ports
+                  .filter((p) => !p.tab)
+                  .map((p) => (
+                    <CommandItem
+                      key={`${p.href} desktop`}
+                      value={`port ${p.title} on the desktop`}
+                      onSelect={() => go(() => onPin(portItem(p)))}
+                    >
+                      <RiLayoutGridLine aria-hidden />
+                      {p.title}
+                      <span className="text-caption-1-regular text-text-tertiary">
+                        put on the desktop
+                      </span>
+                    </CommandItem>
+                  ))}
             </CommandGroup>
           )}
           {typed && (

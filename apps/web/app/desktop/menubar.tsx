@@ -267,7 +267,11 @@ export function MenuBar({
   const { update, take } = useUpdate(computers);
   const waiting = notifications.waiting + (update ? 1 : 0);
   return (
-    <div className="mac-top-menubar text-caption-1-medium text-text-white fixed top-0 right-0 left-0 z-[60] flex items-center pt-[env(safe-area-inset-top)] pr-[calc(0.5rem+env(safe-area-inset-right))] pl-[calc(0.5rem+env(safe-area-inset-left))]">
+    <div
+      className={`mac-top-menubar text-caption-1-medium text-text-white fixed top-0 right-0 left-0 z-[60] flex items-center pt-[env(safe-area-inset-top)] pr-[calc(0.5rem+env(safe-area-inset-right))] pl-[calc(0.5rem+env(safe-area-inset-left))] ${
+        away ? "pointer-events-none" : ""
+      }`}
+    >
       {/* Away while a window is in full screen: the bar's own words go, and
           what it holds for the whole desktop, the notifications, stays. */}
       <div className={away ? "hidden" : "contents"}>
@@ -571,12 +575,16 @@ export function MenuBar({
           </button>
         </div>
       </div>
-      <NotificationsPanel
-        notifications={notifications}
-        update={update}
-        onUpdate={take}
-      />
-      <NotificationToasts notifications={notifications} />
+      {/* What the bar holds for the whole desktop takes the pointer even
+          while the bar itself, away, lets it through to the window. */}
+      <div className="pointer-events-auto contents">
+        <NotificationsPanel
+          notifications={notifications}
+          update={update}
+          onUpdate={take}
+        />
+        <NotificationToasts notifications={notifications} />
+      </div>
       <NewOrgDialog open={makingOrg} onOpenChange={setMakingOrg} />
       <AboutComputer
         open={about}

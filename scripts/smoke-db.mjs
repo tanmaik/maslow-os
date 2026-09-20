@@ -306,6 +306,18 @@ export async function smokeDb({ pgPort }) {
           (await portsReaching(q)).map((s) => s.via),
         );
         assert.deepEqual(via[0], ["everyone"]);
+        // A port made public is open to anyone with its address and given
+        // to nobody: it is not among what reaches a colleague.
+        await asPerson(mine, (q) =>
+          q.query(
+            "insert into port_shares (computer_id, port, subject) values ($1, 4002, 'public')",
+            [computer],
+          ),
+        );
+        assert.deepEqual(await reaching(theirs), [
+          "smoke-machine:4000",
+          "smoke-machine:4001",
+        ]);
         assert.equal(via[1].length, 1);
         assert.match(via[1][0], /^group:./);
         assert.deepEqual(await reaching(others), []);

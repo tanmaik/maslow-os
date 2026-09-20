@@ -3,8 +3,10 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { Row, Rows } from "@/app/settings/row";
 import { Button } from "@/components/base/buttons/button";
 import { Input } from "@/components/base/input/input";
+import { Switch } from "@/components/base/switch/switch";
 import { ImageInput } from "@/components/image-input";
 import {
   Dialog,
@@ -17,12 +19,15 @@ import {
 
 // Publishing a port as an app: the name it will go by and the face it
 // will wear, the port's own offered first and changed here if the person
-// likes, and one Add to Dock. An app already published is renamed the same
-// way, or taken off the shelf.
+// likes, whether it opens as a window or in a browser tab of its own, and
+// one Add to Dock. An app already published is changed the same way, or
+// taken off the shelf.
 export function PublishSheet({
   port,
   name,
   face,
+  tab,
+  unframed,
   published,
   onClose,
 }: {
@@ -32,10 +37,17 @@ export function PublishSheet({
   name: string;
   // The favicon the door found on the port, if any.
   face: string | undefined;
+  // Whether it opens in a browser tab today, and whether its page refuses
+  // to be shown in a window at all, which leaves no choice.
+  tab: boolean;
+  unframed: boolean;
   published: boolean;
   onClose: () => void;
 }) {
   const router = useRouter();
+  const [inTab, setInTab] = useState(tab);
+  // A page that refuses a window leaves no choice, whenever that is learnt.
+  const on = inTab || unframed;
   const [refused, setRefused] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const send = async (form: FormData) => {
@@ -97,6 +109,25 @@ export function PublishSheet({
               />
             </div>
           </div>
+          <input type="hidden" name="tab" value={on ? "on" : "off"} />
+          <Rows>
+            <Row
+              label="Open in a browser tab"
+              description={
+                unframed
+                  ? "This app does not allow itself to be shown in a window."
+                  : "Off, it opens as a window on your desktop."
+              }
+            >
+              <Switch
+                size="sm"
+                aria-label="Open in a browser tab"
+                isSelected={on}
+                isDisabled={unframed}
+                onChange={setInTab}
+              />
+            </Row>
+          </Rows>
           {refused && (
             <p className="text-body-regular text-text-error-primary">
               {refused}

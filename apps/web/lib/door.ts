@@ -55,7 +55,8 @@ export type Stats = {
   free?: number | null;
   // The face a thing serving there wears, when it has one: its own
   // favicon, which only the machine can reach to ask for.
-  ports: { port: number; name: string; face?: string }[];
+  // `tab` where the page a port serves refuses to be shown in a frame.
+  ports: { port: number; name: string; face?: string; tab?: true }[];
   // What is running in their terminal now. Absent from a machine on an
   // older image.
   running?: string[];

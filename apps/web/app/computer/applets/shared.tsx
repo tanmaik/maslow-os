@@ -6,7 +6,7 @@ import { Row, Rows } from "@/app/settings/row";
 import { ButtonLink } from "@/components/base/buttons/button";
 
 // How a port reaches the reader, in words: given to them by name, through
-// a group they are in, to everyone in the org, or to anyone at all.
+// a group they are in, or to everyone in the org.
 const reach = (via: string[]) =>
   via
     .map((v) =>
@@ -14,19 +14,18 @@ const reach = (via: string[]) =>
         ? "shared with you"
         : v === "everyone"
           ? "shared with everyone"
-          : v === "public"
-            ? "public"
-            : `through ${v.replace(/^group:/, "")}`,
+          : `through ${v.replace(/^group:/, "")}`,
     )
     .join(", ");
 
 // The ports others opened to this person, each a window a click away: in a
-// window on the desktop it opens as a window there, never as a new tab,
-// which on a phone's home-screen app would leave the app.
+// window on the desktop it opens as a window there, which on a phone's
+// home-screen app keeps the person in the app; one its owner has open in
+// a tab is left to the link.
 export function Shared({ ports }: { ports: SharedPort[] }) {
   if (ports.length === 0) return null;
   const openHere = (e: React.MouseEvent, s: SharedPort) => {
-    if (window.self === window.top) return;
+    if (window.self === window.top || s.tab) return;
     e.preventDefault();
     window.parent.postMessage(
       { maslow: "open", port: s.port, machine: s.machineId },

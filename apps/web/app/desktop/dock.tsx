@@ -949,6 +949,7 @@ export function Dock({
   const icon = (b: Dragged & { face: string }, place: number) => {
     const { face: src, ...item } = b;
     const mine = held.filter((w) => w.card.href === b.href);
+    const inTab = !!ports.find((p) => p.href === b.href)?.tab;
     const last = mine.at(-1);
     return (
       <DockIconButton
@@ -981,9 +982,11 @@ export function Dock({
         menu={
           <>
             <ContextMenuItem onClick={() => onPick(item)}>
-              New window
+              {inTab ? "Open" : "New window"}
             </ContextMenuItem>
-            {b.kind === "port" && (
+            {/* A widget is a frame on the desktop, which an app that opens
+                in a tab cannot be. */}
+            {b.kind === "port" && !inTab && (
               <ContextMenuItem onClick={() => onPin(item)}>
                 Put on the desktop
               </ContextMenuItem>

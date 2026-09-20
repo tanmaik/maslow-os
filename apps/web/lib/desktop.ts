@@ -74,6 +74,7 @@ export async function portsOf(p: Principal): Promise<Port[]> {
             title: a.name,
             href: `/port/${mine.machineId}/${a.port}`,
             face: a.icon ?? live.get(a.port)?.face,
+            ...(a.tab || live.get(a.port)?.tab ? { tab: true as const } : {}),
           }))
       : []),
     ...(mine
@@ -83,6 +84,7 @@ export async function portsOf(p: Principal): Promise<Port[]> {
             title: `Port ${x.port}`,
             href: `/port/${mine.machineId}/${x.port}`,
             ...(x.face ? { face: x.face } : {}),
+            ...(x.tab ? { tab: true as const } : {}),
             bare: true as const,
           }))
       : []),
@@ -90,6 +92,7 @@ export async function portsOf(p: Principal): Promise<Port[]> {
       title: s.name ?? `Port ${s.port} · ${s.owner}'s`,
       href: `/port/${s.machineId}/${s.port}`,
       ...(s.icon ? { face: s.icon } : {}),
+      ...(s.tab ? { tab: true as const } : {}),
     })),
   ];
 }
@@ -288,6 +291,10 @@ async function nameOf(
   // Only an app lies on the desktop: a port never published is a port.
   const own = (await appsOn(q, c.id)).find((a) => a.port === shown.port);
   if (!own) throw new NotFound(`port ${shown.port} is not published as an app`);
+  if (own.tab)
+    throw new Invalid(
+      `${own.name} opens in a browser tab and cannot lie on the desktop`,
+    );
   return {
     kind: "port",
     title: title || own.name,

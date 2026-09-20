@@ -20,9 +20,17 @@ export type Port = {
   name: string;
   ran?: string;
   face?: string;
+  // Whether the page it serves refuses to be shown in a window.
+  tab?: true;
 };
-// A port published as an app: its name and the face it wears.
-export type Published = { port: number; name: string; icon: string | null };
+// A port published as an app: its name, the face it wears, and whether it
+// opens in a browser tab of its own.
+export type Published = {
+  port: number;
+  name: string;
+  icon: string | null;
+  tab: boolean;
+};
 type Share = {
   port: number;
   subject: "everyone" | "group" | "member" | "public";
@@ -96,12 +104,19 @@ export function Ports({
     sharing?.shares.filter((s) => s.port === port) ?? [];
   const link = (port: number) =>
     sharing ? `/port/${sharing.machineId}/${port}` : null;
-  // In a window on the desktop a port opens as a window there, never as a
-  // new tab, which on a phone's home-screen app would leave the app.
-  const openHere = (e: React.MouseEvent, port: number) => {
-    if (window.self === window.top) return;
+  // Whether a port opens in a browser tab: its page refuses a window, or
+  // its owner said so when they made it an app.
+  const inTab = (p: Port) => !!p.tab || !!appOf(p.port)?.tab;
+  // In a window on the desktop a port opens as a window there, which on a
+  // phone's home-screen app keeps the person in the app; one that opens in
+  // a tab is left to the link.
+  const openHere = (e: React.MouseEvent, p: Port) => {
+    if (window.self === window.top || inTab(p)) return;
     e.preventDefault();
-    window.parent.postMessage({ maslow: "open", port }, location.origin);
+    window.parent.postMessage(
+      { maslow: "open", port: p.port },
+      location.origin,
+    );
   };
   return (
     <div className="flex flex-col gap-2">
@@ -150,7 +165,7 @@ export function Ports({
                     href={`/computer/open?port=${p.port}`}
                     target="_blank"
                     rel="noreferrer"
-                    onClick={(e) => openHere(e, p.port)}
+                    onClick={(e) => openHere(e, p)}
                   >
                     Open
                   </ButtonLink>
@@ -163,11 +178,22 @@ export function Ports({
                       href={`/computer/open?port=${p.port}`}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={(e) => openHere(e, p.port)}
+                      onClick={(e) => openHere(e, p)}
                     />
                   }
                 >
                   Open
+                </ContextMenuItem>
+                <ContextMenuItem
+                  render={
+                    <a
+                      href={`/computer/open?port=${p.port}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    />
+                  }
+                >
+                  Open in a new tab
                 </ContextMenuItem>
                 <ContextMenuItem
                   disabled={!sharing}
@@ -210,6 +236,8 @@ export function Ports({
             appOf(publishingPort)?.icon ??
             ports.find((p) => p.port === publishingPort)?.face
           }
+          tab={!!appOf(publishingPort)?.tab}
+          unframed={!!ports.find((p) => p.port === publishingPort)?.tab}
           published={!!appOf(publishingPort)}
           onClose={() => setPublishingPort(null)}
         />

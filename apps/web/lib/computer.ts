@@ -84,7 +84,7 @@ const sameShape = (a: Shape, b: Shape) =>
 
 // The image every machine boots, by its label: apps/computer, built and
 // pushed by hand to where the cloud keeps images.
-export const IMAGE = "door-87";
+export const IMAGE = "door-89";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -1345,7 +1345,7 @@ export async function publishedOf(p: Principal): Promise<PublishedApp[]> {
 export async function publish(
   p: Principal,
   port: number,
-  as: { name: string; icon: string | null } | null,
+  as: { name: string; icon: string | null; tab: boolean } | null,
 ): Promise<string | null> {
   if (!Number.isInteger(port) || port < 1 || port > 65535)
     return "That is not a port.";
@@ -1357,7 +1357,7 @@ export async function publish(
   return asPerson(p, async (q) => {
     const c = await computerOf(q, p.userId);
     if (!c?.machineId) return "You have no computer yet.";
-    if (as) await publishApp(q, c.id, port, name, as.icon);
+    if (as) await publishApp(q, c.id, port, name, as.icon, as.tab);
     else await unpublishApp(q, c.id, port);
     return null;
   });

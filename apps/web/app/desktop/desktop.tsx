@@ -718,6 +718,21 @@ export function Desktop({
     at?: Point & Partial<Box>,
     pinned = false,
   ): Card | null => {
+    // An app that opens in a browser tab of its own is sent there, and is
+    // no window: its page refuses to be framed, or its owner said so. A tab
+    // the browser will not open, asked for by a program and not a hand, is
+    // a window after all, which at least says what it is.
+    if (
+      item.kind === "port" &&
+      !pinned &&
+      listening.find((x) => x.href === item.href)?.tab
+    ) {
+      const tab = window.open(item.href, "_blank");
+      if (tab) {
+        tab.opener = null;
+        return null;
+      }
+    }
     // A window opened is a window to be seen: full screen ends.
     if (!pinned) setWholly(null);
     const open = (cards: Card[]): Card => {

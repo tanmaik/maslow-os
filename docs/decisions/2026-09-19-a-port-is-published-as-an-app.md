@@ -42,3 +42,16 @@ A widget carries a second place, `phone`, written when it is moved or
 resized on a phone and read there; a laptop reads the first. The two
 desktops are not the same shape, and a widget put in a corner of one is
 not in a corner of the other.
+
+## A window or a tab
+
+2026-09-20. A page that tells browsers it may not be framed, Maslow's own
+dev stack among them, cannot be a window: the browser refuses and the
+window says so. The door already reads each port's page once for its
+favicon; it notes there whether the page sends `X-Frame-Options` or a
+`frame-ancestors` that is not `*`, and says so with the port (`tab`). Such
+a port opens in a browser tab from Applets, the dock and the command bar.
+The owner may ask for the same of any app, a switch where they add it to
+the Dock, kept on its row (`published_apps.tab`), and every row's menu has
+"Open in a new tab". A bare port that may be framed opens as a window, as
+before.

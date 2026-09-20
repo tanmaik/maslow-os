@@ -418,7 +418,9 @@ numbers, size, where and reset in the open; About This Computer
 in the Maslow menu is its face on the desktop. A port is the person's until they share it
 with a person, a group or everyone in the org, and it opens or is a 404;
 or they make it public, and it opens to anyone on the internet with the
-address, no sign-in, the door letting it through and whatever runs on it
+address, a page or an API alike, no sign-in, no cookie and no redirect,
+given to nobody, so it is not listed among what colleagues were shared,
+the door letting it through and whatever runs on it
 checking who is calling and keeping its own limits, which is how an API
 or a site of the person's own is hosted; the agent asks for a port, the
 public included, through the same share tool it asks for a record with,
@@ -711,7 +713,12 @@ desktop by that name and that face, while its port is listening, and
 nowhere at all while it is not, on its owner's desktop, whose computer
 is asked after every two seconds; a colleague's keeps what is shared
 with them while the share stands, since their machine is not asked
-after another's. A bare port is in none of them. The
+after another's. A bare port is in none of them. An app opens as a
+window, or in a browser tab of its own where its owner says so as they
+add it to the dock, or where its page refuses to be shown in a frame,
+which the door notes as it looks for the favicon; an app that opens in a
+tab is no widget, a tab the browser will not open is a window after all,
+and any row in Applets opens in a new tab from its menu. The
 dock's run of apps is the person's shelf, kept on the server in the
 order they dragged it into, so it follows them; the built-in blocks
 keep the order each device has. A port shared with a colleague reaches

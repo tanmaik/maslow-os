@@ -559,6 +559,8 @@ export type PublishedApp = {
   port: number;
   name: string;
   icon: string | null;
+  // Whether it opens in a browser tab of its own and not as a window.
+  tab: boolean;
   position: number;
 };
 
@@ -569,7 +571,7 @@ export async function appsOn(
 ): Promise<PublishedApp[]> {
   return (
     await q.query<PublishedApp>(
-      `select port, name, icon, position from published_apps
+      `select port, name, icon, tab, position from published_apps
        where computer_id = $1 order by position, port`,
       [computerId],
     )
@@ -584,13 +586,14 @@ export async function publishApp(
   port: number,
   name: string,
   icon: string | null,
+  tab: boolean,
 ): Promise<void> {
   await q.query(
-    `insert into published_apps (computer_id, port, name, icon, position)
-     values ($1, $2, $3, $4,
+    `insert into published_apps (computer_id, port, name, icon, tab, position)
+     values ($1, $2, $3, $4, $5,
        (select coalesce(max(position) + 1, 0) from published_apps where computer_id = $1))
-     on conflict (computer_id, port) do update set name = $3, icon = $4`,
-    [computerId, port, name, icon],
+     on conflict (computer_id, port) do update set name = $3, icon = $4, tab = $5`,
+    [computerId, port, name, icon, tab],
   );
 }
 
@@ -634,20 +637,23 @@ export type SharedPort = {
   owner: string;
   name: string | null;
   icon: string | null;
+  // Whether its owner has it open in a browser tab of its own.
+  tab: boolean;
   // How it reaches the reader: "you" when it was given to them by name,
-  // "everyone", "public", or a group they are in, as "group:" and its
-  // name.
+  // "everyone", or a group they are in, as "group:" and its name.
   via: string[];
 };
 
 // The ports other people opened to the member reading, by name, by a group
-// they are in, or to everyone in the org, with whose each is. Their own
-// ports are not among them, and neither is a computer with no machine yet.
+// they are in, or to everyone in the org, with whose each is. A port made
+// public is open to anyone who has its address and is given to nobody, so
+// it is not among them; nor are their own ports, nor a computer with no
+// machine yet.
 export async function portsReaching(q: Query): Promise<SharedPort[]> {
   return (
     await q.query<SharedPort>(
       `select c.machine_id as "machineId", s.port, u.name as owner,
-              a.name as name, a.icon as icon,
+              a.name as name, a.icon as icon, coalesce(a.tab, false) as tab,
               array_agg(distinct case s.subject
                 when 'member' then 'you'
                 when 'group' then 'group:' || g.name
@@ -658,12 +664,12 @@ export async function portsReaching(q: Query): Promise<SharedPort[]> {
        left join groups g on g.id = s.group_id
        left join published_apps a on a.computer_id = s.computer_id and a.port = s.port
        where c.user_id <> current_member() and c.machine_id is not null
-         and (s.subject in ('everyone', 'public')
+         and (s.subject = 'everyone'
            or s.member_id = current_member()
            or exists (select 1 from group_members m
                       where m.group_id = s.group_id
                         and m.member_id = current_member()))
-       group by c.machine_id, s.port, u.name, a.name, a.icon
+       group by c.machine_id, s.port, u.name, a.name, a.icon, a.tab
        order by u.name, s.port`,
     )
   ).rows;
