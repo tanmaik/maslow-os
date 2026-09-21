@@ -89,12 +89,13 @@ const local = (dir: string): Storage => ({
   async put(bytes, ext) {
     const k = key(ext);
     await fs.mkdir(dir, { recursive: true });
-    await fs.writeFile(path.join(dir, k), bytes);
+    await fs.writeFile(path.join(/*turbopackIgnore: true*/ dir, k), bytes);
     return k;
   },
   // A directory signs nothing, so a picture kept here comes through us.
   putUrl: () => null,
-  delete: (k) => fs.rm(path.join(dir, k), { force: true }),
+  delete: (k) =>
+    fs.rm(path.join(/*turbopackIgnore: true*/ dir, k), { force: true }),
   url: (k) => `/uploads/${k}`,
 });
 
@@ -185,7 +186,10 @@ export async function bytesOf(key: string): Promise<number | null> {
 export async function deleteKey(key: string): Promise<void> {
   const st = deployment.storage;
   if (st.kind === "s3") return remove(st, st.prefix + key);
-  if (st.kind === "local") await fs.rm(path.join(st.dir, key), { force: true });
+  if (st.kind === "local")
+    await fs.rm(path.join(/*turbopackIgnore: true*/ st.dir, key), {
+      force: true,
+    });
 }
 
 export const storage: Storage =
@@ -204,7 +208,7 @@ export async function read(k: string): Promise<Uint8Array | null> {
   }
   if (st.kind === "local") {
     try {
-      return await fs.readFile(path.join(st.dir, k));
+      return await fs.readFile(path.join(/*turbopackIgnore: true*/ st.dir, k));
     } catch {
       return null;
     }

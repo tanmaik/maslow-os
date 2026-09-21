@@ -1,7 +1,8 @@
-# The computer's and the relay's images are built from the repo's root
-# and take only what they copy: the computer's own files and the browser
-# package and BoardUI's skill; the relay and the shared editor package,
-# with the workspace's manifests pnpm installs them from.
+# The computer's, the relay's and the website's images are built from the
+# repo's root and take only what they copy: the computer's own files and
+# the browser package and BoardUI's skill; the relay and the shared editor
+# package; the website with every package of the workspace and the
+# migration runner; each with the workspace's manifests pnpm installs from.
 *
 !apps/computer
 !packages/browser
@@ -11,7 +12,15 @@
 !package.json
 !pnpm-lock.yaml
 !pnpm-workspace.yaml
+!apps/web
+!packages
+!scripts/migrate.mjs
 apps/computer/fly.toml
 packages/sync/fly.toml
 packages/browser/fixtures
 **/node_modules
+**/.next*
+**/.turbo
+**/.local
+**/*.tsbuildinfo
+**/.env*

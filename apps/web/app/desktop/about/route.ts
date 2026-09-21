@@ -17,7 +17,10 @@ export async function GET() {
     statsOf(p).catch(() => null),
   ]);
   return Response.json({
-    version: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? "dev",
+    version:
+      process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ??
+      process.env.APP_VERSION ??
+      "dev",
     image: IMAGE,
     machine: c?.machineId ?? null,
     where: c ? regionName(c.region) : null,

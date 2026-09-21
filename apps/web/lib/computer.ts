@@ -86,7 +86,7 @@ const sameShape = (a: Shape, b: Shape) =>
 
 // The image every machine boots, by its label: apps/computer, built and
 // pushed by hand to where the cloud keeps images.
-export const IMAGE = "door-92";
+export const IMAGE = "door-93";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -506,6 +506,57 @@ export async function reconcile(): Promise<void> {
     await stray(keys).catch((err: Error) =>
       console.error(`keys: ${err.message}`),
     );
+}
+
+// A machine of this deployment that no row claims: a destroy that was cut
+// off, or a row that went without paying what it owed. Nobody is watching
+// it and every hour it runs is paid for, so it is stopped, which ends
+// nearly all of what it costs. It is never destroyed here and its disk is
+// never touched: a database put back from an older copy has no row for a
+// machine made since, and a person's files must not go because a row did.
+// What is stopped is said, and letting it go is a person's decision. Only
+// a pass that read every org may say a machine is unclaimed, since a
+// machine whose row could not be read is not a machine without one.
+const UNCLAIMED_AFTER = 60 * 60_000;
+export async function unclaimed(now = new Date()): Promise<number> {
+  const d = deployment.computers;
+  if (d.kind === "none") return 0;
+  // This deployment's own machines: a colleague's checkout, a preview and
+  // production may all stand in one cloud, and each keeps to its own. A
+  // machine is made before its row names it, and that takes minutes, so
+  // one under an hour old is still being made and not yet anybody's to
+  // call unclaimed.
+  const mine = (m: Machine) =>
+    Boolean(m.tags.computer) &&
+    m.tags.env === deployment.where &&
+    (m.tags.checkout ?? "") === (d.checkout ?? "") &&
+    now.getTime() - m.madeAt.getTime() > UNCLAIMED_AFTER;
+  const here = (await cloud.machines()).filter(mine);
+  if (!here.length) return 0;
+
+  const orgs = await asMeter(async (q) =>
+    (await q.query<{ id: string }>("select id from orgs")).rows.map(
+      (r) => r.id,
+    ),
+  );
+  // A row holds its machine, the machine a move is making for it, and the
+  // old one a move still owes the cloud, which the move itself pays.
+  const claimed = new Set<string>();
+  for (const orgId of orgs)
+    for (const c of await asOrg(orgId, allComputers))
+      for (const id of [c.machineId, c.move?.machineId, c.move?.old?.machineId])
+        if (id) claimed.add(id);
+
+  let stopped = 0;
+  for (const m of here) {
+    if (claimed.has(m.id) || m.state !== "running") continue;
+    console.warn(
+      `computer ${m.tags.computer}: no row holds ${m.id}; stopping it, with its disk kept`,
+    );
+    await cloud.stop(m.id);
+    stopped++;
+  }
+  return stopped;
 }
 
 // Whether the machine's door answers, asked again over the half minute a

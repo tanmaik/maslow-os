@@ -9,13 +9,14 @@
   },
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "check": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm check:cloud && pnpm smoke && pnpm check:phone",
-    "check:fast": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm check:cloud && pnpm check:db",
+    "check": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm check:cloud && pnpm check:infra && pnpm smoke && pnpm check:phone",
+    "check:fast": "pnpm typecheck && pnpm format:check && pnpm unused && pnpm check:secrets && pnpm check:cloud && pnpm check:infra && pnpm check:db",
     "check:db": "node scripts/check-db.mjs",
     "check:browser": "node scripts/smoke-browser.mjs",
     "check:phone": "node scripts/smoke-phone.mjs",
     "check:secrets": "node scripts/check-secrets.mjs",
     "check:cloud": "node scripts/check-cloud.mjs",
+    "check:infra": "node scripts/check-infra.mjs",
     "smoke": "node scripts/smoke.mjs",
     "typecheck": "turbo run typecheck",
     "unused": "knip",
@@ -30,6 +31,8 @@
     "teardown": "node scripts/teardown.mjs"
   },
   "devDependencies": {
+    "@aws-sdk/client-ec2": "3.1136.0",
+    "@aws-sdk/client-elastic-load-balancing-v2": "3.1136.0",
     "@dotenvx/dotenvx": "^2.23.0",
     "knip": "6.34.0",
     "prettier": "^3.9.6",

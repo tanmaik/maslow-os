@@ -28,7 +28,7 @@ import { remember, restore } from "./was.mjs";
 
 const SECRET = process.env.DOOR_SECRET;
 const DOMAIN = process.env.DOMAIN;
-const ME = process.env.FLY_MACHINE_ID ?? "local";
+const ME = process.env.MACHINE_ID ?? process.env.FLY_MACHINE_ID ?? "local";
 const APP = process.env.FLY_APP_NAME;
 // The person's name on their machine, as the app gave it to the boot.
 const PERSON = process.env.PERSON || "me";
@@ -125,12 +125,20 @@ function target(req) {
     DOMAIN && host.endsWith(`.${DOMAIN}`)
       ? host.slice(0, -DOMAIN.length - 1)
       : null;
-  const named = /^(?:(\d{1,5})-)?([0-9a-f]{14})$/.exec(label ?? "");
+  // A machine is named as its cloud names it: hex on Fly, its region and
+  // its own name on AWS, so the name may carry hyphens and a port stands
+  // before it.
+  const named = /^(?:(\d{1,5})-)?([a-z0-9][a-z0-9-]*)$/.exec(label ?? "");
   const machine = named?.[2];
   const port = named?.[1] ? Number(named[1]) : null;
-  const elsewhere = machine && machine !== ME && APP;
-  if (elsewhere)
+  if (machine && machine !== ME) {
+    // Fly hands a request for any machine of the app to whichever answers,
+    // so one for another machine is carried there over the private
+    // network. Where the cloud routes by name itself, there is nothing
+    // here for it.
+    if (!APP) return null;
     return { host: `${machine}.vm.${APP}.internal`, port: 8080, mine: false };
+  }
   // A port of theirs is theirs alone: ours are not addressable, and neither
   // is anything outside the range a port can have.
   if (port !== null && machine === ME) {

@@ -48,11 +48,6 @@ export async function renewLeases(checkout, env = process.env) {
   return n;
 }
 
-// When a machine was last wanted: its lease, or, for one made by hand
-// with none, its birth.
-export const wantedAt = (m) =>
-  new Date(m.config?.metadata?.lease ?? m.created_at);
-
 export async function stop(id) {
   await call("POST", `/machines/${id}/stop`);
 }

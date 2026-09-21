@@ -1,0 +1,25 @@
+# The builder's steps for a person's computer: the image it boots, tagged
+# with the label the app names it by, and left alone where that label is
+# already there, since a label stands for what is inside it.
+version: 0.2
+
+env:
+  variables:
+    DOCKER_BUILDKIT: "1"
+
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+  build:
+    commands:
+      - |
+        here() { aws ecr describe-images --repository-name "$NAME/computer" --image-ids imageTag="$LABEL" >/dev/null 2>&1; }
+        if here; then
+          echo "the computer's image is already $LABEL"
+        else
+          docker build -f apps/computer/Dockerfile -t "$REGISTRY/$NAME/computer:$LABEL" .
+          # A label is never overwritten, so a push refused because another
+          # build pushed that label first has done its job all the same.
+          docker push "$REGISTRY/$NAME/computer:$LABEL" || here
+        fi

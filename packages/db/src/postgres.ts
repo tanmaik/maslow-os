@@ -193,8 +193,11 @@ export async function startPostgres(
 }
 
 // The restricted role the app connects as. Cluster-level, so it is made here
-// rather than in a migration.
-export async function ensureAppRole(url: string): Promise<void> {
+// rather than in a migration. Given a password, the role signs in with it.
+export async function ensureAppRole(
+  url: string,
+  password?: string,
+): Promise<void> {
   const client = new pg.Client({ connectionString: url });
   await client.connect();
   try {
@@ -202,6 +205,10 @@ export async function ensureAppRole(url: string): Promise<void> {
       "select 1 from pg_roles where rolname = 'app'",
     );
     if (exists.rowCount === 0) await client.query("create role app login");
+    if (password)
+      await client.query(
+        `alter role app password ${client.escapeLiteral(password)}`,
+      );
   } finally {
     await client.end();
   }

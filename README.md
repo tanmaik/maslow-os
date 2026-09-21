@@ -67,7 +67,12 @@ its own. Without a secret nothing is live and the page saves as it does
 alone.
 
 Production refuses to start without WorkOS, mail, storage, analytics, the relay's secret, or the
-sweep's `CRON_SECRET`.
+sweep's `CRON_SECRET`. A deployment may go without analytics, speech or computers only by
+naming them in `SERVICES_OFF`.
+
+Outside Vercel the app is one container image, built from the repo's root with
+`apps/web/Dockerfile`. It migrates as it starts, on `DATABASE_OWNER_URL`, and takes its
+address from `APP_URL`.
 
 ## Dev secrets
 

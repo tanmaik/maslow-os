@@ -25,3 +25,11 @@ apps/iphone/DerivedData*/
 apps/iphone/Maslow/Info.plist
 apps/iphone/Maslow/Maslow.entitlements
 apps/iphone/Maslow/Free.entitlements
+
+# Terraform's working folder and any local copy of what it built; the
+# record itself lives in the account's state bucket, and the providers'
+# lock file is committed.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan

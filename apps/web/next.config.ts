@@ -1,3 +1,5 @@
+import path from "node:path";
+
 import type { NextConfig } from "next";
 
 const config: NextConfig = {
@@ -16,6 +18,15 @@ const config: NextConfig = {
     "192.168.*.*",
   ],
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
+  // A container image carries the app as one small server and the files it
+  // reads, traced from the repo's root so the workspace's packages come
+  // along. Vercel builds its own way and never sets this.
+  ...(process.env.IMAGE_BUILD === "1"
+    ? {
+        output: "standalone" as const,
+        outputFileTracingRoot: path.join(process.cwd(), "../.."),
+      }
+    : {}),
   // A page fetched before its click is shown as fetched for this long, then
   // fetched again: fresh enough for a brain, far enough ahead to be ready.
   experimental: { staleTimes: { static: 30 } },

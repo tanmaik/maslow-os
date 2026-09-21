@@ -29,7 +29,7 @@ export class DiskGone extends CloudRefused {}
 // A machine as the cloud has it, in our words: running, stopped, on its
 // way from one to the other, or gone (going or went); where; the image it
 // runs by its label; its size; what it was told when it was made; its
-// tags; and the disks it boots from.
+// tags; the disks it boots from; and when it was made.
 export type Machine = {
   id: string;
   name: string;
@@ -42,6 +42,7 @@ export type Machine = {
   env: Record<string, string>;
   tags: Record<string, string>;
   disks: string[];
+  madeAt: Date;
 };
 
 // A disk as the cloud has it: ready to boot from, still being filled or

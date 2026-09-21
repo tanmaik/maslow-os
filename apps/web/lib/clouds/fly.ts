@@ -27,6 +27,7 @@ type FlyMachine = {
   name: string;
   state: string;
   region: string;
+  created_at: string;
   config?: {
     image?: string;
     env?: Record<string, string>;
@@ -68,6 +69,7 @@ const machineOf = (m: FlyMachine): Machine => {
     disks: (m.config?.mounts ?? [])
       .map((mount) => mount.volume)
       .filter((id): id is string => Boolean(id)),
+    madeAt: new Date(m.created_at),
   };
 };
 

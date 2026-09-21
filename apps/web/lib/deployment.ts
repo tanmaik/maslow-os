@@ -59,6 +59,37 @@ export type Computers =
       brain: string | null;
       model: string | null;
     }
+  | {
+      kind: "aws";
+      // What the installer called this deployment. Everything the app
+      // makes in the account carries it, and the app's identity may touch
+      // only what does.
+      name: string;
+      // The one region this deployment makes computers in, and the
+      // network the installer built there: the subnets a machine may
+      // stand in, the firewall it wears, and the identity it boots with.
+      region: string;
+      subnets: string[];
+      firewall: string;
+      // The network they stand in and the front door that carries their
+      // names to them.
+      vpc: string;
+      listener: string;
+      // The Linux a machine boots, by the image the installer chose, and
+      // the role it boots with, which reaches the registry and nothing
+      // else; none where the account grants it another way.
+      os: string;
+      profile: string | null;
+      // Where this deployment's computer images are kept.
+      registry: string;
+      // Every machine has its own name under this: `<machine>.<domain>`.
+      domain: string;
+      checkout: string | null;
+      // Where a machine reaches this deployment's brain and its model
+      // gateway, or null where it cannot.
+      brain: string | null;
+      model: string | null;
+    }
   | { kind: "none" };
 
 // Notifications reach a closed phone through Apple's push service, on a key
@@ -94,6 +125,36 @@ const production = process.env.VERCEL
 // Every Vercel deployment is served over HTTPS; elsewhere only production is.
 const https = Boolean(process.env.VERCEL) || production;
 
+// A container image is built with no secret in reach: what production
+// requires is asked of the container as it starts, never of its build.
+const strict = production && process.env.IMAGE_BUILD !== "1";
+
+// The services this deployment goes without on purpose, named in
+// SERVICES_OFF: production starts without them and says so, where one
+// missing by accident stops it. Only these may be named; sign-in, storage,
+// mail, the relay and the sweep never are.
+const MAY_BE_OFF = ["analytics", "speech", "computers"];
+const off = new Set(
+  (process.env.SERVICES_OFF ?? "")
+    .split(",")
+    .map((name) => name.trim())
+    .filter(Boolean),
+);
+for (const name of off)
+  if (!MAY_BE_OFF.includes(name))
+    throw new Error(
+      `SERVICES_OFF names ${name}, which a deployment cannot go without. Only ${MAY_BE_OFF.join(", ")} may be off.`,
+    );
+if (strict && off.size)
+  console.log(`deployment: off on purpose: ${[...off].join(", ")}`);
+
+// This deployment's own address, as a machine or the relay reaches it:
+// production's on Vercel, or the one named outside it.
+const productionSite = () =>
+  process.env.VERCEL_PROJECT_PRODUCTION_URL ?? process.env.APP_URL;
+const asOrigin = (site: string) =>
+  site.startsWith("http") ? site : `https://${site}`;
+
 function identityProvider(): IdentityProvider {
   const { WORKOS_API_KEY, WORKOS_CLIENT_ID } = process.env;
   if (WORKOS_API_KEY && WORKOS_CLIENT_ID)
@@ -102,7 +163,7 @@ function identityProvider(): IdentityProvider {
       clientId: WORKOS_CLIENT_ID,
       apiKey: WORKOS_API_KEY,
     };
-  if (production) {
+  if (strict) {
     throw new Error(
       "No identity provider: set WORKOS_API_KEY and WORKOS_CLIENT_ID. Production has no fallback sign-in.",
     );
@@ -135,7 +196,7 @@ function storage(): Storage {
       secretKey,
       prefix: process.env.STORAGE_PREFIX ?? "",
     };
-  if (production) {
+  if (strict) {
     throw new Error(
       "No object storage: set STORAGE_ENDPOINT, STORAGE_REGION, STORAGE_BUCKET, STORAGE_ACCESS_KEY and STORAGE_SECRET_KEY. Production has no fallback.",
     );
@@ -146,8 +207,9 @@ function storage(): Storage {
 
 function analytics(): Analytics {
   const key = process.env.POSTHOG_KEY;
+  if (off.has("analytics")) return { kind: "none" };
   if (key) return { kind: "posthog", key };
-  if (production)
+  if (strict)
     throw new Error(
       "No analytics: set POSTHOG_KEY. Production has no fallback.",
     );
@@ -171,8 +233,9 @@ function embeddings(): Embeddings {
 // would hold to talk; production does not start without it.
 function speech(): Speech {
   const { DEEPGRAM_API_KEY: apiKey } = process.env;
+  if (off.has("speech")) return { kind: "none" };
   if (apiKey) return { kind: "deepgram", apiKey };
-  if (production)
+  if (strict)
     throw new Error("DEEPGRAM_API_KEY is not set; production cannot hear.");
   return { kind: "none" };
 }
@@ -196,16 +259,58 @@ function computers(): Computers {
     FLY_COMPUTERS_APP: app,
     FLY_MACHINES_DOMAIN: domain,
   } = process.env;
+  if (off.has("computers")) return { kind: "none" };
   // The address a machine reaches the app at: production's own, or the
   // preview branch's, which outlives any one push. Production without one
   // would make computers that cannot reach the brain, and says so instead.
-  const site = production
-    ? process.env.VERCEL_PROJECT_PRODUCTION_URL
-    : process.env.VERCEL_BRANCH_URL;
-  if (production && token && app && domain && !site)
+  const site = production ? productionSite() : process.env.VERCEL_BRANCH_URL;
+  if (strict && token && app && domain && !site)
     throw new Error(
-      "No address for computers to reach the brain at: set VERCEL_PROJECT_PRODUCTION_URL. Production has no fallback.",
+      "No address for computers to reach the brain at: set APP_URL, or VERCEL_PROJECT_PRODUCTION_URL on Vercel. Production has no fallback.",
     );
+  const {
+    AWS_COMPUTERS_NAME: name,
+    AWS_COMPUTERS_REGION: region,
+    AWS_COMPUTERS_SUBNETS: subnets,
+    AWS_COMPUTERS_FIREWALL: firewall,
+    AWS_COMPUTERS_VPC: vpc,
+    AWS_COMPUTERS_LISTENER: listener,
+    AWS_COMPUTERS_REGISTRY: registry,
+    AWS_COMPUTERS_OS: os,
+    AWS_MACHINES_DOMAIN: awsDomain,
+  } = process.env;
+  if (
+    name &&
+    region &&
+    subnets &&
+    firewall &&
+    vpc &&
+    listener &&
+    registry &&
+    os &&
+    awsDomain
+  ) {
+    if (strict && !site)
+      throw new Error(
+        "No address for computers to reach the brain at: set APP_URL. Production has no fallback.",
+      );
+    return {
+      kind: "aws",
+      name,
+      region,
+      subnets: subnets.split(",").map((s) => s.trim()),
+      firewall,
+      vpc,
+      listener,
+      os,
+      profile: process.env.AWS_COMPUTERS_PROFILE ?? null,
+      registry,
+      domain: awsDomain,
+      checkout: production ? null : (process.env.CHECKOUT ?? "laptop"),
+      brain: site ? `${asOrigin(site)}/mcp` : null,
+      model: site ? `${asOrigin(site)}/model` : null,
+    };
+  }
   if (token && app && domain)
     return {
       kind: "fly",
@@ -213,12 +318,12 @@ function computers(): Computers {
       app,
       domain,
       checkout: production ? null : (process.env.CHECKOUT ?? "laptop"),
-      brain: site ? `https://${site}/mcp` : null,
-      model: site ? `https://${site}/model` : null,
+      brain: site ? `${asOrigin(site)}/mcp` : null,
+      model: site ? `${asOrigin(site)}/model` : null,
     };
-  if (production)
+  if (strict)
     throw new Error(
-      "No computers: set FLY_API_TOKEN, FLY_COMPUTERS_APP and FLY_MACHINES_DOMAIN. Production has no fallback.",
+      "No computers: set FLY_API_TOKEN, FLY_COMPUTERS_APP and FLY_MACHINES_DOMAIN, or the AWS_COMPUTERS_* settings the installer writes. Production has no fallback.",
     );
   return { kind: "none" };
 }
@@ -246,7 +351,7 @@ function models(): Models {
 
 // The sweep is what meters and cleans; production without its cron's
 // secret would run none of it and say nothing.
-if (production && !process.env.CRON_SECRET)
+if (strict && !process.env.CRON_SECRET)
   throw new Error("Production needs CRON_SECRET for the hourly sweep.");
 
 // The relay that holds a record's live document while people are in it,
@@ -263,15 +368,18 @@ type Sync =
 function sync(): Sync {
   const { SYNC_URL: url, SYNC_SECRET: secret } = process.env;
   const site = production
-    ? process.env.VERCEL_PROJECT_PRODUCTION_URL
+    ? productionSite()
     : (process.env.VERCEL_BRANCH_URL ?? process.env.APP_URL);
-  if (production && !secret)
+  if (strict && !secret)
     throw new Error(
       "No relay for live editing: set SYNC_SECRET. Production has no fallback.",
     );
+  if (strict && !site)
+    throw new Error(
+      "No address for the relay to call back: set APP_URL, or VERCEL_PROJECT_PRODUCTION_URL on Vercel. Production has no fallback.",
+    );
   if (!secret || !site) return { kind: "none" };
-  const origin = site.startsWith("http") ? site : `https://${site}`;
-  return { kind: "relay", url: url ?? null, secret, origin };
+  return { kind: "relay", url: url ?? null, secret, origin: asOrigin(site) };
 }
 
 export const deployment = {
@@ -302,7 +410,7 @@ export const deployment = {
 // A code sign-in mails its codes, so in production WorkOS without mail is a
 // deployment nobody can enter.
 if (
-  production &&
+  strict &&
   deployment.identity.kind === "workos" &&
   deployment.mail.kind === "none"
 ) {

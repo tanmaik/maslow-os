@@ -1,0 +1,23 @@
+# The builder's steps: the app's and the relay's images from the repo's
+# root, tagged with the release, pushed only when both are built.
+version: 0.2
+
+env:
+  variables:
+    DOCKER_BUILDKIT: "1"
+
+phases:
+  pre_build:
+    commands:
+      - aws ecr get-login-password | docker login --username AWS --password-stdin "$REGISTRY"
+  build:
+    commands:
+      - docker build -f apps/web/Dockerfile -t "$REGISTRY/$NAME/app:$RELEASE" .
+      - docker build -f packages/sync/Dockerfile -t "$REGISTRY/$NAME/sync:$RELEASE" .
+      # A release's tag is never overwritten, so one already pushed is left
+      # alone and a build that half finished can be run again.
+      - |
+        for i in app sync; do
+          here() { aws ecr describe-images --repository-name "$NAME/$i" --image-ids imageTag="$RELEASE" >/dev/null 2>&1; }
+          here || docker push "$REGISTRY/$NAME/$i:$RELEASE" || here || exit 1
+        done

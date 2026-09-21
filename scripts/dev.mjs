@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 
 import { answerTheBrain } from "./brain.mjs";
-import { renewLeases } from "./fly.mjs";
+import { cloudOf } from "./cloud.mjs";
 import { checkout, devSecrets, freePort, root, startStack } from "./stack.mjs";
 
 // Development runs the real thing where the dev secrets hold a key —
@@ -45,14 +45,16 @@ if (stack.computer)
 // lease is renewed every ten minutes, and the hourly reap stops what
 // lapsed. Silence can only stop a machine, never leak one.
 const renew = () =>
-  renewLeases(checkout, stack.env).then(
-    (n) =>
-      n &&
-      console.log(
-        `computers  ${n} lease${n === 1 ? "" : "s"} renewed for ${checkout}`,
-      ),
-    (err) => console.error(`computers  lease: ${err.message}`),
-  );
+  cloudOf(stack.env)
+    .renewLeases(checkout, stack.env)
+    .then(
+      (n) =>
+        n &&
+        console.log(
+          `computers  ${n} lease${n === 1 ? "" : "s"} renewed for ${checkout}`,
+        ),
+      (err) => console.error(`computers  lease: ${err.message}`),
+    );
 let leases = null;
 // A machine cannot reach a laptop, so the brain is answered the other way
 // about: this checkout dials its machines and holds their doors open.

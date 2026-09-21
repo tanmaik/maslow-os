@@ -29,9 +29,14 @@ sees only that message has the whole picture.
 ## Stack
 
 Node 24 to develop on, 22.18 as the floor: where importing `.ts` arrived.
-pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for hosting. Neon
+pnpm. Monorepo under Turborepo. Next.js for the app. Vercel for hosting, and
+for a customer who runs Maslow in a cloud of their own, one container image
+of the same app, `apps/web/Dockerfile`, which migrates as it starts
+(`docs/decisions/2026-09-19-the-app-runs-anywhere.md`). Neon
 for the managed database. Fly for the computers, and Tigris, through Fly,
-for object storage: one invoice.
+for object storage: one invoice. A customer who hosts Maslow builds it in their own
+AWS account from the Terraform template in `infra/aws/`
+(`docs/decisions/2026-09-19-the-installer-is-terraform.md`).
 
 ## Local
 
@@ -298,8 +303,10 @@ never a tool per action.
 Development runs against the real thing — real vendors, your own keys —
 because a product nobody lives in does not get good. Tests run with no
 credentials: the smoke boots a fresh stack with every vendor key blanked,
-and needs only the dev-app Fly token to make, check and destroy one real
-machine.
+computers among them, so nothing it does costs money. That a computer
+works is its own check, `node scripts/check-computer.mjs`, which makes one
+on whichever cloud the environment names, waits for its door, restarts it
+and takes it away; it costs money and is run deliberately.
 
 The fake is a fallback, never a default. Credential present, real thing;
 absent, fake — so a fresh checkout still gives a working app. A fallback in
@@ -308,7 +315,10 @@ computer has no fake: no Fly token, and computers are off, and the page
 says so.
 
 **In production there is no fallback.** A missing credential stops the app
-from starting. Nothing degrades quietly, and no error is swallowed.
+from starting. Nothing degrades quietly, and no error is swallowed. A
+deployment goes without a service only by naming it in `SERVICES_OFF`, and
+only analytics, speech and computers may be named; the app says what is off
+as it starts. Outside Vercel its own address is `APP_URL`.
 
 The hourly sweep — the meter, the orphans and the computers — runs from
 the app when an hour has passed since the last, in every environment, from
@@ -346,7 +356,8 @@ settled design is `docs/decisions/2026-09-07-the-computer-returns.md`,
 built in its order, one pull request at a time. What the app asks of
 the cloud a computer runs in is one interface of ours, in our own words,
 each cloud a file under `apps/web/lib/clouds/` that implements it, Fly
-the one today, and images called by their label; `pnpm check` refuses
+for the managed product and AWS for a customer who hosts Maslow, and
+images called by their label; `pnpm check` refuses
 an import of a cloud anywhere but the one line that picks it. That
 decision is
 `docs/decisions/2026-09-18-computers-behind-one-interface.md`.
@@ -991,7 +1002,17 @@ renewed while its owner runs, stopped an hour after it lapses, destroyed a
 day after, along with any disk an hour old that no machine holds. An hourly
 reap, reading the vendor's list rather than ours, catches what a failed
 close missed; what it takes from under a live row, the row forgets and
-makes again.
+makes again. It reads whichever cloud the environment names, and takes what
+that cloud alone leaves behind: on AWS, a way through the front door to a
+machine that is gone.
+
+In every environment, production included, the sweep stops a machine of this
+deployment that no row holds, once it is an hour old, since a machine is made
+before its row names it. It is never destroyed there and its disk is never
+touched: a database put back from an older copy has no row for a machine made
+since. A deployment we host is one whose bill we see; a customer's is not, so
+a machine nobody is watching is never left running. Only a pass that read
+every org may call a machine unheld, and a move's machines are held.
 
 ## Documentation
 

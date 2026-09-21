@@ -78,7 +78,11 @@ function vendorsOf(env) {
     )
       ? "S3"
       : null,
-    computers: has("FLY_API_TOKEN", "FLY_COMPUTERS_APP") ? "Fly" : null,
+    computers: has("AWS_COMPUTERS_REGION", "AWS_COMPUTERS_REGISTRY")
+      ? "AWS"
+      : has("FLY_API_TOKEN", "FLY_COMPUTERS_APP")
+        ? "Fly"
+        : null,
     connections: has("COMPOSIO_API_KEY") ? "Composio" : null,
     embeddings: has("VOYAGE_API_KEY") ? "Voyage" : null,
     sync: has("SYNC_URL", "SYNC_SECRET") ? "relay" : null,
