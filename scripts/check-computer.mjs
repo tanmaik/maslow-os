@@ -96,7 +96,6 @@ try {
     secret: SECRET,
     brain: null,
     who: { person: "check", org: "check" },
-    model: null,
     metadata: {
       env: "check",
       computer: "check",

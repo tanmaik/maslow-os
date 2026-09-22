@@ -3,7 +3,8 @@
 # this machine's opens that port's window in Maslow; a file or folder of
 # theirs opens Files there; any other web address is offered on their
 # terminal, and a click there opens it in their own browser, with their own
-# logins. The machine's browser is the agent's, not a place to sign in.
+# logins. The machine's browser is the one Claude Code drives, not a place
+# to sign in.
 set -euo pipefail
 
 help() {

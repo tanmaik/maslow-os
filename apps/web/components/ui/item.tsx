@@ -2,8 +2,8 @@ import * as React from "react";
 import { mergeProps } from "@base-ui/react/merge-props";
 import { useRender } from "@base-ui/react/use-render";
 import { cva, type VariantProps } from "class-variance-authority";
-
 import { cn } from "@/lib/utils";
+
 import { Separator } from "@/components/ui/separator";
 
 function ItemGroup({ className, ...props }: React.ComponentProps<"div">) {
@@ -35,14 +35,13 @@ function ItemSeparator({
 }
 
 const itemVariants = cva(
-  "group/item flex w-full flex-wrap items-center rounded-2lg border text-body-regular transition-colors duration-150 outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring [a]:transition-colors [a]:hover:bg-background-primary-hover",
+  "group/item flex w-full flex-wrap items-center rounded-lg border text-sm transition-colors duration-100 outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 [a]:transition-colors [a]:hover:bg-muted",
   {
     variants: {
       variant: {
         default: "border-transparent",
-        outline:
-          "border-border-button-default bg-background-primary-default shadow-card",
-        muted: "border-transparent bg-background-secondary-default",
+        outline: "border-border",
+        muted: "border-transparent bg-muted/50",
       },
       size: {
         default: "gap-2.5 px-3 py-2.5",

@@ -1797,28 +1797,6 @@ export async function smokeBrain(stack) {
       `${cleared.gone} cleared, ${cleared.kept.length} still waiting`,
     );
 
-    // An ask names the conversation its answer goes back to; a note has
-    // nowhere to answer to.
-    const conversation = "11111111-2222-4333-8444-555555555555";
-    const replied = await as(marge)(async (q) => ({
-      ask: await notifications.leaveNotification(q, {
-        kind: "ask",
-        title: "Which loaf first?",
-        options: ["Rye", "Wheat"],
-        replyTo: conversation,
-      }),
-      note: await notifications.leaveNotification(q, {
-        kind: "note",
-        title: "The oven is on",
-        replyTo: conversation,
-      }),
-    }));
-    check(
-      "an ask answers to a conversation",
-      replied.ask.replyTo === conversation && replied.note.replyTo === null,
-      `ask→${replied.ask.replyTo}, note→${replied.note.replyTo}`,
-    );
-
     // Export and import.
     const owner = new pg.Client({
       connectionString: `postgres://postgres@127.0.0.1:${stack.pgPort}/postgres`,

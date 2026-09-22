@@ -17,7 +17,7 @@ export default async function FilesPage({
   return (
     // A full-height panel takes the page shell's padding back: the list
     // reaches the bottom of the display and nothing scrolls under it.
-    <main className="-mx-6 -mt-6 -mb-28 flex h-dvh min-h-0 flex-col">
+    <main className="-mx-6 -mt-6 -mb-28 flex h-dvh min-h-0 flex-col [html[data-framed]_&]:m-0 [html[data-framed]_&]:h-full">
       <h1 className="sr-only">Files</h1>
       <FileExplorer initialPath={path} initialShare={share} standalone />
     </main>

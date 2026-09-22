@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/base/buttons/button";
+import { Button } from "@/components/ui/button";
 
 // Whether this device has been asked, whatever it answered; one with no
 // storage to say so is asked again.
@@ -30,10 +30,10 @@ function asked(tell: boolean) {
 const PATIENCE = 30_000;
 
 // One card, the first time the desktop is drawn on a device, for
-// everything Maslow will want of it: the microphone, notifications and
-// the location, each by the browser's own prompt in turn from one tap,
-// since a browser gives the first two only to a tap and being stopped
-// mid-task is not elegant. Answered or declined, it never comes back on
+// everything Maslow will want of it: notifications and the location,
+// each by the browser's own prompt in turn from one tap, since a browser
+// gives the first only to a tap and being stopped mid-task is not
+// elegant. Answered or declined, it never comes back on
 // this device; the browser's own answers stand.
 export function Permissions({ computers }: { computers: boolean }) {
   const [open, setOpen] = useState(false);
@@ -47,13 +47,8 @@ export function Permissions({ computers }: { computers: boolean }) {
     asked(false);
     setAsking(true);
     const prompts = (async () => {
-      // The two that need the tap first, while it is fresh; a refusal of
-      // one does not stop the next.
-      if (navigator.mediaDevices?.getUserMedia)
-        await navigator.mediaDevices
-          .getUserMedia({ audio: true })
-          .then((s) => s.getTracks().forEach((t) => t.stop()))
-          .catch(() => {});
+      // The one that needs the tap first, while it is fresh; a refusal
+      // does not stop the next.
       if ("Notification" in window && Notification.permission === "default")
         await Notification.requestPermission().catch(() => {});
       if (computers && navigator.geolocation)
@@ -79,39 +74,33 @@ export function Permissions({ computers }: { computers: boolean }) {
     <div
       role="dialog"
       aria-labelledby="permissions-title"
-      className="bg-canvas/40 fixed inset-0 z-[65] flex items-center justify-center select-none"
+      className="fixed inset-0 bg-black/30 z-[65] flex items-center justify-center select-none"
     >
-      <div className="glass-sheet border-separator-border flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[12px] border p-5">
+      <div className="flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-lg border border-border bg-popover p-4 text-popover-foreground shadow-lg">
         <p
           id="permissions-title"
-          className="text-headline-medium text-text-primary"
+          className="text-base font-medium text-foreground"
         >
           Let Maslow use this device
         </p>
-        <ul className="text-body-regular text-text-secondary flex flex-col gap-1">
-          <li>Your microphone, to hold and talk.</li>
-          <li>Notifications, for what your agent leaves you.</li>
+        <ul className="text-sm text-muted-foreground flex flex-col gap-1">
+          <li>Notifications, for what waits on you.</li>
           {computers && (
             <li>
               Your location, logged to your own computer and nowhere else.
             </li>
           )}
         </ul>
-        <p className="text-caption-1-regular text-text-tertiary">
+        <p className="text-xs text-muted-foreground">
           {asking
             ? "Answer your browser as it asks for each."
             : "Your browser asks for each in turn, once, here, so nothing stops you mid-task."}
         </p>
         <div className="flex justify-end gap-2">
-          <Button
-            variant="secondary"
-            size="small"
-            onClick={later}
-            disabled={asking}
-          >
+          <Button variant="outline" size="sm" onClick={later} disabled={asking}>
             Not now
           </Button>
-          <Button size="small" onClick={allow} disabled={asking}>
+          <Button size="sm" onClick={allow} disabled={asking}>
             Allow
           </Button>
         </div>

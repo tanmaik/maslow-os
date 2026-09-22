@@ -5,7 +5,7 @@ import { useEffect, useState, type ReactNode } from "react";
 // A run of records under a heading, and how one is drawn: a quiet line
 // over its rows, as a notes app names a day.
 export const BAND =
-  "flex items-center gap-3 px-5 pt-4 pb-1.5 text-caption-1-medium text-text-secondary";
+  "flex items-center gap-3 px-5 pt-4 pb-1.5 text-xs font-medium text-muted-foreground";
 
 // Records cut into the days they happened, named in the reader's own zone.
 // The server has no zone, so it names them in UTC and the browser cuts them

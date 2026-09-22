@@ -61,7 +61,6 @@ try {
     secret: "check",
     brain: null,
     who: { person: "check", org: "check" },
-    model: null,
     metadata: { environment: "check", lease: stamp },
   });
   machine = made.id;

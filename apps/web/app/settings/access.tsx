@@ -4,7 +4,7 @@ import { computerOf } from "@maslow/db/computers";
 import { headers } from "next/headers";
 
 import { Command, Head } from "@/app/computer/making";
-import { Button } from "@/components/base/buttons/button";
+import { Button } from "@/components/ui/button";
 import { sshKeysOf, sshOf } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 
@@ -15,7 +15,7 @@ import type { Told } from "./told";
 
 // Every way into the person's computer and brain other than the desktop, in
 // one pane: SSH from their own Mac, the agents signed in to their brain,
-// and their other browsers and phones. Ports are the Applets window's.
+// and their other browsers and phones. Ports have a page of their own.
 export async function AccessPane({
   p,
   agents,
@@ -39,11 +39,11 @@ export async function AccessPane({
     d.kind === "none" ? null : sshOf(p, site),
   ]);
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-6 py-5">
       {ssh && (
         <div className="flex flex-col gap-2">
           <Head>SSH</Head>
-          <p className="px-3 text-body-regular text-text-secondary">
+          <p className="text-sm text-muted-foreground">
             Run once on a Mac, then <code>ssh {ssh.name}</code>.
           </p>
           <Command text={ssh.command} />
@@ -58,7 +58,7 @@ export async function AccessPane({
                 >
                   <form action="/settings/keys" method="post">
                     <input type="hidden" name="remove" value={k.fingerprint} />
-                    <Button type="submit" variant="secondary" size="xs">
+                    <Button type="submit" variant="outline" size="xs">
                       Remove
                     </Button>
                   </form>
@@ -70,7 +70,7 @@ export async function AccessPane({
         </div>
       )}
       <div className="flex flex-col gap-2">
-        <Head>Agents on your brain</Head>
+        <Head>Agents on your database</Head>
         <Agents agents={agents} said={saidAgent} />
       </div>
       <form
@@ -89,8 +89,8 @@ export async function AccessPane({
             description="A lost phone or a forgotten browser stays signed in until you end it here."
           >
             <Button
-              variant="secondary"
-              size="small"
+              variant="outline"
+              size="sm"
               type="submit"
               disabled={devices <= 1}
             >

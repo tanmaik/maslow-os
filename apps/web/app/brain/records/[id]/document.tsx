@@ -3,25 +3,17 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Badge } from "@/components/base/badges/badge";
-import { Button } from "@/components/base/buttons/button";
-import { Textarea } from "@/components/base/textarea/textarea";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
+import { Face } from "../../face";
 import { Body } from "./body";
 import { useLive } from "./live";
 import { lastChange, save } from "./save";
 
 // How often a page asks whether the record changed elsewhere.
 const WATCH = 3000;
-
-// A name's first letters, for a small round mark.
-const initials = (name: string) =>
-  name
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
 
 // A record as a document: a title and a body a person edits where they
 // read them, kept as they leave each one. The body takes its shape as it
@@ -233,12 +225,10 @@ export function Document({
     <div className="flex flex-1 flex-col gap-3">
       {canEdit ? (
         <Textarea
-          size="small"
           aria-label="Title"
           rows={1}
-          autoResize
           value={heading}
-          onChange={(v) => show(v.replace(/\n/g, " "))}
+          onChange={(e) => show(e.target.value.replace(/\n/g, " "))}
           onBlur={() => {
             show(heading.trim());
             void keep("title", heading.trim(), titleBase.current);
@@ -246,14 +236,14 @@ export function Document({
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault();
-              (e.target as HTMLTextAreaElement).blur();
+              e.currentTarget.blur();
             }
           }}
           placeholder="Untitled"
-          fieldClassName="rounded-none bg-transparent p-0 ring-0 [&_textarea]:px-0 [&_textarea]:text-title-3-medium [&_textarea]:text-text-primary"
+          className="min-h-0 resize-none rounded-none border-0 bg-transparent p-0 text-xl font-medium focus-visible:ring-0 dark:bg-transparent"
         />
       ) : (
-        <h1 className="text-title-3-medium text-text-primary">
+        <h1 className="text-xl font-medium text-foreground">
           {title || "(untitled)"}
         </h1>
       )}
@@ -262,23 +252,23 @@ export function Document({
           clash[field] !== undefined && (
             <div
               key={field}
-              className="flex flex-wrap items-center gap-2 rounded-xl border border-border-button-default bg-background-secondary-default px-3 py-2"
+              className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted px-3 py-2"
             >
-              <p className="flex-1 text-body-regular text-text-primary">
+              <p className="flex-1 text-sm text-foreground">
                 The {field} changed while you were writing. This is the newer
                 version.
               </p>
               <div className="flex gap-1">
                 <Button
-                  size="small"
-                  variant="secondary"
+                  size="sm"
+                  variant="outline"
                   disabled={saving[field]}
                   onClick={() => keepMine(field)}
                 >
                   Keep mine
                 </Button>
                 <Button
-                  size="small"
+                  size="sm"
                   variant="ghost"
                   disabled={saving[field]}
                   onClick={() => takeTheirs(field)}
@@ -290,16 +280,15 @@ export function Document({
           ),
       )}
       {(others.length > 0 || (liveable && status === "off")) && (
-        <div className="flex flex-wrap items-center gap-2 text-caption-1-regular text-text-secondary">
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
           {others.length > 0 && (
             <span className="flex -space-x-1.5">
               {others.map((o) => (
-                <Avatar
+                <Face
                   key={o.id}
-                  size="sm"
-                  initials={initials(o.name)}
-                  style={{ background: o.color }}
-                  className="ring-2 ring-background-primary-default"
+                  name={o.name}
+                  style={{ background: o.color, color: "white" }}
+                  className="ring-2 ring-background"
                 />
               ))}
             </span>
@@ -310,7 +299,7 @@ export function Document({
               {others.length === 1 ? "is" : "are"} here
             </span>
           )}
-          {status === "off" && <Badge>Not live</Badge>}
+          {status === "off" && <Badge variant="outline">Not live</Badge>}
         </div>
       )}
       <Body
@@ -324,9 +313,7 @@ export function Document({
         onKeep={(t, base) => keep("body", t, base)}
       />
       {fields}
-      {trouble && (
-        <p className="text-body-regular text-text-error-primary">{trouble}</p>
-      )}
+      {trouble && <p className="text-sm text-destructive">{trouble}</p>}
     </div>
   );
 }

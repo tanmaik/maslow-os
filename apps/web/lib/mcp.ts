@@ -3,6 +3,7 @@ import { asPerson, Gone, type Query } from "@maslow/db";
 import { fullName, type Session } from "@maslow/db/auth";
 import { computerOf } from "@maslow/db/computers";
 import * as notifications from "@maslow/db/notifications";
+import { askOpen } from "@maslow/db/opens";
 import { spend, spentSince } from "@maslow/db/usage";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { after } from "next/server";
@@ -12,6 +13,7 @@ import { connections } from "./connections";
 import { embed, model, RateLimited } from "./embeddings";
 import * as lines from "./lines";
 import { CEILINGS, PRICES } from "./prices";
+import { read as readAddress } from "./address";
 import { widgetsOf, place, unplace } from "./desktop";
 import { pushNotification } from "./push.ts";
 import { named, Refused, tools, type Action } from "./tools";
@@ -161,16 +163,6 @@ const fieldChange = property.partial().extend({
   newName: fieldName.optional(),
 });
 const field = z.object({ type: z.string(), name: z.string() });
-
-// The conversation on the person's computer an ask came from, given by
-// the door there, so the answer goes back to it as the next word.
-const replyTo = z
-  .string()
-  .uuid()
-  .optional()
-  .describe(
-    "the conversation on the person's computer the answer is said into",
-  );
 
 type Result = {
   content: { type: "text"; text: string }[];
@@ -563,7 +555,6 @@ export function brainServer(
           .string()
           .max(1000)
           .describe("why, in a sentence the person reads"),
-        reply_to: replyTo,
       },
     },
     door(async (q, a) => {
@@ -584,7 +575,6 @@ export function brainServer(
         records: a.records ?? [],
         options: ["Accept", "Decline"],
         request: ask.id,
-        replyTo: a.reply_to,
       });
       await pushed(q, notification);
       return {
@@ -670,6 +660,36 @@ export function brainServer(
   );
 
   server.registerTool(
+    "open",
+    {
+      description:
+        "Puts something in front of the person, on whatever screen they have Maslow open on, within a few seconds: a record, a file or folder of their home, an app or a port of their computer, the computer's browser at an address, the terminal, or a pane of Settings. Named by its address: maslow://brain/<record id>, maslow://brain, maslow://fs/<path in their home> (a folder ends in a slash), maslow://port/<number>, maslow://browser?url=<web address>, maslow://terminal, maslow://settings/<pane>, maslow://home. One thing is on their screen at a time: it opens where their screen is empty, and where they have something open it is offered to them and never put over it. Use it to show your work, not to narrate it: one thing at a time, when seeing it helps.",
+      inputSchema: {
+        address: z.string().min(1).max(2048),
+        title: z
+          .string()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("what the pane is called, where the address does not say"),
+      },
+    },
+    door(async (q, a) => {
+      const mine = await computerOf(q, s.userId);
+      const found = readAddress(a.address, (port) =>
+        mine?.machineId ? `/port/${mine.machineId}/${port}` : null,
+      );
+      if (!found)
+        throw new brain.Invalid(
+          "that is not an address Maslow can open; see this tool's description for the ones it can",
+        );
+      const open = { href: found.href, title: a.title ?? found.title };
+      await askOpen(q, open);
+      return { text: `asked to open ${open.title}`, data: { open } };
+    }),
+  );
+
+  server.registerTool(
     "notify",
     {
       description:
@@ -694,7 +714,7 @@ export function brainServer(
     "ask",
     {
       description:
-        "Asks the person a question in their notification center and answers with the notification's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notifications tool reads it back; with reply_to it is also said into that conversation on their computer.",
+        "Asks the person a question in their notification center and answers with the notification's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notifications tool reads it back.",
       inputSchema: {
         title: z.string().min(1).max(200).describe("the question itself"),
         body: z.string().max(4000).optional().describe("markdown"),
@@ -704,15 +724,12 @@ export function brainServer(
           .optional()
           .describe("what they may pick; free text when there are none"),
         records: ids.optional().describe("what the question is about"),
-        reply_to: replyTo,
       },
     },
     door(async (q, a) => {
-      const { reply_to, ...rest } = a;
       const n = await notifications.leaveNotification(q, {
         kind: "ask",
-        ...rest,
-        replyTo: reply_to,
+        ...a,
       });
       await pushed(q, n);
       return {

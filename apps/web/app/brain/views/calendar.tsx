@@ -1,27 +1,40 @@
 "use client";
 
-import { getLocalTimeZone, startOfMonth, today } from "@internationalized/date";
-import type { CalendarDate } from "@internationalized/date";
+import {
+  CalendarDate,
+  getLocalTimeZone,
+  isSameDay,
+  startOfMonth,
+  today,
+} from "@internationalized/date";
+import { RiArrowLeftSLine, RiArrowRightSLine } from "@remixicon/react";
 import { format } from "date-fns";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-import { Button } from "@/components/base/buttons/button";
+import { EagerLink } from "@/components/eager-link";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
-  CalendarMonthGrid,
-  type CalendarGridItem,
-} from "@/components/application/calendar/calendar-month-grid";
-import { CalendarMonthSwitcher } from "@/components/application/calendar/calendar-month-switcher";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 
 import { recordPageHref, typeColor } from "../format";
 import { useHere } from "../here";
-import { monthOf } from "./month";
+import { monthGrid, monthOf } from "./month";
 import { WHEN, type Row } from "./query";
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+// How many records a day names before it says how many more there are.
+const SHOWN = 3;
+
 // The records of a month laid on the days they were last changed, or on a
-// date field the person picked instead, on the calendar block's own
-// switcher and grid.
-// A record opens from its chip.
+// date field the person picked instead. A record opens from its chip.
 export function CalendarView({
   rows,
   on,
@@ -44,6 +57,13 @@ export function CalendarView({
   const from = useHere();
   const month = monthOf(params.get("month") ?? undefined);
   const [highlighted, setHighlighted] = useState<CalendarDate | null>(null);
+  const [picking, setPicking] = useState(false);
+  // A day jumped to is marked for a moment, then is a day like any other.
+  useEffect(() => {
+    if (!highlighted) return;
+    const timer = setTimeout(() => setHighlighted(null), 1600);
+    return () => clearTimeout(timer);
+  }, [highlighted]);
   // The server has no zone and lays an instant on its UTC day; the browser
   // lays it again on its own, as the day bands of the list do.
   const [here, setHere] = useState(false);
@@ -92,64 +112,153 @@ export function CalendarView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, on, here]);
 
-  const items = (date: CalendarDate): CalendarGridItem[] =>
-    (byDay.get(date.toString()) ?? []).map((r) => ({
-      id: r.id,
-      title: r.title || "(untitled)",
-      color: typeColor(r.type),
-      href: recordPageHref(r.id, from),
-    }));
-
   const monthLabel = new Intl.DateTimeFormat(undefined, {
     month: "long",
     year: "numeric",
   }).format(month.toDate(getLocalTimeZone()));
 
+  const now = today(getLocalTimeZone());
+
   return (
-    <div className="flex flex-col gap-3 px-3 pb-3">
+    <div className="flex flex-col gap-3 p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <CalendarMonthSwitcher
-          month={month}
-          monthLabel={monthLabel}
-          onPrevMonth={() => setMonth(month.subtract({ months: 1 }))}
-          onNextMonth={() => setMonth(month.add({ months: 1 }))}
-          onSelectDate={(date) => {
-            setMonth(startOfMonth(date));
-            setHighlighted(date);
-          }}
-        />
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Previous month"
+            onClick={() => setMonth(month.subtract({ months: 1 }))}
+          >
+            <RiArrowLeftSLine />
+          </Button>
+          <Popover open={picking} onOpenChange={setPicking}>
+            <PopoverTrigger
+              render={<Button variant="ghost" size="sm" className="min-w-32" />}
+            >
+              {monthLabel}
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-auto p-0">
+              <Calendar
+                mode="single"
+                defaultMonth={month.toDate(getLocalTimeZone())}
+                onSelect={(d) => {
+                  if (!d) return;
+                  const date = new CalendarDate(
+                    d.getFullYear(),
+                    d.getMonth() + 1,
+                    d.getDate(),
+                  );
+                  setMonth(startOfMonth(date));
+                  setHighlighted(date);
+                  setPicking(false);
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Next month"
+            onClick={() => setMonth(month.add({ months: 1 }))}
+          >
+            <RiArrowRightSLine />
+          </Button>
+        </div>
         {fields.length > 0 && (
-          <div className="flex items-center gap-1">
+          <ToggleGroup
+            aria-label="Laid on"
+            variant="outline"
+            size="sm"
+            spacing={0}
+            value={[on]}
+            onValueChange={([name]) => {
+              if (!name || name === on) return;
+              go((next) =>
+                name === WHEN ? next.delete("on") : next.set("on", name),
+              );
+            }}
+          >
             {[WHEN, ...fields].map((name) => (
-              <Button
-                key={name}
-                variant={on === name ? "primary" : "secondary"}
-                size="small"
-                onClick={() =>
-                  go((next) =>
-                    name === WHEN ? next.delete("on") : next.set("on", name),
-                  )
-                }
-              >
+              <ToggleGroupItem key={name} value={name}>
                 {name}
-              </Button>
+              </ToggleGroupItem>
             ))}
-          </div>
+          </ToggleGroup>
         )}
       </div>
       {capped && (
-        <p className="text-caption-1-regular text-text-secondary">
+        <p className="text-xs text-muted-foreground">
           This month has more than the {rows.length} shown. Add a filter, or
           switch to the list.
         </p>
       )}
-      <div className="min-h-0 flex-1 rounded-3xl bg-background-secondary-default p-3">
-        <CalendarMonthGrid
-          month={month}
-          highlightedDate={highlighted}
-          onHighlightEnd={() => setHighlighted(null)}
-          items={items}
-        />
+      <div className="overflow-hidden rounded-lg border border-border">
+        <div className="grid grid-cols-7 border-b border-border bg-muted/60">
+          {WEEKDAYS.map((d) => (
+            <div
+              key={d}
+              className="px-2 py-1.5 text-xs font-medium text-muted-foreground"
+            >
+              {d}
+            </div>
+          ))}
+        </div>
+        <div className="grid grid-cols-7">
+          {monthGrid(month).map((date, i) => {
+            const held = byDay.get(date.toString()) ?? [];
+            const more = held.length - SHOWN;
+            const outside = date.month !== month.month;
+            return (
+              <div
+                key={date.toString()}
+                className={cn(
+                  "flex min-h-16 min-w-0 flex-col gap-1 border-border p-1 transition-colors duration-slow sm:min-h-24 sm:p-1.5",
+                  i % 7 !== 6 && "border-r",
+                  i < 35 && "border-b",
+                  outside && "bg-muted/40",
+                  highlighted &&
+                    isSameDay(date, highlighted) &&
+                    "bg-primary/10",
+                )}
+              >
+                <span
+                  className={cn(
+                    "flex size-5 items-center justify-center rounded-full text-xs tabular-nums",
+                    outside
+                      ? "text-muted-foreground/60"
+                      : "text-muted-foreground",
+                    isSameDay(date, now) &&
+                      "bg-primary font-medium text-primary-foreground",
+                  )}
+                >
+                  {date.day}
+                </span>
+                {held.slice(0, more > 0 ? SHOWN - 1 : SHOWN).map((r) => (
+                  <EagerLink
+                    key={r.id}
+                    href={recordPageHref(r.id, from)}
+                    title={r.title || "(untitled)"}
+                    className="flex min-w-0 items-center gap-1.5 rounded-sm px-1 py-0.5 text-xs text-foreground outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50"
+                  >
+                    <span
+                      aria-hidden
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ background: typeColor(r.type) }}
+                    />
+                    <span className="truncate max-sm:sr-only">
+                      {r.title || "(untitled)"}
+                    </span>
+                  </EagerLink>
+                ))}
+                {more > 0 && (
+                  <span className="px-1 text-xs text-muted-foreground">
+                    +{more + 1} more
+                  </span>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

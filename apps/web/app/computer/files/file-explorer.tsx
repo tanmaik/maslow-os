@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  RiArrowDownSLine,
   RiArrowLeftSLine,
   RiArrowRightSLine,
   RiCloseLine,
@@ -20,13 +21,13 @@ import {
 import { AnimatePresence, motion } from "motion/react";
 import {
   type DragEvent,
+  Fragment,
   useCallback,
   useEffect,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import type { Selection, SortDescriptor } from "react-aria-components";
 
 import {
   type Entry,
@@ -49,20 +50,26 @@ import { BarButton, InBar, useFolded } from "@/app/desktop/panel";
 import {
   Breadcrumb,
   BreadcrumbItem,
-} from "@/components/base/breadcrumb/breadcrumb";
-import { Button } from "@/components/base/buttons/button";
-import { CloseButton } from "@/components/base/buttons/close-button";
-import { InputBase } from "@/components/base/input/input";
-import { Pagination } from "@/components/base/pagination/pagination";
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { CloseButton } from "@/components/ui/close-button";
+import { Input } from "@/components/ui/input";
 import {
-  Table,
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import {
   TableBody,
   TableCell,
-  TableColumn,
+  TableHead,
   TableHeader,
   TableRow,
-} from "@/components/base/table/table";
-import { ChevronSortDown } from "@/components/foundations/icons/chevrons";
+} from "@/components/ui/table";
 import {
   ContextMenu,
   ContextMenuCheckboxItem,
@@ -76,7 +83,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { BASE, FAST, LEAVE } from "@/lib/motion";
 import { liveSocket } from "@/lib/live";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 import { usePhone } from "@/hooks/use-phone";
 
 // Where the device keeps whether the folders rail is shown, and what the
@@ -252,11 +259,10 @@ const COLUMNS: { id: Column; label: string; className: string }[] = [
 function SortMark({ dir }: { dir?: "ascending" | "descending" }) {
   if (!dir) return null;
   return (
-    <ChevronSortDown
-      className={cx(
-        // The glyph is small inside its box; the box is kept off the
-        // line so a sorted heading is exactly as tall as a row.
-        "-my-[3px] size-6 shrink-0 text-text-secondary transition-transform duration-instant ease-out-quart motion-reduce:transition-none",
+    <RiArrowDownSLine
+      aria-hidden
+      className={cn(
+        "size-4 shrink-0 text-muted-foreground transition-transform duration-instant ease-out-quart motion-reduce:transition-none",
         dir === "ascending" && "rotate-180",
       )}
     />
@@ -281,7 +287,7 @@ function Toolbar({
   children: ReactNode;
 }) {
   const row = (controls: ReactNode) => (
-    <div className="flex h-10 shrink-0 items-center gap-2 border-b border-separator-border px-3">
+    <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-2">
       {controls}
     </div>
   );
@@ -323,18 +329,16 @@ function Place({
       type="button"
       aria-current={on ? "true" : undefined}
       onClick={onClick}
-      className={cx(
-        "group/place flex h-11 w-full shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-lg px-2 text-left outline-none sm:h-7",
-        "focus-visible:ring-2 focus-visible:ring-border-focus-ring",
+      className={cn(
+        "group/place flex h-11 w-full shrink-0 cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 text-left outline-none sm:h-7",
+        "focus-visible:ring-2 focus-visible:ring-ring/50",
         on
-          ? "bg-background-tertiary-default"
-          : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover active:bg-background-tertiary-default",
+          ? "bg-accent"
+          : "transition-colors duration-fast ease-plain hover:bg-accent",
       )}
     >
-      <Mark className="size-4 shrink-0 text-accent-500" aria-hidden />
-      <span className="truncate text-body-regular text-text-primary">
-        {children}
-      </span>
+      <Mark className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+      <span className="truncate text-sm text-foreground">{children}</span>
       {onRemove && (
         <span
           role="button"
@@ -351,7 +355,7 @@ function Place({
               onRemove();
             }
           }}
-          className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-md text-foreground-icon-tertiary opacity-0 transition-opacity duration-instant ease-plain group-hover/place:opacity-100 hover:bg-background-tertiary-hover focus-visible:opacity-100"
+          className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground opacity-0 transition-opacity duration-instant ease-plain group-hover/place:opacity-100 hover:bg-accent focus-visible:opacity-100"
         >
           <RiCloseLine className="size-3.5" aria-hidden />
         </span>
@@ -363,7 +367,7 @@ function Place({
 // The name over a group of the rail's rows.
 function Section({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-3 px-2 pb-1 text-caption-1-medium text-text-tertiary first:mt-0">
+    <p className="mt-3 px-2 pb-1 text-xs font-medium text-muted-foreground first:mt-0">
       {children}
     </p>
   );
@@ -421,13 +425,17 @@ export function FileExplorer({
   // A word typed narrows the list to the names that carry it.
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
-  const [sort, setSort] = useState<SortDescriptor>({
-    column: "name",
-    direction: "ascending",
-  });
+  const [sort, setSort] = useState<{
+    column: Column;
+    direction: "ascending" | "descending";
+  }>({ column: "name", direction: "ascending" });
   // The rows taken hold of: one by a press, more with the shift or the
   // command key, all with command-A, none again with Escape.
-  const [selected, setSelected] = useState<Selection>(new Set());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // The row a shift-press reaches from, and whether the last press was a
+  // finger's, which opens where a pointer's selects.
+  const anchor = useRef<string | null>(null);
+  const touched = useRef(false);
   // The row whose name is a field, and what the field says.
   const [renaming, setRenaming] = useState<{ of: string; to: string } | null>(
     null,
@@ -468,7 +476,7 @@ export function FileExplorer({
   // Whether the folders rail is shown, as the person last left it. On a
   // phone the rail has nowhere to stand beside the list, so it opens as a
   // sheet instead, and starts closed rather than remembered.
-  const [rail, setRail] = useState(true);
+  const [rail, setRail] = useState(false);
   const [sheet, setSheet] = useState(false);
   const wide = !usePhone();
   // What the person dropped on the rail to keep there, and whether a
@@ -480,7 +488,7 @@ export function FileExplorer({
     localStorage.setItem(PINS, JSON.stringify(next));
   };
   useEffect(() => {
-    setRail(localStorage.getItem(RAIL) !== "hidden");
+    setRail(localStorage.getItem(RAIL) === "shown");
     try {
       setPins(JSON.parse(localStorage.getItem(PINS) ?? "[]") as Pin[]);
     } catch {
@@ -653,7 +661,8 @@ export function FileExplorer({
     const address = through
       ? `/computer/files/view?share=${encodeURIComponent(through.id)}&path=${encodeURIComponent(file)}`
       : `/computer/files/view?path=${encodeURIComponent(file)}`;
-    if (standalone) window.open(address, "_blank");
+    if (standalone && !("shell" in document.documentElement.dataset))
+      window.open(address, "_blank");
     else
       window.postMessage(
         {
@@ -689,10 +698,61 @@ export function FileExplorer({
   const mine = !colleague && !share;
 
   // The rows the selection names, as they are listed.
-  const held = () => {
-    const names =
-      selected === "all" ? rows.map((r) => r.name) : [...selected].map(String);
-    return names.flatMap((n) => rows.filter((r) => r.name === n));
+  const held = () => rows.filter((r) => selected.has(r.name));
+
+  // A press on a row: alone it holds that row, with command it adds or
+  // drops it, with shift it holds everything from the last one pressed.
+  const choose = (
+    name: string,
+    keys: { shiftKey: boolean; metaKey: boolean; ctrlKey: boolean },
+  ) => {
+    const names = rows.map((r) => r.name);
+    const from = anchor.current ? names.indexOf(anchor.current) : -1;
+    if (keys.shiftKey && from >= 0) {
+      const to = names.indexOf(name);
+      setSelected(
+        new Set(names.slice(Math.min(from, to), Math.max(from, to) + 1)),
+      );
+      return;
+    }
+    anchor.current = name;
+    if (keys.metaKey || keys.ctrlKey)
+      setSelected((was) => {
+        const next = new Set(was);
+        if (!next.delete(name)) next.add(name);
+        return next;
+      });
+    else setSelected(new Set([name]));
+  };
+
+  // The keys of the list: the arrows walk it, holding each row they land
+  // on, command-A holds every row, Escape lets go, Return opens.
+  const onListKey = (ev: React.KeyboardEvent<HTMLTableSectionElement>) => {
+    if ((ev.target as HTMLElement).closest("input, textarea")) return;
+    const names = rows.map((r) => r.name);
+    const row = (ev.target as HTMLElement).closest<HTMLElement>("tr");
+    const at = names.indexOf(row?.dataset.name ?? "");
+    if ((ev.metaKey || ev.ctrlKey) && ev.key.toLowerCase() === "a") {
+      ev.preventDefault();
+      setSelected(new Set(names));
+    } else if (ev.key === "Escape") {
+      setSelected(new Set());
+    } else if (ev.key === "Enter" && at >= 0) {
+      ev.preventDefault();
+      open(rows[at]!);
+    } else if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      ev.preventDefault();
+      const to = Math.min(
+        names.length - 1,
+        Math.max(0, at + (ev.key === "ArrowDown" ? 1 : -1)),
+      );
+      const next = names[to];
+      if (next === undefined) return;
+      choose(next, { shiftKey: ev.shiftKey, metaKey: false, ctrlKey: false });
+      ev.currentTarget
+        .querySelector<HTMLElement>(`tr[data-name="${CSS.escape(next)}"]`)
+        ?.focus();
+    }
   };
 
   // One action on the person's own files through the door, in JSON.
@@ -957,7 +1017,7 @@ export function FileExplorer({
                 label={railShown ? "Hide the folders" : "Show the folders"}
                 pressed={railShown}
                 onClick={toggleRail}
-                className={cx(!railShown && "text-foreground-icon-tertiary")}
+                className={cn(!railShown && "text-muted-foreground")}
               />
               <BarButton
                 icon={RiArrowLeftSLine}
@@ -972,71 +1032,64 @@ export function FileExplorer({
                 onClick={() => step(1)}
               />
             </InBar>
-            <Breadcrumb
-              className={cx("min-w-0", folded ? "shrink-0" : "-mx-1 flex-1")}
-            >
-              <BreadcrumbItem
-                onClick={
-                  path.length === 0 && !share
-                    ? undefined
-                    : () =>
-                        leaving(() => {
-                          setShare(null);
-                          setPath([]);
-                        })
-                }
-                current={path.length === 0 && !share}
-              >
-                {colleague ? colleague.owner : "Home"}
-              </BreadcrumbItem>
-              {share && (
-                <BreadcrumbItem
-                  onClick={
-                    path.length === 0
-                      ? undefined
-                      : () => leaving(() => setPath([]))
-                  }
-                  current={path.length === 0}
-                  className="truncate"
-                >
-                  {share.name}
-                </BreadcrumbItem>
-              )}
-              {path.map((name, i) =>
-                i === path.length - 1 ? (
-                  <BreadcrumbItem key={i} current className="truncate">
-                    {name}
-                  </BreadcrumbItem>
-                ) : (
-                  <BreadcrumbItem
-                    key={i}
-                    onClick={() => leaving(() => setPath(path.slice(0, i + 1)))}
-                  >
-                    {name}
-                  </BreadcrumbItem>
-                ),
-              )}
+            <Breadcrumb className={cn("min-w-0", !folded && "flex-1")}>
+              <BreadcrumbList className="flex-nowrap gap-1">
+                {[
+                  {
+                    name: colleague ? colleague.owner : "Home",
+                    go: () => {
+                      setShare(null);
+                      setPath([]);
+                    },
+                  },
+                  ...(share
+                    ? [{ name: share.name, go: () => setPath([]) }]
+                    : []),
+                  ...path.map((name, i) => ({
+                    name,
+                    go: () => setPath(path.slice(0, i + 1)),
+                  })),
+                ].map((crumb, i, all) => (
+                  <Fragment key={i}>
+                    {i > 0 && <BreadcrumbSeparator />}
+                    <BreadcrumbItem className="min-w-0">
+                      {i === all.length - 1 ? (
+                        <BreadcrumbPage className="truncate font-medium">
+                          {crumb.name}
+                        </BreadcrumbPage>
+                      ) : (
+                        <BreadcrumbLink
+                          render={<button type="button" />}
+                          onClick={() => leaving(crumb.go)}
+                          className="cursor-pointer truncate"
+                        >
+                          {crumb.name}
+                        </BreadcrumbLink>
+                      )}
+                    </BreadcrumbItem>
+                  </Fragment>
+                ))}
+              </BreadcrumbList>
             </Breadcrumb>
           </>
         }
       >
-        <InputBase
-          aria-label="Search this folder"
-          placeholder="Search"
-          size="small"
-          leadingIcon={RiSearchLine}
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(1);
-          }}
-          // A faint ring at rest, so the field reads as one before a hand
-          // reaches it; hover and focus keep their own.
-          fieldClassName={cx(
-            "h-6 not-data-hovered:not-data-focus-within:ring-border-button-default",
-            folded ? "w-full" : "w-36 shrink-0",
-          )}
-        />
+        <InputGroup
+          className={cn("h-7", folded ? "w-full" : "w-24 shrink-0 sm:w-40")}
+        >
+          <InputGroupAddon>
+            <RiSearchLine aria-hidden />
+          </InputGroupAddon>
+          <InputGroupInput
+            aria-label="Search this folder"
+            placeholder="Search"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setPage(1);
+            }}
+          />
+        </InputGroup>
         <input
           ref={input}
           type="file"
@@ -1060,7 +1113,7 @@ export function FileExplorer({
       {Object.keys(uploads).length > 0 && (
         <div
           aria-live="polite"
-          className="space-y-2 border-b border-separator-border px-3 py-2"
+          className="space-y-2 border-b border-border px-3 py-2"
         >
           <AnimatePresence initial={false}>
             {Object.entries(uploads).map(([key, u]) => {
@@ -1077,10 +1130,10 @@ export function FileExplorer({
                   className="space-y-1"
                 >
                   <div className="flex items-baseline gap-2">
-                    <span className="min-w-0 flex-1 truncate text-body-2-medium text-text-primary">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
                       {name}
                     </span>
-                    <span className="shrink-0 text-caption-1-medium text-text-secondary tabular-nums">
+                    <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
                       {u.error
                         ? "Could not be sent."
                         : `${size(u.done)} of ${size(u.total)}`}
@@ -1092,15 +1145,15 @@ export function FileExplorer({
                     getAriaValueText={() =>
                       `${size(u.done)} of ${size(u.total)}`
                     }
-                    className={cx(u.error && "opacity-50")}
+                    className={cn(u.error && "opacity-50")}
                   />
                   {u.error && (
                     <div className="flex items-center gap-2">
-                      <p className="min-w-0 flex-1 truncate text-caption-1-regular text-text-error-primary">
+                      <p className="min-w-0 flex-1 truncate text-xs text-destructive">
                         {u.error}
                       </p>
                       <Button
-                        variant="secondary"
+                        variant="outline"
                         size="xs"
                         onClick={() => {
                           const again = sending.current[key];
@@ -1110,7 +1163,7 @@ export function FileExplorer({
                         Try again
                       </Button>
                       <CloseButton
-                        size="xs"
+                        size="icon-xs"
                         aria-label={`Close ${name}`}
                         onClick={() => forget(key)}
                       />
@@ -1123,7 +1176,7 @@ export function FileExplorer({
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1 flex-col bg-background-full @md:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col bg-background @md:flex-row">
         {/* Home and what the person put beside it, so any folder is one
             press from any other: down the side on a wide window, where the
             list has room to stand beside it; from a sheet on a phone,
@@ -1210,9 +1263,9 @@ export function FileExplorer({
               <nav
                 aria-label="Folders"
                 {...takes}
-                className={cx(
-                  "flex w-52 shrink-0 flex-col gap-px overflow-y-auto border-r border-separator-border bg-background-secondary-default/55 p-2.5 transition-colors duration-fast ease-plain",
-                  over && "bg-accent-50",
+                className={cn(
+                  "flex w-48 shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-border p-2 transition-colors duration-fast ease-plain",
+                  over && "bg-primary/10",
                 )}
               >
                 {places}
@@ -1222,7 +1275,7 @@ export function FileExplorer({
             <Sheet open={sheet} onOpenChange={setSheet}>
               <SheetContent
                 side="bottom"
-                className="max-h-[70dvh] gap-2 rounded-t-3xl p-3"
+                className="max-h-[70dvh] gap-2 rounded-t-lg p-3"
               >
                 <SheetTitle className="sr-only">Folders</SheetTitle>
                 <nav
@@ -1237,7 +1290,7 @@ export function FileExplorer({
         })()}
         <ContextMenu>
           <ContextMenuTrigger
-            className={cx("@container/list flex min-h-0 flex-col", "flex-1")}
+            className={cn("@container/list flex min-h-0 flex-col", "flex-1")}
             onContextMenu={(e) => {
               // A right-click on the space between rows is about the
               // folder, not a row.
@@ -1287,24 +1340,24 @@ export function FileExplorer({
           >
             <ScrollArea className="min-h-0 flex-1">
               {shown === undefined ? (
-                <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
+                <p className="grid h-full place-items-center p-3 text-sm font-medium text-muted-foreground">
                   Looking…
                 </p>
               ) : failed ? (
-                <p className="grid h-full place-items-center p-3 text-body-medium text-text-error-primary">
+                <p className="grid h-full place-items-center p-3 text-sm font-medium text-destructive">
                   {failed}
                 </p>
               ) : rows.length === 0 ? (
                 // Which nothing this is, and the way out of it.
                 <div className="flex h-full flex-col items-center justify-center gap-2 p-3 text-center">
-                  <span className="text-body-medium text-text-secondary">
+                  <span className="text-sm font-medium text-muted-foreground">
                     {word
                       ? "Nothing is called that."
                       : entries?.length
                         ? "Only hidden files"
                         : "Nothing here yet"}
                   </span>
-                  <span className="text-body-regular text-text-tertiary">
+                  <span className="text-sm text-muted-foreground">
                     {word
                       ? "Try another word."
                       : entries?.length
@@ -1313,8 +1366,8 @@ export function FileExplorer({
                   </span>
                   {!word && entries?.length ? (
                     <Button
-                      variant="secondary"
-                      size="small"
+                      variant="outline"
+                      size="sm"
                       onClick={() => setDotfiles(true)}
                     >
                       Show hidden files
@@ -1322,11 +1375,11 @@ export function FileExplorer({
                   ) : null}
                   {!word && !entries?.length && (
                     <Button
-                      variant="secondary"
-                      size="small"
-                      leadingIcon={RiUploadLine}
+                      variant="outline"
+                      size="sm"
                       onClick={() => input.current?.click()}
                     >
+                      <RiUploadLine data-icon="inline-start" />
                       Upload a file
                     </Button>
                   )}
@@ -1336,61 +1389,69 @@ export function FileExplorer({
                 // across the top and staying there, a hairline between
                 // rows, a row per thing with its mark and its name; a
                 // press on a row opens it.
-                <Table
+                <table
                   aria-label="Files"
-                  size="sm"
-                  selectionMode="multiple"
-                  selectionBehavior="replace"
-                  selectedKeys={selected}
-                  onSelectionChange={setSelected}
-                  sortDescriptor={sort}
-                  onSortChange={(next) => {
-                    setSort(next);
-                    setPage(1);
-                  }}
-                  onRowAction={(key) => {
-                    const e = rows.find((x) => x.name === key);
-                    if (e) open(e);
-                  }}
-                  containerClassName="overflow-x-visible"
-                  className="table-fixed [&_tbody_tr]:border-b-0! [&_td]:h-7 [&_td]:px-3! [&_td]:py-0! @max-[520px]/list:[&_td]:py-1.5! [&_td]:text-body-regular! [&_th]:px-3! [&_th]:py-1! [&_th]:text-caption-1-medium! [&_th]:text-text-tertiary! [&_thead_th]:sticky [&_thead_th]:top-0 [&_thead_th]:z-10 [&_thead_th]:border-t-0!"
+                  aria-multiselectable
+                  className="w-full table-fixed text-sm"
                 >
-                  <TableHeader>
-                    {COLUMNS.map((c) => (
-                      <TableColumn
-                        key={c.id}
-                        id={c.id}
-                        isRowHeader={c.id === "name"}
-                        allowsSorting
-                        className={c.className}
-                      >
-                        {/* The mark is drawn from our own state rather
-                            than the column's render prop, which is made
-                            afresh on every sort and so never turns. */}
-                        <span
-                          className={cx(
-                            "inline-flex h-5 cursor-pointer items-center gap-0.5",
-                            c.id !== "name" && "justify-end",
+                  <TableHeader className="[&_tr]:border-b-0">
+                    <TableRow className="hover:bg-transparent">
+                      {COLUMNS.map((c) => (
+                        <TableHead
+                          key={c.id}
+                          aria-sort={
+                            sort.column === c.id ? sort.direction : undefined
+                          }
+                          className={cn(
+                            "sticky top-0 z-10 h-7 border-b border-border bg-background px-3 text-xs font-medium text-muted-foreground",
+                            c.className,
                           )}
                         >
-                          {c.label}
-                          <SortMark
-                            dir={
-                              sort.column === c.id ? sort.direction : undefined
-                            }
-                          />
-                        </span>
-                      </TableColumn>
-                    ))}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSort((was) => ({
+                                column: c.id,
+                                direction:
+                                  was.column === c.id &&
+                                  was.direction === "ascending"
+                                    ? "descending"
+                                    : "ascending",
+                              }));
+                              setPage(1);
+                            }}
+                            className={cn(
+                              "inline-flex h-5 cursor-pointer items-center gap-0.5 rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+                              c.id !== "name" && "justify-end",
+                            )}
+                          >
+                            {c.label}
+                            <SortMark
+                              dir={
+                                sort.column === c.id
+                                  ? sort.direction
+                                  : undefined
+                              }
+                            />
+                          </button>
+                        </TableHead>
+                      ))}
+                    </TableRow>
                   </TableHeader>
-                  <TableBody>
-                    {rows.map((e) => {
+                  <TableBody onKeyDown={onListKey}>
+                    {rows.map((e, i) => {
                       const Mark = markOf(e);
-                      const on = selected === "all" || selected.has(e.name);
+                      const on = selected.has(e.name);
                       return (
                         <TableRow
                           key={e.name}
-                          id={e.name}
+                          data-name={e.name}
+                          aria-selected={on}
+                          // One stop in the tab order: the row held, or the
+                          // first when none is.
+                          tabIndex={
+                            on || (selected.size === 0 && i === 0) ? 0 : -1
+                          }
                           onContextMenu={() => {
                             setTarget(e);
                             // The row under the right-click is the one the
@@ -1400,18 +1461,27 @@ export function FileExplorer({
                           onPointerDown={(ev) => {
                             // A finger landing on a row names it for the
                             // long press, which raises no right-click.
-                            if (ev.pointerType !== "touch") return;
+                            touched.current = ev.pointerType === "touch";
+                            if (!touched.current) return;
                             setTarget(e);
                             if (!on) setSelected(new Set([e.name]));
                           }}
-                          className={cx(
-                            "cursor-default",
+                          onClick={(ev) => {
+                            if (renaming?.of === e.name) return;
+                            if (touched.current) open(e);
+                            else choose(e.name, ev);
+                          }}
+                          onDoubleClick={() => {
+                            if (renaming?.of !== e.name) open(e);
+                          }}
+                          className={cn(
+                            "cursor-default border-b-0 outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset",
                             on
-                              ? "bg-accent-600 text-text-white"
-                              : "even:bg-background-secondary-default/60 hover:bg-background-primary-hover",
+                              ? "bg-primary/15 hover:bg-primary/15"
+                              : "hover:bg-accent",
                           )}
                         >
-                          <TableCell>
+                          <TableCell className="h-7 px-3 py-0 @max-[520px]/list:py-1.5">
                             <span
                               className="flex items-center gap-2 @max-[400px]/list:min-h-8"
                               draggable={
@@ -1430,19 +1500,13 @@ export function FileExplorer({
                               }}
                             >
                               <Mark
-                                className={cx(
-                                  "size-4 shrink-0",
-                                  on
-                                    ? "text-text-white"
-                                    : "text-foreground-icon-secondary",
-                                )}
+                                className="size-4 shrink-0 text-muted-foreground"
                                 aria-hidden
                               />
                               <span className="flex min-w-0 flex-1 flex-col">
                                 {renaming?.of === e.name ? (
-                                  <InputBase
+                                  <Input
                                     aria-label="Name"
-                                    size="small"
                                     value={renaming.to}
                                     ref={(el) => {
                                       // Focused as it appears, with the name
@@ -1481,28 +1545,17 @@ export function FileExplorer({
                                     onPointerDown={(ev) => ev.stopPropagation()}
                                     onClick={(ev) => ev.stopPropagation()}
                                     onDoubleClick={(ev) => ev.stopPropagation()}
-                                    fieldClassName="h-6 flex-1 bg-background-primary-default text-text-primary"
-                                    className="text-body-regular text-text-primary"
+                                    className="h-6 flex-1 bg-background px-1.5"
                                   />
                                 ) : (
                                   <span
-                                    className={cx(
-                                      "flex items-center gap-1.5 truncate text-body-regular",
-                                      on
-                                        ? "text-text-white"
-                                        : "text-text-primary",
-                                    )}
+                                    className="flex items-center gap-1.5 truncate text-sm text-foreground"
                                     title={e.name}
                                   >
                                     <span className="truncate">{e.name}</span>
                                     {e.id && !colleague && (
                                       <RiShareForwardLine
-                                        className={cx(
-                                          "size-3.5 shrink-0",
-                                          on
-                                            ? "text-text-white"
-                                            : "text-foreground-icon-tertiary",
-                                        )}
+                                        className="size-3.5 shrink-0 text-muted-foreground"
                                         aria-label="Shared"
                                       />
                                     )}
@@ -1510,14 +1563,7 @@ export function FileExplorer({
                                 )}
                                 {/* What the columns had to give up, kept
                                     where there is no room for them. */}
-                                <span
-                                  className={cx(
-                                    "hidden truncate text-caption-1-regular tabular-nums @max-[520px]/list:block",
-                                    on
-                                      ? "text-text-white"
-                                      : "text-text-secondary",
-                                  )}
-                                >
+                                <span className="hidden truncate text-xs text-muted-foreground tabular-nums @max-[520px]/list:block">
                                   {e.kind === "dir" ? "" : size(e.size)}
                                   <span className="hidden @max-[400px]/list:inline">
                                     {e.kind === "dir"
@@ -1529,68 +1575,67 @@ export function FileExplorer({
                             </span>
                           </TableCell>
                           <TableCell
-                            className={cx(
-                              "text-right whitespace-nowrap",
+                            className={cn(
+                              "h-7 px-3 py-0 text-right text-muted-foreground tabular-nums",
                               NARROW.size,
                             )}
                           >
-                            <span
-                              className={cx(
-                                "tabular-nums",
-                                on ? "text-text-white" : "text-text-secondary",
-                              )}
-                            >
-                              {e.kind === "dir" || !e.modified
-                                ? "--"
-                                : size(e.size)}
-                            </span>
+                            {e.kind === "dir" || !e.modified
+                              ? "--"
+                              : size(e.size)}
                           </TableCell>
                           <TableCell
-                            className={cx("whitespace-nowrap", NARROW.kind)}
+                            className={cn(
+                              "h-7 truncate px-3 py-0 text-muted-foreground",
+                              NARROW.kind,
+                            )}
                           >
-                            <span
-                              className={cx(
-                                "truncate",
-                                on ? "text-text-white" : "text-text-secondary",
-                              )}
-                            >
-                              {kindOf(e)}
-                            </span>
+                            {kindOf(e)}
                           </TableCell>
                           <TableCell
-                            className={cx(
-                              "text-right whitespace-nowrap",
+                            className={cn(
+                              "h-7 px-3 py-0 text-right text-muted-foreground tabular-nums",
                               NARROW.modified,
                             )}
                           >
-                            <span
-                              className={cx(
-                                "tabular-nums",
-                                on ? "text-text-white" : "text-text-secondary",
-                              )}
-                            >
-                              {when(e.modified)}
-                            </span>
+                            {when(e.modified)}
                           </TableCell>
                         </TableRow>
                       );
                     })}
                   </TableBody>
-                </Table>
+                </table>
               )}
             </ScrollArea>
             {shown && shown.length > PER_PAGE && (
-              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-separator-border px-3 py-2">
-                <span className="shrink-0 text-caption-1-medium text-text-secondary tabular-nums">
+              <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border px-3 py-2">
+                <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
                   {(here - 1) * PER_PAGE + 1}–
                   {Math.min(here * PER_PAGE, shown.length)} of {shown.length}
                 </span>
-                <Pagination
-                  page={here}
-                  totalPages={pages}
-                  onChange={setPage}
-                  className="min-w-0"
-                />
+                <span className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Previous page"
+                    disabled={here <= 1}
+                    onClick={() => setPage(here - 1)}
+                  >
+                    <RiArrowLeftSLine />
+                  </Button>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    Page {here} of {pages}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label="Next page"
+                    disabled={here >= pages}
+                    onClick={() => setPage(here + 1)}
+                  >
+                    <RiArrowRightSLine />
+                  </Button>
+                </span>
               </div>
             )}
           </ContextMenuTrigger>
@@ -1675,7 +1720,7 @@ export function FileExplorer({
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.97, transition: LEAVE }}
             transition={FAST}
-            className="pointer-events-none absolute inset-2 grid place-items-center rounded-3xl border border-border-focus-ring bg-background-secondary-default/90 text-body-medium text-text-secondary"
+            className="pointer-events-none absolute inset-2 grid place-items-center rounded-lg border border-ring bg-muted/90 text-sm font-medium text-muted-foreground"
           >
             Drop it here.
           </motion.div>

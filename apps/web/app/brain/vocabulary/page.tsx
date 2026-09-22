@@ -4,7 +4,7 @@ import { groupsIn } from "@maslow/db/groups";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
-import { Chip } from "@/components/base/badges/chip";
+import { Badge } from "@/components/ui/badge";
 import { principal } from "@/lib/session";
 
 import { vocabulary } from "../catalog";
@@ -31,10 +31,10 @@ export default async function Page() {
   return (
     <div className="brain-inset flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <h1 className="page-title text-title-3-medium text-text-primary">
+        <h1 className="page-title text-lg font-medium text-foreground">
           Types and fields
         </h1>
-        <p className="text-body-regular text-text-secondary">
+        <p className="text-sm text-muted-foreground">
           The kinds of thing this brain holds. Every record has a title, a body
           and a when; a type adds the fields listed beside it. Yours until you
           share one.
@@ -57,7 +57,7 @@ export default async function Page() {
       </Sheet>
       {sharedGroups(types, people).map((g) => (
         <div key={g.ownerId} className="flex flex-col gap-2">
-          <p className="px-1 text-caption-1-medium text-text-secondary">
+          <p className="px-1 text-xs font-medium text-muted-foreground">
             {g.owner}&apos;s, shared with you
           </p>
           <Sheet>
@@ -71,11 +71,10 @@ export default async function Page() {
   );
 }
 
-// One sheet of lines, a hairline between each. A card on a page, not the
-// page itself: a window keeps its chrome.
+// One list of lines, a hairline between each.
 function Sheet({ children }: { children: ReactNode }) {
   return (
-    <div className="divide-y divide-separator-border rounded-3xl border border-border-button-default bg-background-primary-default">
+    <div className="divide-y divide-border rounded-lg border border-border">
       {children}
     </div>
   );
@@ -95,36 +94,35 @@ function Line({
   children?: ReactNode;
 }) {
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3">
+    <div className="flex min-h-11 flex-wrap items-center gap-x-4 gap-y-2 px-3 py-1.5">
       <span className="flex w-44 shrink-0 items-baseline gap-2">
         <TypeMark
           type={t.name}
           owner={owner}
-          className="text-body-medium text-text-primary"
+          className="text-sm font-medium text-foreground"
         />
-        <span className="text-caption-1-regular text-text-secondary tabular-nums">
+        <span className="text-xs text-muted-foreground tabular-nums">
           {count}
         </span>
       </span>
       <span className="flex min-w-48 flex-1 flex-wrap items-center gap-1.5">
         {t.properties.length === 0 ? (
-          <span className="text-caption-1-regular text-text-secondary">
+          <span className="text-xs text-muted-foreground">
             No fields of its own
           </span>
         ) : (
           t.properties.map((f) => (
-            <Chip
+            <Badge
               key={f.name}
-              variant="caption"
-              color="soft"
+              variant="secondary"
               title={f.options?.length ? f.options.join(", ") : undefined}
             >
               {f.name}
-              <span className="ml-1 text-text-secondary">
+              <span className="font-normal text-muted-foreground">
                 {HOLDS[f.datatype]}
                 {f.required && ", required"}
               </span>
-            </Chip>
+            </Badge>
           ))
         )}
       </span>

@@ -1,14 +1,19 @@
 import "./globals.css";
 
 import { MotionConfig } from "motion/react";
+import { headers } from "next/headers";
 import { type ReactNode } from "react";
 
 import { Analytics } from "@/components/analytics";
 import { DevToolbar } from "@/components/dev-toolbar";
 import { GlassFilter } from "@/components/glass";
+import { Shell } from "@/components/shell/shell";
 import { beforePaint } from "@/components/look";
 import { deployment } from "@/lib/deployment";
+import { membershipsByEmail } from "@maslow/db/auth";
+import { orgOf } from "@maslow/db/settings";
 import { principal } from "@/lib/session";
+import { storage } from "@/lib/storage";
 
 // On a phone Maslow is an app of its own: added to the home screen it
 // opens without the browser's chrome, edge to edge.
@@ -86,13 +91,37 @@ export const viewport = {
   themeColor: "#1c1815",
 };
 
-// Every page sits under the one bar that floats along the bottom.
+async function youOf(p: NonNullable<Awaited<ReturnType<typeof principal>>>) {
+  const [{ org, members }, memberships] = await Promise.all([
+    orgOf(p),
+    membershipsByEmail(p.email),
+  ]);
+  const me = members.find((m) => m.id === p.userId);
+  if (!me) return null;
+  return {
+    name: me.name,
+    email: me.email,
+    org: org.name,
+    picture: me.avatarKey ? storage.url(me.avatarKey) : null,
+    others: memberships
+      .filter((m) => m.userId !== p.userId)
+      .map((m) => ({ userId: m.userId, orgName: m.orgName })),
+  };
+}
+
+// Every page sits under the shell, or bare where the shell does not stand.
 export default async function RootLayout({
   children,
 }: {
   children: ReactNode;
 }) {
   const p = await principal();
+  // A page asked for as a frame is a pane of the shell already on screen,
+  // so it is drawn bare.
+  const framed = (await headers()).get("sec-fetch-dest") === "iframe";
+  // Who is signed in, for the shell's account menu: their name and face,
+  // and the other orgs they could be in instead.
+  const you = p && !framed ? await youOf(p) : null;
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -104,7 +133,7 @@ export default async function RootLayout({
           dangerouslySetInnerHTML={{
             __html:
               beforePaint +
-              ";try{if(window.self!==window.top)document.documentElement.dataset.framed=''}catch(e){document.documentElement.dataset.framed=''}" +
+              ";try{if(window.self!==window.top||/^\\/(home|brain|settings|computer|browser)(\\/|$)/.test(location.pathname))document.documentElement.dataset.framed=''}catch(e){document.documentElement.dataset.framed=''}" +
               ";if('framed' in document.documentElement.dataset)addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&!e.altKey&&!e.shiftKey&&e.key.toLowerCase()==='k'){e.preventDefault();parent.postMessage({maslow:'command'},location.origin)}})",
           }}
         />
@@ -113,7 +142,15 @@ export default async function RootLayout({
         <GlassFilter />
         {/* Motion honours the device's own setting: someone who asked for
             less of it gets the meaning without the travel. */}
-        <MotionConfig reducedMotion="user">{children}</MotionConfig>
+        <MotionConfig reducedMotion="user">
+          <Shell
+            computers={!!p && deployment.computers.kind !== "none"}
+            framed={framed}
+            you={you}
+          >
+            {children}
+          </Shell>
+        </MotionConfig>
         <div className="app-dev-toolbar">
           <DevToolbar />
         </div>

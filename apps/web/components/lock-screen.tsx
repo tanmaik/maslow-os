@@ -9,19 +9,20 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { srcOf } from "@/app/desktop/wallpapers";
-import { AuthCard } from "@/components/application/auth/auth-card";
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Chip } from "@/components/base/badges/chip";
-import { Divider } from "@/components/base/divider/divider";
-import { Button } from "@/components/base/buttons/button";
-import { LinkButton } from "@/components/base/buttons/link-button";
-import { Input } from "@/components/base/input/input";
-import { InputOtp } from "@/components/base/input-otp/input-otp";
-import { RadioGroup } from "@/components/base/radio/radio";
-import { RadioCard } from "@/components/base/radio/radio-card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSeparator,
+  InputOTPSlot,
+} from "@/components/ui/input-otp";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { initials } from "@/lib/initials";
 import { BASE } from "@/lib/motion";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 // Someone this device has signed in before: enough to greet them by, kept
 // on the device and nowhere else.
@@ -76,12 +77,6 @@ function forget(email: string): Known[] {
   return rest;
 }
 
-// The wallpaper this device last saw, so the lock screen wears it too.
-export function rememberPaper(choice: string | null): void {
-  if (choice) localStorage.setItem(PAPER, choice);
-  else localStorage.removeItem(PAPER);
-}
-
 // What the desktop lies on, under the lock screen: the picture this device
 // last saw, Dusk until it has seen one, and a darkening over it deep enough
 // that white words read over the lightest thing a desktop can wear.
@@ -97,7 +92,7 @@ function Paper() {
           alt=""
           aria-hidden
           onLoad={() => setLit(true)}
-          className={cx(
+          className={cn(
             "absolute inset-0 size-full object-cover transition-opacity duration-slow ease-out-quart motion-reduce:transition-none",
             lit ? "opacity-100" : "opacity-0",
           )}
@@ -125,16 +120,16 @@ function Clock() {
     return () => clearInterval(beat);
   }, []);
   return (
-    <div className="flex flex-col items-center gap-1 text-text-white">
+    <div className="flex flex-col items-center gap-1 text-white">
       {/* A width held from the first paint, so nothing moves when the
           clock arrives. */}
-      <span className="min-h-10 text-display-3-medium tabular-nums">
+      <span className="min-h-10 text-2xl font-medium tabular-nums">
         {now?.toLocaleTimeString(undefined, {
           hour: "numeric",
           minute: "2-digit",
         }) ?? " "}
       </span>
-      <span className="text-body-medium text-text-white/80">
+      <span className="text-sm font-medium text-white/80">
         {now
           ?.toLocaleDateString(undefined, {
             weekday: "long",
@@ -160,14 +155,12 @@ function Face({ who }: { who: Known | null }) {
       transition={BASE}
       className="inline-flex"
     >
-      <Avatar
-        // The ladder's next step up: the lock screen is the whole page, and
-        // the face is what it is about.
-        className="size-24 text-title-1-medium"
-        src={who?.picture ?? undefined}
-        alt={who?.name}
-        initials={who ? initials(who.name) : undefined}
-      />
+      <Avatar className="size-20">
+        {who?.picture && <AvatarImage src={who.picture} alt={who.name} />}
+        <AvatarFallback className="text-xl font-medium">
+          {who ? initials(who.name) : null}
+        </AvatarFallback>
+      </Avatar>
     </motion.span>
   );
 }
@@ -175,10 +168,7 @@ function Face({ who }: { who: Known | null }) {
 // What the last leg left to say, under what it is about.
 function Said({ children }: { children: ReactNode }) {
   return (
-    <p
-      role="status"
-      className="text-body-regular text-text-error-primary text-center"
-    >
+    <p role="status" className="text-center text-sm text-destructive">
       {children}
     </p>
   );
@@ -200,10 +190,10 @@ function Tile({
       <button
         type="button"
         onClick={onPick}
-        className="flex w-28 flex-col items-center gap-2 rounded-2lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
+        className="flex w-24 flex-col items-center gap-2 rounded-md p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <Face who={who} />
-        <span className="w-full truncate text-body-medium text-text-primary">
+        <span className="w-full truncate text-sm font-medium text-foreground">
           {who.name.split(" ")[0]}
         </span>
       </button>
@@ -211,9 +201,9 @@ function Tile({
         type="button"
         onClick={onForget}
         aria-label={`Forget ${who.name}`}
-        className="absolute top-0 right-2 grid size-6 place-items-center rounded-full bg-background-quaternary-default text-foreground-icon-secondary opacity-0 transition-opacity duration-fast ease-plain group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:outline-none"
+        className="absolute top-0 right-1 grid size-5 place-items-center rounded-full bg-muted text-muted-foreground opacity-0 transition-opacity duration-fast ease-plain group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
       >
-        <RiCloseLine className="size-4" aria-hidden />
+        <RiCloseLine className="size-3.5" aria-hidden />
       </button>
     </div>
   );
@@ -225,47 +215,115 @@ function Tile({
 function Made({ made, next }: { made: Made[]; next?: string }) {
   const first = made[0]?.people[0]?.id;
   return (
-    <div className="mt-8 flex flex-col gap-4">
-      <Divider className="text-caption-1-medium">For development</Divider>
-      <form action="/auth/dev" method="post" className="flex flex-col gap-4">
+    <div className="mt-8 flex flex-col gap-3 rounded-lg border border-border bg-background/80 p-3">
+      <form action="/auth/dev" method="post" className="flex flex-col gap-3">
         {next && <input type="hidden" name="next" value={next} />}
         <div className="flex items-start gap-2">
-          <Chip variant="caption" color="yellow" className="mt-px">
-            dev
-          </Chip>
-          <p className="text-caption-1-regular text-text-secondary">
+          <Badge variant="outline">dev</Badge>
+          <p className="text-xs text-muted-foreground">
             These people are made up, and this way in does not exist in
             production.
           </p>
         </div>
         {/* Capped, so the way in is on the screen however many people are
             seeded and however short the screen is. */}
-        <RadioGroup
-          name="user"
-          aria-label="Seeded people"
-          defaultValue={first}
-          className="max-h-[32dvh] gap-4 overflow-y-auto"
-        >
-          {made.map((org) => (
-            <div key={org.org} className="flex flex-col gap-2">
-              <p className="text-caption-1-medium text-text-secondary">
-                {org.org}
-              </p>
-              {org.people.map((p) => (
-                <RadioCard
-                  key={p.id}
-                  value={p.id}
-                  title={p.name}
-                  description={p.email}
-                />
-              ))}
-            </div>
-          ))}
-        </RadioGroup>
-        <Button type="submit" variant="secondary" className="w-full">
+        <div className="max-h-[32dvh] overflow-x-hidden overflow-y-auto">
+          <RadioGroup
+            name="user"
+            aria-label="Seeded people"
+            defaultValue={first}
+            className="relative grid-cols-[minmax(0,1fr)] gap-3"
+          >
+            {made.map((org) => (
+              <div key={org.org} className="flex flex-col">
+                <p className="pb-1 text-xs font-medium text-muted-foreground">
+                  {org.org}
+                </p>
+                {org.people.map((p) => (
+                  <Choice
+                    key={p.id}
+                    value={p.id}
+                    title={p.name}
+                    description={p.email}
+                  />
+                ))}
+              </div>
+            ))}
+          </RadioGroup>
+        </div>
+        <Button type="submit" variant="outline" size="lg" className="w-full">
           Sign in
         </Button>
       </form>
+    </div>
+  );
+}
+
+// One thing to pick among a few: what it is, a line about it, and the mark
+// that says it is the one.
+function Choice({
+  value,
+  title,
+  description,
+}: {
+  value: string;
+  title: ReactNode;
+  description: ReactNode;
+}) {
+  return (
+    <label className="relative flex min-h-9 cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-accent has-data-checked:bg-accent">
+      <span className="flex min-w-0 items-baseline gap-2">
+        <span className="shrink-0 text-sm font-medium text-foreground">
+          {title}
+        </span>
+        <span className="truncate text-xs text-muted-foreground">
+          {description}
+        </span>
+      </span>
+      <RadioGroupItem value={value} />
+    </label>
+  );
+}
+
+// One leg of the way in: whose it is, what it asks, the form that answers
+// it, and what else can be done instead.
+function Column({
+  mark,
+  title,
+  description,
+  action,
+  cta,
+  footer,
+  children,
+}: {
+  mark?: ReactNode;
+  title: ReactNode;
+  description: ReactNode;
+  action?: string;
+  cta: string | null;
+  footer?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex w-full flex-col">
+      {mark && <div className="mb-4 flex justify-center">{mark}</div>}
+      <div className="flex flex-col gap-1 text-center">
+        <h1 className="text-lg font-medium text-foreground">{title}</h1>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      <form
+        action={action}
+        method={action ? "post" : undefined}
+        className="mt-6 flex flex-col gap-3"
+      >
+        {children}
+        {cta && (
+          <Button type="submit" size="lg" className="w-full">
+            {cta}
+          </Button>
+        )}
+      </form>
+      {footer}
     </div>
   );
 }
@@ -340,65 +398,45 @@ export function LockScreen({
 
   const card =
     step === "choose" ? (
-      <AuthCard
-        bare
-        centered
-        providers={[]}
-        logo={<Face who={who} />}
+      <Column
+        mark={<Face who={who} />}
         title="Where are you working?"
         description="You're in more than one org. You can move between them from the Maslow menu."
         action="/auth/switch"
         cta="Continue"
-        footer={null}
-        fields={
-          <>
-            {onward}
-            <RadioGroup
-              name="membership"
-              aria-label="Your orgs"
-              defaultValue={landings[0]?.userId}
-              className="gap-2"
-            >
-              {landings.map((m) => (
-                <RadioCard
-                  key={m.userId}
-                  value={m.userId}
-                  title={
-                    <span className="flex items-center gap-2">
-                      <Avatar size="sm" initials={initials(m.orgName)} />
-                      {m.orgName}
-                    </span>
-                  }
-                  description={ROLE[m.role]}
-                />
-              ))}
-            </RadioGroup>
-          </>
-        }
-      />
+      >
+        {onward}
+        <RadioGroup
+          name="membership"
+          aria-label="Your orgs"
+          defaultValue={landings[0]?.userId}
+          className="gap-0 rounded-lg border border-border bg-background/80 p-1"
+        >
+          {landings.map((m) => (
+            <Choice
+              key={m.userId}
+              value={m.userId}
+              title={m.orgName}
+              description={ROLE[m.role]}
+            />
+          ))}
+        </RadioGroup>
+      </Column>
     ) : step === "code" ? (
-      <AuthCard
-        bare
-        centered
-        providers={[]}
-        logo={<Face who={who} />}
+      <Column
+        mark={<Face who={who} />}
         title={who ? who.name : "Check your inbox"}
         description={
           noMail ? (
             <>
               No mail is configured: the code for{" "}
-              <span className="text-body-medium text-text-primary">
-                {email}
-              </span>{" "}
-              is in the server&rsquo;s terminal.
+              <span className="font-medium text-foreground">{email}</span> is in
+              the server&rsquo;s terminal.
             </>
           ) : (
             <>
               Enter the six-digit code sent to{" "}
-              <span className="text-body-medium text-text-primary">
-                {email}
-              </span>
-              .
+              <span className="font-medium text-foreground">{email}</span>.
             </>
           )
         }
@@ -411,45 +449,78 @@ export function LockScreen({
             <form
               action="/auth/restart"
               method="post"
-              className="mt-6 flex justify-center"
+              className="mt-4 flex justify-center"
             >
               {onward}
-              <LinkButton type="submit" size="small">
+              <Button
+                type="submit"
+                variant="link"
+                size="sm"
+                className="text-muted-foreground"
+              >
                 Use a different email
-              </LinkButton>
+              </Button>
             </form>
           )
         }
-        fields={
-          <div className="flex flex-col gap-3">
-            {onward}
-            {!locked && (
-              <>
-                <input
-                  ref={carried}
-                  type="hidden"
-                  name="code"
-                  value={code}
-                  readOnly
+      >
+        {onward}
+        {!locked && (
+          <>
+            <input
+              ref={carried}
+              type="hidden"
+              name="code"
+              value={code}
+              readOnly
+            />
+            <InputOTP
+              maxLength={6}
+              value={code}
+              onChange={setCode}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              autoComplete="one-time-code"
+              autoFocus
+              aria-label="Code"
+              containerClassName="justify-center"
+            >
+              <InputOTPGroup>
+                <InputOTPSlot
+                  index={0}
+                  className="size-10 bg-background/60 text-base"
                 />
-                <InputOtp
-                  value={code}
-                  onChange={setCode}
-                  groupEvery={3}
-                  aria-label="Code"
-                  className="justify-center"
+                <InputOTPSlot
+                  index={1}
+                  className="size-10 bg-background/60 text-base"
                 />
-              </>
-            )}
-            {said && <Said>{said}</Said>}
-          </div>
-        }
-      />
+                <InputOTPSlot
+                  index={2}
+                  className="size-10 bg-background/60 text-base"
+                />
+              </InputOTPGroup>
+              <InputOTPSeparator className="text-muted-foreground" />
+              <InputOTPGroup>
+                <InputOTPSlot
+                  index={3}
+                  className="size-10 bg-background/60 text-base"
+                />
+                <InputOTPSlot
+                  index={4}
+                  className="size-10 bg-background/60 text-base"
+                />
+                <InputOTPSlot
+                  index={5}
+                  className="size-10 bg-background/60 text-base"
+                />
+              </InputOTPGroup>
+            </InputOTP>
+          </>
+        )}
+        {said && <Said>{said}</Said>}
+      </Column>
     ) : (
-      <AuthCard
-        bare
-        centered
-        providers={[]}
+      <Column
         title="Sign in"
         description={
           <>
@@ -461,43 +532,36 @@ export function LockScreen({
         }
         action={emails ? "/auth/email" : undefined}
         cta={emails ? "Continue" : null}
-        footer={null}
-        fields={
-          <div className="flex flex-col gap-3">
-            {onward}
-            {emails && people.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-4 pb-2">
-                {people.map((p) => (
-                  <Tile
-                    key={p.email}
-                    who={p}
-                    onPick={() => pick(p)}
-                    onForget={() => setPeople(forget(p.email))}
-                  />
-                ))}
-              </div>
-            )}
-            {emails && (
-              <>
-                <Input
-                  ref={field}
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  aria-label="Email"
-                  autoFocus
-                  isRequired
-                  isInvalid={said !== null}
-                  fieldClassName="h-11"
-                  inputClassName="placeholder:text-text-placeholder focus:placeholder:text-text-placeholder"
-                />
-              </>
-            )}
-            {said && <Said>{said}</Said>}
+      >
+        {onward}
+        {emails && people.length > 0 && (
+          <div className="flex flex-wrap justify-center gap-4 pb-2">
+            {people.map((p) => (
+              <Tile
+                key={p.email}
+                who={p}
+                onPick={() => pick(p)}
+                onForget={() => setPeople(forget(p.email))}
+              />
+            ))}
           </div>
-        }
-      />
+        )}
+        {emails && (
+          <Input
+            ref={field}
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@example.com"
+            aria-label="Email"
+            autoFocus
+            required
+            aria-invalid={said !== null || undefined}
+            className="h-9 bg-background/60 dark:bg-background/60"
+          />
+        )}
+        {said && <Said>{said}</Said>}
+      </Column>
     );
 
   return (
@@ -505,8 +569,8 @@ export function LockScreen({
     // wears: the words are on a picture, not on paper. Plain, the column
     // lies on the bare ground in the desktop's own look.
     <div
-      className={cx(
-        "fixed inset-0 z-50 overflow-y-auto",
+      className={cn(
+        "fixed inset-0 z-50 overflow-y-auto text-foreground",
         plain ? "bg-canvas" : "dark",
       )}
     >
@@ -518,7 +582,7 @@ export function LockScreen({
           initial={still ? false : { opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={BASE}
-          className="flex w-full max-w-[400px] flex-1 flex-col justify-center pb-12"
+          className="flex w-full max-w-[360px] flex-1 flex-col justify-center pb-12"
         >
           {card}
           {made && step === "who" && <Made made={made} next={next} />}

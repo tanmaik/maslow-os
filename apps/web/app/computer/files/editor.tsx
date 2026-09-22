@@ -21,30 +21,27 @@ const look = EditorView.theme({
     height: "100%",
     fontSize: "13px",
     backgroundColor: "transparent",
-    "--cm-ink": "var(--color-text-primary)",
-    "--cm-quiet": "var(--color-text-secondary)",
-    "--cm-wrong": "var(--color-text-error-primary)",
+    "--cm-ink": "var(--foreground)",
+    "--cm-quiet": "var(--muted-foreground)",
+    "--cm-wrong": "var(--destructive)",
     "--cm-lightness": "0.45",
-    "--cm-keyword":
-      "oklch(from var(--color-accent-500) var(--cm-lightness) c h)",
+    "--cm-keyword": "oklch(from var(--primary) var(--cm-lightness) c h)",
     "--cm-string":
-      "oklch(from var(--color-accent-500) var(--cm-lightness) c calc(h + 100))",
+      "oklch(from var(--primary) var(--cm-lightness) c calc(h + 100))",
     "--cm-number":
-      "oklch(from var(--color-accent-500) var(--cm-lightness) c calc(h + 190))",
+      "oklch(from var(--primary) var(--cm-lightness) c calc(h + 190))",
     "--cm-name":
-      "oklch(from var(--color-accent-500) var(--cm-lightness) c calc(h + 250))",
+      "oklch(from var(--primary) var(--cm-lightness) c calc(h + 250))",
     "--cm-type":
-      "oklch(from var(--color-accent-500) var(--cm-lightness) c calc(h + 310))",
+      "oklch(from var(--primary) var(--cm-lightness) c calc(h + 310))",
     // What a selection is painted with: enough of the accent to be seen
     // at a glance on either ground, and never so much that the words in
     // it are lost.
-    "--cm-picked":
-      "color-mix(in oklch, var(--color-accent-500) 30%, transparent)",
+    "--cm-picked": "color-mix(in oklch, var(--primary) 30%, transparent)",
   },
   ".dark &": {
     "--cm-lightness": "0.8",
-    "--cm-picked":
-      "color-mix(in oklch, var(--color-accent-500) 40%, transparent)",
+    "--cm-picked": "color-mix(in oklch, var(--primary) 40%, transparent)",
   },
   ".cm-scroller": {
     fontFamily: "ui-monospace, monospace",
@@ -56,24 +53,22 @@ const look = EditorView.theme({
   ".cm-gutters": {
     backgroundColor: "transparent",
     borderRight: "none",
-    color: "var(--color-text-secondary)",
+    color: "var(--muted-foreground)",
   },
   ".cm-lineNumbers .cm-gutterElement": { paddingLeft: "12px" },
   // The line the caret is on is painted over the selection, so its wash
   // is faint and see-through: a selection still shows on it.
   ".cm-activeLine": {
-    backgroundColor:
-      "color-mix(in oklch, var(--color-text-primary) 6%, transparent)",
+    backgroundColor: "color-mix(in oklch, var(--foreground) 6%, transparent)",
   },
   ".cm-activeLineGutter": {
-    backgroundColor:
-      "color-mix(in oklch, var(--color-text-primary) 6%, transparent)",
+    backgroundColor: "color-mix(in oklch, var(--foreground) 6%, transparent)",
   },
-  ".cm-content": { caretColor: "var(--color-text-primary)" },
+  ".cm-content": { caretColor: "var(--foreground)" },
   // The caret is drawn by the editor itself when focused: two pixels of
   // ink, so it is found on a dark ground too.
   ".cm-cursor, .cm-dropCursor": {
-    borderLeft: "2px solid var(--color-text-primary)",
+    borderLeft: "2px solid var(--foreground)",
   },
   // The shipped theme paints a focused selection through a long
   // descendant chain; ours has to be as particular to be seen at all.
@@ -82,7 +77,7 @@ const look = EditorView.theme({
     background: "var(--cm-picked)",
   },
   "&.cm-focused .cm-matchingBracket": {
-    backgroundColor: "var(--color-background-quaternary-default)",
+    backgroundColor: "var(--accent)",
   },
 });
 

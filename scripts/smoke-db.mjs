@@ -24,6 +24,7 @@ import {
   setCopy,
   shareFile,
 } from "../packages/db/src/shared-files.ts";
+import { askOpen, takeOpens } from "../packages/db/src/opens.ts";
 import { orgs } from "../packages/db/src/seed.ts";
 
 const pg = createRequire(
@@ -461,6 +462,32 @@ export async function smokeDb({ pgPort }) {
           1,
         );
         await asPerson(mine, (q) => q.query("delete from port_shares"));
+      },
+    );
+    await check(
+      "what the agent asks to open is the person's alone and opens once",
+      async () => {
+        const [wile, road] = acme.users;
+        const as = (u) => ({
+          orgId: acme.id,
+          personId: u.personId,
+          userId: u.id,
+        });
+        await asPerson(as(wile), (q) =>
+          askOpen(q, { href: "/brain", title: "Brain" }),
+        );
+        // Nobody else takes it, and an address off the site is refused.
+        assert.deepEqual(await asPerson(as(road), takeOpens), []);
+        await assert.rejects(
+          asPerson(as(wile), (q) =>
+            askOpen(q, { href: "https://elsewhere.test", title: "Out" }),
+          ),
+          /check constraint/,
+        );
+        assert.deepEqual(await asPerson(as(wile), takeOpens), [
+          { href: "/brain", title: "Brain" },
+        ]);
+        assert.deepEqual(await asPerson(as(wile), takeOpens), []);
       },
     );
     await check(

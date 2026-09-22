@@ -1,24 +1,15 @@
 import type { BrainRecord } from "@maslow/brain";
 import type { ReactNode } from "react";
 
-import { Avatar } from "@/components/base/avatar/avatar";
 import { EagerLink } from "@/components/eager-link";
 import { LocalTime } from "@/components/local-time";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 import { BAND, Days } from "../days";
+import { Face } from "../face";
 import { opening, typeText } from "../format";
 import { TypeIcon, TypeMark } from "../type-icon";
 import { Walk } from "./walk";
-
-// Whose a record is, as two letters, since at any size the name is the same
-// handful of words on every row.
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
 
 // The records as rows of a title and the first line of what they say, cut
 // either into their types or into the days they were last changed, and marked with
@@ -57,34 +48,27 @@ export function ListView({
         href={hrefOf(r.id)}
         data-full={fullOf(r.id)}
         aria-current={lit ? "true" : undefined}
-        className={cx(
-          "relative mx-2 flex flex-col gap-0.5 rounded-xl px-3 py-2 outline-none transition-colors duration-fast ease-plain focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:ring-inset",
+        className={cn(
+          "relative mx-2 flex flex-col gap-0.5 rounded-md px-2 py-1.5 outline-none transition-colors duration-fast ease-plain focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
           // The hairline between two rows, drawn under each but the first
           // and hidden where the open row's fill covers it.
-          "before:absolute before:inset-x-3 before:top-0 before:h-px before:bg-separator-border first:before:hidden",
+          "before:absolute before:inset-x-2 before:top-0 before:h-px before:bg-border first:before:hidden",
           lit
-            ? "bg-background-secondary-hover before:hidden [&+a]:before:hidden"
-            : "hover:bg-background-primary-hover active:bg-background-primary-active",
+            ? "bg-accent before:hidden [&+a]:before:hidden"
+            : "hover:bg-accent active:bg-accent",
         )}
       >
         <span className="flex items-center gap-2">
           {by === "recent" && (
             <TypeIcon type={r.type} className="size-2.5 rounded-[3px]" />
           )}
-          <span className="truncate text-body-medium text-text-primary">
+          <span className="truncate text-sm font-medium text-foreground">
             {r.title || "(untitled)"}
           </span>
-          {whose(r) && (
-            <Avatar
-              size="xs"
-              initials={initials(whose(r)!)}
-              title={whose(r)!}
-              className="ml-auto shrink-0"
-            />
-          )}
+          {whose(r) && <Face name={whose(r)!} className="ml-auto size-5" />}
         </span>
-        <span className="flex items-baseline gap-2 text-caption-1-regular">
-          <span className="shrink-0 text-text-secondary tabular-nums">
+        <span className="flex items-baseline gap-2 text-xs">
+          <span className="shrink-0 text-muted-foreground tabular-nums">
             {/* Under a day band the day is already said; only the time is
                 news. */}
             <LocalTime
@@ -93,7 +77,7 @@ export function ListView({
               clockOnly={by === "recent"}
             />
           </span>
-          <span className="truncate text-text-tertiary">
+          <span className="truncate text-muted-foreground">
             {r.body.trim() ? opening(r.body) : typeText(r.type)}
           </span>
         </span>
@@ -117,7 +101,7 @@ export function ListView({
             <TypeMark
               type={r.type}
               owner={r.ownerId === me ? undefined : r.ownerId}
-              className="text-text-tertiary"
+              className="text-muted-foreground"
             />
           ),
           rows: [r],

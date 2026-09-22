@@ -16,7 +16,7 @@ next-env.d.ts
 # The package store is the machine's, not the repo's.
 .pnpm-store/
 
-# What a tool run in the checkout writes for itself: BoardUI's skill, and the like.
+# What a tool run in the checkout writes for itself: a skill it installs, and the like.
 .agents/
 
 # Xcode writes the project from apps/iphone/project.yml; what it writes stays out.

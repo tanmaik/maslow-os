@@ -4,10 +4,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { Row, Rows } from "@/app/settings/row";
-import { Button } from "@/components/base/buttons/button";
-import { Input } from "@/components/base/input/input";
-import { Switch } from "@/components/base/switch/switch";
 import { ImageInput } from "@/components/image-input";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -16,6 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 
 // Publishing a port as an app: the name it will go by and the face it
 // will wear, the port's own offered first and changed here if the person
@@ -75,12 +76,12 @@ export function PublishSheet({
             <DialogTitle>
               {published
                 ? `Port ${port}, as an app`
-                : `Add port ${port} to the Dock`}
+                : `Make port ${port} an app`}
             </DialogTitle>
             <DialogDescription>
-              An app is on your shelf, in the dock and the command bar, by its
-              name and its face, while its port is listening. Whoever you share
-              the port with sees the same.
+              An app is in your sidebar and in search, by its name and its icon,
+              while its port is listening. Whoever you share it with sees the
+              same.
             </DialogDescription>
           </DialogHeader>
           <input type="hidden" name="port" value={port} />
@@ -92,22 +93,17 @@ export function PublishSheet({
               src={face ?? null}
               fallback={(name.trim()[0] ?? "A").toUpperCase()}
             />
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <label
-                htmlFor={`app-${port}-name`}
-                className="text-caption-1-medium text-text-secondary"
-              >
-                Name
-              </label>
+            <Field className="min-w-0 flex-1">
+              <FieldLabel htmlFor={`app-${port}-name`}>Name</FieldLabel>
               <Input
                 id={`app-${port}-name`}
                 name="name"
                 defaultValue={name}
                 maxLength={120}
-                isRequired
+                required
                 autoFocus
               />
-            </div>
+            </Field>
           </div>
           <input type="hidden" name="tab" value={on ? "on" : "off"} />
           <Rows>
@@ -122,23 +118,19 @@ export function PublishSheet({
               <Switch
                 size="sm"
                 aria-label="Open in a browser tab"
-                isSelected={on}
-                isDisabled={unframed}
-                onChange={setInTab}
+                checked={on}
+                disabled={unframed}
+                onCheckedChange={setInTab}
               />
             </Row>
           </Rows>
-          {refused && (
-            <p className="text-body-regular text-text-error-primary">
-              {refused}
-            </p>
-          )}
+          {refused && <p className="text-sm text-destructive">{refused}</p>}
           <DialogFooter>
             {published && (
               <Button
                 type="button"
-                variant="danger"
-                size="small"
+                variant="destructive"
+                size="sm"
                 disabled={busy}
                 onClick={() => {
                   const form = new FormData();
@@ -147,19 +139,14 @@ export function PublishSheet({
                   void send(form);
                 }}
               >
-                Take off the Dock
+                Stop being an app
               </Button>
             )}
-            <Button
-              type="button"
-              variant="secondary"
-              size="small"
-              onClick={onClose}
-            >
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="submit" size="small" disabled={busy}>
-              {published ? "Save" : "Add to Dock"}
+            <Button type="submit" size="sm" disabled={busy}>
+              {published ? "Save" : "Make it an app"}
             </Button>
           </DialogFooter>
         </form>

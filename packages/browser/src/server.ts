@@ -94,7 +94,7 @@ function place(p: string): string {
     : p;
 }
 
-// A tool's inputs as BoardUI's server declares them, as the shape ours
+// A tool's inputs as shadcn's server declares them, as the shape ours
 // registers: objects, strings, numbers, booleans, lists and choices,
 // each with its words, required or not. Anything else is passed as is.
 function shaped(schema: Record<string, unknown> | undefined): z.ZodRawShape {
@@ -121,24 +121,17 @@ function shaped(schema: Record<string, unknown> | undefined): z.ZodRawShape {
   return shape;
 }
 
-// BoardUI's own MCP server, started once from the package beside this
+// shadcn's own MCP server, started once from the package beside this
 // one: what it offers, and the client it answers. Null, said once, when
 // it will not start, and the browser stands alone.
 type Attached = {
   client: Client;
   tools: Awaited<ReturnType<Client["listTools"]>>["tools"];
 };
-async function startBoardui(): Promise<Attached | null> {
-  // The program as its package names it, wherever the package manager
+async function startShadcn(): Promise<Attached | null> {
+  // The program is the package's own entry, wherever the package manager
   // put it.
-  const need = createRequire(import.meta.url);
-  const pkg = need("boardui/package.json") as {
-    bin: string | Record<string, string>;
-  };
-  const bin = path.join(
-    path.dirname(need.resolve("boardui/package.json")),
-    typeof pkg.bin === "string" ? pkg.bin : pkg.bin.boardui!,
-  );
+  const bin = createRequire(import.meta.url).resolve("shadcn");
   const client = new Client({ name: "computer", version: "1" });
   // Run by this same node, wherever it is, with a path that finds it: the
   // process this runs in is started with no path of its own.
@@ -146,8 +139,7 @@ async function startBoardui(): Promise<Attached | null> {
     command: process.execPath,
     args: [bin, "mcp"],
     cwd: process.env.HOME ?? "/",
-    // Given its home, for the licence it keeps, and a path, and nothing
-    // else of this process's.
+    // Given its home and a path, and nothing else of this process's.
     env: {
       HOME: process.env.HOME ?? "/",
       PATH: [
@@ -164,31 +156,27 @@ async function startBoardui(): Promise<Attached | null> {
     return { client, tools: (await client.listTools()).tools };
   } catch (err) {
     console.error(
-      `boardui: not attached: ${(err as Error).message} ${said.trim()}`,
+      `shadcn: not attached: ${(err as Error).message} ${said.trim()}`,
     );
     return null;
   }
 }
 
-// BoardUI's tools offered as ours, each as boardui_<name>, with a project
-// path carried to where this process sees the home.
-function offerBoardui(server: McpServer, attached: Attached | null): void {
+// shadcn's tools offered as ours, each as shadcn_<name>.
+function offerShadcn(server: McpServer, attached: Attached | null): void {
   if (!attached) return;
   for (const t of attached.tools) {
     server.registerTool(
-      `boardui_${t.name}`,
+      `shadcn_${t.name}`,
       {
         description: t.description ?? "",
         inputSchema: shaped(t.inputSchema as Record<string, unknown>),
       },
-      (async (args: Record<string, unknown>) => {
-        if (typeof args.projectDir === "string")
-          args.projectDir = place(args.projectDir);
-        return (await attached.client.callTool({
+      (async (args: Record<string, unknown>) =>
+        (await attached.client.callTool({
           name: t.name,
           arguments: args,
-        })) as Result;
-      }) as unknown as Parameters<typeof server.registerTool>[2],
+        })) as Result) as unknown as Parameters<typeof server.registerTool>[2],
     );
   }
 }
@@ -198,7 +186,7 @@ function browserServer(browser: Browser, gif: Gif): McpServer {
     { name: "computer", version: "1" },
     {
       instructions:
-        "This computer's browser, and BoardUI's own server beside it as the boardui_ tools, which look components up and install them into a project by its path. For the browser, start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
+        "This computer's browser, and shadcn's own server beside it as the shadcn_ tools, which look components up in its registries and say how to add them to a project. For the browser, start with read_page to see what is on the page as numbered refs, or find to locate something by words; then act on a ref with computer, form_input or navigate. Every answer ends with the tab's title and address. Screenshots are for looking, refs are for acting.",
     },
   );
 
@@ -763,10 +751,10 @@ export async function serve(http?: number): Promise<void> {
   const bye = () => browser.quit().finally(() => process.exit(0));
   process.on("SIGINT", bye);
   process.on("SIGTERM", bye);
-  const boardui = await startBoardui();
+  const shadcn = await startShadcn();
   if (http === undefined) {
     const one = browserServer(browser, gif);
-    offerBoardui(one, boardui);
+    offerShadcn(one, shadcn);
     await one.connect(new StdioServerTransport());
     process.stdin.on("close", bye);
     return;
@@ -1033,7 +1021,7 @@ export async function serve(http?: number): Promise<void> {
       enableJsonResponse: true,
     });
     const server = browserServer(browser, gif);
-    offerBoardui(server, boardui);
+    offerShadcn(server, shadcn);
     await server.connect(transport);
     res.on("close", () => void server.close());
     await transport.handleRequest(req, res);

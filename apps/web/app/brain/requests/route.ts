@@ -3,7 +3,7 @@ import { asPerson } from "@maslow/db";
 import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
-import { tellAnswer, tellPublic } from "@/lib/computer";
+import { tellPublic } from "@/lib/computer";
 import { origin } from "@/lib/origin";
 import { principal } from "@/lib/session";
 import { Refused, told } from "@/lib/shares";
@@ -32,8 +32,6 @@ export async function POST(request: Request) {
     // The door hears of a port made public once the answer has landed; a
     // door that could not be reached hears within the hour.
     if (made.opened) after(() => tellPublic(p));
-    const answered = made.notification;
-    if (answered) after(() => tellAnswer(p, answered));
   } catch (err) {
     if (
       err instanceof Invalid ||

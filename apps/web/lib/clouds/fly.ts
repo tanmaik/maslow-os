@@ -112,7 +112,6 @@ const shape = (m: Shape) => ({
     PERSON: m.who.person,
     ORG: m.who.org,
     ...(m.brain ? { BRAIN_URL: m.brain.url, BRAIN_TOKEN: m.brain.token } : {}),
-    ...(m.model ? { MODEL_URL: m.model.url, MODEL_TOKEN: m.model.token } : {}),
   },
   guest: { cpu_kind: m.cpuKind, cpus: m.cpus, memory_mb: m.memoryMb },
   // Two gigabytes of disk standing in for memory, so a machine that

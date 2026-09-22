@@ -11,14 +11,17 @@ import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BarButton, InBar } from "@/app/desktop/panel";
-import { Button } from "@/components/base/buttons/button";
-import { CloseButton } from "@/components/base/buttons/close-button";
-import { Divider } from "@/components/base/divider/divider";
-import { InputBase } from "@/components/base/input/input";
-import { PillTab, PillTabList } from "@/components/base/tabs/pill-tab";
+import { Button } from "@/components/ui/button";
+import { CloseButton } from "@/components/ui/close-button";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
+import { Separator } from "@/components/ui/separator";
 import { liveSocket } from "@/lib/live";
 import { FAST, LEAVE } from "@/lib/motion";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 // The computer's browser, live and in hand: its picture as video from the
 // machine itself, and the person's pointer, clicks, keys and scrolls sent
@@ -424,8 +427,8 @@ export function LiveBrowser({ href }: { href?: string }) {
 
   return (
     <div
-      className={cx(
-        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-button-default bg-background-primary-default",
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background",
         "[html[data-framed]_&]:rounded-none [html[data-framed]_&]:border-0",
       )}
     >
@@ -439,7 +442,7 @@ export function LiveBrowser({ href }: { href?: string }) {
         leading
         phone="strip"
         as={(controls) => (
-          <div className="flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-separator-border px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div className="flex h-9 shrink-0 items-center gap-1 overflow-x-auto border-b border-border px-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {controls}
           </div>
         )}
@@ -450,7 +453,11 @@ export function LiveBrowser({ href }: { href?: string }) {
             are carried from here, where they cannot be read as the
             address. */}
         <div className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          <PillTabList aria-label="Tabs">
+          <div
+            role="group"
+            aria-label="Tabs"
+            className="flex items-center gap-1"
+          >
             <AnimatePresence initial={false}>
               {tabs.map((t) => (
                 <motion.span
@@ -459,37 +466,36 @@ export function LiveBrowser({ href }: { href?: string }) {
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.9, transition: LEAVE }}
                   transition={FAST}
-                  // A tab is 180 at its widest, and the pill shrinks to it:
-                  // the title takes what is left after the close's 28, cut
-                  // with an ellipsis, so the two never meet at any length.
-                  className="flex max-w-[180px] min-w-0 items-center"
+                  // A tab is 180 at its widest: the title takes what is left
+                  // after the close, cut with an ellipsis, so the two never
+                  // meet at any length.
+                  className="relative flex max-w-[180px] min-w-0 items-center"
                 >
-                  <PillTab
-                    variant="blue"
-                    isSelected={t.id === current}
-                    onSelect={() => tell({ tab: t.id })}
-                    // The pill's own label box may shrink, so the title is
-                    // cut rather than run under the close.
-                    className="min-w-0 shrink pr-7 [&>span]:min-w-0"
+                  <button
+                    type="button"
+                    aria-pressed={t.id === current}
+                    onClick={() => tell({ tab: t.id })}
+                    className={cn(
+                      "h-7 min-w-0 shrink cursor-pointer truncate rounded-md pr-7 pl-2.5 text-left text-sm outline-none transition-colors duration-fast ease-plain focus-visible:ring-2 focus-visible:ring-ring/50",
+                      t.id === current
+                        ? "bg-accent font-medium text-foreground"
+                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
                   >
-                    <span className="block truncate">
-                      {t.title ||
-                        (t.url === "about:blank" ? "" : t.url) ||
-                        "New tab"}
-                    </span>
-                  </PillTab>
+                    {t.title ||
+                      (t.url === "about:blank" ? "" : t.url) ||
+                      "New tab"}
+                  </button>
                   <CloseButton
-                    size="xs"
+                    size="icon-xs"
                     aria-label={`Close ${t.title || "tab"}`}
                     onClick={() => tell({ closeTab: t.id })}
-                    // 20 of glyph in a 24 target, carrying no fill of its own
-                    // so it reads the same on the raised tab and beside it.
-                    className="z-20 -ml-7 shrink-0 bg-transparent before:absolute before:-inset-0.5 before:content-[''] hover:bg-background-tertiary-hover"
+                    className="absolute top-0.5 right-0.5 text-muted-foreground"
                   />
                 </motion.span>
               ))}
             </AnimatePresence>
-          </PillTabList>
+          </div>
           <BarButton
             icon={RiAddLine}
             label="Open a new tab"
@@ -509,7 +515,7 @@ export function LiveBrowser({ href }: { href?: string }) {
       </InBar>
       {/* The way around, one row under the tabs: back, forward, reload
           and the address, in a field shaped as a browser's is. */}
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-separator-border px-2">
+      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
         <form
           className="flex min-w-0 flex-1 items-center gap-2"
           onSubmit={(e) => {
@@ -534,26 +540,22 @@ export function LiveBrowser({ href }: { href?: string }) {
             label="Reload"
             onClick={() => send({ kind: "reload" })}
           />
-          <InputBase
-            ref={address}
-            size="small"
-            aria-label="Address"
-            leadingIcon={RiGlobalLine}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            placeholder="An address"
-            autoComplete="off"
-            spellCheck={false}
-            fieldClassName="h-6 min-w-0 flex-1 rounded-full bg-background-secondary-default focus-within:ring-border-focus-ring"
-          />
+          <InputGroup className="h-7 min-w-0 flex-1">
+            <InputGroupAddon>
+              <RiGlobalLine aria-hidden />
+            </InputGroupAddon>
+            <InputGroupInput
+              ref={address}
+              aria-label="Address"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="An address"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </InputGroup>
           {elsewhere && (
-            // One radius across the row: the group, the field and this.
-            <Button
-              type="submit"
-              variant="secondary"
-              size="small"
-              className="rounded-full"
-            >
+            <Button type="submit" variant="outline" size="sm">
               Go
             </Button>
           )}
@@ -561,10 +563,7 @@ export function LiveBrowser({ href }: { href?: string }) {
       </div>
       {/* The page itself, on paper, edge to edge: the picture keeps the
           machine browser's own shape and nothing shows through behind it. */}
-      <div
-        ref={paneRef}
-        className="relative min-h-0 flex-1 bg-background-primary-default"
-      >
+      <div ref={paneRef} className="relative min-h-0 flex-1 bg-background">
         {/* The canvas stays, shown or not, so the first frame has somewhere
           to land before the door has said the browser is open. */}
         <canvas
@@ -576,8 +575,8 @@ export function LiveBrowser({ href }: { href?: string }) {
           height={shot.h}
           aria-label="Browser"
           tabIndex={0}
-          className={cx(
-            "absolute inset-0 size-full touch-none bg-background-primary-default object-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring",
+          className={cn(
+            "absolute inset-0 size-full touch-none bg-card object-contain outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
             ready ? "" : "hidden",
           )}
           style={{ cursor }}
@@ -649,13 +648,13 @@ export function LiveBrowser({ href }: { href?: string }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, transition: LEAVE }}
               transition={FAST}
-              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background-primary-default"
+              className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-background"
             >
               <RiGlobalLine
-                className="size-8 text-foreground-icon-tertiary"
+                className="size-8 text-muted-foreground"
                 aria-hidden
               />
-              <p className="text-body-medium text-text-secondary">
+              <p className="text-sm font-medium text-muted-foreground">
                 {state === "asking"
                   ? "Looking for your computer's browser…"
                   : "Type an address above, or let your agent open one."}
@@ -669,23 +668,23 @@ export function LiveBrowser({ href }: { href?: string }) {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, transition: LEAVE }}
               transition={FAST}
-              className="absolute inset-0 overflow-y-auto bg-background-primary-default p-4"
+              className="absolute inset-0 overflow-y-auto bg-background p-4"
             >
-              <h2 className="text-headline-medium text-text-primary">
+              <h2 className="text-base font-medium text-foreground">
                 {decodes
                   ? "Cannot reach your computer's browser"
                   : "This browser cannot show the picture"}
               </h2>
-              <p className="mt-3 text-body-regular text-text-secondary">
+              <p className="mt-3 text-sm text-muted-foreground">
                 {decodes
                   ? "The door on your computer did not answer. Trying again every second."
                   : "The picture arrives as video, which this browser cannot decode."}
               </p>
-              <Divider className="my-5" />
-              <p className="text-body-medium text-text-primary">
+              <Separator className="my-5" />
+              <p className="text-sm font-medium text-foreground">
                 Please try the following:
               </p>
-              <ul className="mt-2 list-disc space-y-2 pl-5 text-body-regular text-text-secondary">
+              <ul className="mt-2 list-disc space-y-2 pl-5 text-sm text-muted-foreground">
                 {decodes ? (
                   <>
                     <li>Wait a moment — this page keeps asking on its own.</li>
@@ -707,7 +706,7 @@ export function LiveBrowser({ href }: { href?: string }) {
         {said && (
           <p
             role="status"
-            className="absolute inset-x-0 bottom-0 bg-background-secondary-default px-3 py-2 text-caption-1-regular text-text-secondary"
+            className="absolute inset-x-0 bottom-0 bg-muted px-3 py-2 text-xs text-muted-foreground"
           >
             {said}
           </p>

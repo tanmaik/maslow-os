@@ -1,12 +1,11 @@
 # The computer's, the relay's and the website's images are built from the
 # repo's root and take only what they copy: the computer's own files and
-# the browser package and BoardUI's skill; the relay and the shared editor
+# the browser package; the relay and the shared editor
 # package; the website with every package of the workspace and the
 # migration runner; each with the workspace's manifests pnpm installs from.
 *
 !apps/computer
 !packages/browser
-!.claude/skills/boardui
 !packages/sync
 !packages/document
 !package.json

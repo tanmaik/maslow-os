@@ -9,8 +9,12 @@ import {
 import { usePathname, useSearchParams } from "next/navigation";
 import { useEffect, useState, type ComponentType, type ReactNode } from "react";
 
-import { Input } from "@/components/base/input/input";
 import { EagerLink } from "@/components/eager-link";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group";
 import {
   SidebarGroupLabel,
   SidebarMenu,
@@ -21,7 +25,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 import { typeHref, typeText } from "./format";
 import { TypeIcon } from "./type-icon";
@@ -79,10 +83,10 @@ function View({
             aria-current={lit ? "page" : undefined}
           />
         }
-        className="text-body-regular text-text-secondary data-active:text-body-medium hover:text-text-primary data-active:text-text-primary"
+        className="text-muted-foreground hover:text-foreground data-active:text-foreground"
       >
         {Mark ? (
-          <Mark className="text-foreground-icon-secondary" aria-hidden />
+          <Mark className="text-muted-foreground" aria-hidden />
         ) : type ? (
           <span className="flex size-4 items-center justify-center">
             <TypeIcon type={type} className="size-2.5 rounded-[3px]" />
@@ -91,11 +95,11 @@ function View({
         <span>{children}</span>
       </SidebarMenuButton>
       {waiting ? (
-        <SidebarMenuBadge className="hidden bg-accent-600 text-caption-1-semibold text-text-white md:flex">
+        <SidebarMenuBadge className="hidden bg-primary text-primary-foreground md:flex">
           {waiting}
         </SidebarMenuBadge>
       ) : count !== undefined ? (
-        <SidebarMenuBadge className="hidden text-caption-1-regular text-text-tertiary md:flex">
+        <SidebarMenuBadge className="hidden text-xs text-muted-foreground md:flex">
           {count}
         </SidebarMenuBadge>
       ) : null}
@@ -153,26 +157,28 @@ export function BrainNav({
 
   return (
     <div
-      className="brain-nav flex gap-1 rounded-3xl border border-border-button-default bg-background-secondary-default p-2 shadow-sidebar md:flex-col"
+      className="brain-nav flex gap-1 rounded-lg border border-border bg-muted p-2 md:flex-col"
       // A record is read on its own, with its own way back; every other
       // view of the brain keeps the rail beside it.
       data-away={pathname.startsWith("/brain/records") ? "" : undefined}
     >
       <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-1.5rem),transparent)] md:flex-col md:overflow-visible md:[mask-image:none]">
-        <SidebarGroupLabel className="hidden justify-between text-caption-1-medium text-text-tertiary md:flex">
-          <span className="truncate">Your brain</span>
+        <SidebarGroupLabel className="hidden justify-between text-xs font-medium text-muted-foreground md:flex">
+          <span className="truncate">Your database</span>
           <span className="tabular-nums">{records}</span>
         </SidebarGroupLabel>
         {many > 12 && (
-          <Input
-            size="small"
-            value={narrow}
-            onChange={setNarrow}
-            placeholder="Search types"
-            aria-label="Search types"
-            leadingIcon={RiSearchLine}
-            className="mb-1 hidden md:block"
-          />
+          <InputGroup className="mb-1 hidden h-7 md:flex">
+            <InputGroupAddon>
+              <RiSearchLine />
+            </InputGroupAddon>
+            <InputGroupInput
+              value={narrow}
+              onChange={(e) => setNarrow(e.target.value)}
+              placeholder="Search types"
+              aria-label="Search types"
+            />
+          </InputGroup>
         )}
         <SidebarMenu className="max-md:flex-row max-md:gap-1">
           <View
@@ -227,18 +233,18 @@ function Group({ group, current }: { group: Shared; current: string }) {
       <SidebarMenuButton
         aria-expanded={shown}
         onClick={() => setOpen(!open)}
-        className="text-body-regular text-text-secondary hover:text-text-primary"
+        className="text-muted-foreground hover:text-foreground"
       >
         <RiArrowRightSLine
-          className={cx(
-            "text-foreground-icon-secondary transition-transform duration-fast ease-plain",
+          className={cn(
+            "text-muted-foreground transition-transform duration-fast ease-plain",
             shown && "rotate-90",
           )}
           aria-hidden
         />
         <span>{group.owner}</span>
       </SidebarMenuButton>
-      <SidebarMenuBadge className="text-caption-1-regular text-text-tertiary">
+      <SidebarMenuBadge className="text-xs text-muted-foreground">
         {group.types.length}
       </SidebarMenuBadge>
       {shown && (
@@ -255,7 +261,7 @@ function Group({ group, current }: { group: Shared; current: string }) {
                       aria-current={lit ? "page" : undefined}
                     />
                   }
-                  className="text-body-regular text-text-secondary data-active:text-body-medium hover:text-text-primary data-active:text-text-primary"
+                  className="text-muted-foreground hover:text-foreground data-active:text-foreground"
                 >
                   <span className="flex size-4 items-center justify-center">
                     <TypeIcon
@@ -264,7 +270,7 @@ function Group({ group, current }: { group: Shared; current: string }) {
                     />
                   </span>
                   <span>{typeText(t.name)}</span>
-                  <span className="ml-auto text-caption-1-regular text-text-tertiary tabular-nums">
+                  <span className="ml-auto text-xs text-muted-foreground tabular-nums">
                     {t.held}
                   </span>
                 </SidebarMenuSubButton>

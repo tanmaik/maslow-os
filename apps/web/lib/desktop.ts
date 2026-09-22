@@ -42,10 +42,10 @@ export async function desktopOf(p: Principal): Promise<{
         wallpaper,
       };
     }),
-    // A computer that does not answer never takes the desktop down: the room
-    // opens without its ports, the Computer pane says the door is silent,
-    // and the next ask puts them back.
-    portsOf(p).catch(() => []),
+    // A computer that does not answer never takes Home down: it opens
+    // with what colleagues shared, the Computer pane says the door is
+    // silent, and the next ask puts the person's own back.
+    portsOf(p).catch(async () => (await sharedWithMe(p)).map(sharedApp)),
   ]);
   return { desktops, ports, wallpaper };
 }
@@ -54,7 +54,7 @@ export async function desktopOf(p: Principal): Promise<{
 // published, each as they named it, only while it is listening this
 // moment; and the ports other people opened to them, wearing the name and
 // face their owner published them under, or saying whose they are. A port
-// never published is none of them: it opens in a browser tab, from Applets.
+// never published is none of them: it opens in a browser tab, from Ports.
 export async function portsOf(p: Principal): Promise<Port[]> {
   const [mine, shared, published] = await Promise.all([
     sharingOf(p),
@@ -62,8 +62,9 @@ export async function portsOf(p: Principal): Promise<Port[]> {
     publishedOf(p),
   ]);
   // A computer that does not answer is not one with no ports: the ask
-  // fails, and the room keeps what it knew.
+  // fails, and whoever asked keeps what it knew.
   const stats = mine ? await statsOf(p) : null;
+  if (mine && !stats) throw new Error("the computer did not answer");
   const live = new Map((stats?.ports ?? []).map((x) => [x.port, x]));
   return [
     ...(mine
@@ -76,14 +77,17 @@ export async function portsOf(p: Principal): Promise<Port[]> {
             ...(a.tab || live.get(a.port)?.tab ? { tab: true as const } : {}),
           }))
       : []),
-    ...shared.map((s) => ({
-      title: s.name ?? `Port ${s.port} · ${s.owner}'s`,
-      href: `/port/${s.machineId}/${s.port}`,
-      ...(s.icon ? { face: s.icon } : {}),
-      ...(s.tab ? { tab: true as const } : {}),
-    })),
+    ...shared.map(sharedApp),
   ];
 }
+
+// A port a colleague opened to the person, as something to open.
+const sharedApp = (s: SharedPort): Port => ({
+  title: s.name ?? `Port ${s.port} · ${s.owner}'s`,
+  href: `/port/${s.machineId}/${s.port}`,
+  ...(s.icon ? { face: s.icon } : {}),
+  ...(s.tab ? { tab: true as const } : {}),
+});
 
 // --- Keeping a desktop ----------------------------------------------------
 

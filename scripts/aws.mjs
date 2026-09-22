@@ -25,9 +25,6 @@ import {
 const MINE = "maslow-cloud:";
 const THEIRS = "maslow:";
 
-// Whether this environment names an AWS account to sweep.
-export const on = (env = process.env) => Boolean(env.AWS_COMPUTERS_REGION);
-
 const region = (env) => {
   if (!env.AWS_COMPUTERS_REGION)
     throw new Error("AWS_COMPUTERS_REGION is not set");

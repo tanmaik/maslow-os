@@ -1,19 +1,16 @@
 import SwiftUI
 import UserNotifications
 
-// Home: the agent, the brain, the computer, what waits on you, and you.
+// Home: the brain, the computer, what waits on you, and you.
 struct HomeView: View {
   @Environment(Session.self) private var session
   @Environment(Push.self) private var push
   @Environment(\.scenePhase) private var phase
   @State private var waiting = 0
-  @State private var tab = "agent"
+  @State private var tab = "brain"
 
   var body: some View {
     TabView(selection: $tab) {
-      Tab("Agent", systemImage: "sparkles", value: "agent") {
-        AgentView()
-      }
       Tab("Brain", systemImage: "brain.fill", value: "brain") {
         BrainView()
       }

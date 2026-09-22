@@ -10,23 +10,23 @@ import {
 } from "@remixicon/react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { Fragment, useCallback, useEffect, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type ReactNode,
+} from "react";
 
-import {
-  NotificationCenter,
-  type NotificationCenterItem,
-} from "@/components/application/notification-center/notification-center";
-import { Button } from "@/components/base/buttons/button";
-import { Input } from "@/components/base/input/input";
-import {
-  Notification as NotificationCard,
-  NotificationViewport,
-} from "@/components/base/notification/notification";
+import { Button } from "@/components/ui/button";
+import { CloseButton } from "@/components/ui/close-button";
+import { Input } from "@/components/ui/input";
 import { UpdateDialog } from "@/app/computer/updating";
 import { Markdown } from "@/components/markdown";
 import type { Update } from "@/lib/computer";
 import { BASE, LEAVE } from "@/lib/motion";
-import { cx } from "@/utils/cx";
 
 // What waits on the person, behind the clock: notes their agent left and
 // asks it cannot answer itself. The brain has no live channel of its own,
@@ -151,6 +151,20 @@ function ago(at: string): string {
   return `${Math.round(hours / 24)}d`;
 }
 
+// One row of the panel: what it says, what it is about, and what it is
+// waiting for.
+type Row = {
+  id: string;
+  icon: ComponentType<{ className?: string }>;
+  title: string;
+  when: string;
+  unread: boolean;
+  body?: ReactNode;
+  // What the person may answer, the first in the accent when it is safe
+  // to lead with.
+  actions?: { id: string; label: string; lead: boolean }[];
+};
+
 // The panel itself: every notification newest first, over the desktop, out of the
 // way of the clock that opened it.
 export function NotificationsPanel({
@@ -167,25 +181,27 @@ export function NotificationsPanel({
   const [asking, setAsking] = useState(false);
   // The update as a notification: what it is, what taking it means, and
   // the one button that takes it, which asks first.
-  const updateRow: NotificationCenterItem | null = update
-    ? {
-        id: UPDATE,
-        category: "activity",
-        group: "",
-        title: "An update is ready for your computer",
-        description: (
-          <span className="text-body-regular text-text-secondary">
-            Image {update.image}, ready since {ago(update.readyAt)}. Updating
-            restarts your computer, which takes about a minute.
-          </span>
-        ),
-        timestamp: ago(update.readyAt),
-        unread: true,
-        status: "information",
-        icon: RiRefreshLine,
-        actions: [{ id: "update", label: "Update", variant: "primary" }],
-      }
-    : null;
+  const rows: Row[] = [
+    ...(update
+      ? [
+          {
+            id: UPDATE,
+            icon: RiRefreshLine,
+            title: "An update is ready for your computer",
+            when: ago(update.readyAt),
+            unread: true,
+            body: (
+              <p className="text-sm text-muted-foreground">
+                Image {update.image}, ready since {ago(update.readyAt)}.
+                Updating restarts your computer, which takes about a minute.
+              </p>
+            ),
+            actions: [{ id: "update", label: "Update", lead: true }],
+          },
+        ]
+      : []),
+    ...notifications.notifications.map((n) => row(n, notifications)),
+  ];
   useEffect(() => {
     if (!open) return;
     const key = (e: KeyboardEvent) => e.key === "Escape" && show(false);
@@ -197,6 +213,7 @@ export function NotificationsPanel({
   const clearable = notifications.notifications.some(
     (n) => n.kind === "note" || n.answer !== null,
   );
+  const unread = rows.filter((r) => r.unread).length;
   return (
     <>
       <UpdateDialog
@@ -214,46 +231,81 @@ export function NotificationsPanel({
             />
             <motion.aside
               aria-label="Notifications"
-              initial={{ opacity: 0, x: 24, filter: "blur(4px)" }}
-              animate={{
-                opacity: 1,
-                x: 0,
-                filter: "blur(0px)",
-                transition: BASE,
-              }}
-              exit={{
-                opacity: 0,
-                x: 24,
-                filter: "blur(4px)",
-                transition: LEAVE,
-              }}
-              className="glass-sheet glass-airy fixed top-[calc(27px+env(safe-area-inset-top))] right-2 z-[70] w-[400px] max-w-[calc(100vw-1rem)] overflow-hidden rounded-3xl max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] max-sm:w-auto max-sm:max-w-none"
+              initial={{ opacity: 0, x: 24 }}
+              animate={{ opacity: 1, x: 0, transition: BASE }}
+              exit={{ opacity: 0, x: 24, transition: LEAVE }}
+              className="fixed top-[calc(27px+env(safe-area-inset-top))] right-2 z-[70] flex max-h-[calc(100dvh-4rem)] w-[380px] max-w-[calc(100vw-1rem)] flex-col overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg max-sm:inset-x-2 max-sm:bottom-[calc(env(safe-area-inset-bottom)+0.5rem)] max-sm:w-auto max-sm:max-w-none"
             >
-              <NotificationCenter
-                tabs={false}
-                title="Notifications"
-                emptyMessage="Nothing is waiting on you."
-                className="w-full max-w-none border-none bg-transparent shadow-none"
-                clear={{
-                  label: "Clear",
-                  onClear: notifications.clear,
-                  disabled: !clearable,
-                }}
-                notifications={[
-                  ...(updateRow ? [updateRow] : []),
-                  ...notifications.notifications.map((n) =>
-                    row(n, notifications),
-                  ),
-                ]}
-                // Update asks first, in a dialog over the panel.
-                onAction={(id, answer) =>
-                  id === UPDATE
-                    ? setAsking(true)
-                    : void notifications.answer(id, answer)
-                }
-              />
+              <header className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-border pr-1 pl-3">
+                <h2 className="text-sm font-medium text-foreground">
+                  Notifications
+                  <span className="pl-2 text-xs font-normal text-muted-foreground">
+                    {unread === 0 ? "No unread" : `${unread} unread`}
+                  </span>
+                </h2>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => void notifications.clear()}
+                  disabled={!clearable}
+                >
+                  Clear
+                </Button>
+              </header>
+              {rows.length === 0 ? (
+                <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                  Nothing is waiting on you.
+                </p>
+              ) : (
+                <ul className="flex min-h-0 flex-col overflow-y-auto">
+                  {rows.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex gap-2.5 border-b border-border px-3 py-2.5 last:border-b-0"
+                    >
+                      <r.icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <div className="flex items-baseline justify-between gap-2">
+                          <p className="min-w-0 text-sm font-medium text-foreground">
+                            {r.title}
+                          </p>
+                          <span className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
+                            {r.when}
+                            {r.unread && (
+                              <span
+                                aria-label="Unread"
+                                className="size-1.5 rounded-full bg-primary"
+                              />
+                            )}
+                          </span>
+                        </div>
+                        {r.body}
+                        {r.actions && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {r.actions.map((a) => (
+                              <Button
+                                key={a.id}
+                                size="sm"
+                                variant={a.lead ? "default" : "outline"}
+                                // Update asks first, in a dialog over the panel.
+                                onClick={() =>
+                                  r.id === UPDATE
+                                    ? setAsking(true)
+                                    : void notifications.answer(r.id, a.id)
+                                }
+                              >
+                                {a.label}
+                              </Button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
               {notifications.said && (
-                <p className="text-caption-1-regular text-text-error-primary px-4 pb-3">
+                <p className="border-t border-border px-3 py-2 text-xs text-destructive">
                   {notifications.said}
                 </p>
               )}
@@ -265,28 +317,12 @@ export function NotificationsPanel({
   );
 }
 
-// One notification as a row of the panel: what it says, what it is about, and
-// what it is waiting for.
-function row(
-  n: Notification,
-  notifications: Notifications,
-): NotificationCenterItem {
+// One notification as a row of the panel.
+function row(n: Notification, notifications: Notifications): Row {
   const answered = n.kind === "ask" && n.answer !== null;
   const waiting = n.kind === "ask" && n.answer === null;
   return {
     id: n.id,
-    category: "activity",
-    group: "",
-    title: n.title,
-    description: n.body ? (
-      <Markdown className="text-body-regular text-text-secondary">
-        {n.body}
-      </Markdown>
-    ) : null,
-    timestamp:
-      n.from === "you" ? ago(n.createdAt) : `${n.from} · ${ago(n.createdAt)}`,
-    unread: n.readAt === null,
-    status: answered ? "success" : waiting ? "information" : "neutral",
     icon: answered
       ? RiCheckLine
       : n.request
@@ -294,6 +330,10 @@ function row(
         : waiting
           ? RiQuestionAnswerLine
           : RiNotification3Line,
+    title: n.title,
+    when:
+      n.from === "you" ? ago(n.createdAt) : `${n.from} · ${ago(n.createdAt)}`,
+    unread: n.readAt === null,
     // An ask that hands another person access to a private record is
     // hard to take back, so nothing here is the default: its choices
     // stand level and the person picks one.
@@ -302,23 +342,25 @@ function row(
         ? n.options.map((o, i) => ({
             id: o,
             label: o,
-            variant:
-              n.request || i > 0
-                ? ("secondary" as const)
-                : ("primary" as const),
+            lead: !n.request && i === 0,
           }))
         : undefined,
-    content: (
+    body: (
       <>
+        {n.body && (
+          <Markdown className="text-sm text-muted-foreground">
+            {n.body}
+          </Markdown>
+        )}
         {n.records.length > 0 && (
-          <p className="text-caption-1-regular text-text-tertiary mt-1.5">
+          <p className="text-xs text-muted-foreground">
             About{" "}
             {n.records.map((id, i) => (
               <Fragment key={id}>
                 {i > 0 && ", "}
                 <Link
                   href={`/brain/records/${id}`}
-                  className="text-text-secondary underline-offset-2 hover:underline"
+                  className="underline-offset-2 hover:underline"
                 >
                   {notifications.titles[id] ?? id}
                 </Link>
@@ -327,9 +369,7 @@ function row(
           </p>
         )}
         {answered && (
-          <p className="text-caption-1-regular text-text-tertiary mt-1.5">
-            You said {n.answer}.
-          </p>
+          <p className="text-xs text-muted-foreground">You said {n.answer}.</p>
         )}
         {waiting && n.options.length === 0 && (
           <Typed onSay={(answer) => void notifications.answer(n.id, answer)} />
@@ -340,28 +380,79 @@ function row(
 }
 
 // An ask that offers nothing to pick takes whatever the person types.
-export function Typed({ onSay }: { onSay: (answer: string) => void }) {
+function Typed({ onSay }: { onSay: (answer: string) => void }) {
   const [answer, setAnswer] = useState("");
   return (
     <form
-      className="mt-2 flex items-center gap-2"
+      className="mt-1 flex items-center gap-2"
       onSubmit={(e) => {
         e.preventDefault();
         if (answer.trim()) onSay(answer.trim());
       }}
     >
       <Input
-        size="small"
         aria-label="Your answer"
         placeholder="Your answer"
         value={answer}
-        onChange={setAnswer}
+        onChange={(e) => setAnswer(e.target.value)}
         className="flex-1"
       />
-      <Button type="submit" size="small" disabled={!answer.trim()}>
+      <Button type="submit" disabled={!answer.trim()}>
         Send
       </Button>
     </form>
+  );
+}
+
+// One notification that has just arrived. It goes by itself unless the
+// pointer is on it; an ask is still behind the clock, waiting.
+function Toast({
+  n,
+  onOpen,
+  onDrop,
+}: {
+  n: Notification;
+  onOpen: () => void;
+  onDrop: () => void;
+}) {
+  const [held, setHeld] = useState(false);
+  const drop = useRef(onDrop);
+  drop.current = onDrop;
+  useEffect(() => {
+    if (held) return;
+    const gone = setTimeout(() => drop.current(), TOAST);
+    return () => clearTimeout(gone);
+  }, [held]);
+  const Icon = n.kind === "ask" ? RiQuestionAnswerLine : RiNotification3Line;
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0, transition: BASE }}
+      exit={{ opacity: 0, transition: LEAVE }}
+      onPointerEnter={() => setHeld(true)}
+      onPointerLeave={() => setHeld(false)}
+      onClick={onOpen}
+      className="pointer-events-auto flex w-[360px] max-w-[calc(100vw-1.5rem)] cursor-pointer gap-2.5 rounded-lg border border-border bg-popover py-2.5 pr-1.5 pl-3 text-popover-foreground shadow-lg max-sm:w-full max-sm:max-w-none"
+    >
+      <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <p className="text-sm font-medium text-foreground">{n.title}</p>
+        {n.body && (
+          <p className="truncate text-sm text-muted-foreground">
+            {n.body.split("\n")[0]}
+          </p>
+        )}
+      </div>
+      <CloseButton
+        size="icon-xs"
+        aria-label="Close"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDrop();
+        }}
+      />
+    </motion.div>
   );
 }
 
@@ -373,42 +464,25 @@ export function NotificationToasts({
 }: {
   notifications: Notifications;
 }) {
-  const [held, setHeld] = useState<string | null>(null);
+  const { drop } = notifications;
   if (notifications.open || notifications.fresh.length === 0) return null;
   return (
-    <NotificationViewport
-      position="top-right"
-      // 25 of menu bar and 8 under it, and the clock's own right edge.
-      className={cx(
-        "top-[calc(33px+env(safe-area-inset-top))] right-[calc(0.5rem+env(safe-area-inset-right))] z-[80]",
-        "sm:top-[calc(33px+env(safe-area-inset-top))] sm:right-[calc(0.5rem+env(safe-area-inset-right))]",
-        "max-sm:inset-x-0 max-sm:top-[env(safe-area-inset-top)] max-sm:w-full max-sm:items-stretch max-sm:px-2",
-      )}
+    // 25 of menu bar and 8 under it, and the clock's own right edge.
+    <div
+      role="region"
+      aria-label="New notifications"
+      className="pointer-events-none fixed top-[calc(33px+env(safe-area-inset-top))] right-[calc(0.5rem+env(safe-area-inset-right))] z-[80] flex flex-col items-end gap-2 max-sm:inset-x-0 max-sm:top-[env(safe-area-inset-top)] max-sm:items-stretch max-sm:px-2"
     >
-      {notifications.fresh.map((n) => (
-        <div
-          key={n.id}
-          onPointerEnter={() => setHeld(n.id)}
-          onPointerLeave={() => setHeld((h) => (h === n.id ? null : h))}
-        >
-          <NotificationCard
-            title={n.title}
-            description={n.body ? n.body.split("\n")[0] : undefined}
-            status={n.kind === "ask" ? "information" : "neutral"}
-            icon={n.kind === "ask" ? RiQuestionAnswerLine : RiNotification3Line}
-            introDelay={0}
-            // It goes by itself; an ask is still behind the clock, waiting.
-            autoDismissDuration={held === n.id ? undefined : TOAST}
-            onDismiss={() => notifications.drop(n.id)}
-            closeLabel="Close"
-            onClick={() => notifications.show(true)}
-            className={cx(
-              "w-[360px] max-w-[calc(100vw-1.5rem)] cursor-pointer",
-              "max-sm:w-full max-sm:max-w-none",
-            )}
+      <AnimatePresence>
+        {notifications.fresh.map((n) => (
+          <Toast
+            key={n.id}
+            n={n}
+            onOpen={() => notifications.show(true)}
+            onDrop={() => drop(n.id)}
           />
-        </div>
-      ))}
-    </NotificationViewport>
+        ))}
+      </AnimatePresence>
+    </div>
   );
 }

@@ -4,14 +4,13 @@ import type { Share, Subject, Target } from "@maslow/brain";
 import type { Group } from "@maslow/db/groups";
 import { RiGroupLine } from "@remixicon/react";
 
-import { Chip } from "@/components/base/badges/chip";
-import { Button } from "@/components/base/buttons/button";
-import { Label } from "@/components/base/input/label";
-import { Select, SelectItem } from "@/components/base/select/select";
-import { SettingsCard } from "@/components/application/settings/settings-rows";
 import { FormDialog } from "@/components/form-dialog";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Field, FieldLabel } from "@/components/ui/field";
 
-import { FIELD } from "./format";
+import { Choose } from "./choose";
+import { Required } from "./fields";
 
 // A subject as a form value and back: "everyone", "public", "group:<id>",
 // "member:<id>".
@@ -35,49 +34,44 @@ export function ShareFields({
 }) {
   return (
     <>
-      <div className="flex flex-col gap-1.5">
-        <Label isRequired>Share with</Label>
-        <Select
-          size="sm"
+      <Field>
+        <FieldLabel>
+          Share with
+          <Required />
+        </FieldLabel>
+        <Choose
           name="subject"
           aria-label="Share with"
           placeholder="Choose people"
-          isRequired
-          triggerClassName={`w-full ${FIELD}`}
-          popoverClassName="w-[var(--trigger-width)] max-w-none"
-        >
-          {members.map((m) => (
-            <SelectItem key={m.id} id={`member:${m.id}`}>
-              {m.name}
-            </SelectItem>
-          ))}
-          {groups.map((g) => (
-            <SelectItem key={g.id} id={`group:${g.id}`}>
-              {g.name} (group)
-            </SelectItem>
-          ))}
-          <SelectItem id="everyone">Everyone in the org</SelectItem>
-        </Select>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label>Permission</Label>
-        <Select
-          size="sm"
+          required
+          className="w-full"
+          options={[
+            ...members.map((m) => [`member:${m.id}`, m.name] as const),
+            ...groups.map(
+              (g) => [`group:${g.id}`, `${g.name} (group)`] as const,
+            ),
+            ["everyone", "Everyone in the org"] as const,
+          ]}
+        />
+      </Field>
+      <Field>
+        <FieldLabel>Permission</FieldLabel>
+        <Choose
           name="level"
           aria-label="Permission"
-          defaultSelectedKey="view"
-          triggerClassName={`w-full ${FIELD}`}
-          popoverClassName="w-[var(--trigger-width)] max-w-none"
-        >
-          <SelectItem id="view">{MAY.view}</SelectItem>
-          <SelectItem id="edit">{MAY.edit}</SelectItem>
-          <SelectItem id="owner">{MAY.owner}</SelectItem>
-        </Select>
-        <p className="text-caption-1-regular text-text-secondary">
+          defaultValue="view"
+          className="w-full"
+          options={[
+            ["view", MAY.view],
+            ["edit", MAY.edit],
+            ["owner", MAY.owner],
+          ]}
+        />
+        <p className="text-xs text-muted-foreground">
           Everyone can only be given view. Editors can change; owners can also
           share, delete and merge.
         </p>
-      </div>
+      </Field>
     </>
   );
 }
@@ -127,7 +121,7 @@ export function Sharing({
           groups={groups.filter((g) => !g.everyone)}
         />
         <div>
-          <Button size="small" type="submit">
+          <Button size="sm" type="submit">
             {what === "type"
               ? "Share this type, and every record of it"
               : "Share this record"}
@@ -135,31 +129,29 @@ export function Sharing({
         </div>
       </form>
       {shares.length > 0 && (
-        <SettingsCard>
+        <div className="flex flex-col border-t border-border">
           {shares.map((g) => (
             <div
               key={g.id}
-              className="flex min-h-[52px] w-full items-center justify-between gap-3 border-b border-separator-border py-2.5 pr-2.5 last:border-b-0"
+              className="flex min-h-10 w-full items-center justify-between gap-3 border-b border-border py-1.5 last:border-b-0"
             >
               <span className="flex min-w-0 items-center gap-2">
-                <span className="truncate text-body-regular text-text-primary">
+                <span className="truncate text-sm text-foreground">
                   {name(g.subject)}
                 </span>
-                <Chip variant="caption" color="soft">
-                  {MAY[g.level]}
-                </Chip>
+                <Badge variant="secondary">{MAY[g.level]}</Badge>
               </span>
               <form action="/brain/share" method="post">
                 <input type="hidden" name="intent" value="unshare" />
                 <input type="hidden" name={target.name} value={target.value} />
                 <input type="hidden" name="subject" value={value(g.subject)} />
-                <Button variant="secondary" size="small" type="submit">
+                <Button variant="outline" size="sm" type="submit">
                   Stop sharing
                 </Button>
               </form>
             </div>
           ))}
-        </SettingsCard>
+        </div>
       )}
     </div>
   );
@@ -185,10 +177,13 @@ export function Sharing({
     if (owner) {
       return (
         <FormDialog
-          trigger={said}
-          leadingIcon={RiGroupLine}
-          variant="secondary"
-          className="shrink-0 gap-1 rounded-full px-2.5 text-text-secondary"
+          trigger={
+            <>
+              <RiGroupLine data-icon="inline-start" />
+              {said}
+            </>
+          }
+          className="shrink-0 text-muted-foreground"
           title={title}
           description={description}
         >
@@ -200,15 +195,15 @@ export function Sharing({
     // that does not: that someone else can see it too.
     if (shares.length === 0) return null;
     return (
-      <span className="flex shrink-0 items-center gap-1 px-1 text-caption-1-medium text-text-secondary">
+      <span className="flex shrink-0 items-center gap-1 px-1 text-xs font-medium text-muted-foreground">
         <RiGroupLine className="size-3.5" aria-hidden />
         {said}
       </span>
     );
   }
   return (
-    <div className="flex flex-col gap-2 text-body-regular">
-      <p className="text-text-secondary">
+    <div className="flex flex-col gap-2 text-sm">
+      <p className="text-muted-foreground">
         {shares.length === 0 ? (
           ownerName === "you" ? (
             "Only you can see this."
@@ -223,21 +218,14 @@ export function Sharing({
               <span key={g.id}>
                 {i > 0 && ", "}
                 {name(g.subject)}{" "}
-                <Chip variant="caption" color="soft">
-                  {MAY[g.level]}
-                </Chip>
+                <Badge variant="secondary">{MAY[g.level]}</Badge>
               </span>
             ))}
           </>
         )}
       </p>
       {owner && (
-        <FormDialog
-          trigger="Share"
-          variant="secondary"
-          title={title}
-          description={description}
-        >
+        <FormDialog trigger="Share" title={title} description={description}>
           {inside}
         </FormDialog>
       )}

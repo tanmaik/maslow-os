@@ -14,9 +14,16 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { turnOff } from "@/app/desktop/off";
-import { Button } from "@/components/base/buttons/button";
-import { Notification } from "@/components/base/notification/notification";
-import { Select, SelectItem } from "@/components/base/select/select";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Row, Rows } from "@/app/settings/row";
 // Where the person is, as their request said: the address it came from,
 // the city that address is in when known, and the region nearest it; and
@@ -76,14 +83,14 @@ async function timed(url: string, init?: RequestInit): Promise<number> {
 // minute where it differs.
 function Ms({ trip }: { trip: Trip }) {
   return (
-    <span className="text-body-regular text-text-primary tabular-nums">
+    <span className="text-sm text-foreground tabular-nums">
       {trip.now === null
         ? trip.failed
           ? "Could not be measured"
           : "Measuring…"
         : `${trip.now} ms`}
       {trip.best !== null && trip.best !== trip.now && (
-        <span className="text-caption-1-regular text-text-secondary">
+        <span className="text-xs text-muted-foreground">
           , best {trip.best}
         </span>
       )}
@@ -106,7 +113,7 @@ export function Where({
   from: From;
 }) {
   // Straight from this browser to the computer: what a keystroke in the
-  // terminal, a word to the Agent and the machine's browser ride on.
+  // terminal and the machine's browser ride on.
   const toComputer = useTrip(
     useCallback(
       () => timed(`${door}/maslow/health?${Date.now()}`, { mode: "no-cors" }),
@@ -139,61 +146,57 @@ export function Where({
   const nearer = from.region !== current;
   return (
     <div className="flex flex-col gap-2">
-      <p className="px-3 text-caption-1-medium text-text-secondary">
+      <p className="text-xs font-medium text-muted-foreground">
         How fast it feels
       </p>
       {wire !== null && !far && (
-        <p className="px-3 text-body-regular text-text-primary">
+        <p className="text-sm text-foreground">
           Like a terminal: {wire} ms to your computer at best, under the{" "}
           {BUDGET_MS} a keystroke needs.
         </p>
       )}
       {far && (
-        <Notification
-          status="information"
-          dismissible={false}
-          title="Your computer is far from you"
-          description={`${wire} ms to your computer at best; under ${BUDGET_MS} feels like a terminal.${
-            nearer
-              ? ` ${regionName(from.region)} is nearest to you: move it there below.`
-              : " Nothing nearer to you is on the list; pick a region below if you know better."
-          }`}
-        />
+        <Alert>
+          <AlertTitle>Your computer is far from you</AlertTitle>
+          <AlertDescription>
+            {`${wire} ms to your computer at best; under ${BUDGET_MS} feels like a terminal.${
+              nearer
+                ? ` ${regionName(from.region)} is nearest to you: move it there below.`
+                : " Nothing nearer to you is on the list; pick a region below if you know better."
+            }`}
+          </AlertDescription>
+        </Alert>
       )}
       <Rows>
         <Row
           label="You to your computer"
-          description="Every keystroke in the terminal, every word to the Agent and every frame of its browser go straight there from this browser and back."
+          description="Every keystroke in the terminal and every frame of its browser go straight there from this browser and back."
         >
           <Ms trip={toComputer} />
         </Row>
         <Row
           label="You to Maslow"
-          description="Every click on a page and every read of the brain goes to our server in Ohio and back, once."
+          description="Every click on a page and every read of your database goes to our server in Ohio and back, once."
         >
           <Ms trip={toMaslow} />
         </Row>
         <Row
           label="Maslow to your computer"
-          description="Files, the ports on the desktop and the numbers on this pane are asked of your computer by our server, on top of the trip to it."
+          description="Files, your ports and the numbers on this pane are asked of your computer by our server, on top of the trip to it."
         >
           <Ms trip={viaMaslow} />
         </Row>
       </Rows>
-      <p className="px-3 pt-3 text-caption-1-medium text-text-secondary">
-        Where
-      </p>
+      <p className="pt-3 text-xs font-medium text-muted-foreground">Where</p>
       <Rows>
         <Row label="Your computer">
-          <span className="text-body-regular text-text-primary">
-            {regionName(current)}
-          </span>
+          <span className="text-sm text-foreground">{regionName(current)}</span>
         </Row>
         <Row
           label="Where you are"
           description={from.city ? `Near ${from.city}` : undefined}
         >
-          <span className="text-body-regular text-text-primary">
+          <span className="text-sm text-foreground">
             {regionName(from.region)}
           </span>
         </Row>
@@ -202,25 +205,37 @@ export function Where({
           description="Nothing moves your computer but this button."
         >
           <Select
-            aria-label="Region to move to"
-            size="sm"
-            selectedKey={picked}
-            onSelectionChange={(k) => k !== null && setPicked(String(k))}
-            triggerClassName="h-8"
+            items={Object.entries(from.regions).map(([code, name]) => ({
+              value: code,
+              label: name,
+            }))}
+            value={picked}
+            onValueChange={(v) => v !== null && setPicked(v)}
           >
-            {Object.entries(from.regions).map(([code, name]) => (
-              <SelectItem key={code} id={code} isDisabled={code === current}>
-                {name}
-                {code === current ? ", now" : ""}
-              </SelectItem>
-            ))}
+            <SelectTrigger size="sm" aria-label="Region to move to">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {Object.entries(from.regions).map(([code, name]) => (
+                  <SelectItem
+                    key={code}
+                    value={code}
+                    disabled={code === current}
+                  >
+                    {name}
+                    {code === current ? ", now" : ""}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
           </Select>
           <AlertDialog>
             <AlertDialogTrigger
               render={
                 <Button
-                  variant="secondary"
-                  size="small"
+                  variant="outline"
+                  size="sm"
                   disabled={picked === current}
                 />
               }

@@ -1,7 +1,11 @@
 "use client";
 
 import type { Property } from "@maslow/brain";
-import { RiCheckLine } from "@remixicon/react";
+import {
+  RiArrowDownSLine,
+  RiArrowRightSLine,
+  RiCheckLine,
+} from "@remixicon/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, type ReactNode } from "react";
 import {
@@ -11,33 +15,31 @@ import {
 } from "@tanstack/react-table";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Chip } from "@/components/base/badges/chip";
-import { Checkbox } from "@/components/base/checkbox/checkbox";
-import { Pagination } from "@/components/base/pagination/pagination";
+import { LocalTime } from "@/components/local-time";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
   TableCell,
-  TableColumn,
+  TableHead,
   TableHeader,
   TableRow,
-} from "@/components/base/table/table";
-import { ChevronSortDown } from "@/components/foundations/icons/chevrons";
-import { LocalTime } from "@/components/local-time";
-import { cx } from "@/utils/cx";
+} from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 
+import { Face } from "../face";
 import { cell, recordPageHref, typeText } from "../format";
 import { useHere } from "../here";
-
-// A column that holds its place while the table is dragged sideways.
-const STUCK = "max-sm:sticky max-sm:z-10 max-sm:bg-background-primary-default";
-
 import { TypeIcon } from "../type-icon";
 import { Chosen } from "./chosen";
 import type { Column } from "./columns";
 import { saidOutright } from "./kept";
 import { WHEN, type Row } from "./query";
+
+// A column that holds its place while the table is dragged sideways.
+const STUCK = "max-sm:sticky max-sm:z-10 max-sm:bg-background";
 
 const SELECT = "__select__";
 const REST = "__rest__";
@@ -53,20 +55,13 @@ function value(kind: Column["kind"], v: unknown, p?: Property): ReactNode {
   if (v === undefined || v === null || v === "") return null;
   if (kind === "boolean") {
     return v ? (
-      <RiCheckLine
-        className="size-4 text-foreground-icon-secondary"
-        aria-label="yes"
-      />
+      <RiCheckLine className="size-4 text-muted-foreground" aria-label="yes" />
     ) : (
-      <span className="text-text-placeholder">no</span>
+      <span className="text-muted-foreground">no</span>
     );
   }
   if (kind === "enum") {
-    return (
-      <Chip variant="caption" color="soft">
-        {String(v)}
-      </Chip>
-    );
+    return <Badge variant="outline">{String(v)}</Badge>;
   }
   // A list keeps to one line like every other value: its first two items
   // and how many more, the whole of it under the pointer.
@@ -77,7 +72,7 @@ function value(kind: Column["kind"], v: unknown, p?: Property): ReactNode {
       <span className="flex items-baseline gap-1" title={items.join(", ")}>
         <span className="truncate">{first.join(", ")}</span>
         {items.length > first.length && (
-          <span className="shrink-0 text-text-tertiary">
+          <span className="shrink-0 text-muted-foreground">
             +{items.length - first.length}
           </span>
         )}
@@ -94,7 +89,7 @@ function value(kind: Column["kind"], v: unknown, p?: Property): ReactNode {
     );
   }
   return (
-    <span className={cx("truncate", kind === "number" && "tabular-nums")}>
+    <span className={cn("truncate", kind === "number" && "tabular-nums")}>
       {cell(v, p)}
     </span>
   );
@@ -106,26 +101,16 @@ function cellFor(c: Column, r: Row, properties: Property[]): ReactNode {
   if (c.kind === "title") {
     return (
       <span className="flex items-center gap-2">
-        <span className="truncate text-body-medium text-text-primary">
+        <span className="truncate text-sm font-medium text-foreground">
           {r.title || "(untitled)"}
         </span>
-        {r.owner && (
-          <Avatar
-            size="xs"
-            initials={r.owner
-              .split(" ")
-              .slice(0, 2)
-              .map((w) => w[0]?.toUpperCase() ?? "")
-              .join("")}
-            title={r.owner}
-          />
-        )}
+        {r.owner && <Face name={r.owner} className="size-5" />}
       </span>
     );
   }
   if (c.kind === "type") {
     return (
-      <span className="flex items-center gap-2 truncate text-text-secondary">
+      <span className="flex items-center gap-2 truncate text-muted-foreground">
         <TypeIcon type={r.type} />
         {typeText(r.type)}
       </span>
@@ -133,7 +118,7 @@ function cellFor(c: Column, r: Row, properties: Property[]): ReactNode {
   }
   if (c.kind === "when") {
     return (
-      <span className="text-text-secondary tabular-nums">
+      <span className="text-muted-foreground tabular-nums">
         {r.at && <LocalTime at={r.at} fallback="" />}
       </span>
     );
@@ -153,11 +138,12 @@ function cellFor(c: Column, r: Row, properties: Property[]): ReactNode {
 
 function SortChevron({ dir }: { dir: false | "asc" | "desc" }) {
   return (
-    <ChevronSortDown
-      className={cx(
-        "size-4 shrink-0 transition-[transform,color] duration-fast ease-plain",
+    <RiArrowDownSLine
+      aria-hidden
+      className={cn(
+        "size-4 shrink-0 transition-[transform,opacity] duration-fast ease-plain",
         dir === "asc" && "rotate-180",
-        dir ? "text-text-secondary" : "text-text-tertiary",
+        dir ? "text-foreground" : "opacity-40",
       )}
     />
   );
@@ -250,21 +236,17 @@ export function TableView({
         enableSorting: false,
         header: ({ table }) => (
           <Checkbox
-            size="sm"
-            slot={null}
             aria-label="Select all"
-            isSelected={table.getIsAllRowsSelected()}
-            isIndeterminate={table.getIsSomeRowsSelected()}
-            onChange={(on) => table.toggleAllRowsSelected(!!on)}
+            checked={table.getIsAllRowsSelected()}
+            indeterminate={table.getIsSomeRowsSelected()}
+            onCheckedChange={(on) => table.toggleAllRowsSelected(!!on)}
           />
         ),
         cell: ({ row }) => (
           <Checkbox
-            size="sm"
-            slot={null}
             aria-label={`Choose ${row.original.title || "this record"}`}
-            isSelected={row.getIsSelected()}
-            onChange={(on) => row.toggleSelected(!!on)}
+            checked={row.getIsSelected()}
+            onCheckedChange={(on) => row.toggleSelected(!!on)}
           />
         ),
       });
@@ -320,104 +302,98 @@ export function TableView({
           onDone={() => setRowSelection({})}
         />
       )}
-      <Table
-        aria-label="Records"
-        size="sm"
-        className="table-fixed"
-        containerClassName="overflow-x-auto"
-      >
+      <Table aria-label="Records" className="table-fixed">
         <TableHeader>
-          {headers.map((header) => {
-            const id = header.column.id;
-            const label = flexRender(
-              header.column.columnDef.header,
-              header.getContext(),
-            );
-            if (id === SELECT) {
+          <TableRow className="hover:bg-transparent">
+            {headers.map((header) => {
+              const id = header.column.id;
+              const label = flexRender(
+                header.column.columnDef.header,
+                header.getContext(),
+              );
+              if (id === SELECT) {
+                return (
+                  <TableHead key={header.id} className="h-8 w-11 pl-3">
+                    {label}
+                  </TableHead>
+                );
+              }
+              if (id === REST) {
+                // Every column is as wide as it was left; this one takes what
+                // is over, so a wide window is filled and a narrow one
+                // scrolls.
+                return (
+                  <TableHead key={header.id} className="h-8">
+                    <span className="sr-only">the rest of the row</span>
+                  </TableHead>
+                );
+              }
+              const c = columns.find((col) => col.key === id)!;
+              const canSort = header.column.getCanSort();
               return (
-                <TableColumn
+                <TableHead
                   key={header.id}
-                  id={id}
-                  isRowHeader={false}
-                  className="w-11"
-                >
-                  {label}
-                </TableColumn>
-              );
-            }
-            if (id === REST) {
-              // Every column is as wide as it was left; this one takes what
-              // is over, so a wide window is filled and a narrow one
-              // scrolls.
-              return (
-                <TableColumn key={header.id} id={id}>
-                  <span className="sr-only">the rest of the row</span>
-                </TableColumn>
-              );
-            }
-            const c = columns.find((col) => col.key === id)!;
-            const canSort = header.column.getCanSort();
-            return (
-              <TableColumn
-                key={header.id}
-                id={id}
-                isRowHeader={c.kind === "title"}
-                style={{ width: c.width }}
-                className={cx(
-                  "relative text-text-secondary",
-                  // On a phone the table is read by dragging it sideways,
-                  // and the title stays put so every row keeps its name.
-                  c.kind === "title" && STUCK,
-                  c.kind === "title" &&
-                    (canChoose ? "max-sm:left-11" : "max-sm:left-0"),
-                )}
-              >
-                {canSort ? (
-                  <button
-                    type="button"
-                    onClick={() => sortBy(c)}
-                    className="flex cursor-pointer items-center gap-1 truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
-                  >
-                    <span className="truncate">{label}</span>
-                    <SortChevron dir={header.column.getIsSorted()} />
-                  </button>
-                ) : (
-                  <span className="truncate">{label}</span>
-                )}
-                <span
-                  aria-hidden
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    setDragging(c.key);
-                    const move = resize(c.key, c.width, e.clientX);
-                    const up = () => {
-                      setDragging(null);
-                      globalThis.removeEventListener("pointermove", move);
-                      globalThis.removeEventListener("pointerup", up);
-                    };
-                    globalThis.addEventListener("pointermove", move);
-                    globalThis.addEventListener("pointerup", up);
-                  }}
-                  className={cx(
-                    "absolute top-0 right-0 h-full w-2 cursor-col-resize border-r-2 transition-colors duration-fast ease-plain",
-                    dragging === c.key
-                      ? "border-accent-500"
-                      : "border-transparent hover:border-border-button-hover",
+                  scope="col"
+                  style={{ width: c.width }}
+                  className={cn(
+                    "relative h-8 px-3 text-xs text-muted-foreground",
+                    // On a phone the table is read by dragging it sideways,
+                    // and the title stays put so every row keeps its name.
+                    c.kind === "title" && STUCK,
+                    c.kind === "title" &&
+                      (canChoose ? "max-sm:left-11" : "max-sm:left-0"),
                   )}
-                />
-              </TableColumn>
-            );
-          })}
+                >
+                  {canSort ? (
+                    <button
+                      type="button"
+                      onClick={() => sortBy(c)}
+                      className="flex cursor-pointer items-center gap-1 truncate rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className="truncate">{label}</span>
+                      <SortChevron dir={header.column.getIsSorted()} />
+                    </button>
+                  ) : (
+                    <span className="truncate">{label}</span>
+                  )}
+                  <span
+                    aria-hidden
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      setDragging(c.key);
+                      const move = resize(c.key, c.width, e.clientX);
+                      const up = () => {
+                        setDragging(null);
+                        globalThis.removeEventListener("pointermove", move);
+                        globalThis.removeEventListener("pointerup", up);
+                      };
+                      globalThis.addEventListener("pointermove", move);
+                      globalThis.addEventListener("pointerup", up);
+                    }}
+                    className={cn(
+                      "absolute top-0 right-0 h-full w-2 cursor-col-resize border-r-2 transition-colors duration-fast ease-plain",
+                      dragging === c.key
+                        ? "border-primary"
+                        : "border-transparent hover:border-ring",
+                    )}
+                  />
+                </TableHead>
+              );
+            })}
+          </TableRow>
         </TableHeader>
         <TableBody>
           {table.getRowModel().rows.map((row) => (
             <TableRow
               key={row.id}
-              id={row.id}
-              onAction={() =>
-                router.push(recordPageHref(row.original.id, here))
-              }
-              className="cursor-pointer outline-none transition-colors duration-fast ease-plain hover:bg-background-primary-hover active:bg-background-primary-active focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-focus-ring"
+              tabIndex={0}
+              data-state={row.getIsSelected() ? "selected" : undefined}
+              onClick={() => router.push(recordPageHref(row.original.id, here))}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && e.target === e.currentTarget)
+                  router.push(recordPageHref(row.original.id, here));
+              }}
+              className="h-9 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset"
             >
               {row.getVisibleCells().map((c) => {
                 const title =
@@ -426,7 +402,13 @@ export function TableView({
                 return (
                   <TableCell
                     key={c.id}
-                    className={cx(
+                    onClick={
+                      c.column.id === SELECT
+                        ? (e) => e.stopPropagation()
+                        : undefined
+                    }
+                    className={cn(
+                      "px-3 py-1.5",
                       title && STUCK,
                       title && (canChoose ? "max-sm:left-11" : "max-sm:left-0"),
                     )}
@@ -440,8 +422,11 @@ export function TableView({
         </TableBody>
       </Table>
       {cursor && (
-        <div className="border-t border-separator-border p-3">
-          <Pagination mode="cursor" hasNext onNext={more} />
+        <div className="flex justify-end border-t border-border px-3 py-2">
+          <Button variant="outline" size="sm" onClick={more}>
+            Next
+            <RiArrowRightSLine data-icon="inline-end" />
+          </Button>
         </div>
       )}
     </div>

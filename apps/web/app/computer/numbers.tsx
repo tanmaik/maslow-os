@@ -1,10 +1,9 @@
 "use client";
 
-import { RiCpuLine, RiHardDrive3Line, RiRamLine } from "@remixicon/react";
-import { useEffect, useState, type ComponentType } from "react";
+import { useEffect, useState } from "react";
 import { Area, AreaChart, ReferenceLine, XAxis, YAxis } from "recharts";
 
-import { Notification } from "@/components/base/notification/notification";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
   ChartContainer,
   ChartTooltip,
@@ -14,7 +13,7 @@ import {
 import { useCountUp } from "@/hooks/use-count-up";
 import type { Stats } from "@/lib/door";
 import { SIZES, specs, type SizeKey } from "@/lib/sizes";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 export type { Stats };
 
@@ -30,14 +29,9 @@ const cpusOf = (s: (typeof SIZES)[SizeKey]) => specs(s).split(",")[0];
 // Both lines are the same ink: each sits alone on its own card, named by
 // its title, so colour has nothing to tell apart.
 const chart = {
-  cpu: { label: "CPU", color: "var(--color-accent-500)" },
-  memory: { label: "Memory", color: "var(--color-accent-500)" },
+  cpu: { label: "CPU", color: "var(--primary)" },
+  memory: { label: "Memory", color: "var(--primary)" },
 } satisfies ChartConfig;
-
-type IconComponent = ComponentType<{
-  className?: string;
-  "aria-hidden"?: boolean | "true" | "false";
-}>;
 
 // The computer's live numbers, asked for every few seconds: the last
 // minute of them on screen, and what the last ask said when it failed.
@@ -103,7 +97,7 @@ export function Numbers({
 }) {
   if (!now)
     return (
-      <p className="px-3 text-body-regular text-text-secondary">
+      <p className="text-sm text-muted-foreground">
         {failed
           ? `Could not read the numbers: ${failed}. Trying again.`
           : "Reading the numbers…"}
@@ -118,16 +112,15 @@ export function Numbers({
   return (
     <div className="flex flex-col gap-4">
       {hot && (
-        <Notification
-          status="error"
-          dismissible={false}
-          title="Your computer is near its limit"
-          description="It has been running near the top of its size for the last minute."
-        />
+        <Alert variant="destructive">
+          <AlertTitle>Your computer is near its limit</AlertTitle>
+          <AlertDescription>
+            It has been running near the top of its size for the last minute.
+          </AlertDescription>
+        </Alert>
       )}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid divide-y divide-border rounded-lg border border-border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         <Live
-          icon={RiCpuLine}
           title="CPU"
           value={now.cpu}
           unit="%"
@@ -136,7 +129,6 @@ export function Numbers({
           samples={samples}
         />
         <Live
-          icon={RiRamLine}
           title="Memory"
           value={now.memory.used / 1e8}
           scale={0.1}
@@ -146,7 +138,6 @@ export function Numbers({
           samples={samples}
         />
         <Stat
-          icon={RiHardDrive3Line}
           title="Disk"
           value={now.used === null ? null : now.used / 1e8}
           scale={0.1}
@@ -158,8 +149,8 @@ export function Numbers({
   );
 }
 
-// A number that rolls to where it is going, as BoardUI's headline figures
-// do, drawn at the scale it is kept in.
+// A number that rolls to where it is going, drawn at the scale it is kept
+// in.
 function Rolling({
   value,
   scale = 1,
@@ -174,15 +165,13 @@ function Rolling({
   return (
     <>
       {(shown * scale).toFixed(digits)}
-      <span className="text-headline-medium text-text-secondary">{unit}</span>
+      <span className="text-sm font-normal text-muted-foreground">{unit}</span>
     </>
   );
 }
 
-// One measure on BoardUI's stat card: its mark on a tile, its name, the
-// number now, and what it is of.
+// One measure: its name, the number now, and what it is of.
 function Stat({
-  icon: Icon,
   title,
   value,
   scale,
@@ -190,7 +179,6 @@ function Stat({
   of,
   children,
 }: {
-  icon: IconComponent;
   title: string;
   value: number | null;
   scale?: number;
@@ -199,25 +187,19 @@ function Stat({
   children?: React.ReactNode;
 }) {
   return (
-    <section className="flex min-w-0 flex-col items-start justify-between gap-3 rounded-2xl bg-background-secondary-default p-4">
-      <span className="flex items-center rounded-md bg-stat-card-icon-background p-1.5 shadow-card">
-        <Icon
-          className="size-5 shrink-0 text-foreground-icon-primary"
-          aria-hidden
-        />
-      </span>
+    <section className="flex min-w-0 flex-col items-start justify-between gap-3 p-3">
       <div className="flex w-full flex-col gap-0.5">
-        <p className="w-full text-body-medium text-text-secondary">{title}</p>
-        <p className="text-title-1-medium whitespace-nowrap text-text-primary tabular-nums">
+        <p className="w-full text-xs font-medium text-muted-foreground">
+          {title}
+        </p>
+        <p className="text-lg font-medium whitespace-nowrap text-foreground tabular-nums">
           {value === null ? (
             "—"
           ) : (
             <Rolling value={value} scale={scale} unit={unit} />
           )}
         </p>
-        <p className="truncate text-caption-1-regular text-text-secondary">
-          {of}
-        </p>
+        <p className="truncate text-xs text-muted-foreground">{of}</p>
       </div>
       {/* The chart's place is kept whether or not there is one, so the
           three cards' titles and numbers sit on the same lines. */}
@@ -234,7 +216,6 @@ function Live({
   samples,
   ...stat
 }: {
-  icon: IconComponent;
   title: string;
   value: number;
   scale?: number;
@@ -249,7 +230,7 @@ function Live({
     <Stat {...stat}>
       <ChartContainer
         config={chart}
-        className={cx("h-10 w-full", samples.length < 2 && "opacity-0")}
+        className={cn("h-10 w-full", samples.length < 2 && "opacity-0")}
       >
         <AreaChart
           data={samples}
@@ -262,13 +243,9 @@ function Live({
             hide
           />
           <YAxis domain={[0, 100]} hide />
-          <ReferenceLine
-            y={50}
-            stroke="var(--color-chart-cursor)"
-            strokeDasharray="2 3"
-          />
+          <ReferenceLine y={50} stroke="var(--border)" strokeDasharray="2 3" />
           <ChartTooltip
-            cursor={{ stroke: "var(--color-chart-cursor)" }}
+            cursor={{ stroke: "var(--border)" }}
             content={
               <ChartTooltipContent
                 hideIndicator
@@ -283,7 +260,7 @@ function Live({
             dataKey={field}
             type="monotone"
             stroke={`var(--color-${field})`}
-            strokeWidth={2}
+            strokeWidth={1.5}
             fill={`var(--color-${field})`}
             fillOpacity={0.14}
             baseValue={0}

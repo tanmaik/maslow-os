@@ -5,9 +5,8 @@ import { principal } from "@/lib/session";
 // which takes longer than a function's default.
 export const maxDuration = 60;
 
-// The update waiting on this person's computer, if one is: the menu bar
-// asks every few minutes for its dot, and About and the Computer pane for
-// the line they say.
+// The update waiting on this person's computer, if one is: the shell
+// asks every few minutes, for the notification that offers it.
 export async function GET() {
   const p = await principal();
   if (!p) return new Response(null, { status: 401 });

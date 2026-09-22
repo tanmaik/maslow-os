@@ -1,7 +1,6 @@
 import * as React from "react";
-
 import { cn } from "@/lib/utils";
-import { ChevronDownIcon } from "lucide-react";
+import { RiArrowDownSLine } from "@remixicon/react";
 
 type NativeSelectProps = Omit<React.ComponentProps<"select">, "size"> & {
   size?: "sm" | "default";
@@ -24,11 +23,11 @@ function NativeSelect({
       <select
         data-slot="native-select"
         data-size={size}
-        className="h-9 w-full min-w-0 cursor-pointer appearance-none rounded-2lg border border-border-button-default bg-background-primary-default py-1 pr-8 pl-2.5 text-body-medium text-text-primary shadow-xs transition-[background-color,border-color,box-shadow] duration-150 outline-none select-none hover:border-border-button-hover hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:cursor-not-allowed disabled:bg-background-primary-disabled disabled:text-text-tertiary disabled:shadow-none aria-invalid:border-border-error-default data-[size=sm]:h-8 data-[size=sm]:rounded-lg data-[size=sm]:py-0.5 data-[size=sm]:text-body-2-medium"
+        className="h-8 w-full min-w-0 appearance-none rounded-lg border border-input bg-transparent py-1 pr-8 pl-2.5 text-sm transition-colors outline-none select-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30 disabled:pointer-events-none disabled:cursor-not-allowed aria-invalid:border-destructive aria-invalid:ring-2 aria-invalid:ring-destructive/20 data-[size=sm]:h-7 data-[size=sm]:rounded-[min(var(--radius-md),10px)] data-[size=sm]:py-0.5 dark:bg-input/30 dark:hover:bg-input/50 dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40"
         {...props}
       />
-      <ChevronDownIcon
-        className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-text-secondary select-none"
+      <RiArrowDownSLine
+        className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted-foreground select-none"
         aria-hidden="true"
         data-slot="native-select-icon"
       />

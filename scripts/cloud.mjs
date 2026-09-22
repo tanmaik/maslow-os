@@ -3,7 +3,6 @@
 // Fly otherwise. A machine is its id, its name, whether it runs, the tags
 // the app gave it, the disks it holds and when it was made; a disk is its
 // id, its name, when it was made and whether a machine holds it.
-import * as aws from "./aws.mjs";
 import * as fly from "./fly.mjs";
 
 // Fly's own answers, in those words.
@@ -34,20 +33,28 @@ const overFly = {
   leftovers: async () => [],
 };
 
-const overAws = {
-  name: "AWS",
-  machines: aws.machines,
-  volumes: aws.volumes,
-  renewLeases: aws.renewLeases,
-  stop: aws.stop,
-  destroy: aws.destroy,
-  destroyVolume: aws.destroyVolume,
-  untouchable: aws.untouchable,
-  leftovers: aws.leftovers,
-};
+// AWS's half is fetched only where the environment names an AWS account.
+// The hourly reap on GitHub runs with nothing installed, as Fly's half
+// needs nothing; AWS's needs Amazon's packages, and asking for them where
+// no AWS account is named would stop the reap before it began.
+async function overAws() {
+  const aws = await import("./aws.mjs");
+  return {
+    name: "AWS",
+    machines: aws.machines,
+    volumes: aws.volumes,
+    renewLeases: aws.renewLeases,
+    stop: aws.stop,
+    destroy: aws.destroy,
+    destroyVolume: aws.destroyVolume,
+    untouchable: aws.untouchable,
+    leftovers: aws.leftovers,
+  };
+}
 
 // When a machine was last wanted: its lease, or, for one made by hand
 // with none, its birth.
 export const wantedAt = (m) => new Date(m.tags.lease ?? m.madeAt);
 
-export const cloudOf = (env = process.env) => (aws.on(env) ? overAws : overFly);
+export const cloudOf = async (env = process.env) =>
+  env.AWS_COMPUTERS_REGION ? overAws() : overFly;

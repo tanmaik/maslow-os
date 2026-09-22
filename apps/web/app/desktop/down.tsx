@@ -53,18 +53,16 @@ export function Down({ back }: { back: boolean }) {
       aria-live="polite"
       className="fixed bg-black inset-0 z-[70] flex items-center justify-center select-none"
     >
-      <div className="glass-solid border-separator-border flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[12px] border p-5">
-        <p className="text-headline-medium text-text-primary">{title}</p>
+      <div className="glass-solid border-border flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[12px] border p-5">
+        <p className="text-base font-medium text-foreground">{title}</p>
         <Progress aria-label={step} value={value} />
-        <p className="text-body-regular text-text-secondary">
+        <p className="text-sm text-muted-foreground">
           {back
             ? `${step}.`
             : `${step}. Your windows come back as they were once it answers.`}
         </p>
         {state?.failed && (
-          <p className="text-body-regular text-text-error-primary">
-            {state.failed}
-          </p>
+          <p className="text-sm text-destructive">{state.failed}</p>
         )}
       </div>
     </div>

@@ -11,7 +11,7 @@ import {
 import { createPortal } from "react-dom";
 
 import type { Mark } from "@/app/desktop/apps";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 // A window's bar has room for the panel's own controls: after the name,
 // or, for one that stands for the panel as a whole, before it, right
@@ -31,8 +31,6 @@ const Bar = createContext<{
   // question here; the desktop asks it and stops when the answer is no.
   beforeClose?: (ask: (() => Promise<boolean>) | null) => void;
 } | null>(null);
-
-export const BarSlot = Bar.Provider;
 
 // Whether this panel is in a window on a phone, where its controls fold
 // into a strip and a sheet rather than lying along the bar.
@@ -111,8 +109,8 @@ export function BarButton({
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className={cx(
-        "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-lg text-foreground-icon-secondary transition-colors duration-fast ease-plain outline-none hover:bg-background-primary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent",
+      className={cn(
+        "flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground transition-colors duration-fast ease-plain outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent",
         className,
       )}
     >

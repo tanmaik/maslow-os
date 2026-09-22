@@ -18,7 +18,7 @@ import Link from "next/link";
 
 import { EagerLink } from "@/components/eager-link";
 import { deployment } from "@/lib/deployment";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 import { vocabulary } from "../../catalog";
 import { recordHref, verbText } from "../../format";
@@ -139,11 +139,11 @@ export async function RecordPane({
           them, never between the record's name and its words. */}
       <div className="grid flex-1 content-start gap-x-8 gap-y-3 @2xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)] @2xl:grid-rows-[auto_1fr]">
         <div className="col-span-full flex items-center gap-2">
-          <p className="flex min-w-0 flex-1 items-center gap-2 text-caption-1-medium text-text-secondary">
+          <p className="flex min-w-0 flex-1 items-center gap-2 text-xs font-medium text-muted-foreground">
             <EagerLink
               href={back.href}
-              className={cx(
-                "-ml-1 flex shrink-0 items-center gap-0.5 rounded-full px-1 py-0.5 transition-colors duration-fast ease-plain hover:text-text-primary",
+              className={cn(
+                "-ml-1 flex shrink-0 items-center gap-0.5 rounded-sm px-1 py-0.5 transition-colors duration-fast ease-plain hover:text-foreground",
                 back.className,
               )}
             >
@@ -156,7 +156,7 @@ export async function RecordPane({
             <TypeMark
               type={r.type}
               owner={r.ownerId === p.userId ? undefined : r.ownerId}
-              className="truncate text-text-primary"
+              className="truncate text-foreground"
             />
             {ownerName !== "you" && (
               <>
@@ -179,11 +179,11 @@ export async function RecordPane({
         </div>
         <div className="flex min-w-0 flex-col gap-3.5">
           {r.mergedInto && (
-            <p className="border-l-2 border-separator-border pl-3 text-body-regular text-text-secondary">
+            <p className="border-l-2 border-border pl-3 text-sm text-muted-foreground">
               Merged into{" "}
               <Link
                 href={hrefOf(winner?.id ?? r.mergedInto)}
-                className="text-text-primary underline"
+                className="text-foreground underline"
               >
                 {winner?.title || r.mergedInto}
               </Link>
@@ -191,7 +191,7 @@ export async function RecordPane({
             </p>
           )}
           {r.deletedAt && !r.mergedInto && (
-            <p className="border-l-2 border-separator-border pl-3 text-body-regular text-text-secondary">
+            <p className="border-l-2 border-border pl-3 text-sm text-muted-foreground">
               Deleted.
             </p>
           )}
@@ -235,7 +235,7 @@ export async function RecordPane({
               {/* A map of two or three records does not need the room a
                   crowded one does. */}
               <div
-                className={`overflow-hidden rounded-2xl border border-border-button-default ${
+                className={`overflow-hidden rounded-lg border border-border ${
                   near.nodes.length <= 3 ? "h-36" : "h-52"
                 }`}
               >
@@ -257,7 +257,7 @@ export async function RecordPane({
 
 // A section's title.
 const Heading = ({ children }: { children: React.ReactNode }) => (
-  <h2 className="text-caption-1-semibold text-text-secondary">{children}</h2>
+  <h2 className="text-xs font-medium text-muted-foreground">{children}</h2>
 );
 
 // The records this one is linked to, or anything merged into it is,

@@ -192,22 +192,6 @@ async function asked<T>(
 // machine is on: each call carries a ticket the door takes, but for
 // whether it answers at all.
 export const door = {
-  // A word to a conversation on the machine: what to say, to which
-  // conversation, and which ask it answers where it answers one.
-  async say(
-    machineId: string,
-    ticket: string,
-    word: { chat: string; text: string; answered?: string },
-  ): Promise<void> {
-    const res = await knock(machineId, "/say", ticket, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(word),
-      ms: 8_000,
-    });
-    if (!res.ok) throw new Error(`the door answered ${res.status}`);
-  },
-
   // The machine's numbers.
   stats(machineId: string, ticket: string): Promise<Stats> {
     return asked(machineId, "/stats", ticket);

@@ -11,14 +11,12 @@ copyright its authors, under that same licence:
 The dock's icons in apps/web/public/dock/ are Maslow's own, made for it as
 one family of clear glass objects.
 
-It carries the BoardUI design system (https://www.boardui.com), under
-`apps/web/components/base`, `apps/web/components/application`,
-`apps/web/components/foundations`, `apps/web/styles`, `apps/web/utils`
-and `apps/web/hooks/use-count-up.ts`. The free components are MIT. The
-Pro components and chart cards are under BoardUI's Pro licence, bought
-by Maslow Industries: they may be shipped inside Maslow and not
-published as source, so this repository does not go public with them in
-it.
+It carries components from shadcn/ui (https://ui.shadcn.com), MIT, under
+`apps/web/components/ui`, and shadcn's agent skill under
+`.claude/skills/shadcn`; and parts of Vercel's AI Elements
+(https://ai-sdk.dev/elements), Apache-2.0, under
+`apps/web/components/ai-elements`, changed for Maslow: cut to what the
+Agent window uses, drawn with Remix icons, on Base UI.
 
 The wallpapers under apps/web/public/wallpapers are photographs, each
 cut to 2560 by 1600 from an original found on Wikimedia Commons or in

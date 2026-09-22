@@ -288,8 +288,7 @@ it does. Every app Composio reaches is one a person can connect; the
 product names none. The page asks Composio what is connected each time it is
 shown, and says so when Composio does not answer. Connecting takes the whole
 tab to the app's sign-in, since a sign-in page refuses to be shown in a
-frame, and the way back lands on the desktop with the Settings window open on
-what came of it. In production a finished
+frame, and the way back lands on Settings, open on what came of it. In production a finished
 sign-in activates only once we have vouched for who did it. Access to a person's apps
 ends with their membership: a membership that ends or an org that is deleted
 owes its accounts to Composio in the same transaction. Composio's managed
@@ -364,10 +363,10 @@ decision is
 
 It is per membership, claimed at sign-in in the person's region and made
 as the page asks after it, and it never sleeps; while it is being made,
-restarting or moving, the whole computer is off: the desktop is covered
+restarting or moving, the whole computer is off: the screen is covered
 under one card that says what it is doing, so nothing on it is ever seen
-waiting or reconnecting, and once the door answers every window of the
-computer opens afresh under the card before it lifts. A restart puts the
+waiting or reconnecting, and what is open is opened afresh under the card
+before it lifts. A restart puts the
 terminal back and nothing else: the door writes down every half minute
 each window's folder, name and the command running in it, and at the
 first boot after, puts the windows back in their folders and types each
@@ -384,18 +383,16 @@ throws their Linux away and keeps home; it is a button, never automatic,
 and the backups are there to restore from afterwards. A new image is an
 update, not a restart: the page asks after one every few minutes, the app
 looks at the machine and writes on the person's row that one is ready and
-to which image, and says so quietly in three places — a notification
-behind the clock, counted among what waits on the person and standing
-until they take it, a newer image taking the place of an older; a line in
-the Maslow menu and in About This Computer; and a row on the Computer
+to which image, and says so quietly in two places — a notification,
+counted among what waits on the person and standing until they take it,
+a newer image taking the place of an older; and a row on the Computer
 pane. Each has one button, Update, which names what it will stop before
 it stops it. Nothing takes an update on its own, and none of it is on the
 machine.
 Every computer is at least one size, four shared CPUs and eight
 gigabytes, since memory is what people run out of and the CPUs sit idle:
 the door, the browser and one Claude Code take a gigabyte and a half
-before the person has done anything, each agent a third more and an app
-they build one or two. That is a floor and not a start: a row under it is
+before the person has done anything, and an app they build one or two. That is a floor and not a start: a row under it is
 lifted to it at the next sweep, and no machine is ever shaped below it.
 One given more by hand on Fly keeps it: the row learns the machine's size
 at the next sweep, and nothing remade is made smaller than it is. Every
@@ -425,8 +422,7 @@ and the page is blocked for the minutes it takes. The computer is a
 pane of Settings, plain first, ready, the update if one waits, the last
 backup with the fourteen kept listed under it, each restoring into a
 dated folder of its own in the home and over nothing, and then its
-numbers, size, where and reset in the open; About This Computer
-in the Maslow menu is its face on the desktop. A port is the person's until they share it
+numbers, size, where and reset in the open. A port is the person's until they share it
 with a person, a group or everyone in the org, and it opens or is a 404;
 or they make it public, and it opens to anyone on the internet with the
 address, a page or an API alike, no sign-in, no cookie and no redirect,
@@ -449,7 +445,7 @@ moves it to the Trash, a right-click on the space between rows makes a
 folder, and deleting is always moving to the Trash of their Linux, never
 erasing.
 What is shared with a person stands in their Files under the sharer's
-name, opens in the Preview window as their own would, and has a link on
+name, opens in the preview as their own would, and has a link on
 our domain by its id that opens for whoever is allowed and is a 404 for
 anyone else. A colleague reads it from the owner's machine while that is
 up and from a copy in the bucket while it is not; the app keeps the copy
@@ -466,46 +462,27 @@ notification for each person it reached. Every copy has a row and is
 owed its deletion when the row goes; a shared thing has a ceiling on its
 size and its files. The settled design is
 `docs/decisions/2026-09-16-files-are-shared.md`. The door is the one way in, and
-ready means the door answers. Three sockets go straight from the person's
+ready means the door answers. Two sockets go straight from the person's
 browser to it, each on a ticket from our sign-in and never through our
 server: Talk, a terminal joined to a `tmux` session on the machine, a
 plain shell with Claude Code the word `claude` away, so closing the tab
 kills nothing and the next tab finds it mid-output — its tmux windows
 listed down a sidebar, each named for the program running in it or, at a
 bare prompt, the folder it is in, and renamed by a double-click on the
-name, which is then theirs and not tmux's; the one in view marked, any
-Terminal window on the desktop turned to any of them, any but the last
-closed from the list,
-one opened from the dock starting in a fresh shell of its own, and a
-shell nobody ever ran anything in going with its Terminal; and View, the machine's browser as real
+name, which is then theirs and not tmux's; the one in view marked, and
+any but the last closed from the list; and View, the machine's browser as real
 H.264 video decoded in the tab, drawn at the size of the pane it is shown
 in, which the pane tells the machine as it settles, so the picture fills
 the window and is never letterboxed; its tabs, the person's hands and
 pointer on it, the cursor the page wants under that pointer, and what
-changed in a folder of their home, on one socket; and Agent, the same
-Claude Code the terminal runs, spoken to over the Agent Client Protocol
-through `claude-code-acp`. The door is that agent's client, and it owns
-the terminal a command runs in: a command starts as the person in their
-home and what it writes goes down the sockets as it arrives, so the
-output is live under the tool call that ran it. The tab never runs
-anything. Each agent the person keeps has one of its own, as the person,
-in their home, on managed auth, and the door holds the conversation rather
-than the tab: a prompt keeps going with nobody watching, what it said is
-kept and replayed to the next socket, and the session id is on the disk,
-so a door that comes back after a new image loads the same conversation.
-The window is a conversation: what the agent says as markdown, what it
-thought folded away, a row for every tool call with its changes or its
-output beside it, the plan it is working to, and what it asks before it
-acts, answered there. Which conversation and which mode are the person's
-to pick, and the model is the deployment's alone; a new one and any of the ones
-the machine keeps are a click away. Nothing durable lives in
+changed in a folder of their home, on one socket. Nothing durable lives in
 a tab: the tab is a view onto state on the machine, and the machine's
 browser never idles away. What a program on the machine opens goes to whoever is at the terminal:
-a port of theirs opens that port's window on the desktop, a folder of theirs opens Files there, a
-file of theirs opens in the Preview window, and any other address is
+a port of theirs fills the screen, a folder of theirs opens Files there, a
+file of theirs opens in the preview, and any other address is
 offered to open on their own device (Files lists Home, the folders the
-person pinned beside it and what was shared with them, not every folder; the Preview window is one file in a
-window of its own named for it, a picture or a video shown as it is, a
+person pinned beside it and what was shared with them, not every folder; the preview is one file
+filling the screen, a picture or a video shown as it is, a
 PDF or an Office document read whole by the browser's own viewer, every
 page, the document made into a PDF once on the machine and kept there,
 text edited and saved there, and the way a file opens from Files, from
@@ -521,89 +498,10 @@ ssh's ProxyCommand, makes the Mac a key if it has none and registers its
 public half, and writes a `Host` named after the computer that uses that
 key and no agent, and
 landing in the same tmux session the Terminal page shows, as a grouped
-session of its own; a command given to `ssh` runs plain. Every model
-call goes through us: the agent on the machine sends it to this
-deployment's gateway, `/model`, carrying a token of its computer's and
-no key, and the gateway sends it on with the OpenRouter key that
-computer's row holds, minted per person with a cap of five dollars a
-week. The week is the person's own: seven days counted from the day their
-computer was claimed, so everyone's turns on their own day. The key never
-resets on its own; when a person's week turns the app sets its ceiling to
-what it has spent plus the cap, at the hourly sweep or when they next look
-at what they spent. A reset is ours to give, `pnpm model:reset`, which
-gives a key its cap again at OpenRouter and moves no week. The key never
-leaves our server. What a person spent is shown to
-them in dollars, in the Agent window and on the Agent pane; OpenRouter
-holds the record, the sweep copies it, and reaching the cap stops the
-calls and nothing else. Where a machine cannot dial the deployment, as
-on a laptop, the call goes to its own door and up the line the laptop's
-stack holds open for the brain. Two Claude Codes run on the machine and they never share credentials or
-settings: ours keeps its configuration in a directory of its own,
-`~/.maslow/claude`, seeded at boot with its servers, so what it
-writes down there never reaches the person's own `~/.claude`. The Agent window's is ours: started with
-`MASLOW_AUTH=managed`, it runs through the gateway, on GLM 5.3 Flash at
-the least reasoning it offers and nothing else — the gateway puts that
-model and that much thought on every call whatever was asked for, so no
-Claude model is reachable on what Maslow pays for — and the app is the
-one way to it.
-The settled design is `docs/decisions/2026-09-16-the-model-gateway.md`. The Agent window is BoardUI's AI Chat template wired
-to it: a rail of the person's agents, each a named conversation that
-stays, with a mark of its own colour, the last thing it said under its
-name and when, pinned ones first and no folders; the thread in
-its user and assistant turns, with what the agent did as its task list,
-a thought one step among the steps it came with and folded with them,
-what it asks before it acts as a notification, the kind of thing named, the
-thing itself as it would run, and the answers as buttons, which goes
-when the prompt does, and a question it asks the person, which is an
-ask of the brain's with this conversation to answer to: it stands in the
-thread and behind the clock alike, is answered in either, the answer is
-said back into the conversation as its next word, and the turn does not
-wait on it; the pill
-composer, naming no model, since the choice is the deployment's and not
-the person's to be told, with a mic, which is the same ear
-hold to talk uses, clicked on and off with the words landing in the
-field, live while the agent works, since a word typed then goes
-into the running turn: at once while the agent is thinking, and once the
-tool it is running has answered if one is, the turn stopped where it
-stands and prompted on with the word, as Claude Code's own terminal does;
-and under
-it how the agent acts and how full the conversation is, with the week's
-spend behind that ring; the spend is said in the open on the Agent pane.
-One agent is in view at a time and the rest stand open behind it,
-each with its own Claude Code process, running on; a new one is handed
-over at once, since the door keeps one warm; one quiet for three minutes
-is closed, its process freed, and opens again whole when wanted. A
-computer with no agent it can open, none kept or none that loads, is
-given its first, Heartbeat, the moment its agent starts; every other
-agent is made only by the person, who
-names it as they make it, and
-renamed with a click on the name; nothing makes another on its own,
-and the window opens on the last one spoken to, never on an empty one. The
-name and the last line each agent said are the door's, kept on the disk.
-An agent picked in the rail is in view at once, whole from the
-door's own record when it was open before, and Claude Code loads it
-behind. Two tools are the door's own, handed to every
-conversation as a small MCP server started beside it under a token of
-that conversation's: `wakeup`, which prompts the conversation again
-after a delay, kept on the disk so a door coming back still keeps it, or
-with what a command run as the person prints, a second's worth at a time
-and only the lines matching a pattern where one is given, into the
-running turn or as a turn of its own, waking the conversation if it
-sleeps; and `stop`, which ends one. Claude Code's own background work,
-a shell in the background and its subagents, stays its own within a
-turn. There is no cron and no workflow. Every word into a conversation,
-whoever says it, goes through one door function. What the adapter lacks
-for this, one prompt at a time, a close, and the question handed to the
-door, is put into its installed copy when the image is built, in
-`apps/computer/patch-acp.mjs`. The window is the one shape a
-conversation has. `claude` in the
+session of its own; a command given to `ssh` runs plain. `claude` in the
 person's terminal is their own: plain Claude Code on their own Claude
 account, signed into inside Claude Code, and nothing of it passes
-through us; there is no switch between the two. An env block in the
-person's own Claude Code settings that names the API's address or key is
-theirs to have, and a session of ours refuses to run through it; a
-deployment without our provisioning key has no Agent of ours, and says
-so. Laptops, previews and
+through us. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
 ever calls home: our Claude Code on it sends no telemetry, no error
@@ -617,272 +515,137 @@ boot, where it updates itself the way Claude Code does and `claude
 update` works; the image carries a copy under ours, read-only and unable
 to update itself, which runs until theirs arrives. `claude` on their path
 is ours either way, and it hands whichever copy they have their own
-credentials; an editor drives the same Claude Code over the Agent Client
-Protocol through `claude-code-acp`. Their Claude Code knows the same two
-MCP servers as ours, seeded into their own `~/.claude.json` and kept
-current there except where they changed or removed one, and nothing else
-of ours: no mode, no model, no skill, and it signs in to their own
-account. Ours, in its own directory, knows the same two, and a note there
-says what this computer is and to use them: the computer's own, `packages/browser`,
+credentials. Their Claude Code knows two MCP servers of ours, seeded
+into their own `~/.claude.json` and kept current there except where they
+changed or removed one, and nothing else of ours: no mode, no model, no
+skill, and it signs in to their own account. The two are the computer's
+own, `packages/browser`,
 running on the machine outside the person's Linux but as the person,
 which is the browser, with its profile on the disk and a page of its own,
 `/browser`, where the person watches it live and takes it over with their
 own clicks and keys, dragging to select and carrying the words out, and
-beside the browser's tools BoardUI's own MCP server, started beside ours
-from the package the image carries and offered as the `boardui_` tools,
-which look components up and install them into an app by its path; and
+beside the browser's tools shadcn's own MCP server, started beside ours
+from the package the image carries and offered as the `shadcn_` tools,
+which look components up and say how to add them to an app; and
 the
 brain at this deployment's `/mcp`, reached with a session of the owner's
 that our server opens for the computer and the person can end in
-settings. Four skills the image carries are linked into ours: `maslow`,
-how this system works; `apps`, how an app is built here and shown as a
-window or a widget; `brain`, how the brain is used well; and `boardui`,
-BoardUI's own, so what the Agent builds for them looks like Maslow. The
-skills are the Agent's; the person's own Claude Code has the two servers
-and nothing else of ours. The
+settings. The
 brain's MCP is the brain and the connectors, and nothing of the machine:
 no hand that runs a command or reads or writes a file goes into it.
 
 ## Interface
 
-The canvas is the screen and the chrome floats over it: warm and quiet, in
-the device's look, or light or dark as the person picks. Home is a desktop the size of the display that
-never scrolls, and every surface of Maslow is a window on it, drawn in
-the window with its controls in the window's bar, placed
-anywhere, at any size the person drags it to, overlapping if they like,
-coming to the front when touched; nothing lays windows out for them and
-nothing resizes one because another changed. A click on an icon in
-the dock brings that app's window forward, back from the dock if it was
-minimized, or opens its first, at the block's own size; New window in the
-icon's menu opens another, and every window after the first is
-numbered, on the bar, in the menu and on its icon when minimized. The dock and the window's frame are ryOS's
-(github.com/ryokun6/ryos), carried over as code under its licence, which
-is now ours too: AGPL-3.0, in `LICENSE`, with `NOTICE` saying what came
-from where. What the desktop lies on is ours: nine photographs that ship with
-the app, free to use and credited on their tiles and in NOTICE, each cut
-to 2560 wide and a few hundred kilobytes, and the bare warm
-ground, which is also what is left when a picture will not load. A person
-adds their own, kept whole in the bucket and theirs alone. They are all
-in Settings under Look, where a right-click on the desktop goes, and the one
-picked is worn at once and follows the person to any device. Glass is the browser's own: a surface's backdrop is what
-is truly behind it, frosted and bent at the edges through one SVG filter
-(`components/glass.tsx`), never a picture of the page; Chrome bends,
-Safari and Firefox frost. Glass is the chrome and paper is the content:
-the menu bar fully transparent with nothing painted on a laptop, and on a
-phone one flat band with the status bar in the app's own ground, the dock clear glass, and menus, dialogs, every
-window's bar and every rail beside its content (the brain's types, the
-terminal's windows, the Agent's conversations, the Settings toolbar)
-glass at one level, blurred only as much as their words need and
-keeping enough of their own colour to read; what is read or edited,
-a list, a form, a terminal, a page on a port, lies on solid ground. Two
-looks and no third. A page framed in a window is flush to its frame: no
-margin, no card edge, no toolbar of its own that the bar already is. The dock is a
-shelf of it holding icons that swell
-under the pointer, with a label over the one the hand is on and a dot
-under the ones with a window open; it lies along the bottom, the left or
-the right, as a right-click on the dock says (a phone's
-along the bottom), and an icon's right-click carries the dock's settings
-under its own; it stays in view unless told to hide, and then its edge
-brings it back. A window arrives out of its icon, shrinks
-back into the dock when minimized, and wears three plain lights and its
-name in a bar; the one in front casts the deep shadow. A menu bar runs along the top: the Maslow menu at its left holds
-About This Computer (the machine, where it is, its size and image, and
-what it is using, laid out as ryOS's is), Settings, your other orgs and
-the way out; the
-front window's own menu stands beside it; Window lists every window;
-the clock is at the right. The first time the desktop is
-drawn on a device, one card asks for everything Maslow will want of it,
-on one tap: the microphone, notifications and the location, each by the
-browser's own prompt in turn, so nothing stops the person mid-task;
-answered or declined, the card never returns on that device, the
-browser's answers stand, and the location, once granted, is logged to
-their own machine and nowhere else.
-Any window fills the desktop and comes back with a double-click
-anywhere on its title bar but a field or the lights, with its keys, or
-from its menu, and only one is filled at a time; the bar shows a grip while the pointer is
-on it, and a filled window pulled by its bar comes back down under the
-pointer and is carried from there. Filling and full screen are two
-things. Filling makes a window as big as the desktop, under the menu bar
-and up to the dock, and is kept with the desktop, so it is filled on
-every device. Full screen is the green light's alone on a laptop, and the
-device's own: the window is the whole display, its bar and nothing else,
-with no menu bar and no dock, and the browser's own full screen is taken
-with it, notifications still arrive over it, and its bar carries it
-nowhere; Escape, the light again, the browser leaving full screen or
-another window opened or raised from this device ends it, and the window
-is back as it was, filled if it was filled. The settled design is
-`docs/decisions/2026-09-19-full-screen-is-the-green-light.md`. A phone has no full screen to give, so its
-green light fills. A snapped window fills exactly the screen
-under the menu bar and up to the dock, edge to edge. A port is a port until its owner publishes
-it as an app, one at a time from Applets, a window in the dock that
-lists every port listening on their computer, each opened, shared or
-added to the dock from its row, and the ports colleagues opened to
-them: the
-port's own favicon and name are offered and either is changed there,
-and from then on the app is in the dock, the command bar and on the
-desktop by that name and that face, while its port is listening, and
-nowhere at all while it is not, on its owner's desktop, whose computer
-is asked after every two seconds; a colleague's keeps what is shared
-with them while the share stands, since their machine is not asked
-after another's. A bare port is in none of them. An app opens as a
-window, or in a browser tab of its own where its owner says so as they
-add it to the dock, or where its page refuses to be shown in a frame,
-which the door notes as it looks for the favicon; an app that opens in a
-tab is no widget, and a tab the browser will not open is a window after
-all. Only an app is a window: Open on a row in Applets is a browser tab
-of the port's own, an app opens as a window from the dock, and a port
-that is no app, asked for by a program on the machine, is shown in the
-computer's own browser. A
-port that matters, an app or one shared, found not listening is said so
-in Applets and kept as it was for ten minutes: back within them, it goes
-on as it was; gone longer, its app, its shares and its public address are
-forgotten, and it is a new port when it next listens. That is judged
-while its owner is looking, since that is when the door is asked. The
-dock's run of apps stands in the order they were added, the same on
-every device; the built-in blocks keep the order each device dragged
-them into. A port shared with a colleague reaches
-them under the name and face its owner published it as, or as "Port N
-· owner's" where it was never published. An app can be put
-on the desktop itself, from its icon's menu: a widget, with no bar, under
-every window, moved by the grip along its top and resized by its
-edges, kept where it was left, on a phone in a place of its own apart
-from its place on a laptop, and made a window again or taken off
-from the grip's menu. The desktop is the ground under the windows, and the agent arranges it:
-`desktop`, `place` and `unplace` on the brain's MCP put a widget down at a
-place and size, move one, or take one off, and say what lies there and
-which ports colleagues opened to the person; a widget is an app served
-on a port, of the person's own computer, which the agent builds and runs
-there, or of a colleague's opened to them, and nothing else, since a
-record's page on a desktop is a document and not a widget. The windows the
-person has open are theirs and the agent never sees or touches them. A
-widget the agent placed is an ordinary one, dragged, resized, minimized
-or made a window like any other. The desktop is kept on the server with a count of how many times it
-was kept: a save from the page names the count it saw and one that fell
-behind is refused and takes the newer desktop in, its own changes kept over
-it, and the page's two-second ask after ports says when the desktop was
-kept elsewhere, so what the agent placed is on screen within seconds on
-every device. There is one desktop
-for now. The keys reach all of it. Command-K opens the command bar,
-one field over the desktop that finds an app, a window, a port, a pane of
-Settings, a record or a file in the person's home by its words and goes
-there on Return; a letter
-typed with nothing focused opens it with that letter. Control and
-Option with a key act on the window in front, since the keys a browser
-or a Mac owns are never taken: N opens another of its app, W closes it,
-M minimizes it, Tab and Shift-Tab go to the next and the previous,
-comma opens Settings, and the arrows, U, I, J, K and Return put it on a
-side, a corner or the whole desktop; the Window menu lists every one
-beside its key. Tab reaches the dock as one stop and the arrows walk
-its icons. A framed page keeps every key of its own but Command-K.
-On a phone the Agent is voice first: a chat opens in voice mode, the
-thread as a caption of the last thing said with the work under way in
-a small line above it, and under them one big button. Hold it and the
-words appear as they are heard; let go and they go, into the running
-turn if one runs; slide the thumb off before letting go and nothing is
-sent. The keyboard is one tap away and the same thread takes both, and
-the chats are a picker under the bar. Speech becomes text at Deepgram,
-behind an interface of ours: our server mints a token good for a
-minute and the phone streams its microphone to Deepgram directly,
-never through us. Without the key the button says this copy cannot
-hear, and production refuses to start. The settled design is
-`docs/decisions/2026-09-16-you-hold-and-you-talk.md`.
-A phone is the same desktop, as ryOS's is: the wallpaper, the menu bar,
-the windows and the dock, with no home screen, no handle and no recents.
-Every window is the full width of the screen, 8px in from either side; it
-opens at its app's own height under the menu bar, each window after the
-first a little lower so the bar of the one under it shows, moves up and
-down only by its title bar, and stays put under a finger that has moved
-less than the slop the phone gives a tap; resizes from its top and bottom edges only, the
-bottom a thumb's width and the top a thin strip above the lights since it
-lies flush under the menu bar, and a double-tap on an edge makes it as tall as the desktop
-and the next brings its height back; it fills the screen on a double-tap
-of its title bar and comes back on the next or when its bar is pulled
-down, a fill or a swipe buzzing under the finger where the phone can, and
-a swipe across its title bar brings the next or the previous window to
-the front. A phone turned sideways keeps its windows whole. With the
-keyboard up the desktop ends where the keyboard begins, so what lies
-along a window's bottom, the terminal's keys, the composer, rises with
-it, and the dock and its grip rise too. A phone puts the app to sleep in
-the background and cuts its lines; on its return the terminal's and the
-Agent's sockets reconnect at once, and a microphone the phone took away
-is opened again. A long press raises the app's own menu and never the
-phone's copy-and-share callout. The dock lies along the bottom, scrolls sideways when it overflows,
-stays while windows stand at their own heights, goes when a window fills
-the screen, and comes back on a tap of the grip left at the bottom edge,
-or a swipe up from it. The menus stand in a strip that scrolls sideways, the
-front app's name in bold, and the clock shows the time alone beside the
-search. Never the system's own gestures, which the browser owns. Every
-window's title bar on a phone is the three lights at the left, the name,
-and one control at the right that holds the panel's toolbar as a sheet
-of rows; a path or an address the panel keeps in view stays in a strip
-under the title bar. The brain keeps its search and one Filter button,
-with its conditions and sort as a sheet and its view switch under one
-more control, and its table drags sideways with the title column held.
-Every menu — a window's, the desktop's, a row's — opens as a sheet from
-the bottom edge, on a long press where a right-click goes, with rows a
-thumb can hit. The command bar opens from the menu bar's search icon or
-a two-finger tap, and stands full width. Nothing but a window's own
-content scrolls. A tap acts at once, with no wait for a second and no
-highlight, and a row pressed is one step darker. Every window, at every
-size, is drawn as ryOS's Aqua Glass draws one: a 24px title bar with the
-name at 13, the three traffic lights, plain, that go grey on a
-window behind, a 12px radius, and one frosted pane from title bar to
-foot. The settled design is
-`docs/decisions/2026-09-17-the-phone-is-the-desktop.md`.
-Nothing else animates. The look is one colour on pure grey: no hue in any neutral, an
-orange unless the person picks another under Look in Settings, kept
-on their device, spent only on what they are meant to look at. Type has
-three sizes and each has one job: the body at 14 is what is read, regular
-for prose and a value and medium for a name; the caption at 12 is what
-stands beside or under it, regular for a description, a date, a size or a
-path and medium for a label on its own, a section head, a column head, a
-chip or a bar; the headline at 16 names a pane, a sheet, a dialog or an
-empty state, and only a page's own title climbs past it. Nothing is set at
-13, nothing is bolder than medium below the headline but a count in a
-pill, and no size, weight, leading or tracking is ever written by hand.
-On a phone the root is 18 instead of 16, so the same three sizes read
-at arm's length as iOS's do: the body lands at 15.75, the caption at
-13.5 and the headline at 18, near iOS's callout, footnote and headline;
-what is set in px, the menu bar, the dock and a window's 24px bar,
-stays as it is on a laptop, and the name in the bar is the second body
-size, which scales with the rest. Menus are rows of 28 on a
-laptop and 44 on a phone, and a menu-bar word fills the bar's height,
-the front app's in bold. A traffic light's hit area is as wide as its
-pitch and never wider, since three that overlap take each other's taps,
-and as tall as a thumb on a phone.
-Settings is laid out
-as a Mac's System Settings: a rail of panes down the left in two
-groups, yours and the org's, with a search over it that leaves only
-what matches, and one pane at a time on the right, its parts lying on
-the pane one under another with a hairline between, no card and no head
-of its own; on a phone the rail is a strip along the top. Yours are six,
-each named for the question it answers: You, Look, Computer (the
-machine alone: ready, update, where, backups, reset), Agent (what
-it spent this week against the cap, and nothing else), Apps, and Access
-(SSH, the agents signed in to their brain, and their other browsers
-and phones; ports are Applets', not Settings'); the org's are Org, with
-deletion at its foot, Members and Groups. Each fact is on one pane and
-said once, and no pane explains what its rows already show. What waits on you waits behind the clock: a click on it slides
-a panel in from the right over the desktop, closed by the clock again,
-Escape or a click outside, holding every notification newest first — a note
-read and cleared, an ask answered where it stands, by picking one of the
-options it offers or typing an answer, and marked with what you said
-once you have. A note points at records as plain links that open them; "Clear"
-at the top takes away what is done with, notes and answered asks, and an
-ask still waiting, an ask to share among them, stays until it is answered;
-and one that arrives while you are at the desktop stands at the top right
-for six seconds, or until you point at it. The clock carries a dot while anything is unread
-and the count of the asks still waiting on you; the Brain carries
-nothing. "Waiting on you" is what asks something of you and is still
-there: the agent's notes and asks, an ask to share among them, and later
-the pages teammates' agents put in front of you; a shared record is
-knowledge, not a demand, and nothing tracks whether you opened it. The
-settled designs are
-`docs/decisions/2026-09-09-the-canvas-is-the-screen.md` and
-`docs/decisions/2026-09-11-the-screen-is-a-desktop.md`, with the skin over it
-in `docs/decisions/2026-09-12-the-look-is-warm.md`.
+Maslow is a sidebar and one thing on the screen. The sidebar names every
+place down the left: Search, Home, Database, Files, Terminal, Browser and
+Ports; under them the person's apps, each by the name and face it was
+given; and at its foot Notifications, Settings and the person, whose menu
+holds their other orgs, a new org and the way out. What is picked fills
+the rest of the screen, flush to its edges, and the sidebar marks where
+the person is. Nothing floats, nothing is dragged and nothing is laid out:
+there is no dock, no menu bar, no window and no split. On a phone the
+places are tabs along the bottom edge, each a target a thumb can hit, and
+the one picked fills the screen above them; nothing but the page's own
+content scrolls, and the page never goes sideways. `check:phone` holds
+those numbers. The shell is `apps/web/components/shell/shell.tsx`, and the
+list of Maslow's own apps, which the sidebar and Home both read, is
+`apps/web/app/desktop/apps.ts`. The settled design is
+`docs/decisions/2026-09-21-one-sidebar-and-no-agent.md`.
 
-The way in is a lock screen: the desktop's own wallpaper, darkened, with the
+Home is the list of apps: Maslow's own, each with a line saying what it
+is for, then the person's apps and the ones colleagues shared with them,
+and under those any widget an agent placed through the brain's `place`.
+A port is a port until its owner makes it an app, from Ports, the page
+that lists every port listening on their computer, each opened, shared
+or made an app, and the ports colleagues opened to them: the port's own
+favicon and name are offered and either is changed there, and from then
+on the app is in the sidebar, on Home and in the command bar by that name
+and that face, while its port is listening, and nowhere at all while it
+is not, on its owner's screen; a colleague's keeps what is shared with
+them while the share stands, since their machine is not asked after
+another's. A computer that does not answer leaves the sidebar's apps as
+they were, never empty. An app fills the screen, framed by a page of
+ours, or opens in a browser tab of its own where its owner says so as
+they make it an app, or where its page refuses to be shown in a frame,
+which the door notes as it looks for the favicon; a colleague's opens
+the same way from Ports as from the sidebar. Open on a bare port in
+Ports is a browser tab of the port's own. A port that matters, an app or
+one shared, found not listening is said so in Ports and kept as it was
+for ten minutes: back within them, it goes on as it was; gone longer, its
+app, its shares and its public address are forgotten, and it is a new
+port when it next listens. That is judged while its owner is looking,
+since that is when the door is asked. A port shared with a colleague
+reaches them under the name and face its owner published it as, or as
+"Port N · owner's" where it was never published.
+
+An agent connected to the brain arranges Home and puts things in front
+of the person: `desktop`, `place` and `unplace` on the brain's MCP put a
+widget down, move one or take one off, and say what lies there and which
+ports colleagues opened to the person; a widget is an app served on a
+port, of the person's own computer or of a colleague's opened to them,
+and nothing else. `open` puts something in front of the person by its
+one address, `maslow://`: a record, a file or folder of their home, a
+port, the computer's browser at an address, the terminal, a pane of
+Settings. It opens where Home is showing, and where anything else is
+open it is offered at the foot of the screen and never put over it.
+
+Command-K, or Search in the sidebar, opens the command bar: one field
+over the screen that finds an app, a pane of Settings, a record or a
+file in the person's home by its words and goes there on Return. A
+framed page keeps every key of its own but Command-K. While the computer
+is being made, restarting, updating or moving, the screen is covered
+under one card that says what it is doing. The first time the shell is
+drawn on a device, one card asks for what Maslow will want of it, on one
+tap: notifications and the location, each by the browser's own prompt in
+turn; answered or declined, the card never returns on that device, and
+the location, once granted, is logged to their own machine and nowhere
+else.
+
+The look is one colour on pure grey: no hue in any neutral, an orange
+unless the person picks another under Look in Settings, kept on their
+device, spent only on what they are meant to look at. Type has three
+sizes and each has one job: the body at 14 is what is read, regular for
+prose and a value and medium for a name; the caption at 12 is what
+stands beside or under it, regular for a description, a date, a size or
+a path and medium for a label on its own, a section head, a column head
+or a chip; the headline at 16 names a pane, a sheet, a dialog or an
+empty state, and only a page's own title climbs past it. Nothing is set
+at 13, nothing is bolder than medium below the headline, and a size is
+one of the scale's own, `text-xs`, `text-sm`, `text-base`, set once in
+`apps/web/app/globals.css`, never a number written by hand. On a phone
+the root is 18 instead of 16, so the same three sizes read at arm's
+length as iOS's do.
+
+Settings is laid out as a Mac's System Settings: a rail of panes down
+the left in two groups, yours and the org's, with a search over it that
+leaves only what matches, and one pane at a time on the right, its parts
+lying on the pane one under another with a hairline between, no card and
+no head of its own; on a phone the rail is a strip along the top. Yours
+are five, each named for the question it answers: You, Look, Computer
+(the machine alone: ready, update, where, backups, reset), Apps, and
+Access (SSH, the agents signed in to their brain, and their other
+browsers and phones; ports have a page of their own); the org's are Org,
+with deletion at its foot, Members and Groups. Each fact is on one pane
+and said once, and no pane explains what its rows already show.
+
+What waits on you waits behind Notifications in the sidebar: a click on
+it slides a panel in from the right, closed by the same click, Escape or
+a click outside, holding every notification newest first — a note read
+and cleared, an ask answered where it stands, by picking one of the
+options it offers or typing an answer, and marked with what you said
+once you have. A note points at records as plain links that open them;
+"Clear" at the top takes away what is done with, notes and answered
+asks, and an ask still waiting, an ask to share among them, stays until
+it is answered; and one that arrives while you are there stands at the
+top right for six seconds, or until you point at it. Notifications
+carries a dot while anything is unread or waiting on you. "Waiting on
+you" is what asks something of you and is still there: an agent's notes
+and asks, an ask to share among them; a shared record is knowledge, not
+a demand, and nothing tracks whether you opened it. The skin is settled
+in `docs/decisions/2026-09-12-the-look-is-warm.md` and
+`docs/decisions/2026-09-19-one-skin.md`.
+
+The way in is a lock screen: the person's wallpaper, darkened, with the
 clock and the date over it and one column in the middle; in production,
 for now, the same column alone on the bare ground, with no wallpaper and
 no clock. It asks for an
@@ -892,53 +655,30 @@ face itself; picking one goes straight to the code. The code is six boxes and
 the last digit sends it, over that person's picture where the device knows
 them, since the server never says whether an address has an account before
 the code is right. A person in more than one org says which one they are in
-on the same screen, after the code and before the desktop. The seeded people
+on the same screen, after the code and before Home. The seeded people
 stay under a quiet divider, for development, and are not there in production.
 
-The skin is BoardUI's (boardui.com), a design system bought outright
-and installed as source we own: its whole catalogue, free and Pro, is
-under `apps/web/components/base`, `application` and `foundations`, with
-its tokens in `apps/web/styles`. Every component is BoardUI's where
-BoardUI has one: button, input, textarea, select, switch, checkbox,
-radio, tabs, table, tooltip, badge, chip, avatar, kbd, divider,
-breadcrumb, pagination, date picker, notification, the chart cards and
-the agent pieces. Where BoardUI ships a whole screen we want, the Agent
-window being the first, it is that template wired to the real thing
-rather than a copy of it: the template's own components take props for
-what a real screen puts in their place, everything the product does not
-have is cut behind one of those props, and there is one of each component
-in the app. shadcn, still installed whole under
-`apps/web/components/ui`, is for what BoardUI lacks: dialog, sheet,
-context menu, menu bar, dropdown, popover, command, progress, skeleton,
-and the like, each restyled to BoardUI's geometry and motion so the two
-are one skin. Nothing is hand-rolled beside either: a component is taken
-from the catalogue, never written beside it. Styling is Tailwind on
-BoardUI's semantic tokens: its neutral ramp is pure grey with no hue in
-any step, its accent ramp is spun from the hue
-the person picked, and every shadcn token name points at the BoardUI
-token it means. Type is BoardUI's composite utilities
-(`text-body-medium`, `text-caption-1-semibold`), never a size and a
-weight stacked by hand. Motion is BoardUI's: menus condense in over
-150ms from a little smaller and a little blurred, dialogs over 300ms,
-hover colours over 150ms, a press darkens one step and never shrinks,
-exits faster than entrances, all of it held still for anyone who asked
-for less motion; ryOS's own animations, a window arriving out of its
-icon and leaving for the dock, the dock's swell, stay ryOS's. Icons are
-Remix Icon, as component references. BoardUI Pro's source is licensed,
-not ours to publish: the repository stays private while it is in it,
-and going public means taking the Pro parts out first. The look is the
-device's, or light or dark as the person picks under Look in Settings,
-kept on the device. The typeface is the device's own, `system-ui` and
-`ui-monospace`, and nothing else is named, shipped or fetched anywhere;
-nothing is fetched from anywhere at build or at run.
-
-Where BoardUI ships an assembled block, under
-`apps/web/components/application` — a data table, a calendar, a settings
-row — the product uses that block, not a hand assembly of the primitives
-beside it: a prop first, and only then a small edit inside the block
-itself when a prop is missing, made in the way every other use of that
-block would want it too. The base components stay exactly as they are
-used today.
+The skin is one: shadcn/ui, installed whole as source we own under
+`apps/web/components/ui` (style `base-nova`, on Base UI, drawing Remix
+icons). The
+look is plain, tight and quiet, and it is written down once: the token
+block at the top of `apps/web/app/globals.css` and the rules in
+`apps/web/components/ui/README.md`. shadcn's colour names are the only
+ones; every neutral is pure grey; the one colour is the accent the
+person picked, which feeds `--primary` and `--ring`. Corners are small,
+6px, and only an avatar, a status dot and a switch are round. Type is
+one scale, 12 for a label, 14 for the body, and a title a step or two
+up. Controls are 32px, or 28 small, on a 4px grid; a hairline divides
+regions, never a card inside a card; shadows are for what floats; there
+are no gradients and no blur on content. A component is taken from the
+catalogue, never written beside it; the few of ours beside it, a close
+button and a status dot, are in the same folder. Motion is a colour or
+an opacity over 150ms and the components' own entrances, all of it held
+still for anyone who asked for less. Icons are Remix Icon, as component references. The
+look is the device's, or light or dark as the person picks under Look
+in Settings, kept on the device. The typeface is the device's own,
+`system-ui` and `ui-monospace`, and nothing else is named, shipped or
+fetched anywhere; nothing is fetched from anywhere at build or at run.
 
 A click shows the next page at once. Every link is `next/link`, so a click
 swaps only what changed and the page it points at is fetched before the
@@ -958,8 +698,7 @@ session as a bearer token, opens the site's own doors with it, and is
 refused by the brain's MCP as a browser is. It reads the brain through
 three thin doors over `packages/brain`, `/brain/types`, `/brain/read`
 and `/brain/get`, and what waits on the person through `/notifications`.
-The Agent on it runs in Bypass and offers no mode, and its one big
-button is hold to talk, streamed to Deepgram as the web's is. With
+Its tabs are Brain, Computer, Waiting and You. With
 Always allowed, the phone logs the person's location for as long as
 they carry it, straight to their computer's door and never through us.
 A lost phone is ended from Settings › Access with "Sign out the
@@ -984,9 +723,8 @@ Billing is per org, and the org owner pays for everyone in it. Managed is pay
 as you go through Stripe. **No resource that costs money exists without a
 payment method behind it**: a sweep finds anything that does, and finding one
 is an incident. Every resource has a ceiling before it ships; every ceiling
-but one is ours, it never shows, and reaching it alerts us rather than
-walling the person. The one exception is the model key: that ceiling is the
-person's, weekly, in dollars, and shown wherever they spend it.
+is ours, it never shows, and reaching it alerts us rather than walling the
+person.
 
 ## Public site
 
@@ -1039,8 +777,8 @@ What a reviewer walks by hand is `REVIEW.md`.
 - The preview built and its database migrated. Both are required checks, so a
   change that fails `next build` or a migration never reaches main.
 - The phone's layout holds: `check:phone` opens a fresh stack in a browser
-  the size of a phone and measures the bar, the dock, a window, the fill
-  and the grip against the numbers settled on 2026-09-18. It is part of
+  the size of a phone and measures the tabs along the bottom, how big each
+  is, and that a place fills the width and nothing scrolls sideways. It is part of
   `check`, in the image's Chromium or the Chrome a laptop or the runner
   carries, and skips only where there is no browser at all.
 - A reader read it: Greptile on the pull request, or Codex on the whole

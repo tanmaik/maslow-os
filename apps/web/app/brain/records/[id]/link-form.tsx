@@ -2,10 +2,7 @@
 
 import { RiAddLine } from "@remixicon/react";
 
-import { Button } from "@/components/base/buttons/button";
-import { Input } from "@/components/base/input/input";
-import { Label } from "@/components/base/input/label";
-import { Select, SelectItem } from "@/components/base/select/select";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -15,12 +12,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
-import { FIELD, recordHref } from "../../format";
+import { Choose } from "../../choose";
+import { Required } from "../../fields";
+import { recordHref } from "../../format";
 import { OtherRecord } from "./other-record";
 
-// A new link from or to this record, under any verb, behind a dashed pill
-// among the links it joins.
+// A new link from or to this record, under any verb, behind a dashed
+// button among the links it joins.
 export function LinkForm({
   id,
   type,
@@ -36,13 +37,13 @@ export function LinkForm({
       <DialogTrigger
         render={
           <Button
-            variant="secondary"
-            size="small"
-            leadingIcon={RiAddLine}
-            className="h-8 rounded-full border-dashed pr-3 text-text-secondary shadow-none"
+            variant="outline"
+            size="sm"
+            className="self-start border-dashed text-muted-foreground"
           />
         }
       >
+        <RiAddLine data-icon="inline-start" />
         Link
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-lg">
@@ -58,29 +59,38 @@ export function LinkForm({
           className="contents"
         >
           <input type="hidden" name="back" value={back} />
-          <div className="-mx-5 grid gap-4 overflow-y-auto px-5">
-            <div className="flex flex-col gap-1.5">
-              <Label>Direction</Label>
-              <Select
-                size="sm"
+          <div className="-mx-4 grid gap-4 overflow-y-auto px-4 py-px">
+            <Field>
+              <FieldLabel>Direction</FieldLabel>
+              <Choose
                 name="direction"
                 aria-label="Direction"
-                defaultSelectedKey="out"
-                triggerClassName={`w-full ${FIELD}`}
-                popoverClassName="w-[var(--trigger-width)] max-w-none"
-              >
-                <SelectItem id="out">this {type} … the other</SelectItem>
-                <SelectItem id="in">the other … this {type}</SelectItem>
-              </Select>
-            </div>
-            <Input size="small" name="verb" label="Verb" isRequired />
-            <div className="flex flex-col gap-1.5">
-              <Label isRequired>Record</Label>
+                defaultValue="out"
+                className="w-full"
+                options={[
+                  ["out", `this ${type} … the other`],
+                  ["in", `the other … this ${type}`],
+                ]}
+              />
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="link-verb">
+                Verb
+                <Required />
+              </FieldLabel>
+              <Input id="link-verb" name="verb" required />
+            </Field>
+            <Field>
+              <FieldLabel>
+                Record
+                <Required />
+              </FieldLabel>
               <OtherRecord not={id} name="other" />
-            </div>
+            </Field>
           </div>
           <DialogFooter>
-            <Button size="small" type="submit" leadingIcon={RiAddLine}>
+            <Button size="sm" type="submit">
+              <RiAddLine data-icon="inline-start" />
               Link
             </Button>
           </DialogFooter>

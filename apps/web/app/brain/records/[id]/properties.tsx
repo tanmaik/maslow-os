@@ -15,14 +15,14 @@ import {
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ComponentType } from "react";
 
-import { Button } from "@/components/base/buttons/button";
-import { Input } from "@/components/base/input/input";
-import { Select, SelectItem } from "@/components/base/select/select";
 import { DateField } from "@/components/date-field";
 import { LocalTime } from "@/components/local-time";
-import { cx } from "@/utils/cx";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
-import { cell, FIELD, typeText } from "../../format";
+import { Choose } from "../../choose";
+import { cell, typeText } from "../../format";
 import { save } from "./save";
 
 type Mark = ComponentType<{
@@ -205,22 +205,22 @@ export function Properties({
       </dl>
       {more > 0 && (
         <Button
-          variant="secondary"
+          variant="ghost"
           size="xs"
-          leadingIcon={unfolded ? RiArrowUpSLine : RiArrowDownSLine}
           onClick={() => setUnfolded((u) => !u)}
-          className="mt-1"
+          className="mt-1 -ml-2 text-muted-foreground"
         >
+          {unfolded ? (
+            <RiArrowUpSLine data-icon="inline-start" />
+          ) : (
+            <RiArrowDownSLine data-icon="inline-start" />
+          )}
           {unfolded
             ? "Show less"
             : `${more} ${filled ? "more" : more === 1 ? "field" : "fields"}`}
         </Button>
       )}
-      {trouble && (
-        <p className="py-1 text-body-regular text-text-error-primary">
-          {trouble}
-        </p>
-      )}
+      {trouble && <p className="py-1 text-sm text-destructive">{trouble}</p>}
     </div>
   );
 }
@@ -247,7 +247,7 @@ function Line({
 }) {
   return (
     <div className="flex min-h-8 w-full items-center gap-3">
-      <dt className="flex w-36 shrink-0 items-center gap-1.5 text-caption-1-medium text-text-tertiary">
+      <dt className="flex w-36 shrink-0 items-center gap-1.5 text-xs font-medium text-muted-foreground">
         <Mark className="size-4 shrink-0" aria-hidden />
         <span className="truncate">{typeText(label)}</span>
       </dt>
@@ -255,12 +255,7 @@ function Line({
         {editing ? (
           <div className="flex w-full flex-wrap items-center gap-2">
             {children}
-            <Button
-              type="button"
-              variant="secondary"
-              size="xs"
-              onClick={onClose}
-            >
+            <Button type="button" variant="outline" size="xs" onClick={onClose}>
               Done
             </Button>
           </div>
@@ -268,19 +263,19 @@ function Line({
           <button
             type="button"
             onClick={onOpen}
-            className={cx(
-              "-ml-1.5 min-w-0 max-w-full cursor-pointer truncate rounded-lg px-1.5 py-1 text-left text-body-regular outline-none",
-              "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover active:bg-background-secondary-active focus-visible:ring-2 focus-visible:ring-border-focus-ring",
-              shown ? "text-text-primary" : "text-text-tertiary",
+            className={cn(
+              "-ml-1.5 max-w-full min-w-0 cursor-pointer truncate rounded-md px-1.5 py-1 text-left text-sm outline-none",
+              "transition-colors duration-fast ease-plain hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring/50",
+              shown ? "text-foreground" : "text-muted-foreground",
             )}
           >
             {shown || "Empty"}
           </button>
         ) : (
           <span
-            className={cx(
-              "truncate py-1 text-body-regular",
-              shown ? "text-text-primary" : "text-text-tertiary",
+            className={cn(
+              "truncate py-1 text-sm",
+              shown ? "text-foreground" : "text-muted-foreground",
             )}
           >
             {shown || "Empty"}
@@ -318,25 +313,21 @@ function FieldControl({
           ];
     const current = value === undefined || value === null ? "" : String(value);
     return (
-      <Select
+      <Choose
         size="sm"
         aria-label={f.name}
-        defaultSelectedKey={current || NONE}
+        defaultValue={current || NONE}
         defaultOpen
-        onSelectionChange={(k) => {
-          const next = k === NONE ? "" : String(k ?? "");
-          if (next === current) onClose();
-          else onChange(next);
+        onValueChange={(k) => {
+          const next = k === NONE ? "" : k;
+          if (next !== current) onChange(next);
         }}
-        triggerClassName={`min-w-40 ${FIELD}`}
-      >
-        {!f.required && <SelectItem id={NONE}>—</SelectItem>}
-        {choices.map(([v, label]) => (
-          <SelectItem key={v} id={v}>
-            {label}
-          </SelectItem>
-        ))}
-      </Select>
+        onOpenChange={(open) => {
+          if (!open) onClose();
+        }}
+        className="min-w-40"
+        options={[...(f.required ? [] : [[NONE, "—"] as const]), ...choices]}
+      />
     );
   }
   if (f.datatype === "date" || f.datatype === "datetime") {
@@ -353,17 +344,16 @@ function FieldControl({
   return (
     <Input
       aria-label={f.name}
-      size="small"
       autoFocus
       type={f.datatype === "number" ? "number" : "text"}
       inputMode={f.datatype === "number" ? "decimal" : undefined}
       defaultValue={text}
       placeholder={f.datatype === "list" ? "one, two, three" : undefined}
-      onBlur={(e) => onChange((e.target as HTMLInputElement).value.trim())}
+      onBlur={(e) => onChange(e.target.value.trim())}
       onKeyDown={(e) => {
-        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+        if (e.key === "Enter") e.currentTarget.blur();
       }}
-      className="min-w-40 flex-1"
+      className="h-7 min-w-40 flex-1"
     />
   );
 }

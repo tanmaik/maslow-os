@@ -7,7 +7,8 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { useRef, type ReactNode } from "react";
 
-import { Notification } from "@/components/base/notification/notification";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { SNAP } from "@/lib/motion";
 
 import { recordHref, typeHref, typeText } from "./format";
@@ -35,14 +36,14 @@ export function Asks({
   if (asks.length === 0) return null;
   return (
     <div className="flex flex-col gap-2 px-3 pb-3">
-      <h2 className="text-caption-1-medium text-text-secondary">
+      <h2 className="text-xs font-medium text-muted-foreground">
         Waiting on you
       </h2>
-      {asks.map((a, i) => (
+      {asks.map((a) => (
         <motion.div key={a.id} layout transition={SNAP}>
-          <Ask id={a.id} back={back} order={i}>
+          <Ask id={a.id} back={back}>
             Your agent asks to let{" "}
-            <b className="text-text-primary">
+            <b className="text-foreground">
               {list(
                 a.subjects.map((s) =>
                   s.who === "everyone"
@@ -64,7 +65,7 @@ export function Asks({
                     <Link
                       key={i}
                       href={recordHref(it.record)}
-                      className="text-text-primary underline"
+                      className="text-foreground underline"
                     >
                       {records.get(it.record)?.title || "a record"}
                     </Link>
@@ -75,7 +76,7 @@ export function Asks({
                     <Link
                       key={i}
                       href="/settings?pane=computer"
-                      className="text-text-primary underline"
+                      className="text-foreground underline"
                     >
                       port {it.port} on your computer
                     </Link>
@@ -83,7 +84,7 @@ export function Asks({
                 }
                 if ("file" in it) {
                   return (
-                    <span key={i} className="text-text-primary">
+                    <span key={i} className="text-foreground">
                       {it.file} on your computer
                     </span>
                   );
@@ -95,7 +96,7 @@ export function Asks({
                   <Link
                     key={i}
                     href={typeHref(name)}
-                    className="inline-flex items-baseline gap-1 text-text-primary underline"
+                    className="inline-flex items-baseline gap-1 text-foreground underline"
                   >
                     every record of type
                     {name ? (
@@ -123,12 +124,10 @@ export function Asks({
 function Ask({
   id,
   back,
-  order,
   children,
 }: {
   id: string;
   back: string;
-  order: number;
   children: ReactNode;
 }) {
   const form = useRef<HTMLFormElement>(null);
@@ -150,25 +149,18 @@ function Ask({
         <input type="hidden" name="back" value={back} />
         <input ref={intent} type="hidden" name="intent" value="" />
       </form>
-      <Notification
-        title={children}
-        icon={RiShareForwardLine}
-        dismissible={false}
-        introDelay={order * 0.05}
-        actions={[
-          {
-            label: "Accept",
-            variant: "primary",
-            onClick: () => answer("accept"),
-          },
-          {
-            label: "Decline",
-            variant: "secondary",
-            onClick: () => answer("decline"),
-          },
-        ]}
-        className="pr-4"
-      />
+      <Alert>
+        <RiShareForwardLine />
+        <AlertDescription className="text-pretty">{children}</AlertDescription>
+        <div className="col-start-2 mt-2 flex gap-2">
+          <Button size="sm" onClick={() => answer("accept")}>
+            Accept
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => answer("decline")}>
+            Decline
+          </Button>
+        </div>
+      </Alert>
     </>
   );
 }

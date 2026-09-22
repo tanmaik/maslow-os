@@ -9,8 +9,8 @@ import {
   type Kept,
   type Papers,
 } from "@/app/desktop/wallpapers";
-import { CloseButton } from "@/components/base/buttons/close-button";
-import { cx } from "@/utils/cx";
+import { CloseButton } from "@/components/ui/close-button";
+import { cn } from "@/lib/utils";
 
 // What a wallpaper of the person's own may weigh, said here as the page
 // says it and refused again by the route.
@@ -72,10 +72,10 @@ function Tile({
         aria-label={name}
         aria-pressed={chosen}
         onClick={onPick}
-        className={cx(
-          "block aspect-16/10 w-full overflow-hidden rounded-2lg bg-canvas outline-none",
-          "ring-offset-2 ring-offset-background-primary-default focus-visible:ring-2 focus-visible:ring-border-focus-ring",
-          chosen && "ring-2 ring-border-focus-ring",
+        className={cn(
+          "block aspect-16/10 w-full overflow-hidden rounded-md bg-canvas outline-none",
+          "ring-offset-2 ring-offset-background focus-visible:ring-2 focus-visible:ring-ring",
+          chosen && "ring-2 ring-ring",
         )}
       >
         {src && (
@@ -94,20 +94,20 @@ function Tile({
           />
         )}
       </button>
-      <span className="truncate text-caption-1-medium text-text-secondary">
+      <span className="truncate text-xs font-medium text-muted-foreground">
         {name}
       </span>
       {credit && (
-        <span className="-mt-1.5 truncate text-caption-1-regular text-text-tertiary">
+        <span className="-mt-1.5 truncate text-xs text-muted-foreground">
           {credit}
         </span>
       )}
       {onRemove && (
         <CloseButton
-          size="2xs"
+          size="icon-xs"
           aria-label={`Remove ${name}`}
           onClick={onRemove}
-          className="absolute top-1.5 right-1.5 bg-background-primary-default opacity-0 transition-opacity duration-fast ease-out-quart group-hover:opacity-100 focus-visible:opacity-100"
+          className="absolute top-1 right-1 bg-background opacity-0 hover:bg-background transition-opacity duration-fast ease-out-quart group-hover:opacity-100 focus-visible:opacity-100"
         />
       )}
     </div>
@@ -170,7 +170,7 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
 
   return (
     <div id="wallpaper" className="flex scroll-mt-20 flex-col gap-3">
-      <h3 className="text-body-regular text-text-primary">Wallpaper</h3>
+      <h3 className="text-sm text-foreground">Wallpaper</h3>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {PAPERS.map((p) => (
           <Tile
@@ -183,7 +183,7 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
           />
         ))}
       </div>
-      <h4 className="pt-2 text-caption-1-medium text-text-tertiary">Yours</h4>
+      <h4 className="pt-2 text-xs font-medium text-muted-foreground">Yours</h4>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <label
           onDragOver={(e) => {
@@ -196,9 +196,9 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
             setOver(false);
             void take(e.dataTransfer.files[0]);
           }}
-          className={cx(
-            "flex aspect-16/10 cursor-pointer flex-col items-center justify-center gap-1 rounded-2lg border border-dashed border-border-button-default bg-background-secondary-default text-center transition-colors duration-fast ease-out-quart hover:bg-background-secondary-hover",
-            over && "border-border-focus-ring bg-background-secondary-hover",
+          className={cn(
+            "flex aspect-16/10 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed border-border bg-muted text-center transition-colors duration-fast ease-out-quart hover:bg-accent",
+            over && "border-ring bg-accent",
             busy && "cursor-progress",
           )}
         >
@@ -211,8 +211,8 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
               e.currentTarget.value = "";
             }}
           />
-          <RiImageAddLine className="size-5 text-foreground-icon-tertiary" />
-          <span className="px-2 text-caption-1-medium text-text-secondary">
+          <RiImageAddLine className="size-5 text-muted-foreground" />
+          <span className="px-2 text-xs font-medium text-muted-foreground">
             {busy ? "Keeping…" : "Add a picture"}
           </span>
         </label>
@@ -229,9 +229,7 @@ export function Wallpaper({ papers }: { papers: Papers | null }) {
           />
         ))}
       </div>
-      {said && (
-        <p className="text-caption-1-regular text-text-error-primary">{said}</p>
-      )}
+      {said && <p className="text-xs text-destructive">{said}</p>}
     </div>
   );
 }

@@ -88,11 +88,9 @@ function RecordChip({ id, data }: NodeProps<RecordNode>) {
   const color = typeColor(data.type);
   return (
     <div
-      className={`flex cursor-grab items-center gap-1.5 rounded-md border border-border-button-default bg-background-primary-default px-1.5 text-text-primary transition-[background-color,border-color] duration-fast ease-plain active:cursor-grabbing ${
-        attended
-          ? "border-border-button-active bg-background-primary-hover"
-          : "hover:bg-background-primary-hover active:bg-background-primary-active"
-      } text-caption-1-medium`}
+      className={`flex cursor-grab items-center gap-1.5 rounded-md border border-border bg-card px-1.5 text-foreground transition-[background-color,border-color] duration-fast ease-plain active:cursor-grabbing ${
+        attended ? "border-ring bg-accent" : "hover:bg-accent active:bg-accent"
+      } text-xs font-medium`}
       style={{
         width: chipWidth(data.title),
         height: CHIP_HEIGHT,
@@ -154,9 +152,7 @@ function VerbLine({
   const by = y2 - uy * ARROW;
   const half = ARROW / 2;
   const arrow = `M ${x2} ${y2} L ${bx - uy * half} ${by + ux * half} L ${bx + uy * half} ${by - ux * half} Z`;
-  const color = named
-    ? "var(--color-text-primary)"
-    : "var(--color-text-tertiary)";
+  const color = named ? "var(--foreground)" : "var(--muted-foreground)";
   const opacity = named ? 0.9 : 0.4;
   return (
     <>
@@ -168,7 +164,7 @@ function VerbLine({
       {worded && data && (
         <EdgeLabelRenderer>
           <div
-            className="absolute rounded-md bg-background-primary-default/90 px-1 text-caption-2-regular text-text-secondary"
+            className="absolute rounded-md bg-card/90 px-1 text-xs text-muted-foreground"
             style={{
               // Read at its own size however far out the map is zoomed,
               // but never blown up past the chips it sits between.
@@ -360,7 +356,7 @@ function Canvas({
       onNodeDrag={(_, node) => hold(node.id, node.position.x, node.position.y)}
       // A chip stays where it was put; only its neighbours settle.
       onNodeDragStop={() => physics.current?.simulation.alphaTarget(0)}
-      className="bg-background-primary-default"
+      className="bg-card"
     ></ReactFlow>
   );
 }

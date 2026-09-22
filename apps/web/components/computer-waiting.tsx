@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { Announcement } from "@/components/base/announcement/announcement";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // What a page of the computer shows while there is no computer to show:
 // either the deployment has none at all, or this person's is still coming
@@ -44,27 +44,25 @@ export function ComputerWaiting({
 
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center">
-      <Announcement
-        className="max-w-sm"
-        icon={RiInformation2Line}
-        title={title}
-        description={
-          polls ? (
+      <Alert className="max-w-sm">
+        <RiInformation2Line aria-hidden />
+        <AlertTitle>{title}</AlertTitle>
+        <AlertDescription>
+          {description}
+          {polls && (
             <>
-              {description}{" "}
+              {" "}
               <Link
                 href="/settings?pane=computer"
-                className="text-text-primary underline underline-offset-2"
+                className="text-foreground underline underline-offset-2"
               >
                 Computer, in Settings
               </Link>
               , shows it coming up.
             </>
-          ) : (
-            description
-          )
-        }
-      />
+          )}
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

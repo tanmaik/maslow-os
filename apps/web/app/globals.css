@@ -1,17 +1,10 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "../styles/theme.css";
-@import "../styles/typography.css";
-@import "../styles/boardui.css";
 
 /* Both looks. The dark one applies under .dark, set on the root before paint. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* BoardUI's skin. Its neutral ramp is Tailwind's grey; ours is pure grey,
-   no hue in any step, so paper is white and the greys carry nothing of
-   their own beside the accent. Its accent ramp is blue; ours is spun
-   from the hue and chroma the person picked under Look in Settings, so
-   every button, ring, switch and selection follows the pick. */
 @theme {
   /* The motion of the product: four curves and four clocks, and nothing
      between them. Everything arriving or settling decelerates hard and
@@ -29,242 +22,160 @@
      ours and not on Tailwind's. */
   --default-transition-duration: 150ms;
   --default-transition-timing-function: ease;
-  --color-neutral-50: oklch(0.985 0 0);
-  --color-neutral-100: oklch(0.966 0 0);
-  --color-neutral-200: oklch(0.928 0 0);
-  --color-neutral-300: oklch(0.872 0 0);
-  --color-neutral-400: oklch(0.712 0 0);
-  --color-neutral-500: oklch(0.562 0 0);
-  --color-neutral-600: oklch(0.452 0 0);
-  --color-neutral-700: oklch(0.372 0 0);
-  --color-neutral-800: oklch(0.272 0 0);
-  --color-neutral-900: oklch(0.212 0 0);
-  --color-neutral-925: oklch(0.182 0 0);
-  --color-neutral-950: oklch(0.148 0 0);
-  /* The eleven steps of the accent, at the lightness and the chroma
-     BoardUI tuned its own ramp to, spun onto the hue the person picked:
-     colour rises slowly through the tints, so a ghost button's ground and
-     a selected pill stay near-white, peaks at 600 where a word must carry,
-     and falls away into the shades. The step is a literal oklch here, in
-     `@theme`, so Tailwind emits every `accent-*` utility; only the hue and
-     how much of it come from the pick at runtime. */
-  --color-accent-50: oklch(
-    0.97 calc(var(--accent-chroma) * 0.065) var(--accent-hue)
-  );
-  --color-accent-100: oklch(
-    0.932 calc(var(--accent-chroma) * 0.15) var(--accent-hue)
-  );
-  --color-accent-200: oklch(
-    0.882 calc(var(--accent-chroma) * 0.276) var(--accent-hue)
-  );
-  --color-accent-300: oklch(
-    0.809 calc(var(--accent-chroma) * 0.49) var(--accent-hue)
-  );
-  --color-accent-400: oklch(
-    0.707 calc(var(--accent-chroma) * 0.77) var(--accent-hue)
-  );
-  --color-accent-500: oklch(0.623 var(--accent-chroma) var(--accent-hue));
-  --color-accent-600: oklch(
-    0.546 calc(var(--accent-chroma) * 1.145) var(--accent-hue)
-  );
-  --color-accent-700: oklch(
-    0.488 calc(var(--accent-chroma) * 1.135) var(--accent-hue)
-  );
-  --color-accent-800: oklch(
-    0.424 calc(var(--accent-chroma) * 0.93) var(--accent-hue)
-  );
-  --color-accent-900: oklch(
-    0.379 calc(var(--accent-chroma) * 0.68) var(--accent-hue)
-  );
-  --color-accent-950: oklch(
-    0.282 calc(var(--accent-chroma) * 0.425) var(--accent-hue)
-  );
 }
 
+/* The look, in one place. shadcn's names are the only colour names; every
+   neutral is pure grey; the one colour is the person's accent, which
+   feeds --primary and --ring. */
 @theme inline {
-  /* The device's own face, whatever it is; nothing is named or shipped.
-     Body sits at 14; a label in a bar drops to 12 and a title climbs, so a
-     page says where to start before it is read. */
+  /* The device's own face, whatever it is; nothing is named or shipped. */
   --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --font-serif: var(--font-sans);
   --font-heading: var(--font-sans);
+  /* The one type scale: a label is xs, the body is sm, and a title climbs
+     one step at a time. */
   --text-xs: 12px;
   --text-xs--line-height: 16px;
   --text-sm: 14px;
   --text-sm--line-height: 20px;
-  --text-base: 14px;
-  --text-base--line-height: 20px;
-  --text-lg: 16px;
-  --text-lg--line-height: 24px;
-  --text-xl: 18px;
-  --text-xl--line-height: 26px;
-  --text-2xl: 22px;
-  --text-2xl--line-height: 28px;
-  --text-3xl: 28px;
-  --text-3xl--line-height: 34px;
-  --text-4xl: 34px;
-  --text-4xl--line-height: 40px;
-  /* shadcn's names, each pointing at the BoardUI token it means, so a
-     shadcn part and a BoardUI part on the same page are one skin. */
-  --color-sidebar-ring: var(--ring);
-  --color-sidebar-border: var(--border);
-  --color-sidebar-accent-foreground: var(--foreground);
-  --color-sidebar-accent: var(--accent);
-  --color-sidebar-primary-foreground: var(--primary-foreground);
-  --color-sidebar-primary: var(--primary);
-  --color-sidebar-foreground: var(--foreground);
-  --color-sidebar: var(--card);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 26px;
+  --text-xl: 22px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 28px;
+  --text-2xl--line-height: 34px;
+  --text-3xl: 34px;
+  --text-3xl--line-height: 40px;
+  /* Small corners, stepped from one number. */
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
   --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  /* The old desktop's own: its ground and its dock. */
   --color-canvas: var(--canvas);
-  --shadow-float: var(--float);
-  --color-dock-dot: var(--dock-dot);
   --color-dock-line: var(--dock-line);
 }
 
-/* The label of a tool the agent is running: a highlight sweeps across it. */
-@keyframes live-tool-shine {
-  from {
-    background-position:
-      -4.5rem 0,
-      0 0;
-  }
-  to {
-    background-position:
-      calc(100% + 4.5rem) 0,
-      0 0;
-  }
-}
-
-@utility live-tool-shine {
-  @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-    color: transparent;
-    background-image:
-      linear-gradient(to right, transparent, var(--foreground), transparent),
-      linear-gradient(var(--muted-foreground), var(--muted-foreground));
-    background-size:
-      4.5rem 100%,
-      100% 100%;
-    background-repeat: no-repeat;
-    background-clip: text;
-    animation: live-tool-shine 2.2s steps(30) infinite;
-  }
-}
-
-/* Warm, and one colour in it: an orange unless the person picks another,
-   spent on the few things a person is meant to look at. Every shadcn name
-   is a BoardUI token; only the desk, the glass and the dock are ours. Light
-   is the root; dark is a class set before paint. */
+/* Light is the root; dark is a class set before paint. The accent is a hue
+   and how much of it, set from the person's pick under Look in Settings. */
 :root {
   color-scheme: light;
   --accent-hue: 42;
   --accent-chroma: 0.163;
-  /* Words that carry meaning read at 4.5:1 over their ground: one step
-     darker than BoardUI's own for the supporting and the faint. */
-  --color-text-secondary: var(--color-neutral-600);
-  --color-text-tertiary: var(--color-neutral-500);
-  --color-text-placeholder: var(--color-neutral-500);
-  --color-foreground-icon-secondary: var(--color-neutral-600);
-  --color-foreground-icon-tertiary: var(--color-neutral-500);
-  --canvas: oklch(0.972 0.006 75); /* the desk the windows sit on */
-  --background: var(--color-background-full);
-  --foreground: var(--color-text-primary);
-  --card: var(--color-background-primary-default);
-  --card-foreground: var(--color-text-primary);
-  --popover: var(--color-background-primary-default);
-  --popover-foreground: var(--color-text-primary);
-  --primary: var(--color-accent-500);
-  --primary-foreground: var(--color-text-white);
-  --secondary: var(--color-background-secondary-default);
-  --secondary-foreground: var(--color-text-primary);
-  --muted: var(--color-background-secondary-default);
-  --muted-foreground: var(--color-text-secondary);
-  --accent: var(--color-background-primary-hover);
-  --accent-foreground: var(--color-text-primary);
-  --destructive: var(--color-red-500);
-  --border: var(--color-border-button-default);
-  --input: var(--color-border-button-default);
-  --ring: var(--color-border-focus-ring);
-  --cast: oklch(0.28 0 0 / 16%);
-  --float: 0 1px 2px -1px var(--cast), 0 14px 34px -18px var(--cast);
-  /* The glass: a breath of the accent, clear enough to see through. */
+  --radius: 0.375rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.623 var(--accent-chroma) var(--accent-hue));
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.965 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.965 0 0);
+  --muted-foreground: oklch(0.5 0 0);
+  --accent: oklch(0.95 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --success: oklch(0.6 0.15 150);
+  --warning: oklch(0.7 0.15 75);
+  --border: oklch(0.915 0 0);
+  --input: oklch(0.89 0 0);
+  --ring: var(--primary);
+  --chart-1: var(--primary);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.708 0 0);
+  --chart-5: oklch(0.87 0 0);
+  --sidebar: oklch(0.98 0 0);
+  --sidebar-foreground: var(--foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+  /* The old desktop's ground, glass and dock. */
+  --canvas: oklch(0.97 0 0);
   --glass: color-mix(in srgb, var(--primary) 6%, rgba(250, 251, 253, 0.26));
   --glass-rim: rgba(0, 0, 0, 0.22);
   --glass-cast: 0 8px 30px rgba(0, 0, 0, 0.22);
   --glass-shine: rgba(255, 255, 255, 0.4);
-  --dock-dot: rgba(0, 0, 0, 0.6);
   --dock-line: rgba(0, 0, 0, 0.2);
 }
 
 .dark {
   color-scheme: dark;
-  --color-text-secondary: var(--color-neutral-300);
-  --color-text-tertiary: var(--color-neutral-400);
-  --color-text-placeholder: var(--color-neutral-400);
-  --color-foreground-icon-secondary: var(--color-neutral-300);
-  --color-foreground-icon-tertiary: var(--color-neutral-400);
-  --canvas: oklch(0.15 0.008 58);
-  --primary: var(--color-accent-400);
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.97 0 0);
+  --card: oklch(0.18 0 0);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: oklch(0.2 0 0);
+  --popover-foreground: oklch(0.97 0 0);
+  --primary: oklch(0.707 calc(var(--accent-chroma) * 0.77) var(--accent-hue));
   --primary-foreground: oklch(0.19 0.02 var(--accent-hue));
-  --destructive: var(--color-red-400);
-  --cast: oklch(0.05 0 0 / 55%);
-  --float: 0 1px 2px -1px var(--cast), 0 16px 38px -18px var(--cast);
+  --secondary: oklch(0.235 0 0);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: oklch(0.235 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: oklch(0.26 0 0);
+  --accent-foreground: oklch(0.97 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.72 0.15 150);
+  --warning: oklch(0.78 0.14 75);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --sidebar: oklch(0.165 0 0);
+  --canvas: oklch(0.145 0 0);
   --glass: color-mix(in srgb, var(--primary) 7%, rgba(26, 27, 31, 0.32));
   --glass-rim: rgba(0, 0, 0, 0.45);
   --glass-cast: 0 8px 30px rgba(0, 0, 0, 0.55);
   --glass-shine: rgba(255, 255, 255, 0.12);
-  --dock-dot: rgba(255, 255, 255, 0.6);
   --dock-line: rgba(255, 255, 255, 0.2);
 }
 
-/* Tailwind expands a shadow utility at build time; under .dark it reads the
-   dark elevation again, so a card's shadow is the dark one without a
-   dark: on every card. */
-.dark .shadow-xs {
-  --tw-shadow: var(--shadow-xs);
-}
-.dark .shadow-sm {
-  --tw-shadow: var(--shadow-sm);
-}
-.dark .shadow-md {
-  --tw-shadow: var(--shadow-md);
-}
-.dark .shadow-lg {
-  --tw-shadow: var(--shadow-lg);
-}
-.dark .shadow-xl {
-  --tw-shadow: var(--shadow-xl);
-}
-.dark .shadow-card {
-  --tw-shadow: var(--shadow-card);
-}
-.dark .shadow-dropdown {
-  --tw-shadow: var(--shadow-dropdown);
-}
-.dark .shadow-sidebar {
-  --tw-shadow: var(--shadow-sidebar);
-}
-
-/* A page crosses to the next the way BoardUI's parts arrive: the one
-   leaving fades fast, the one arriving condenses in from a little
-   smaller and a little blurred. Every link in a window is a page of its
+/* A page crosses to the next: the one leaving fades fast, the one
+   arriving condenses in from a little smaller and a little blurred. Every link in a window is a page of its
    own, so this is what a click feels like there. */
 @view-transition {
   navigation: auto;
@@ -297,68 +208,16 @@
     animation: none;
   }
 }
-/* The look changes from the point the person clicked, as one soft circle;
-   the crossfade would fight it. Colour transitions hold still while the
-   next look is captured, so the circle holds the finished palette and
-   not a frame still fading. */
-.theme-transitioning::view-transition-old(root),
-.theme-transitioning::view-transition-new(root) {
-  animation: none;
-}
-.theme-transitioning::view-transition-old(root) {
-  z-index: 1;
-}
-.theme-transitioning::view-transition-new(root) {
-  z-index: 2;
-}
-.theme-transitioning,
-.theme-transitioning * {
-  transition: none !important;
-}
-
-/* A running agent's line shimmers. */
-@keyframes ai-chat-text-shimmer {
-  from {
-    background-position: 200% center;
-  }
-  to {
-    background-position: -100% center;
-  }
-}
-.agent-progress-loading-text {
-  color: transparent;
-  background-image: linear-gradient(
-    100deg,
-    var(--color-text-secondary) 16%,
-    var(--color-text-secondary) 38%,
-    var(--color-text-primary) 50%,
-    var(--color-text-secondary) 62%,
-    var(--color-text-secondary) 84%
-  );
-  background-position: 200% center;
-  background-size: 300% 100%;
-  background-clip: text;
-  -webkit-background-clip: text;
-  animation: ai-chat-text-shimmer 3.4s linear infinite;
-  will-change: background-position;
-}
-@media (prefers-reduced-motion: reduce) {
-  .agent-progress-loading-text {
-    color: var(--color-text-secondary);
-    background-image: none;
-    animation: none;
-  }
-}
 details summary::-webkit-details-marker {
   display: none;
 }
 
 @layer base {
   * {
-    @apply border-border-button-default outline-ring/50;
+    @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-canvas text-foreground;
+    @apply bg-background text-foreground;
   }
   html {
     @apply font-sans antialiased;
@@ -436,7 +295,7 @@ html[data-framed] main {
   /* Paper to the frame's edge whatever the page holds, however short:
      the window's glass is never seen through its content. A page with
      a rail of its own beside the content keeps the rail on the glass. */
-  background: var(--color-background-full);
+  background: var(--background);
 }
 html[data-framed] main:has(> .brain-layout),
 html[data-framed] main:has(> * > nav[aria-label="Shells"]),
@@ -462,12 +321,12 @@ html[data-framed] main > [data-slot="card"] {
   border-radius: 0;
   border: 0;
   box-shadow: none;
-  background: var(--color-background-full);
+  background: var(--background);
   min-height: 100%;
 }
 html[data-framed] .page-sheet > .sticky {
   border-radius: 0;
-  background: var(--color-background-full);
+  background: var(--background);
 }
 html[data-framed] .brain-layout {
   display: flex;
@@ -486,20 +345,16 @@ html[data-framed] .brain-layout {
 html[data-framed] .brain-nav {
   border-radius: 0;
   border: 0;
-  border-bottom: 1px solid var(--color-separator-border);
+  border-bottom: 1px solid var(--border);
   box-shadow: none;
-  background: color-mix(
-    in srgb,
-    var(--color-background-secondary-default) 55%,
-    transparent
-  );
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
   min-height: 0;
   overflow: auto;
 }
 @media (min-width: 768px) {
   html[data-framed] .brain-nav {
     border-bottom: 0;
-    border-right: 1px solid var(--color-separator-border);
+    border-right: 1px solid var(--border);
   }
 }
 html[data-framed] .brain-layout > main {
@@ -541,15 +396,6 @@ html[data-framed] .brain-layout:has(.brain-nav[data-away]) > main {
   min-height: 100%;
   overflow: visible;
 }
-html[data-framed] .prefs {
-  margin: 0;
-  height: 100%;
-}
-html[data-framed] .prefs-pane {
-  flex: 1 0 auto;
-  background: var(--color-background-full);
-}
-
 /* The accent a person picked in Settings, set on the root before paint. */
 html[data-accent="red"] {
   --accent-hue: 22;
@@ -617,11 +463,6 @@ html[data-accent="graphite"] {
   background: color-mix(in srgb, var(--popover) 66%, transparent);
   -webkit-backdrop-filter: blur(14px) saturate(185%);
   backdrop-filter: blur(14px) saturate(185%);
-}
-/* A sheet with more of the desk in it: the notices, which lie over the
-   wallpaper and hold little. */
-.glass-sheet.glass-airy {
-  background: color-mix(in srgb, var(--popover) 58%, transparent);
 }
 /* A window's frame, as ryOS's Aqua Glass draws one (aqua-glass.css:
    190-227): one frosted pane from title bar to foot, its tint a little
@@ -721,174 +562,16 @@ html[data-paper-light] .mac-top-menubar [aria-expanded="true"] {
   .mac-top-menubar,
   html[data-paper-light] .mac-top-menubar {
     background: var(--ground);
-    color: var(--color-text-white);
-  }
-}
-
-/* Settings, as a Mac lays out System Settings: a rail of panes down the
-   left with a search over it, and the pane on the right, its name over
-   its wells. Every part is BoardUI's. */
-.prefs {
-  --prefs-line: var(--color-separator-border);
-  /* One width for what a person reads: a pane's wells centre on it,
-     however wide the window is. */
-  --prefs-width: 640px;
-  /* The surface owns the whole body box, so no ground of the page's shows
-     above, beside or below it. */
-  margin: -1.5rem -1.5rem -7rem;
-  height: 100dvh;
-  display: flex;
-  overflow: hidden;
-  background: var(--color-background-full);
-  color: var(--color-text-primary);
-}
-/* The rail: the search, then the panes in their groups. It keeps its
-   width and its own scroll; the pane beside it scrolls on its own, so
-   the rail stands still however far the pane goes. */
-.prefs-side {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  width: 196px;
-  flex-shrink: 0;
-  padding: 10px 8px;
-  overflow-y: auto;
-  border-right: 1px solid var(--prefs-line);
-  background: var(--color-background-secondary-default);
-}
-.prefs-search {
-  margin-bottom: 6px;
-}
-.prefs-group {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-.prefs-group + .prefs-group {
-  margin-top: 8px;
-}
-.prefs-group-name {
-  padding: 4px 8px 2px;
-}
-.prefs-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 30px;
-  padding: 3px 8px 3px 5px;
-  border-radius: var(--radius-2lg);
-  outline: none;
-  transition: background-color var(--transition-duration-fast) var(--ease-plain);
-}
-.prefs-item:focus-visible {
-  outline: 2px solid var(--color-border-focus-ring);
-  outline-offset: -2px;
-}
-/* The mark on a small tile, as a Mac's are. */
-.prefs-item-mark {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  border-radius: 7px;
-}
-.prefs-main {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  flex: 1;
-  overflow-y: auto;
-}
-/* A pane: its wells, one below another, centred however wide the window
-   is. */
-.prefs-pane {
-  padding: 24px 24px 32px;
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-}
-.prefs-pane > * {
-  width: 100%;
-  max-width: var(--prefs-width);
-  margin-inline: auto;
-}
-/* On a phone the rail is a strip along the top: the search, then the
-   panes as a row that scrolls sideways, and the pane under it. */
-@media (max-width: 639px) {
-  .prefs {
-    flex-direction: column;
-  }
-  /* A strip of chips along the top, scrolled sideways by a thumb; the
-     search, which the strip makes needless, is not drawn. */
-  .prefs-side {
-    width: auto;
-    flex-direction: row;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 12px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    border-right: 0;
-    border-bottom: 1px solid var(--prefs-line);
-  }
-  .prefs-side::-webkit-scrollbar {
-    display: none;
-  }
-  .prefs-search {
-    display: none;
-  }
-  .prefs-group {
-    display: contents;
-  }
-  .prefs-group-name {
-    display: none;
-  }
-  .prefs-item {
-    flex: 0 0 auto;
-    width: auto;
-    min-height: 36px;
-    padding: 4px 12px 4px 6px;
-    white-space: nowrap;
-    border-radius: 999px;
-    border: 1px solid var(--prefs-line);
+    color: var(--primary-foreground);
   }
 }
 
 /* Under reduced motion the travel goes and the meaning stays: a menu or a
-   dialog still fades, but does not scale or blur; nothing pulses. */
+   dialog is there or not, with no entrance and no exit; nothing pulses. */
 @media (prefers-reduced-motion: reduce) {
-  [data-slot="dialog-content"],
-  [data-slot="alert-dialog-content"],
-  [data-slot="dropdown-menu-content"],
-  [data-slot="context-menu-content"],
-  [data-slot="menubar-content"],
-  [data-slot="popover-content"],
-  [data-slot="select-content"],
-  [data-slot="tooltip-content"] {
-    transition-property: opacity;
-  }
-  [data-slot="dialog-content"][data-starting-style],
-  [data-slot="dialog-content"][data-ending-style],
-  [data-slot="alert-dialog-content"][data-starting-style],
-  [data-slot="alert-dialog-content"][data-ending-style],
-  [data-slot="dropdown-menu-content"][data-starting-style],
-  [data-slot="dropdown-menu-content"][data-ending-style],
-  [data-slot="context-menu-content"][data-starting-style],
-  [data-slot="context-menu-content"][data-ending-style],
-  [data-slot="menubar-content"][data-starting-style],
-  [data-slot="menubar-content"][data-ending-style],
-  [data-slot="popover-content"][data-starting-style],
-  [data-slot="popover-content"][data-ending-style],
-  [data-slot="select-content"][data-starting-style],
-  [data-slot="select-content"][data-ending-style],
-  [data-slot="tooltip-content"][data-starting-style],
-  [data-slot="tooltip-content"][data-ending-style] {
-    scale: 1;
-    filter: none;
+  [class*="animate-in"],
+  [class*="animate-out"] {
+    animation-duration: 1ms !important;
   }
   .animate-pulse {
     animation: none;
@@ -896,7 +579,7 @@ html[data-paper-light] .mac-top-menubar [aria-expanded="true"] {
   }
 }
 
-/* A phone: every menu is a sheet, and a pane's grid is one column. */
+/* A phone: every menu is a sheet. */
 @media (max-width: 639.98px) {
   /* Every menu — a window's, the desk's, the dock's, a row's — is a sheet
      up from the bottom edge, where a thumb is, rather than a card beside
@@ -914,11 +597,6 @@ html[data-paper-light] .mac-top-menubar [aria-expanded="true"] {
     width: 100% !important;
     min-width: 0 !important;
     max-width: none !important;
-  }
-
-  .prefs-section-grid {
-    grid-template-columns: 1fr;
-    justify-items: stretch;
   }
 }
 

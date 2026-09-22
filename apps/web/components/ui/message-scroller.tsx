@@ -7,10 +7,10 @@ import {
   useMessageScrollerScrollable,
   useMessageScrollerVisibility,
 } from "@shadcn/react/message-scroller";
-
 import { cn } from "@/lib/utils";
+
 import { Button } from "@/components/ui/button";
-import { ArrowDownIcon } from "lucide-react";
+import { RiArrowDownLine } from "@remixicon/react";
 
 function MessageScrollerProvider(
   props: React.ComponentProps<typeof MessageScrollerPrimitive.Provider>,
@@ -107,7 +107,7 @@ function MessageScrollerButton({
     >
       {children ?? (
         <>
-          <ArrowDownIcon />
+          <RiArrowDownLine />
           <span className="sr-only">
             {direction === "end" ? "Scroll to end" : "Scroll to start"}
           </span>

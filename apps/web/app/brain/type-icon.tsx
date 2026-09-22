@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 import { typeColor, typeHref, typeText } from "./format";
 
@@ -14,7 +14,7 @@ export function TypeIcon({
 }) {
   return (
     <span
-      className={cx("size-2 shrink-0 rounded-[2px]", className)}
+      className={cn("size-2 shrink-0 rounded-[2px]", className)}
       style={{ background: typeColor(type) }}
       aria-hidden
     />
@@ -42,11 +42,11 @@ export function TypeMark({
       <span className="truncate">{typeText(type)}</span>
     </>
   );
-  const classes = cx("inline-flex min-w-0 items-center gap-2", className);
+  const classes = cn("inline-flex min-w-0 items-center gap-2", className);
   return link ? (
     <Link
       href={typeHref(type, owner)}
-      className={cx(classes, "hover:underline")}
+      className={cn(classes, "hover:underline")}
     >
       {inner}
     </Link>

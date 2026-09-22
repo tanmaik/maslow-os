@@ -23,14 +23,8 @@ import {
 } from "react";
 
 import { Markdown } from "@/components/markdown";
-import {
-  MENU_ITEM,
-  MENU_ITEM_ACTIVE,
-  MENU_ITEM_INTERACTIVE,
-  MENU_POPOVER_SURFACE,
-} from "@/components/base/dropdown/menu-styles";
-import { Textarea } from "@/components/base/textarea/textarea";
-import { cx } from "@/utils/cx";
+import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 import type * as Y from "yjs";
 
@@ -310,7 +304,7 @@ export function Body({
         },
         attributes: {
           class:
-            "min-h-7 text-body-regular text-text-primary focus:outline-none [&_h1]:mt-4 [&_h1]:text-title-3-semibold [&_h2]:mt-3 [&_h2]:text-headline-semibold [&_h3]:mt-3 [&_h3]:text-headline-medium [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-separator-border [&_blockquote]:pl-3 [&_blockquote]:text-text-secondary [&_hr]:my-4 [&_hr]:border-t [&_hr]:border-separator-border [&_code]:rounded-md [&_code]:bg-background-secondary-default [&_code]:px-1 [&_code]:font-mono [&_pre]:rounded-2lg [&_pre]:bg-background-secondary-default [&_pre]:p-3 [&>*+*]:mt-3",
+            "min-h-7 text-sm text-foreground focus:outline-none [&_h1]:mt-4 [&_h1]:text-lg [&_h1]:font-medium [&_h2]:mt-3 [&_h2]:text-base [&_h2]:font-medium [&_h3]:mt-3 [&_h3]:text-sm [&_h3]:font-medium [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [&_hr]:my-4 [&_hr]:border-t [&_hr]:border-border [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1 [&_code]:font-mono [&_pre]:rounded-md [&_pre]:bg-muted [&_pre]:p-3 [&>*+*]:mt-3",
           "aria-label": "Body",
         },
       },
@@ -589,15 +583,13 @@ export function Body({
   if (!whole && !joined)
     return (
       <Textarea
-        size="small"
         aria-label="Body"
         rows={4}
-        autoResize
-        isReadOnly={joining || handing}
+        readOnly={joining || handing}
         value={text}
-        onChange={(v) => {
+        onChange={(e) => {
           edited.current = true;
-          setText(v);
+          setText(e.target.value);
         }}
         onFocus={() => {
           typing.current = true;
@@ -628,7 +620,7 @@ export function Body({
             if (saving.current === save) saving.current = null;
           });
         }}
-        fieldClassName="rounded-none bg-transparent p-0 ring-0 [&_textarea]:px-0"
+        className="resize-none rounded-none border-0 bg-transparent p-0 focus-visible:ring-0 dark:bg-transparent"
       />
     );
 
@@ -668,7 +660,7 @@ export function Body({
       }}
     >
       {blank && (
-        <p className="pointer-events-none absolute inset-x-0 top-0 text-body-regular text-text-tertiary">
+        <p className="pointer-events-none absolute inset-x-0 top-0 text-sm text-muted-foreground">
           Start writing, or type / for commands
         </p>
       )}
@@ -679,12 +671,9 @@ export function Body({
           role="listbox"
           aria-label="Insert"
           style={{ top: hangs.top, maxHeight: hangs.max || undefined }}
-          className={cx(
-            MENU_POPOVER_SURFACE,
-            "absolute left-0 z-30 flex w-60 flex-col gap-1 p-2",
-          )}
+          className="absolute left-0 z-30 flex w-56 max-w-[calc(100vw-32px)] flex-col overflow-y-auto rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
         >
-          <span className="px-2 py-1 text-caption-1-medium text-text-secondary">
+          <span className="px-1.5 py-1 text-xs font-medium text-muted-foreground">
             Insert
           </span>
           {shown.map((i, n) => (
@@ -698,14 +687,13 @@ export function Body({
                 choose(n);
               }}
               onMouseEnter={() => setPick(n)}
-              className={cx(
-                MENU_ITEM,
-                "min-h-10 text-body-medium",
-                n === at ? MENU_ITEM_ACTIVE : MENU_ITEM_INTERACTIVE,
+              className={cn(
+                "flex w-full cursor-default items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm outline-hidden select-none max-sm:min-h-11",
+                n === at && "bg-accent text-accent-foreground",
               )}
             >
               <i.mark
-                className="size-5 shrink-0 text-foreground-icon-secondary"
+                className="size-4 shrink-0 text-muted-foreground"
                 aria-hidden
               />
               {i.name}

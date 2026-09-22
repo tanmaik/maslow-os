@@ -2,12 +2,31 @@
 
 import type { Property } from "@maslow/brain";
 
-import { Input } from "@/components/base/input/input";
-import { Label } from "@/components/base/input/label";
-import { Select, SelectItem } from "@/components/base/select/select";
 import { DateField } from "@/components/date-field";
+import { Field, FieldLabel } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 
-import { cell, FIELD } from "./format";
+import { Choose } from "./choose";
+import { cell } from "./format";
+
+// The star on the name of a field that must be filled.
+export function Required() {
+  return (
+    <span aria-hidden className="-ml-1.5 text-destructive">
+      *
+    </span>
+  );
+}
+
+// A field's name over its input, starred when the record needs it.
+function Name({ p, htmlFor }: { p: Property; htmlFor?: string }) {
+  return (
+    <FieldLabel htmlFor={htmlFor}>
+      {p.name}
+      {p.required && <Required />}
+    </FieldLabel>
+  );
+}
 
 // One input per declared field, named p.<field>, holding what the record
 // has: a select for a choice, a calendar for a day, a number for a number.
@@ -27,40 +46,33 @@ export function FieldInputs({
         const value = values[p.name];
         const choices =
           p.datatype === "enum"
-            ? (p.options ?? []).map((o) => [o, o])
+            ? (p.options ?? []).map((o) => [o, o] as const)
             : p.datatype === "boolean"
-              ? [
+              ? ([
                   ["true", "yes"],
                   ["false", "no"],
-                ]
+                ] as const)
               : null;
         if (choices) {
           return (
-            <div key={p.id} className="flex flex-col gap-1.5">
-              {labels && <Label isRequired={p.required}>{p.name}</Label>}
-              <Select
-                size="sm"
+            <Field key={p.id}>
+              {labels && <Name p={p} />}
+              <Choose
                 name={id}
                 aria-label={p.name}
                 placeholder={p.required ? "Choose" : "None"}
-                defaultSelectedKey={value === undefined ? null : String(value)}
-                isRequired={p.required}
-                triggerClassName={`w-full ${FIELD}`}
-                popoverClassName="w-[var(--trigger-width)] max-w-none"
-              >
-                {choices.map(([v, label]) => (
-                  <SelectItem key={v} id={v}>
-                    {label}
-                  </SelectItem>
-                ))}
-              </Select>
-            </div>
+                defaultValue={value === undefined ? null : String(value)}
+                required={p.required}
+                options={choices}
+                className="w-full"
+              />
+            </Field>
           );
         }
         if (p.datatype === "date" || p.datatype === "datetime") {
           return (
-            <div key={p.id} className="flex flex-col gap-1.5">
-              {labels && <Label isRequired={p.required}>{p.name}</Label>}
+            <Field key={p.id}>
+              {labels && <Name p={p} htmlFor={id} />}
               <DateField
                 id={id}
                 name={id}
@@ -68,22 +80,25 @@ export function FieldInputs({
                 defaultValue={typeof value === "string" ? value : undefined}
                 required={p.required}
               />
-            </div>
+            </Field>
           );
         }
         return (
-          <Input
-            size="small"
-            key={p.id}
-            name={id}
-            label={labels ? p.name : undefined}
-            aria-label={labels ? undefined : p.name}
-            type={p.datatype === "number" ? "number" : "text"}
-            inputMode={p.datatype === "number" ? "decimal" : undefined}
-            defaultValue={cell(value, p)}
-            placeholder={p.datatype === "list" ? "one, two, three" : undefined}
-            isRequired={p.required}
-          />
+          <Field key={p.id}>
+            {labels && <Name p={p} htmlFor={id} />}
+            <Input
+              id={id}
+              name={id}
+              aria-label={labels ? undefined : p.name}
+              type={p.datatype === "number" ? "number" : "text"}
+              inputMode={p.datatype === "number" ? "decimal" : undefined}
+              defaultValue={cell(value, p)}
+              placeholder={
+                p.datatype === "list" ? "one, two, three" : undefined
+              }
+              required={p.required}
+            />
+          </Field>
         );
       })}
     </>

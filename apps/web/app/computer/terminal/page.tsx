@@ -23,8 +23,8 @@ export default async function TerminalPage() {
     // whole window when framed in the room, where it has none. The negative
     // margin gives back the 112 the layout keeps under every page for
     // chrome this one does not have; it goes when that padding does.
-    <main className="flex h-[calc(100dvh-3rem)] -mb-22 min-h-0 flex-col gap-4 [html[data-framed]_&]:mb-0 [html[data-framed]_&]:h-dvh">
-      <h1 className="page-title text-title-3-medium text-text-primary">
+    <main className="flex h-[calc(100dvh-3rem)] -mb-22 min-h-0 flex-col gap-4 [html[data-framed]_&]:mb-0 [html[data-framed]_&]:h-full">
+      <h1 className="page-title text-lg font-medium text-foreground">
         Terminal
       </h1>
       {off ? (

@@ -4,19 +4,15 @@ import {
   RiFileLine,
   RiFileTextLine,
   RiImageLine,
-  RiLayoutGridLine,
   RiPlugLine,
   RiSettings3Line,
   RiVideoLine,
-  RiWindowLine,
 } from "@remixicon/react";
 import { useEffect, useRef, useState } from "react";
 
 import { TypeIcon } from "@/app/brain/type-icon";
 import { APPS, portItem } from "@/app/desktop/apps";
-import type { Dragged, Held } from "@/app/desktop/dock";
-import type { Port } from "@/app/desktop/tiles";
-import { Kbd } from "@/components/base/kbd/kbd";
+import type { Dragged, Port } from "@/app/desktop/tiles";
 import {
   Command,
   CommandDialog,
@@ -25,7 +21,6 @@ import {
   CommandInput,
   CommandItem,
   CommandList,
-  CommandShortcut,
 } from "@/components/ui/command";
 
 // The panes of Settings the bar can open straight to.
@@ -33,7 +28,6 @@ const PANES: { id: string; title: string }[] = [
   { id: "you", title: "You" },
   { id: "look", title: "Look" },
   { id: "computer", title: "Computer" },
-  { id: "agent", title: "Agent" },
   { id: "apps", title: "Apps" },
   { id: "access", title: "Access" },
   { id: "org", title: "Org" },
@@ -90,20 +84,17 @@ const markFor = (name: string) => {
         : RiFileLine;
 };
 
-// The command bar: one field over the desktop, opened with a key, that finds
-// an app, a window, a port, a pane of Settings, a record or a file by its
-// words and takes the person there. The keys do everything: the arrows
+// The command bar: one field over the screen, opened with a key, that finds
+// an app, a pane of Settings, a record or a file by its words and takes
+// the person there. The keys do everything: the arrows
 // move, Return goes, Escape leaves.
 export function CommandBar({
   open,
   initial,
   onOpenChange,
-  windows,
   ports,
   onApp,
   onNewApp,
-  onWindow,
-  onPin,
   onPane,
   onRecord,
   onFile,
@@ -112,14 +103,11 @@ export function CommandBar({
   // What was typed to open it, so the first key is not lost.
   initial: string;
   onOpenChange: (open: boolean) => void;
-  windows: Held[];
   ports: Port[];
-  // An app: its window brought forward, or its first opened.
+  // One of Maslow's own apps.
   onApp: (b: Dragged) => void;
-  // An app or a port in a window of its own, whatever is open.
+  // An app of the person's own, or one a colleague opened to them.
   onNewApp: (b: Dragged) => void;
-  onWindow: (w: Held) => void;
-  onPin: (b: Dragged) => void;
   onPane: (id: string) => void;
   onRecord: (id: string, title: string) => void;
   onFile: (path: string, name: string) => void;
@@ -236,33 +224,21 @@ export function CommandBar({
       // area either side.
       className="max-sm:top-[calc(25px+env(safe-area-inset-top)+8px)] max-sm:left-[calc(8px+env(safe-area-inset-left))] max-sm:right-[calc(8px+env(safe-area-inset-right))] max-sm:w-auto max-sm:max-w-none max-sm:translate-x-0"
     >
-      <Command
-        value={lit}
-        onValueChange={setLit}
-        onKeyDown={(e) => {
-          // Command and Return opens an app in a window of its own.
-          if (e.key !== "Enter" || !e.metaKey) return;
-          const b = APPS.find((x) => `app ${x.title}` === lit);
-          if (!b) return;
-          e.preventDefault();
-          const { mark: _mark, ...item } = b;
-          go(() => onNewApp(item));
-        }}
-      >
+      <Command value={lit} onValueChange={setLit}>
         <CommandInput
           autoFocus
           value={q}
           onValueChange={setQ}
-          placeholder="Search your brain, files, apps and settings"
+          placeholder="Search your database, files, apps and settings"
         />
         <CommandList>
           <CommandEmpty>Nothing matches</CommandEmpty>
           {(broke.brain || broke.disk) && (
-            <p className="text-caption-1-regular text-text-secondary px-3 py-2">
+            <p className="text-xs text-muted-foreground px-3 py-2">
               {broke.brain && broke.disk
-                ? "Your brain and your computer did not answer, so nothing of either is here."
+                ? "Your database and your computer did not answer, so nothing of either is here."
                 : broke.brain
-                  ? "Your brain did not answer, so no records are here."
+                  ? "Your database did not answer, so no records are here."
                   : "Your computer did not answer, so no files are here."}
             </p>
           )}
@@ -275,34 +251,11 @@ export function CommandBar({
               >
                 <Mark aria-hidden />
                 {b.title}
-                <CommandShortcut>
-                  <Kbd>⌘↩</Kbd>
-                  <span>new window</span>
-                </CommandShortcut>
               </CommandItem>
             ))}
           </CommandGroup>
-          {windows.length > 0 && (
-            <CommandGroup heading="Windows">
-              {windows.map((w) => (
-                <CommandItem
-                  key={w.card.id}
-                  value={`window ${w.card.title} ${w.card.id}`}
-                  onSelect={() => go(() => onWindow(w))}
-                >
-                  <RiWindowLine aria-hidden />
-                  {w.card.title}
-                  {w.card.minimized && (
-                    <span className="text-caption-1-regular text-text-tertiary">
-                      minimized
-                    </span>
-                  )}
-                </CommandItem>
-              ))}
-            </CommandGroup>
-          )}
           {ports.length > 0 && (
-            <CommandGroup heading="Apps">
+            <CommandGroup heading="Your apps">
               {ports.map((p) => (
                 <CommandItem
                   key={p.href}
@@ -313,22 +266,6 @@ export function CommandBar({
                   {p.title}
                 </CommandItem>
               ))}
-              {typed &&
-                ports
-                  .filter((p) => !p.tab)
-                  .map((p) => (
-                    <CommandItem
-                      key={`${p.href} desktop`}
-                      value={`port ${p.title} on the desktop`}
-                      onSelect={() => go(() => onPin(portItem(p)))}
-                    >
-                      <RiLayoutGridLine aria-hidden />
-                      {p.title}
-                      <span className="text-caption-1-regular text-text-tertiary">
-                        put on the desktop
-                      </span>
-                    </CommandItem>
-                  ))}
             </CommandGroup>
           )}
           {typed && (
@@ -355,7 +292,7 @@ export function CommandBar({
                 >
                   <TypeIcon type={r.type} />
                   <span className="truncate">{r.title}</span>
-                  <span className="truncate text-caption-1-regular text-text-tertiary">
+                  <span className="truncate text-xs text-muted-foreground">
                     {r.opening}
                   </span>
                 </CommandItem>
@@ -374,7 +311,7 @@ export function CommandBar({
                   >
                     <Mark aria-hidden />
                     <span className="truncate">{f.name}</span>
-                    <span className="truncate text-caption-1-regular text-text-tertiary">
+                    <span className="truncate text-xs text-muted-foreground">
                       {f.folder || "Home"}
                     </span>
                   </CommandItem>

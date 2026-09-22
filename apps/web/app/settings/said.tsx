@@ -3,10 +3,10 @@
 import { RiCheckboxCircleFill, RiErrorWarningFill } from "@remixicon/react";
 import { useEffect, useState } from "react";
 
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
-// What the last save left to say. A save that went through is BoardUI's
-// notification, rising through the well's bottom edge for a moment and
+// What the last save left to say. A save that went through is a small
+// notice, rising through the section's bottom edge for a moment and
 // sinking back out the same edge; a refusal is a red line under the form,
 // with the warning mark on it; anything else is a plain line.
 export function Said({
@@ -37,9 +37,9 @@ export function Said({
     return (
       <p
         aria-live="polite"
-        className={cx(
-          "flex items-center gap-1.5 text-caption-1-regular",
-          tone === "wrong" ? "text-text-error-primary" : "text-text-secondary",
+        className={cn(
+          "flex items-center gap-1.5 text-xs",
+          tone === "wrong" ? "text-destructive" : "text-muted-foreground",
           className,
         )}
       >
@@ -53,24 +53,24 @@ export function Said({
     <div
       role="status"
       aria-live="polite"
-      className={cx(
+      className={cn(
         "pointer-events-none absolute bottom-0 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1",
-        "rounded-full border border-border-button-default bg-background-primary-default py-1 pr-2.5 pl-1.5 shadow-dropdown",
-        "transition-[opacity,translate,scale,filter]",
+        "rounded-md border border-border bg-popover py-1 pr-2.5 pl-1.5 shadow-md",
+        "transition-[opacity,translate]",
         phase === "shown" &&
-          "translate-y-1/2 scale-100 opacity-100 blur-none duration-base ease-out-quart",
+          "translate-y-1/2 opacity-100 duration-base ease-out-quart",
         phase === "hidden" &&
-          "translate-y-[calc(50%+12px)] scale-[0.97] opacity-0 blur-[4px] duration-base ease-out-quart",
+          "translate-y-[calc(50%+8px)] opacity-0 duration-base ease-out-quart",
         phase === "leaving" &&
-          "translate-y-[calc(50%+8px)] scale-[0.96] opacity-0 blur-[3px] duration-fast ease-in-quad",
-        "motion-reduce:translate-y-1/2 motion-reduce:scale-100 motion-reduce:blur-none",
+          "translate-y-[calc(50%+8px)] opacity-0 duration-fast ease-in-quad",
+        "motion-reduce:translate-y-1/2",
       )}
     >
       <RiCheckboxCircleFill
-        className="size-4 shrink-0 text-notification-success-foreground"
+        className="size-4 shrink-0 text-success"
         aria-hidden
       />
-      <span className="text-caption-1-medium whitespace-nowrap text-text-primary">
+      <span className="text-xs font-medium whitespace-nowrap text-foreground">
         {text.replace(/\.$/, "")}
       </span>
     </div>

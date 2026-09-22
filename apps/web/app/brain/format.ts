@@ -12,11 +12,6 @@ function day(s: string) {
   return Number.isNaN(d.getTime()) ? s : format(d, "d MMM yyyy");
 }
 
-// One height for every control in a form of the brain's: the 36 a text
-// field and a button already are, so a picker beside them is not 2px
-// taller than the rest of the row.
-export const FIELD = "h-9 py-0";
-
 // The first line of a body with words in it, as much as a row can hold. A
 // body is markdown, and a row shows what it says rather than how it is
 // marked: no hashes, no bullets, no fences.

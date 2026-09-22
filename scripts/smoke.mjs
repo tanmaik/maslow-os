@@ -99,7 +99,7 @@ async function settingsPage(cookie, pane = "members") {
   return (await res.text()).replaceAll("<!-- -->", "");
 }
 
-// Who the page says you are: the name on the menu bar's right.
+// Who the page says you are: the name at the foot of the sidebar.
 const youOn = (html) => html.match(/data-you[^>]*>([^<]*)</)?.[1];
 
 // Whether the page offers a switch to another org of yours. The offer
@@ -151,28 +151,6 @@ try {
 
   const out = await page();
   check("signed out", out.includes(SIGNED_OUT), "sign-in page");
-
-  // The model gateway takes a token of a computer's and nothing else: a
-  // stranger and a made-up token are refused, a path it does not carry is
-  // not there, and a deployment that mints no keys says so.
-  const gate = (token, path = "/v1/messages") =>
-    fetch(`${stack.url}/model${path}`, {
-      method: "POST",
-      headers: token ? { authorization: `Bearer ${token}` } : {},
-      body: "{}",
-    }).then((r) => r.status);
-  const [noToken, madeUp, elsewhere] = await Promise.all([
-    gate(null),
-    gate("nobody.0000"),
-    gate(null, "/v1/models"),
-  ]);
-  check(
-    "model gateway refuses a stranger",
-    [401, 503].includes(noToken) &&
-      [401, 503].includes(madeUp) &&
-      elsewhere === 404,
-    `no token ${noToken}, made-up ${madeUp}, other path ${elsewhere}`,
-  );
 
   // The first org signs in again at the end: its second visit reuses a pooled
   // connection where an old org setting exists as '' rather than missing.

@@ -1,9 +1,9 @@
 import type { App } from "@/lib/composio";
 import type { Connection } from "@/lib/connections";
 
-import { Avatar } from "@/components/base/avatar/avatar";
-import { Chip } from "@/components/base/badges/chip";
-import { Button } from "@/components/base/buttons/button";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/initials";
 
 import { AccountName } from "./account-name";
@@ -37,14 +37,14 @@ export function Connections({
   return (
     <Section id="apps" title="Connected apps">
       {!enabled ? (
-        <p className="text-body-regular text-text-secondary">
+        <p className="text-sm text-muted-foreground">
           Connections are not set up on this deployment.
         </p>
       ) : (
         <>
           <Said {...said} />
           {connections === null ? (
-            <p className="text-body-regular text-text-secondary">
+            <p className="text-sm text-muted-foreground">
               Composio didn&apos;t answer, so your connections can&apos;t be
               shown right now. Reload to try again.
             </p>
@@ -57,7 +57,7 @@ export function Connections({
                     data-app={slug}
                     className="flex flex-col gap-2"
                   >
-                    <div className="flex items-center gap-2 px-3">
+                    <div className="flex items-center gap-2">
                       {accounts[0]!.logo ? (
                         <img
                           src={accounts[0]!.logo}
@@ -65,12 +65,13 @@ export function Connections({
                           className="size-5 shrink-0 object-contain"
                         />
                       ) : (
-                        <Avatar
-                          size="sm"
-                          initials={initials(accounts[0]!.appName)}
-                        />
+                        <Avatar size="sm">
+                          <AvatarFallback>
+                            {initials(accounts[0]!.appName)}
+                          </AvatarFallback>
+                        </Avatar>
                       )}
-                      <p className="text-body-medium text-text-secondary">
+                      <p className="text-sm font-medium text-muted-foreground">
                         {accounts[0]!.appName}
                       </p>
                     </div>
@@ -87,9 +88,9 @@ export function Connections({
                           }
                         >
                           {c.status !== "ACTIVE" && (
-                            <Chip variant="caption" color="yellow">
+                            <Badge variant="outline">
                               {c.status.toLowerCase()}
-                            </Chip>
+                            </Badge>
                           )}
                           <form action="/settings/connections" method="post">
                             <input
@@ -98,11 +99,7 @@ export function Connections({
                               value="disconnect"
                             />
                             <input type="hidden" name="account" value={c.id} />
-                            <Button
-                              variant="secondary"
-                              size="small"
-                              type="submit"
-                            >
+                            <Button variant="outline" size="sm" type="submit">
                               Disconnect
                             </Button>
                           </form>
@@ -116,11 +113,7 @@ export function Connections({
                         >
                           <input type="hidden" name="intent" value="connect" />
                           <input type="hidden" name="app" value={slug} />
-                          <Button
-                            variant="secondary"
-                            size="small"
-                            type="submit"
-                          >
+                          <Button variant="outline" size="sm" type="submit">
                             Connect
                           </Button>
                         </form>

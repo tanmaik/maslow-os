@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
-import { Loader2Icon } from "lucide-react";
+import { RiLoaderLine } from "@remixicon/react";
 
-// The one loop reduced motion keeps: a paused spinner reads as a frozen app,
-// so it turns whatever the person has asked for.
-function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
+function Spinner({
+  className,
+  ...props
+}: React.ComponentProps<typeof RiLoaderLine>) {
   return (
-    <Loader2Icon
+    <RiLoaderLine
       data-slot="spinner"
       role="status"
       aria-label="Loading"

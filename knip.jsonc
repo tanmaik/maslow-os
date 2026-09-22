@@ -8,18 +8,9 @@
       "ignoreBinaries": ["vercel"],
     },
     "apps/web": {
-      // The whole shadcn catalogue and the whole BoardUI catalogue are
-      // installed, used or not: a component is taken from here, never
-      // written beside it.
-      "entry": [
-        "components/ui/*.tsx",
-        "components/base/**/*.{ts,tsx}",
-        "components/application/**/*.{ts,tsx}",
-        "components/foundations/**/*.{ts,tsx}",
-        "hooks/use-mobile.ts",
-        "hooks/use-count-up.ts",
-        "utils/*.ts",
-      ],
+      // The whole shadcn catalogue is installed, used or not: a component
+      // is taken from here, never written beside it.
+      "entry": ["components/ui/*.tsx", "hooks/use-mobile.ts"],
       // Agentation's sync server, run by the developer's own MCP config.
       "ignoreDependencies": ["agentation-mcp"],
     },

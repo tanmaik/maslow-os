@@ -22,9 +22,6 @@ struct YouView: View {
             NavigationLink { LookPane() } label: {
               Label("Look", systemImage: "paintpalette.fill")
             }
-            NavigationLink { ClaudeCodePane() } label: {
-              Label("Claude Code", systemImage: "sparkles")
-            }
           }
           Section {
             orgs(held.orgs)

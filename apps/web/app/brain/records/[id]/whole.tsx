@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/base/buttons/button";
+import { Button } from "@/components/ui/button";
 
 // What can be done to a whole record rather than to a word in it: the word
 // on the control, its mark, and what it is about to do said plainly.
@@ -59,22 +59,22 @@ export function Whole({
   // Where the page comes back to once it is done.
   back: string;
 }) {
-  const { said, mark, asks, means } = ACTS[act];
+  const { said, mark: Mark, asks, means } = ACTS[act];
   return (
     <AlertDialog>
       <AlertDialogTrigger
         render={
           <Button
-            variant="secondary"
-            size="small"
-            leadingIcon={mark}
-            iconOnly
+            variant="outline"
+            size="icon-sm"
             aria-label={said}
             title={said}
             className="shrink-0"
           />
         }
-      />
+      >
+        <Mark />
+      </AlertDialogTrigger>
       <AlertDialogContent>
         <form action={action} method="post" className="contents">
           <input type="hidden" name="intent" value={act} />

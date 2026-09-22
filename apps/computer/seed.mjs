@@ -1,12 +1,10 @@
-// Three jobs at boot, none of which stops it. Ours: the configuration
-// of our own session, ~/.maslow/claude, written whole from the image,
-// with the note that tells it what this computer is. Theirs, given: the
-// two servers ours knows, the computer's and the brain, seeded into the
-// person's own ~/.claude.json and kept current there, except where they
-// changed or removed one, since what they build in their own terminal
-// reaches the same computer and the same brain. Theirs, taken back: the
-// mode, the skill link and the model earlier images put into their files,
-// once, where they never changed them; nothing else of ours goes there.
+// Two jobs at boot, neither of which stops it. Theirs, given: two
+// servers, the computer's and the brain, seeded into the person's own
+// ~/.claude.json and kept current there, except where they changed or
+// removed one, since what they build in their own terminal reaches the
+// same computer and the same brain. Theirs, taken back: the mode, the
+// skill link and the model earlier images put into their files, once,
+// where they never changed them; nothing else of ours goes there.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -41,89 +39,10 @@ const filled = (v) =>
     ? v.replace(/\$\{(\w+)\}/g, (whole, name) => process.env[name] ?? whole)
     : v;
 
-if (name === "ours") ours();
-else if (name === "servers") give();
+if (name === "servers") give();
 else if (name === "as-me") mine(JSON.parse(fs.readFileSync(0, "utf8")));
 else if (name === "theirs") theirs();
 else takeBack(JSON.parse(fs.readFileSync(0, "utf8")));
-
-// The configuration of our own session, ~/.maslow/claude: the two MCP
-// servers, kept current every boot beside any the Agent added itself,
-// how it acts, written whole, the four skills linked in, and,
-// once, the conversations the door had open before ours had a directory,
-// so the Agent's chats still open; the person's own conversations are
-// theirs and stay where they are. The copy is marked done only once it is,
-// so a boot cut short tries again.
-function ours() {
-  const dir = path.join(home, ".maslow", "claude");
-  const read = (at) =>
-    JSON.parse(fs.readFileSync(at, "utf8"), (_, v) => filled(v));
-  const mcp = read("/opt/maslow/etc/mcp.json");
-  if (!process.env.BRAIN_URL) delete mcp.brain;
-  const settings = read("/opt/maslow/etc/settings.json");
-  // The conversations the door knows as its own, by id: none where the
-  // door never kept any; unknown, and carried on the next boot instead,
-  // where the record cannot be read.
-  let ids = [];
-  try {
-    const kept = JSON.parse(fs.readFileSync("/data/.agent-chats.json", "utf8"));
-    if (!Array.isArray(kept)) throw new Error("not a list");
-    ids = kept.filter((id) => /^[\w-]+$/.test(id));
-  } catch (err) {
-    if (err.code !== "ENOENT") ids = null;
-  }
-  const asMe = spawnSync(
-    process.execPath,
-    [
-      "-e",
-      `
-      const fs = require("node:fs"), path = require("node:path");
-      const [dir, ids, mcp, settings, slug] = JSON.parse(process.argv[1]);
-      fs.mkdirSync(path.join(dir, "skills"), { recursive: true });
-      const write = (at, value) => fs.writeFileSync(at, JSON.stringify(value, null, 2) + "\\n");
-      let config = {};
-      try { config = JSON.parse(fs.readFileSync(path.join(dir, ".claude.json"), "utf8")); } catch {}
-      write(path.join(dir, ".claude.json"), { ...config, hasCompletedOnboarding: true, mcpServers: { ...(config.mcpServers ?? {}), ...mcp } });
-      write(path.join(dir, "settings.json"), { permissions: settings });
-      fs.copyFileSync("/opt/maslow/etc/CLAUDE.md", path.join(dir, "CLAUDE.md"));
-      for (const skill of ["maslow", "apps", "brain", "boardui"]) {
-        const link = path.join(dir, "skills", skill);
-        try { if (!fs.lstatSync(link).isSymbolicLink()) throw new Error(); } catch { try { fs.rmSync(link, { recursive: true, force: true }); } catch {} fs.symlinkSync("/opt/maslow/skills/" + skill, link); }
-      }
-      const done = path.join(dir, ".conversations-carried");
-      if (ids && !fs.existsSync(done)) {
-        const from = path.join(process.env.HOME, ".claude", "projects", slug);
-        const to = path.join(dir, "projects", slug);
-        fs.mkdirSync(to, { recursive: true });
-        for (const id of ids) {
-          for (const name of [id + ".jsonl", id]) {
-            const at = path.join(from, name);
-            if (fs.existsSync(at)) fs.cpSync(at, path.join(to, name), { recursive: true });
-          }
-        }
-        fs.writeFileSync(done, ids.join("\\n") + "\\n");
-      }
-      `,
-      // Claude Code names a project's folder after the home as the person's
-      // Linux sees it, /home/me, not as this host does.
-      JSON.stringify([
-        dir,
-        ids,
-        mcp,
-        settings,
-        "/home/me".replaceAll("/", "-"),
-      ]),
-    ],
-    {
-      uid: 1000,
-      gid: 1000,
-      env: { HOME: home, PATH: process.env.PATH ?? "/usr/bin:/bin" },
-      stdio: ["ignore", "inherit", "inherit"],
-      timeout: 60_000,
-    },
-  );
-  if (asMe.status !== 0) process.exit(asMe.status ?? 1);
-}
 
 // Root's half of giving the servers. The record says a set was given
 // before it is, so a boot cut off between the two still knows the value

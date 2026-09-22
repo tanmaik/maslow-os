@@ -74,7 +74,7 @@ export function OtherRecord({ not, name }: { not: string; name: string }) {
         itemToStringLabel={(c: Candidate) => c.title || "(untitled)"}
       >
         <ComboboxInput
-          placeholder="Search the brain"
+          placeholder="Search the database"
           aria-label="The other record"
         />
         <ComboboxContent>

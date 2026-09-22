@@ -1,20 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-} from "@/components/base/segmented-control/segmented-control";
-import { applyThemeWithTransition } from "@/components/application/theme/theme-toggle";
 import { LOOK, type Look } from "@/components/look";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 // Which look the page wears: the device's, or light or dark whatever the
-// device says, kept on this device. The change spreads as one soft circle
-// out of the segment that was pressed, BoardUI's own reveal.
+// device says, kept on this device.
 export function LookPicker() {
   const [look, setLook] = useState<Look>("system");
-  const from = useRef<HTMLElement | null>(null);
   useEffect(() => {
     const kept = localStorage.getItem(LOOK);
     if (kept === "light" || kept === "dark") setLook(kept);
@@ -24,29 +18,25 @@ export function LookPicker() {
     const dark =
       to === "dark" ||
       (to === "system" && matchMedia("(prefers-color-scheme: dark)").matches);
-    void applyThemeWithTransition(dark ? "dark" : "light", {
-      element: from.current,
-    });
-    // The device's own is the absence of a pick, which the reveal cannot
-    // say for itself; it writes light or dark, and this takes it back.
+    // The device's own is the absence of a pick.
     if (to === "system") localStorage.removeItem(LOOK);
+    else localStorage.setItem(LOOK, to);
     document.documentElement.classList.toggle("dark", dark);
   };
   return (
-    <SegmentedControl
+    <ToggleGroup
       aria-label="Look"
-      selectedKeys={[look]}
-      onPointerDown={(e) => {
-        from.current = e.target as HTMLElement;
-      }}
-      onSelectionChange={(keys) => {
-        const to = [...keys][0];
+      variant="outline"
+      size="sm"
+      spacing={0}
+      value={[look]}
+      onValueChange={([to]) => {
         if (to === "system" || to === "light" || to === "dark") pick(to);
       }}
     >
-      <SegmentedControlItem id="system">Like the device</SegmentedControlItem>
-      <SegmentedControlItem id="light">Light</SegmentedControlItem>
-      <SegmentedControlItem id="dark">Dark</SegmentedControlItem>
-    </SegmentedControl>
+      <ToggleGroupItem value="system">Like the device</ToggleGroupItem>
+      <ToggleGroupItem value="light">Light</ToggleGroupItem>
+      <ToggleGroupItem value="dark">Dark</ToggleGroupItem>
+    </ToggleGroup>
   );
 }

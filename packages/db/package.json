@@ -11,6 +11,7 @@
     "./throttle": "./src/throttle.ts",
     "./settings": "./src/settings.ts",
     "./usage": "./src/usage.ts",
+    "./opens": "./src/opens.ts",
     "./computers": "./src/computers.ts",
     "./groups": "./src/groups.ts",
     "./desktops": "./src/desktops.ts",

@@ -27,7 +27,6 @@ const faked = {
   computers: "off: no FLY_API_TOKEN, nobody gets a computer",
   connections: "faked: three pretend apps connect with a click",
   embeddings: "faked: a stand-in hashes words",
-  speech: "off: no DEEPGRAM_API_KEY, hold to talk says so",
   sync: "off: no relay, nothing is live",
 };
 for (const [name, vendor] of Object.entries(stack.vendors)) {
@@ -46,7 +45,7 @@ if (stack.computer)
 // lapsed. Silence can only stop a machine, never leak one.
 const renew = () =>
   cloudOf(stack.env)
-    .renewLeases(checkout, stack.env)
+    .then((cloud) => cloud.renewLeases(checkout, stack.env))
     .then(
       (n) =>
         n &&

@@ -19,7 +19,7 @@ import { redirect } from "next/navigation";
 import { userAgent } from "next/server";
 
 import { principal } from "@/lib/session";
-import { cx } from "@/utils/cx";
+import { cn } from "@/lib/utils";
 
 import { Asks } from "./asks";
 import { Cut, Ways } from "./cut";
@@ -302,13 +302,13 @@ export default async function Page({
   // is inside asks the split.
 
   return (
-    <div className="page-sheet @container overflow-visible rounded-3xl border border-border-button-default bg-background-primary-default">
+    <div className="page-sheet @container overflow-visible bg-background">
       <Remember subject={subject} />
       {/* One row on a phone: what to search for, one button for how the
           list is narrowed, one for a new record, one for how it is looked
           at. On a wide screen the same controls lie along the bar with
           the conditions on a line under them. */}
-      <div className="sticky top-0 z-20 flex items-center gap-3 rounded-t-3xl bg-background-primary-default p-3 max-sm:flex-nowrap sm:flex-wrap">
+      <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-background px-3 py-2 max-sm:flex-nowrap sm:flex-wrap">
         <form
           method="get"
           className="min-w-56 flex-1 max-sm:order-1 max-sm:min-w-0"
@@ -372,21 +372,21 @@ export default async function Page({
         />
       )}
       {type && !type.own && (
-        <p className="px-3 pb-3 text-body-regular text-text-secondary">
+        <p className="px-3 pb-3 text-sm text-muted-foreground">
           {people.get(type.ownerId) ?? "someone"}&apos;s {typeText(type.name)},
           shared with you.
         </p>
       )}
       {nothing ? (
         <div className="flex flex-col items-center gap-3 px-3 py-8 text-center">
-          <p className="text-body-regular text-text-secondary">
+          <p className="text-sm text-muted-foreground">
             {one("q")
               ? `No results for “${one("q")}”.`
               : terms.length
                 ? "No results match these filters."
                 : type
                   ? "No records yet."
-                  : "This brain is empty. Write a note, or let your agent start."}
+                  : "This database is empty. Write a note, or let your agent start."}
           </p>
           {(one("q") || terms.length > 0) && (
             <LinkButton
@@ -423,8 +423,8 @@ export default async function Page({
       ) : (
         <div className="brain-split @container/split grid @[40rem]:grid-cols-[minmax(16rem,20rem)_minmax(0,1fr)]">
           <div
-            className={cx(
-              "flex min-w-0 flex-col @[40rem]/split:border-r @[40rem]/split:border-separator-border",
+            className={cn(
+              "flex min-w-0 flex-col @[40rem]/split:border-r @[40rem]/split:border-border",
               chosen && "@max-[40rem]/split:hidden",
             )}
           >
@@ -444,7 +444,7 @@ export default async function Page({
             )}
           </div>
           <div
-            className={cx(
+            className={cn(
               "min-w-0 px-4 pt-3 pb-4 sm:px-5 sm:pb-5",
               !chosen && "@max-[40rem]/split:hidden",
             )}
@@ -463,7 +463,7 @@ export default async function Page({
                 hrefOf={hrefOf}
               />
             ) : (
-              <p className="py-8 text-center text-body-regular text-text-secondary">
+              <p className="py-8 text-center text-sm text-muted-foreground">
                 That record is not in this list.
               </p>
             )}
@@ -472,7 +472,7 @@ export default async function Page({
       )}
       {/* The table view keeps its own footer, on the pagination block. */}
       {view !== "table" && view !== "list" && cursor && !nothing && (
-        <div className="border-t border-separator-border p-3">
+        <div className="border-t border-border p-3">
           <LinkButton href={href({ cursor })}>Load more</LinkButton>
         </div>
       )}

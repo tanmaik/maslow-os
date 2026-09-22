@@ -101,10 +101,10 @@ export function Door({
     // taller than that scrolls within the page, top first.
     <main className="h-[calc(100dvh-8.5rem)] overflow-y-auto">
       <div className="flex min-h-full items-center justify-center px-4 py-6">
-        <div className="flex w-full max-w-md flex-col gap-4 rounded-3xl border border-border-button-default bg-background-primary-default p-6 shadow-card">
+        <div className="flex w-full max-w-md flex-col gap-4 rounded-lg border border-border bg-card p-6">
           <div className="flex flex-col gap-1.5">
-            <h1 className="text-title-3-medium text-text-primary">{title}</h1>
-            <p className="text-body-regular text-text-secondary">
+            <h1 className="text-lg font-medium text-foreground">{title}</h1>
+            <p className="text-sm text-muted-foreground">
               {because ? <>{because} </> : null}
               {description}
             </p>

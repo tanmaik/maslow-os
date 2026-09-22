@@ -11,7 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { CloseButton } from "@/components/base/buttons/close-button";
+import { CloseButton } from "@/components/ui/close-button";
 
 // Takes one link away, asked first and named by the record at its other
 // end: a link is one click to destroy and nothing on the page brings it
@@ -38,7 +38,7 @@ export function Unlink({
       <AlertDialogTrigger
         render={
           <CloseButton
-            size="sm"
+            size="icon-xs"
             aria-label={`Unlink ${title}`}
             title={`Unlink ${title}`}
             className="opacity-0 transition-opacity duration-instant ease-plain group-hover:opacity-100 pointer-coarse:opacity-100 focus-visible:opacity-100"

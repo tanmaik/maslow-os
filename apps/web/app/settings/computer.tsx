@@ -4,7 +4,7 @@ import { computerOf } from "@maslow/db/computers";
 import { headers } from "next/headers";
 
 import { Making } from "@/app/computer/making";
-import { Notification } from "@/components/base/notification/notification";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { stateNow, updateOn } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { whereFrom } from "@/lib/region";
@@ -29,12 +29,13 @@ export async function ComputerPane({ p }: { p: Principal }) {
   return (
     <div className="flex flex-col gap-4">
       {d.kind === "none" ? (
-        <Notification
-          status="neutral"
-          dismissible={false}
-          title="Computers are off here"
-          description="This deployment has no cloud for computers, so nobody gets a computer."
-        />
+        <Alert>
+          <AlertTitle>Computers are off here</AlertTitle>
+          <AlertDescription>
+            This deployment has no cloud for computers, so nobody gets a
+            computer.
+          </AlertDescription>
+        </Alert>
       ) : (
         <Making
           state={state}

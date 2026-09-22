@@ -237,7 +237,7 @@ resource "aws_ecs_task_definition" "app" {
     environment = [
       { name = "APP_VERSION", value = var.release },
       { name = "SYNC_URL", value = "wss://sync.${var.domain}" },
-      { name = "SERVICES_OFF", value = "analytics,speech" },
+      { name = "SERVICES_OFF", value = "analytics" },
       { name = "AWS_COMPUTERS_NAME", value = var.name },
       { name = "AWS_COMPUTERS_REGION", value = var.region },
       { name = "AWS_COMPUTERS_SUBNETS", value = join(",", aws_subnet.public[*].id) },

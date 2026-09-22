@@ -7,6 +7,6 @@ export const BrainGraph = dynamic(
   () => import("./graph").then((m) => m.BrainGraph),
   {
     ssr: false,
-    loading: () => <div className="h-full bg-background-secondary-default" />,
+    loading: () => <div className="h-full bg-muted" />,
   },
 );

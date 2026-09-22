@@ -11,11 +11,7 @@ import type { ComponentType } from "react";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-import { buttonStyles } from "@/components/base/buttons/button";
-import {
-  SegmentedControl,
-  SegmentedControlItem,
-} from "@/components/base/segmented-control/segmented-control";
+import { buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,7 +21,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { cx } from "@/utils/cx";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { cn } from "@/lib/utils";
 
 // A way of cutting the list: its name and where it goes.
 type Option = { key: string; label: string; href: string };
@@ -67,30 +64,31 @@ export function Cut({
     for (const o of options) router.prefetch(o.href);
   }, [options, router]);
   return (
-    <SegmentedControl
+    <ToggleGroup
       aria-label={label}
-      selectedKeys={[current]}
-      onSelectionChange={(keys) => {
-        const key = [...keys][0];
+      variant="outline"
+      spacing={0}
+      value={[current]}
+      onValueChange={([key]) => {
         const to = options.find((o) => o.key === key);
         if (to && to.key !== current) router.push(to.href);
       }}
-      className={cx("shrink-0", className)}
+      className={cn("shrink-0", className)}
     >
       {options.map((o) => {
         const Mark = marked ? MARKS[o.key] : undefined;
         return (
-          <SegmentedControlItem
+          <ToggleGroupItem
             key={o.key}
-            id={o.key}
+            value={o.key}
             aria-label={Mark ? o.label : undefined}
-            className={Mark ? "px-2" : undefined}
+            title={Mark ? o.label : undefined}
           >
-            {Mark ? <Mark className="size-4" aria-hidden /> : o.label}
-          </SegmentedControlItem>
+            {Mark ? <Mark aria-hidden /> : o.label}
+          </ToggleGroupItem>
         );
       })}
-    </SegmentedControl>
+    </ToggleGroup>
   );
 }
 
@@ -112,18 +110,14 @@ export function Ways({
   }, [cuts, router]);
   return (
     <DropdownMenu>
-      {/* A plain button, not BoardUI's: the trigger has to take the
-          menu's own props, and a react-aria button swallows them. */}
       <DropdownMenuTrigger
         aria-label="View"
-        className={cx(
-          buttonStyles.base,
-          buttonStyles.size.small,
-          buttonStyles.variant.secondary,
-          "shrink-0 px-2 max-sm:order-4 sm:hidden",
+        className={cn(
+          buttonVariants({ variant: "outline", size: "icon" }),
+          "shrink-0 max-sm:order-4 sm:hidden",
         )}
       >
-        <RiMoreLine aria-hidden className="size-4" />
+        <RiMoreLine aria-hidden />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-auto">
         {cuts.map((c, i) => (
@@ -137,8 +131,8 @@ export function Ways({
                 aria-current={o.key === c.current ? "true" : undefined}
                 className={
                   o.key === c.current
-                    ? "text-text-primary"
-                    : "text-text-secondary"
+                    ? "text-foreground"
+                    : "text-muted-foreground"
                 }
               >
                 {o.label}
