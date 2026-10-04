@@ -12,6 +12,8 @@
 [![Postgres](https://img.shields.io/badge/Postgres-row--level%20security-4169e1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
 [![MCP](https://img.shields.io/badge/MCP-Claude-d97757?logo=anthropic&logoColor=white)](#claude-and-the-brain)
 
+Built by [Tanmai Kalisipudi](https://github.com/tanmaik) and [Tanishk Govil](https://github.com/tanishkgovil).
+
 <br />
 
 <img src="docs/screenshots/database.png" alt="The Database: a rail of types, a list of records, and the record Road Runner open beside it with its fields, links and a map of what it connects to" width="100%" />
