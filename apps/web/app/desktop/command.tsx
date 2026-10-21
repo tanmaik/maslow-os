@@ -258,9 +258,10 @@ export function CommandBar({
         />
         <CommandList>
           <CommandEmpty>Nothing matches</CommandEmpty>
-          {(broke.brain || broke.disk) && (
+          {/* the trial has no computer to ask, so a silent disk is no news there */}
+          {(broke.brain || (broke.disk && !trial)) && (
             <p className="text-caption-1-regular text-text-secondary px-3 py-2">
-              {broke.brain && broke.disk
+              {broke.brain && broke.disk && !trial
                 ? "Your brain and your computer did not answer, so nothing of either is here."
                 : broke.brain
                   ? "Your brain did not answer, so no records are here."
