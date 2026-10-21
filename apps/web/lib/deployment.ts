@@ -105,17 +105,6 @@ export type Push =
     }
   | { kind: "none" };
 
-// Model keys for the computers come from OpenRouter, minted per person
-// with a provisioning key of ours, or from nowhere, in which case Claude
-// Code on a computer runs on the person's own account and the page says
-// so. Not a fallback: a deployment without one has the feature off, in
-// the open.
-export type Models =
-  | { kind: "openrouter"; provisioningKey: string; capUsd: number }
-  | { kind: "none" };
-
-// What turns a person's voice into words, for hold to talk.
-export type Speech = { kind: "deepgram"; apiKey: string } | { kind: "none" };
 // Production is the live Vercel environment or any box that is not a
 // development server and not a Vercel preview.
 const production = process.env.VERCEL
@@ -133,7 +122,7 @@ const strict = production && process.env.IMAGE_BUILD !== "1";
 // SERVICES_OFF: production starts without them and says so, where one
 // missing by accident stops it. Only these may be named; sign-in, storage,
 // mail, the relay and the sweep never are.
-const MAY_BE_OFF = ["analytics", "speech", "computers"];
+const MAY_BE_OFF = ["analytics", "computers"];
 const off = new Set(
   (process.env.SERVICES_OFF ?? "")
     .split(",")
@@ -229,17 +218,6 @@ function embeddings(): Embeddings {
   return production ? { kind: "none" } : { kind: "fake" };
 }
 
-// A deployment without Deepgram cannot hear, and says so wherever a person
-// would hold to talk; production does not start without it.
-function speech(): Speech {
-  const { DEEPGRAM_API_KEY: apiKey } = process.env;
-  if (off.has("speech")) return { kind: "none" };
-  if (apiKey) return { kind: "deepgram", apiKey };
-  if (strict)
-    throw new Error("DEEPGRAM_API_KEY is not set; production cannot hear.");
-  return { kind: "none" };
-}
-
 // A deployment without Composio has no connections in production, and
 // pretend ones anywhere else.
 function connections(): Connections {
@@ -328,9 +306,6 @@ function computers(): Computers {
   return { kind: "none" };
 }
 
-// The cap is what a person may spend on models in a week, in dollars: the
-// one ceiling of ours they are shown, and the default a computer's row
-// carries from the day its key is minted.
 function push(): Push {
   const { APNS_TEAM_ID, APNS_KEY_ID, APNS_KEY } = process.env;
   if (!APNS_TEAM_ID || !APNS_KEY_ID || !APNS_KEY) return { kind: "none" };
@@ -341,12 +316,6 @@ function push(): Push {
     key: APNS_KEY.replace(/\\n/g, "\n"),
     bundleId: process.env.APNS_BUNDLE_ID ?? "tech.maslow.iphone",
   };
-}
-
-function models(): Models {
-  const provisioningKey = process.env.OPENROUTER_PROVISIONING_KEY;
-  if (!provisioningKey) return { kind: "none" };
-  return { kind: "openrouter", provisioningKey, capUsd: 5 };
 }
 
 // The sweep is what meters and cleans; production without its cron's
@@ -395,11 +364,9 @@ export const deployment = {
   seededSignIn: !production,
   storage: storage(),
   computers: computers(),
-  models: models(),
   push: push(),
   connections: connections(),
   embeddings: embeddings(),
-  speech: speech(),
   sync: sync(),
   https,
   identity: identityProvider(),

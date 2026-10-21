@@ -71,9 +71,6 @@ export type Shape = {
   brain: { url: string; token: string } | null;
   // The account's name and the machine's, so a prompt reads wile@acme.
   who: { person: string; org: string };
-  // Where the agent inside sends its model calls and what it carries
-  // there; none where this deployment mints no keys.
-  model: { url: string; token: string } | null;
   metadata: Record<string, string>;
 };
 

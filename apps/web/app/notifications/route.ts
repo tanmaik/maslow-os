@@ -12,7 +12,7 @@ import {
 import { after, NextResponse } from "next/server";
 
 import { answerShareAsk } from "@/lib/asks";
-import { tellAnswer, tellPublic } from "@/lib/computer";
+import { tellPublic } from "@/lib/computer";
 import { principal } from "@/lib/session";
 import { Refused, told } from "@/lib/shares";
 
@@ -74,9 +74,6 @@ export async function POST(request: Request) {
           );
           return { files, opened };
         } else await answerNotification(q, said.id, said.answer);
-        // The answer goes back to the conversation it came from, once
-        // this answer has landed.
-        after(() => tellAnswer(p, said.id!));
       }
       return { files: [], opened: false };
     });

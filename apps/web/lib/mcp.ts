@@ -162,16 +162,6 @@ const fieldChange = property.partial().extend({
 });
 const field = z.object({ type: z.string(), name: z.string() });
 
-// The conversation on the person's computer an ask came from, given by
-// the door there, so the answer goes back to it as the next word.
-const replyTo = z
-  .string()
-  .uuid()
-  .optional()
-  .describe(
-    "the conversation on the person's computer the answer is said into",
-  );
-
 type Result = {
   content: { type: "text"; text: string }[];
   structuredContent?: Record<string, unknown>;
@@ -563,7 +553,6 @@ export function brainServer(
           .string()
           .max(1000)
           .describe("why, in a sentence the person reads"),
-        reply_to: replyTo,
       },
     },
     door(async (q, a) => {
@@ -584,7 +573,6 @@ export function brainServer(
         records: a.records ?? [],
         options: ["Accept", "Decline"],
         request: ask.id,
-        replyTo: a.reply_to,
       });
       await pushed(q, notification);
       return {
@@ -694,7 +682,7 @@ export function brainServer(
     "ask",
     {
       description:
-        "Asks the person a question in their notification center and answers with the notification's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notifications tool reads it back; with reply_to it is also said into that conversation on their computer.",
+        "Asks the person a question in their notification center and answers with the notification's id. Give options and they pick one; give none and they type an answer. Nothing waits here: the answer arrives when they give it, and the notifications tool reads it back.",
       inputSchema: {
         title: z.string().min(1).max(200).describe("the question itself"),
         body: z.string().max(4000).optional().describe("markdown"),
@@ -704,15 +692,12 @@ export function brainServer(
           .optional()
           .describe("what they may pick; free text when there are none"),
         records: ids.optional().describe("what the question is about"),
-        reply_to: replyTo,
       },
     },
     door(async (q, a) => {
-      const { reply_to, ...rest } = a;
       const n = await notifications.leaveNotification(q, {
         kind: "ask",
-        ...rest,
-        replyTo: reply_to,
+        ...a,
       });
       await pushed(q, n);
       return {

@@ -98,26 +98,21 @@ grep -q profile.d/me.sh "$OS/etc/bash.bashrc" ||
 chown root:root "$OS"
 chmod 755 "$OS"
 
-# The way to Maslow's models, the gateway's address and a token of this
-# computer's, given to the machine by our server, stays with the door,
-# outside the person's Linux: the door hands it to the agent behind the
-# Agent window and the terminals it runs its commands in, so `claude` in a
-# terminal never sees it. No key is on the machine, and no file that would
-# put one into a login shell.
-rm -f "$OS/etc/profile.d/maslow-model-key.sh" "$OS/usr/local/bin/auth" \
-  "$OS/usr/local/bin/model" "$OS/etc/profile.d/maslow-model.sh"
+# No model and no credential of ours is on this machine: whatever an
+# earlier image left in the person's Linux to reach one is taken back on
+# every boot.
+rm -f "$OS/etc/profile.d/maslow-model-key.sh" "$OS/etc/profile.d/maslow-model.sh" \
+  "$OS/etc/profile.d/maslow-auth.sh" "$OS/usr/local/bin/auth" \
+  "$OS/usr/local/bin/model" "$OS/usr/local/bin/claude-code-acp"
 chroot --userspec=1000:1000 "$OS" /bin/sh -c 'rm -f /home/me/.config/maslow/auth /home/me/.config/maslow/model' || true
 # Ours on the path of every shell, a bare `ssh computer claude` included,
-# which reads no profile: `claude` and `claude-code-acp` are the wrappers
-# that read the rule at every start, and `xdg-open` opens a port or a
-# file of theirs on their desktop and offers any other address to their
-# own device. Every login shell reads the same rule, so an editor that
-# starts Claude Code its own way finds the same one.
+# which reads no profile: `claude` runs the person's own copy where they
+# have one and the image's until theirs arrives, and `xdg-open` opens a
+# port or a file of theirs on their desktop and offers any other address
+# to their own device.
 ln -sf /opt/maslow/bin/claude "$OS/usr/local/bin/claude"
-ln -sf /opt/maslow/bin/claude-code-acp "$OS/usr/local/bin/claude-code-acp"
 ln -sf /opt/maslow/bin/open "$OS/usr/local/bin/xdg-open"
 ln -sf /opt/maslow/bin/xclip "$OS/usr/local/bin/xclip"
-ln -sf /opt/maslow/bin/auth-env "$OS/etc/profile.d/maslow-auth.sh"
 
 # Claude Code inside reaches the brain with a session of the owner's,
 # given to the machine by our server; a machine our server cannot be
@@ -128,11 +123,10 @@ else
   rm -f "$OS/etc/profile.d/maslow-brain.sh"
 fi
 
-# Our own session's configuration, written whole from the image; the two
-# servers given into the person's own Claude Code and kept current there,
-# except where they changed one; and whatever else an earlier image put in
-# their files taken back. Bounded, so nothing in the home can hold the boot.
-timeout 30 node /opt/maslow/seed.mjs "$HOME_DIR" ours || echo "ours: could not be seeded; the Agent may start without its servers"
+# The two servers given into the person's own Claude Code and kept current
+# there, except where they changed one; and whatever else an earlier image
+# put in their files taken back. Bounded, so nothing in the home can hold
+# the boot.
 timeout 10 node /opt/maslow/seed.mjs "$HOME_DIR" servers || echo "servers: could not be seeded; left alone"
 timeout 30 node /opt/maslow/seed.mjs "$HOME_DIR" theirs || echo "theirs: could not be taken back; left alone"
 
@@ -172,8 +166,8 @@ keep /usr/sbin/sshd -D -e -f /opt/maslow/etc/sshd_config &
 keep node /opt/maslow/door.mjs &
 # The computer's own tool server: the browser, ours, outside the person's
 # Linux but run as the person, so it updates with the image and reaches
-# only their home, and beside it BoardUI's own server as the `boardui_`
-# tools; the Agent inside finds it on 8082. Its profile, logins included,
+# only their home, and beside it shadcn's own server as the `shadcn_`
+# tools; Claude Code inside finds it on 8082. Its profile, logins included,
 # is on the disk. It is a real, headed Chrome on a display nobody looks
 # at, Xvfb, as big as the largest pane it is ever drawn into: a headless
 # one announces itself, and sites that turn bots away turn it away too.

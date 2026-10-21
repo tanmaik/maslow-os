@@ -482,23 +482,7 @@ H.264 video decoded in the tab, drawn at the size of the pane it is shown
 in, which the pane tells the machine as it settles, so the picture fills
 the window and is never letterboxed; its tabs, the person's hands and
 pointer on it, the cursor the page wants under that pointer, and what
-changed in a folder of their home, on one socket; and Agent, the same
-Claude Code the terminal runs, spoken to over the Agent Client Protocol
-through `claude-code-acp`. The door is that agent's client, and it owns
-the terminal a command runs in: a command starts as the person in their
-home and what it writes goes down the sockets as it arrives, so the
-output is live under the tool call that ran it. The tab never runs
-anything. Each agent the person keeps has one of its own, as the person,
-in their home, on managed auth, and the door holds the conversation rather
-than the tab: a prompt keeps going with nobody watching, what it said is
-kept and replayed to the next socket, and the session id is on the disk,
-so a door that comes back after a new image loads the same conversation.
-The window is a conversation: what the agent says as markdown, what it
-thought folded away, a row for every tool call with its changes or its
-output beside it, the plan it is working to, and what it asks before it
-acts, answered there. Which conversation and which mode are the person's
-to pick, and the model is the deployment's alone; a new one and any of the ones
-the machine keeps are a click away. Nothing durable lives in
+changed in a folder of their home, on one socket. Nothing durable lives in
 a tab: the tab is a view onto state on the machine, and the machine's
 browser never idles away. What a program on the machine opens goes to whoever is at the terminal:
 a port of theirs opens that port's window on the desktop, a folder of theirs opens Files there, a
@@ -521,89 +505,10 @@ ssh's ProxyCommand, makes the Mac a key if it has none and registers its
 public half, and writes a `Host` named after the computer that uses that
 key and no agent, and
 landing in the same tmux session the Terminal page shows, as a grouped
-session of its own; a command given to `ssh` runs plain. Every model
-call goes through us: the agent on the machine sends it to this
-deployment's gateway, `/model`, carrying a token of its computer's and
-no key, and the gateway sends it on with the OpenRouter key that
-computer's row holds, minted per person with a cap of five dollars a
-week. The week is the person's own: seven days counted from the day their
-computer was claimed, so everyone's turns on their own day. The key never
-resets on its own; when a person's week turns the app sets its ceiling to
-what it has spent plus the cap, at the hourly sweep or when they next look
-at what they spent. A reset is ours to give, `pnpm model:reset`, which
-gives a key its cap again at OpenRouter and moves no week. The key never
-leaves our server. What a person spent is shown to
-them in dollars, in the Agent window and on the Agent pane; OpenRouter
-holds the record, the sweep copies it, and reaching the cap stops the
-calls and nothing else. Where a machine cannot dial the deployment, as
-on a laptop, the call goes to its own door and up the line the laptop's
-stack holds open for the brain. Two Claude Codes run on the machine and they never share credentials or
-settings: ours keeps its configuration in a directory of its own,
-`~/.maslow/claude`, seeded at boot with its servers, so what it
-writes down there never reaches the person's own `~/.claude`. The Agent window's is ours: started with
-`MASLOW_AUTH=managed`, it runs through the gateway, on GLM 5.3 Flash at
-the least reasoning it offers and nothing else — the gateway puts that
-model and that much thought on every call whatever was asked for, so no
-Claude model is reachable on what Maslow pays for — and the app is the
-one way to it.
-The settled design is `docs/decisions/2026-09-16-the-model-gateway.md`. The Agent window is BoardUI's AI Chat template wired
-to it: a rail of the person's agents, each a named conversation that
-stays, with a mark of its own colour, the last thing it said under its
-name and when, pinned ones first and no folders; the thread in
-its user and assistant turns, with what the agent did as its task list,
-a thought one step among the steps it came with and folded with them,
-what it asks before it acts as a notification, the kind of thing named, the
-thing itself as it would run, and the answers as buttons, which goes
-when the prompt does, and a question it asks the person, which is an
-ask of the brain's with this conversation to answer to: it stands in the
-thread and behind the clock alike, is answered in either, the answer is
-said back into the conversation as its next word, and the turn does not
-wait on it; the pill
-composer, naming no model, since the choice is the deployment's and not
-the person's to be told, with a mic, which is the same ear
-hold to talk uses, clicked on and off with the words landing in the
-field, live while the agent works, since a word typed then goes
-into the running turn: at once while the agent is thinking, and once the
-tool it is running has answered if one is, the turn stopped where it
-stands and prompted on with the word, as Claude Code's own terminal does;
-and under
-it how the agent acts and how full the conversation is, with the week's
-spend behind that ring; the spend is said in the open on the Agent pane.
-One agent is in view at a time and the rest stand open behind it,
-each with its own Claude Code process, running on; a new one is handed
-over at once, since the door keeps one warm; one quiet for three minutes
-is closed, its process freed, and opens again whole when wanted. A
-computer with no agent it can open, none kept or none that loads, is
-given its first, Heartbeat, the moment its agent starts; every other
-agent is made only by the person, who
-names it as they make it, and
-renamed with a click on the name; nothing makes another on its own,
-and the window opens on the last one spoken to, never on an empty one. The
-name and the last line each agent said are the door's, kept on the disk.
-An agent picked in the rail is in view at once, whole from the
-door's own record when it was open before, and Claude Code loads it
-behind. Two tools are the door's own, handed to every
-conversation as a small MCP server started beside it under a token of
-that conversation's: `wakeup`, which prompts the conversation again
-after a delay, kept on the disk so a door coming back still keeps it, or
-with what a command run as the person prints, a second's worth at a time
-and only the lines matching a pattern where one is given, into the
-running turn or as a turn of its own, waking the conversation if it
-sleeps; and `stop`, which ends one. Claude Code's own background work,
-a shell in the background and its subagents, stays its own within a
-turn. There is no cron and no workflow. Every word into a conversation,
-whoever says it, goes through one door function. What the adapter lacks
-for this, one prompt at a time, a close, and the question handed to the
-door, is put into its installed copy when the image is built, in
-`apps/computer/patch-acp.mjs`. The window is the one shape a
-conversation has. `claude` in the
+session of its own; a command given to `ssh` runs plain. `claude` in the
 person's terminal is their own: plain Claude Code on their own Claude
 account, signed into inside Claude Code, and nothing of it passes
-through us; there is no switch between the two. An env block in the
-person's own Claude Code settings that names the API's address or key is
-theirs to have, and a session of ours refuses to run through it; a
-deployment without our provisioning key has no Agent of ours, and says
-so. Laptops, previews and
+through us; there is no switch between the two. Laptops, previews and
 production all make real machines; there is no fake, and every machine
 outside production carries a lease the reap enforces. Nothing on a machine
 ever calls home: our Claude Code on it sends no telemetry, no error
@@ -617,8 +522,7 @@ boot, where it updates itself the way Claude Code does and `claude
 update` works; the image carries a copy under ours, read-only and unable
 to update itself, which runs until theirs arrives. `claude` on their path
 is ours either way, and it hands whichever copy they have their own
-credentials; an editor drives the same Claude Code over the Agent Client
-Protocol through `claude-code-acp`. Their Claude Code knows the same two
+credentials. Their Claude Code knows the same two
 MCP servers as ours, seeded into their own `~/.claude.json` and kept
 current there except where they changed or removed one, and nothing else
 of ours: no mode, no model, no skill, and it signs in to their own
@@ -634,12 +538,7 @@ which look components up and install them into an app by its path; and
 the
 brain at this deployment's `/mcp`, reached with a session of the owner's
 that our server opens for the computer and the person can end in
-settings. Four skills the image carries are linked into ours: `maslow`,
-how this system works; `apps`, how an app is built here and shown as a
-window or a widget; `brain`, how the brain is used well; and `boardui`,
-BoardUI's own, so what the Agent builds for them looks like Maslow. The
-skills are the Agent's; the person's own Claude Code has the two servers
-and nothing else of ours. The
+settings. The
 brain's MCP is the brain and the connectors, and nothing of the machine:
 no hand that runs a command or reads or writes a file goes into it.
 
@@ -671,7 +570,7 @@ Safari and Firefox frost. Glass is the chrome and paper is the content:
 the menu bar fully transparent with nothing painted on a laptop, and on a
 phone one flat band with the status bar in the app's own ground, the dock clear glass, and menus, dialogs, every
 window's bar and every rail beside its content (the brain's types, the
-terminal's windows, the Agent's conversations, the Settings toolbar)
+terminal's windows, the Settings toolbar)
 glass at one level, blurred only as much as their words need and
 keeping enough of their own colour to read; what is read or edited,
 a list, a form, a terminal, a page on a port, lies on solid ground. Two
@@ -774,18 +673,6 @@ comma opens Settings, and the arrows, U, I, J, K and Return put it on a
 side, a corner or the whole desktop; the Window menu lists every one
 beside its key. Tab reaches the dock as one stop and the arrows walk
 its icons. A framed page keeps every key of its own but Command-K.
-On a phone the Agent is voice first: a chat opens in voice mode, the
-thread as a caption of the last thing said with the work under way in
-a small line above it, and under them one big button. Hold it and the
-words appear as they are heard; let go and they go, into the running
-turn if one runs; slide the thumb off before letting go and nothing is
-sent. The keyboard is one tap away and the same thread takes both, and
-the chats are a picker under the bar. Speech becomes text at Deepgram,
-behind an interface of ours: our server mints a token good for a
-minute and the phone streams its microphone to Deepgram directly,
-never through us. Without the key the button says this copy cannot
-hear, and production refuses to start. The settled design is
-`docs/decisions/2026-09-16-you-hold-and-you-talk.md`.
 A phone is the same desktop, as ryOS's is: the wallpaper, the menu bar,
 the windows and the dock, with no home screen, no handle and no recents.
 Every window is the full width of the screen, 8px in from either side; it
@@ -803,9 +690,8 @@ the front. A phone turned sideways keeps its windows whole. With the
 keyboard up the desktop ends where the keyboard begins, so what lies
 along a window's bottom, the terminal's keys, the composer, rises with
 it, and the dock and its grip rise too. A phone puts the app to sleep in
-the background and cuts its lines; on its return the terminal's and the
-Agent's sockets reconnect at once, and a microphone the phone took away
-is opened again. A long press raises the app's own menu and never the
+the background and cuts its lines; on its return the terminal's
+sockets reconnect at once. A long press raises the app's own menu and never the
 phone's copy-and-share callout. The dock lies along the bottom, scrolls sideways when it overflows,
 stays while windows stand at their own heights, goes when a window fills
 the screen, and comes back on a tap of the grip left at the bottom edge,
@@ -855,10 +741,9 @@ as a Mac's System Settings: a rail of panes down the left in two
 groups, yours and the org's, with a search over it that leaves only
 what matches, and one pane at a time on the right, its parts lying on
 the pane one under another with a hairline between, no card and no head
-of its own; on a phone the rail is a strip along the top. Yours are six,
+of its own; on a phone the rail is a strip along the top. Yours are five,
 each named for the question it answers: You, Look, Computer (the
-machine alone: ready, update, where, backups, reset), Agent (what
-it spent this week against the cap, and nothing else), Apps, and Access
+machine alone: ready, update, where, backups, reset), Apps, and Access
 (SSH, the agents signed in to their brain, and their other browsers
 and phones; ports are Applets', not Settings'); the org's are Org, with
 deletion at its foot, Members and Groups. Each fact is on one pane and
@@ -901,9 +786,7 @@ under `apps/web/components/base`, `application` and `foundations`, with
 its tokens in `apps/web/styles`. Every component is BoardUI's where
 BoardUI has one: button, input, textarea, select, switch, checkbox,
 radio, tabs, table, tooltip, badge, chip, avatar, kbd, divider,
-breadcrumb, pagination, date picker, notification, the chart cards and
-the agent pieces. Where BoardUI ships a whole screen we want, the Agent
-window being the first, it is that template wired to the real thing
+breadcrumb, pagination, date picker, notification, and the chart cards. Where BoardUI ships a whole screen we want, it is that template wired to the real thing
 rather than a copy of it: the template's own components take props for
 what a real screen puts in their place, everything the product does not
 have is cut behind one of those props, and there is one of each component
@@ -958,8 +841,7 @@ session as a bearer token, opens the site's own doors with it, and is
 refused by the brain's MCP as a browser is. It reads the brain through
 three thin doors over `packages/brain`, `/brain/types`, `/brain/read`
 and `/brain/get`, and what waits on the person through `/notifications`.
-The Agent on it runs in Bypass and offers no mode, and its one big
-button is hold to talk, streamed to Deepgram as the web's is. With
+With
 Always allowed, the phone logs the person's location for as long as
 they carry it, straight to their computer's door and never through us.
 A lost phone is ended from Settings › Access with "Sign out the

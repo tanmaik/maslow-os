@@ -44,22 +44,3 @@ export function PhoneSheet({
     </Drawer>
   );
 }
-
-// One line of a phone's sheet: a whole row to a thumb.
-export function SheetRow({
-  children,
-  onClick,
-}: {
-  children: ReactNode;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="text-body-medium text-text-secondary focus-visible:ring-border-focus-ring duration-fast ease-plain flex min-h-[44px] items-center rounded-2lg px-3 text-left outline-none transition-colors focus-visible:ring-2 active:bg-background-secondary-hover"
-    >
-      {children}
-    </button>
-  );
-}

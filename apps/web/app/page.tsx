@@ -1,7 +1,6 @@
 import { orgOf } from "@maslow/db/settings";
 import { after } from "next/server";
 
-import { ChatsProvider } from "@/app/computer/agent/chats";
 import { Desktop } from "@/app/desktop/desktop";
 import { LockScreen } from "@/components/lock-screen";
 import { SignIn, notice, type Notice } from "@/components/sign-in";
@@ -48,20 +47,18 @@ export default async function Page({
   return (
     <main>
       <h1 className="sr-only">{org.name}</h1>
-      <ChatsProvider>
-        <Desktop
-          desktop={desktops[0]!}
-          ports={ports}
-          wallpaper={wallpaper}
-          computers={deployment.computers.kind !== "none"}
-          you={
-            you && {
-              ...you,
-              others: memberships.filter((m) => m.userId !== p.userId),
-            }
+      <Desktop
+        desktop={desktops[0]!}
+        ports={ports}
+        wallpaper={wallpaper}
+        computers={deployment.computers.kind !== "none"}
+        you={
+          you && {
+            ...you,
+            others: memberships.filter((m) => m.userId !== p.userId),
           }
-        />
-      </ChatsProvider>
+        }
+      />
     </main>
   );
 }

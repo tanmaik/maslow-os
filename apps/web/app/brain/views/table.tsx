@@ -14,7 +14,7 @@ import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import { Avatar } from "@/components/base/avatar/avatar";
 import { Chip } from "@/components/base/badges/chip";
 import { Checkbox } from "@/components/base/checkbox/checkbox";
-import { Pagination } from "@/components/base/pagination/pagination";
+import { Button } from "@/components/base/buttons/button";
 import {
   Table,
   TableBody,
@@ -441,7 +441,9 @@ export function TableView({
       </Table>
       {cursor && (
         <div className="border-t border-separator-border p-3">
-          <Pagination mode="cursor" hasNext onNext={more} />
+          <Button variant="secondary" size="small" onClick={more}>
+            More
+          </Button>
         </div>
       )}
     </div>

@@ -1,7 +1,6 @@
 import {
   RiApps2Line,
   RiBrainLine,
-  RiChat3Line,
   RiFolderLine,
   RiGlobalLine,
   RiSettings3Line,
@@ -61,15 +60,6 @@ export const APPS: App[] = [
     face: "/dock/terminal.png",
     box: { w: 0.56, h: 0.7 },
     bounds: { min: { w: 480, h: 320 } },
-  },
-  {
-    kind: "page",
-    title: "Agent",
-    href: "/computer/agent",
-    mark: RiChat3Line,
-    face: "/dock/agent.png",
-    box: { w: 0.62, h: 0.74 },
-    bounds: { min: { w: 520, h: 420 } },
   },
   {
     kind: "brain",

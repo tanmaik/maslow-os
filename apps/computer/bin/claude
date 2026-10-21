@@ -1,5 +1,8 @@
 #!/bin/bash
-# Claude Code as the person starts it, from any shell.
+# Claude Code as the person starts it, from any shell: their own copy in
+# their Linux where they have one, the image's read-only copy until it
+# arrives. It signs in to their own Claude account and nothing of ours
+# passes through it.
 set -euo pipefail
-. /opt/maslow/bin/start
-start claude "$@"
+. /opt/maslow/bin/theirs
+exec "$(theirs claude /opt/maslow/node_modules/.bin/claude)" "$@"

@@ -46,8 +46,6 @@ targets:
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         ITSAppUsesNonExemptEncryption: false
-        NSMicrophoneUsageDescription: Hold to talk to your agent.
-        NSSpeechRecognitionUsageDescription: Turns what you say into words for your agent.
         NSLocationWhenInUseUsageDescription: Logs where you are to your own computer, once a minute while Maslow is open.
         NSLocationAlwaysAndWhenInUseUsageDescription: Logs where you are to your own computer, once a minute while Maslow is open and whenever you move with it closed.
         UIBackgroundModes:

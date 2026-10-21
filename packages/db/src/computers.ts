@@ -21,17 +21,6 @@ export type Computer = {
   backedUpAt: Date | null;
   // The public keys that open SSH, one per line; empty until set.
   authorizedKeys: string;
-  // The OpenRouter key Claude Code on the machine runs on, its hash, and
-  // what of its spend the ledger already holds.
-  modelKey: string | null;
-  modelKeyHash: string | null;
-  modelSpentUsd: number;
-  // What this person may spend on models in a week, in dollars; null for a
-  // key minted before the column, which the deployment's default covers.
-  modelCapUsd: number | null;
-  // Which week of their own the key's allowance was last set for, and the
-  // day the weeks are counted from.
-  modelWeek: number | null;
   createdAt: Date;
   // The owner's session the machine holds to reach the brain, if any.
   sessionId: string | null;
@@ -69,9 +58,7 @@ const COLUMNS = `c.id, c.org_id as "orgId", c.user_id as "userId", c.region,
   c.cpu_kind as "cpuKind", c.cpus, c.memory_mb as "memoryMb", c.disk_gb as "diskGb", c.secret,
   c.volume_id as "volumeId", c.machine_id as "machineId", c.ready_at as "readyAt",
   c.backed_up_at as "backedUpAt", c.authorized_keys as "authorizedKeys",
-  c.model_key as "modelKey", c.model_key_hash as "modelKeyHash",
-  c.model_spent_usd::float as "modelSpentUsd", c.model_cap_usd::float as "modelCapUsd",
-  c.model_week as "modelWeek", c.created_at as "createdAt",
+  c.created_at as "createdAt",
   c.session_id as "sessionId", c.move,
   c.update_image as "updateImage", c.update_ready_at as "updateReadyAt",
   c.memory_used_mb as "memoryUsedMb",
@@ -101,54 +88,6 @@ export async function claimComputer(
       randomBytes(24).toString("base64url"),
     ],
   );
-}
-
-// The model key the computer runs on, once minted, with the weekly cap it
-// was minted against.
-export async function setModelKey(
-  q: Query,
-  id: string,
-  key: string,
-  hash: string,
-  capUsd: number,
-) {
-  await q.query(
-    `update computers set model_key = $2, model_key_hash = $3, model_cap_usd = $4
-     where id = $1`,
-    [id, key, hash, capUsd],
-  );
-}
-
-// A key OpenRouter no longer has is forgotten, so the next remake mints
-// another.
-export async function clearModelKey(q: Query, id: string) {
-  await q.query(
-    "update computers set model_key = null, model_key_hash = null, model_spent_usd = 0, model_week = null where id = $1",
-    [id],
-  );
-}
-
-// The key's allowance turned to a week of the person's own: true for the
-// one caller that turned it, so two asking at once give one week, not
-// two.
-export async function turnModelWeek(
-  q: Query,
-  id: string,
-  week: number,
-): Promise<boolean> {
-  const { rowCount } = await q.query(
-    "update computers set model_week = $2 where id = $1 and model_week is distinct from $2",
-    [id, week],
-  );
-  return rowCount === 1;
-}
-
-// How much of the key's spend the ledger holds now.
-export async function setModelSpent(q: Query, id: string, usd: number) {
-  await q.query("update computers set model_spent_usd = $2 where id = $1", [
-    id,
-    usd,
-  ]);
 }
 
 // The public keys that open SSH, as the person set them.
@@ -421,25 +360,6 @@ export async function note(
       entry.why,
     ],
   );
-}
-
-// What the person's model key spent on each day, in dollars, from the
-// ledger's own copies: the sweep writes the delta it read with the hour it
-// read it, so the days are a sum of those deltas.
-export async function spentByDay(
-  q: Query,
-  userId: string,
-  since: Date,
-): Promise<{ day: string; usd: number }[]> {
-  const r = await q.query<{ day: string; usd: number }>(
-    `select to_char(at at time zone 'UTC', 'YYYY-MM-DD') as day,
-            sum((detail->>'usd')::numeric)::float as usd
-       from ledger
-      where user_id = $1 and resource = 'key' and event = 'spent' and at >= $2
-      group by 1 order by 1`,
-    [userId, since],
-  );
-  return r.rows;
 }
 
 // A port on a computer and who may reach it: a member, a group, everyone

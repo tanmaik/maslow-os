@@ -33,7 +33,6 @@ const PANES: { id: string; title: string }[] = [
   { id: "you", title: "You" },
   { id: "look", title: "Look" },
   { id: "computer", title: "Computer" },
-  { id: "agent", title: "Agent" },
   { id: "apps", title: "Apps" },
   { id: "access", title: "Access" },
   { id: "org", title: "Org" },

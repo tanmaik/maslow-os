@@ -3,7 +3,7 @@
 // itself. Resolves once open; fails with our server's word when the
 // computer is not ready, or when the door does not answer.
 export async function liveSocket(
-  path: "talk" | "view" | "agent",
+  path: "talk" | "view",
   query: Record<string, string> = {},
 ): Promise<WebSocket> {
   const res = await fetch("/computer/live", { cache: "no-store" });

@@ -1,12 +1,10 @@
 import { asMeter, asOrg, asPerson, type Query } from "@maslow/db";
 import type { Principal } from "@maslow/db/auth";
-import { notificationOf } from "@maslow/db/notifications";
 import {
   allComputers,
   claimComputer,
   clearMachine,
   clearVolume,
-  clearModelKey,
   addKey,
   computerByMachine,
   computerOf,
@@ -21,9 +19,6 @@ import {
   setMemory,
   setShape,
   setMachine,
-  setModelKey,
-  setModelSpent,
-  turnModelWeek,
   setMove,
   setPlace,
   setReady,
@@ -34,7 +29,6 @@ import {
   sharesOn,
   sharePort,
   publicPortsOn,
-  spentByDay,
   appsOn,
   forgetPort,
   markStopped,
@@ -51,7 +45,6 @@ import {
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import { deployment } from "./deployment.ts";
-import { modelToken, modelUrl } from "./models.ts";
 import { cloud } from "./cloud.ts";
 import { CloudRefused, DiskGone, type Machine } from "./clouds.ts";
 import {
@@ -62,7 +55,6 @@ import {
   type Stats,
 } from "./door.ts";
 import { ownerPrincipal, refreshShares } from "./shares.ts";
-import { openrouter, type Spend } from "./openrouter.ts";
 import { isRegion, regionName } from "./region.ts";
 import { list, presign, remove, s3 } from "./s3.ts";
 import { SIZES } from "./sizes.ts";
@@ -86,7 +78,7 @@ const sameShape = (a: Shape, b: Shape) =>
 
 // The image every machine boots, by its label: apps/computer, built and
 // pushed by hand to where the cloud keeps images.
-export const IMAGE = "door-93";
+export const IMAGE = "door-94";
 
 // How far a computer has got: off, when this deployment makes none;
 // then its disk, its machine, its first start, and ready when its door
@@ -364,7 +356,6 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
           secret: c.secret,
           brain: await brainOf(q, c),
           who: await whoOf(q, c),
-          model: await modelOf(q, c),
           metadata: tags(c),
         }));
     } catch (err) {
@@ -398,47 +389,6 @@ async function step(q: Query, c: Computer, why: string): Promise<void> {
     return;
   }
   if (await door.answers(c.machineId)) await setReady(q, c.id, true);
-}
-
-// The name a computer's key carries at OpenRouter: the environment, the
-// checkout, and the computer, so any list there traces back in one look
-// and each deployment knows its own.
-const keyPrefix = () => {
-  const d = deployment.computers;
-  return `maslow ${deployment.where} ${d.kind !== "none" ? (d.checkout ?? "production") : "off"} `;
-};
-
-// What the machine carries for its model calls: the gateway's address and
-// a token of the computer's own. The OpenRouter key behind it is minted
-// once per computer against a weekly cap in dollars, kept on its row so it
-// can differ per person, and never leaves this server. Null where this
-// deployment mints none; the person's own account then.
-async function modelOf(
-  q: Query,
-  c: Computer,
-): Promise<{ url: string; token: string } | null> {
-  if (!(await modelKeyOf(q, c))) return null;
-  return { url: modelUrl(), token: modelToken(c) };
-}
-
-async function modelKeyOf(q: Query, c: Computer): Promise<string | null> {
-  const m = deployment.models;
-  if (m.kind !== "openrouter") return null;
-  if (c.modelKey) return c.modelKey;
-  const capUsd = c.modelCapUsd ?? m.capUsd;
-  const minted = await openrouter.mint(`${keyPrefix()}${c.id}`, capUsd);
-  await setModelKey(q, c.id, minted.key, minted.hash, capUsd);
-  await turnModelWeek(q, c.id, weekOf(c).n);
-  await note(q, {
-    orgId: c.orgId,
-    userId: c.userId,
-    resource: "key",
-    event: "made",
-    ref: minted.hash,
-    detail: { capUsd, every: "week" },
-    why: "the computer's Claude Code runs on it",
-  });
-  return minted.key;
 }
 
 // What Claude Code on the machine reaches the brain with: a session of
@@ -491,21 +441,13 @@ export async function reconcile(): Promise<void> {
     ),
   );
   const live = new Map((await cloud.machines()).map((m) => [m.id, m]));
-  const keys = new Set<string>();
-  let whole = true;
   for (const orgId of orgs) {
     try {
-      for (const hash of await reconcileOrg(orgId, live)) keys.add(hash);
+      await reconcileOrg(orgId, live);
     } catch (err) {
-      whole = false;
       console.error(`computers ${orgId}: ${(err as Error).message}`);
     }
   }
-  // Only a pass that read every org may say which keys nobody holds.
-  if (whole)
-    await stray(keys).catch((err: Error) =>
-      console.error(`keys: ${err.message}`),
-    );
 }
 
 // A machine of this deployment that no row claims: a destroy that was cut
@@ -673,7 +615,7 @@ async function revive(q: Query, c: Computer, why: string): Promise<void> {
 
 // --- Updates -----------------------------------------------------------
 
-// The update waiting on a person, as the menu bar, About and the Computer
+// The update waiting on a person, as the notification and the Computer
 // pane say it. Null when their machine is on the image of the day, and
 // when an older update was overtaken by a newer image.
 export type Update = { image: string; readyAt: string };
@@ -764,7 +706,6 @@ async function remake(
     secret: c.secret,
     brain: await brainOf(q, c),
     who: await whoOf(q, c),
-    model: await modelOf(q, c),
     metadata: wanted(c, m),
   });
   // Written down once Fly has it, so a refused reshape leaves the row
@@ -793,105 +734,10 @@ async function reopens(q: Query, c: Computer, machineId: string) {
   if (await answersSoon(machineId)) await setReady(q, c.id, true);
 }
 
-// Keys at OpenRouter that carry this deployment's name and no computer
-// here holds: gone with the computer, whatever failed to let them go. One
-// made within the hour is left: its computer may be mid-making.
-async function stray(held: Set<string>): Promise<void> {
-  if (deployment.models.kind !== "openrouter") return;
-  const prefix = keyPrefix();
-  for (const k of await openrouter.list())
-    if (
-      k.name.startsWith(prefix) &&
-      !held.has(k.hash) &&
-      Date.now() - k.createdAt.getTime() > 3600 * 1000
-    ) {
-      await openrouter.remove(k.hash);
-      console.log(`key ${k.name}: deleted, its computer is gone`);
-    }
-}
-
-// A week of the person's own: seven days, counted from the day their
-// computer was claimed, so everyone's turns on their own day and hour.
-const WEEK = 7 * 24 * 3600_000;
-const weekOf = (c: Computer): { n: number; turns: Date } => {
-  const n = Math.floor((Date.now() - c.createdAt.getTime()) / WEEK);
-  return { n, turns: new Date(c.createdAt.getTime() + (n + 1) * WEEK) };
-};
-
-// The key's ceiling as it stands for this week of the person's. The key
-// never resets on its own: when their week turns, or the key still resets
-// by OpenRouter's calendar, the ceiling is set to what it has spent plus
-// the cap, which is a fresh week's allowance. Within a week it is left
-// alone, so one raised by hand, a reset, stands until the week turns and
-// moves no week.
-async function allowance(
-  q: Query,
-  c: Computer,
-  read: Spend,
-  capUsd: number,
-): Promise<number> {
-  const { n } = weekOf(c);
-  // The week is turned on the row first, and only its one winner moves
-  // the ceiling; a ceiling OpenRouter refuses rolls the row back with it.
-  const turned = await turnModelWeek(q, c.id, n);
-  if (!turned && read.every === null && read.limit !== null) return read.limit;
-  const limit = read.usage + capUsd;
-  await openrouter.cap(c.modelKeyHash!, limit);
-  await note(q, {
-    orgId: c.orgId,
-    userId: c.userId,
-    resource: "key",
-    event: "capped",
-    ref: c.modelKeyHash!,
-    detail: { capUsd, week: n, limit, was: read.limit, wasEvery: read.every },
-    why: "their week turned",
-  });
-  return limit;
-}
-
-// The key's spend since the last sweep, into the ledger, and its ceiling
-// moved on when the person's week has turned. A key OpenRouter no longer
-// has is forgotten and the machine remade with a fresh one.
-async function spend(q: Query, c: Computer, m: Machine): Promise<void> {
-  const models = deployment.models;
-  if (models.kind !== "openrouter" || !c.modelKeyHash) return;
-  const capUsd = c.modelCapUsd ?? models.capUsd;
-  let total: number;
-  try {
-    const read = await openrouter.spent(c.modelKeyHash);
-    total = read.usage;
-    await allowance(q, c, read, capUsd);
-  } catch (err) {
-    if (/ answered 404:/.test((err as Error).message)) {
-      await clearModelKey(q, c.id);
-      await remake(
-        q,
-        { ...c, modelKey: null, modelKeyHash: null },
-        m,
-        "its key was gone",
-      );
-      await reopens(q, c, m.id);
-    }
-    return;
-  }
-  if (total <= c.modelSpentUsd + 0.000001) return;
-  await note(q, {
-    orgId: c.orgId,
-    userId: c.userId,
-    resource: "key",
-    event: "spent",
-    ref: c.modelKeyHash,
-    detail: { usd: total - c.modelSpentUsd, total },
-    why: "models Claude Code called",
-  });
-  await setModelSpent(q, c.id, total);
-}
-
-// Answers the hashes of the model keys the org's computers hold.
 async function reconcileOrg(
   orgId: string,
   live: Map<string, Machine>,
-): Promise<string[]> {
+): Promise<void> {
   const computers = await asOrg(orgId, allComputers);
   const beside = computers[0];
   if (beside)
@@ -954,17 +800,9 @@ async function reconcileOrg(
       // comes or goes, the machine is remade holding the new one.
       const brained =
         (m.env.BRAIN_URL ?? null) === ((await brainOf(q, c))?.url ?? null);
-      // A machine carries the way to our models, and never a key: remade
-      // when it holds a key of ours, or a gateway address that is not the
-      // one modelOf would give it now (none where this deployment mints no
-      // keys). modelOf mints the row's key if it has none.
-      const want = await modelOf(q, c);
-      const modelled =
-        m.env.MODEL_KEY === undefined &&
-        (m.env.MODEL_URL ?? null) === (want?.url ?? null);
       // What the machine cannot run without is put right at once, and the
       // image of the day comes with the restart it already costs.
-      if (c.current && (!sized || !named || !brained || !modelled)) {
+      if (c.current && (!sized || !named || !brained)) {
         await remake(
           q,
           c,
@@ -973,9 +811,7 @@ async function reconcileOrg(
             ? "the person was named"
             : !brained
               ? "the brain came within reach"
-              : !modelled
-                ? "the way to our models changed"
-                : "the size was changed",
+              : "the size was changed",
         );
         await reopens(q, c, m.id);
         return;
@@ -1039,13 +875,9 @@ async function reconcileOrg(
             .pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys)
             .catch(() => {});
         await retellPublic(q, c).catch(() => {});
-        await spend(q, c, m);
       }
     });
   }
-  return (await asOrg(orgId, allComputers))
-    .map((c) => c.modelKeyHash)
-    .filter((h): h is string => h !== null);
 }
 
 // How many backups of a home are kept: the newest fourteen.
@@ -1728,7 +1560,6 @@ async function moveOn(
           secret: c.secret,
           brain: await brainOf(q, c),
           who: await whoOf(q, c),
-          model: await modelOf(q, c),
           metadata: tags(c),
         }));
       await on({ machineId: made.id });
@@ -1790,78 +1621,6 @@ export async function pushKeys(p: Principal): Promise<void> {
   const c = await ready(p);
   if (!c) return;
   await door.pushKeys(c.machineId!, ticket(c, 60), c.authorizedKeys);
-}
-
-// What a person has spent on models, in dollars: this week against their
-// cap, the day it turns over, every day the ledger holds, and what each
-// model took. Nothing here is faked; a deployment that mints no keys has
-// no answer at all.
-export type Usage = {
-  spentUsd: number;
-  capUsd: number;
-  resetsAt: string;
-  days: { day: string; usd: number }[];
-  models: { model: string; usd: number }[];
-};
-
-// The vendor is asked once a minute for each person; a pane opened twice
-// in that minute reads the same answer.
-const usages = new Map<string, { at: number; usage: Promise<Usage | null> }>();
-export function usageOf(p: Principal): Promise<Usage | null> {
-  const held = usages.get(p.userId);
-  if (held && Date.now() - held.at < 60_000) return held.usage;
-  const usage = readUsage(p).catch((err: Error) => {
-    usages.delete(p.userId);
-    throw err;
-  });
-  usages.set(p.userId, { at: Date.now(), usage });
-  return usage;
-}
-
-async function readUsage(p: Principal): Promise<Usage | null> {
-  const m = deployment.models;
-  if (m.kind !== "openrouter") return null;
-  const c =
-    deployment.computers.kind === "none"
-      ? null
-      : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
-  const capUsd = c?.modelCapUsd ?? m.capUsd;
-  // Before there is a key the week is still the computer's own; with no
-  // computer at all it is a week from now.
-  if (!c?.modelKeyHash)
-    return {
-      spentUsd: 0,
-      capUsd,
-      resetsAt: (c
-        ? weekOf(c).turns
-        : new Date(Date.now() + WEEK)
-      ).toISOString(),
-      days: [],
-      models: [],
-    };
-  const year = new Date();
-  year.setUTCFullYear(year.getUTCFullYear() - 1);
-  const [read, days, called] = await Promise.all([
-    openrouter.spent(c.modelKeyHash),
-    asOrg(p.orgId, (q) => spentByDay(q, p.userId, year)),
-    // The activity of one key, which OpenRouter answers per model per day.
-    openrouter.activity(c.modelKeyHash).catch(() => []),
-  ]);
-  const byModel = new Map<string, number>();
-  for (const a of called)
-    byModel.set(a.model, (byModel.get(a.model) ?? 0) + a.usd);
-  // What is left of the week's allowance is what the ceiling leaves, so a
-  // reset shows as a week begun again.
-  const limit = await asOrg(p.orgId, (q) => allowance(q, c, read, capUsd));
-  return {
-    spentUsd: Math.max(0, capUsd - (limit - read.usage)),
-    capUsd,
-    resetsAt: weekOf(c).turns.toISOString(),
-    days,
-    models: [...byModel]
-      .map(([model, usd]) => ({ model, usd }))
-      .sort((a, b) => b.usd - a.usd),
-  };
 }
 
 // The way in from the person's own terminal: the computer's name, which
@@ -1963,25 +1722,6 @@ function honours(c: Computer, t: string): boolean {
     sig.length === want.length &&
     timingSafeEqual(Buffer.from(sig), Buffer.from(want))
   );
-}
-
-// An ask answered, said back into the conversation it came from on the
-// person's computer, where it named one: the question and the answer, as
-// the next word of that conversation. Nothing waits on it; a computer
-// that is not ready, or a door that does not answer, leaves the answer
-// for the agent's own notifications tool to read.
-export async function tellAnswer(p: Principal, id: string): Promise<void> {
-  const n = await asPerson(p, (q) => notificationOf(q, id));
-  if (!n?.replyTo || n.answer === null) return;
-  const c = await ready(p);
-  if (!c) return;
-  await door
-    .say(c.machineId!, ticket(c, 60), {
-      chat: n.replyTo,
-      text: `You asked "${n.title}"; the person answered: ${n.answer}`,
-      answered: n.id,
-    })
-    .catch((err: Error) => console.error(`say ${c.id}: ${err.message}`));
 }
 
 // The computer's numbers this moment, asked of its door with a ticket

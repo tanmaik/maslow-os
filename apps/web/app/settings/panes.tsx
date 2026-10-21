@@ -15,7 +15,6 @@ import {
   RiPaletteLine,
   RiKey2Line,
   RiSearchLine,
-  RiSparklingLine,
   RiTeamLine,
   RiUserLine,
 } from "@remixicon/react";
@@ -46,7 +45,6 @@ export type Pane = {
 const MARKS: Record<string, Mark> = {
   you: RiUserLine,
   computer: RiComputerLine,
-  agent: RiSparklingLine,
   look: RiPaletteLine,
   apps: RiApps2Line,
   access: RiKey2Line,

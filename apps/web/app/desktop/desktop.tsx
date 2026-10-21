@@ -24,7 +24,6 @@ import { Permissions } from "@/components/permissions";
 import type { Progress } from "@/lib/computer";
 import { Look } from "@/app/computer/files/look";
 import { FileExplorer } from "@/app/computer/files/file-explorer";
-import { Agent } from "@/app/computer/agent/agent";
 import { Terminal } from "@/app/computer/terminal/terminal";
 import {
   anotherOf,
@@ -97,7 +96,6 @@ const PANELS: Record<
   string,
   ComponentType<{ fresh?: boolean; id?: string; href?: string }>
 > = {
-  "/computer/agent": Agent,
   "/computer/terminal": Terminal,
   "/computer/files": FileExplorer,
   "/computer/files/view": Look,

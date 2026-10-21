@@ -1,6 +1,0 @@
-#!/bin/bash
-# Claude Code as an editor starts it over the Agent Client Protocol, Zed's
-# wire between an editor and an agent: the same Claude Code, the same auth.
-set -euo pipefail
-. /opt/maslow/bin/start
-start claude-code-acp "$@"

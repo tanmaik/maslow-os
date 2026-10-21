@@ -209,7 +209,6 @@ const machineEnv = (m: Shape) => ({
   PERSON: m.who.person,
   ORG: m.who.org,
   ...(m.brain ? { BRAIN_URL: m.brain.url, BRAIN_TOKEN: m.brain.token } : {}),
-  ...(m.model ? { MODEL_URL: m.model.url, MODEL_TOKEN: m.model.token } : {}),
 });
 
 // Two gigabytes of disk standing in for memory, as every machine on Fly

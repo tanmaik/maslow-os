@@ -16,8 +16,8 @@ WORKDIR /opt/maslow
 # pinned months ago: the image is remade often and every computer is moved
 # onto it, so that is how it stays current without anything on a person's
 # disk updating itself behind them.
-COPY apps/computer/package.json apps/computer/patch-acp.mjs .
-RUN npm install --omit=dev && node patch-acp.mjs
+COPY apps/computer/package.json .
+RUN npm install --omit=dev
 WORKDIR /opt/maslow/browser
 COPY packages/browser/package.json .
 RUN npm install --omit=dev
@@ -36,8 +36,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN usermod -l me -d /home/me -m node && groupmod -n me node && usermod -p '*' me
 COPY --chmod=0440 apps/computer/etc/sudoers.d/me /etc/sudoers.d/me
 COPY --chmod=0644 apps/computer/etc/profile.d/me.sh /etc/profile.d/me.sh
-COPY --chmod=0755 apps/computer/bin/claude apps/computer/bin/claude-code-acp apps/computer/bin/open apps/computer/bin/notice apps/computer/bin/notify apps/computer/bin/ask apps/computer/bin/xclip apps/computer/bin/welcome /opt/maslow/bin/
-COPY --chmod=0644 apps/computer/bin/auth-env apps/computer/bin/theirs apps/computer/bin/start /opt/maslow/bin/
+COPY --chmod=0755 apps/computer/bin/claude apps/computer/bin/open apps/computer/bin/notice apps/computer/bin/notify apps/computer/bin/ask apps/computer/bin/xclip apps/computer/bin/welcome /opt/maslow/bin/
+COPY --chmod=0644 apps/computer/bin/theirs /opt/maslow/bin/
 COPY --chmod=0644 apps/computer/etc/pip.conf /etc/pip.conf
 RUN visudo -cf /etc/sudoers.d/me
 WORKDIR /opt/maslow
@@ -86,11 +86,6 @@ RUN curl -sS https://downloads.1password.com/linux/keys/1password.asc \
     && ln -s /opt/maslow/op/usr/bin/op /opt/maslow/bin/op \
     && rm -rf /var/cache/apt/archives/*.deb /var/lib/apt/lists/* /etc/apt/sources.list.d/1password.list
 COPY --chmod=0755 apps/computer/boot.sh apps/computer/terminal.sh apps/computer/ssh-login.sh ./
-COPY apps/computer/door.mjs apps/computer/stats.mjs apps/computer/seed.mjs apps/computer/backup.mjs apps/computer/files.mjs apps/computer/shares.mjs apps/computer/agent-tools.mjs apps/computer/was.mjs ./
-COPY apps/computer/etc/sshd_config apps/computer/etc/mcp.json apps/computer/etc/tmux.conf apps/computer/etc/settings.json apps/computer/etc/CLAUDE.md etc/
-# What the Agent knows: how this system works, how an app is built here,
-# how the brain is used, and the skin Maslow wears, BoardUI's own skill.
-# Four skills, linked into our session's skills at boot.
-COPY apps/computer/skills skills
-COPY .claude/skills/boardui skills/boardui
+COPY apps/computer/door.mjs apps/computer/stats.mjs apps/computer/seed.mjs apps/computer/backup.mjs apps/computer/files.mjs apps/computer/shares.mjs apps/computer/was.mjs ./
+COPY apps/computer/etc/sshd_config apps/computer/etc/mcp.json apps/computer/etc/tmux.conf etc/
 CMD ["/opt/maslow/boot.sh"]

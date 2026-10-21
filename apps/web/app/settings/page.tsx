@@ -34,7 +34,6 @@ import { LookPicker } from "@/app/settings/look-picker";
 import { Wallpaper } from "@/app/settings/wallpaper";
 import { papersOf } from "@/lib/wallpapers";
 import { AccessPane } from "@/app/settings/access";
-import { AgentPane } from "@/app/settings/agent";
 import { AppsPane } from "@/app/settings/apps-pane";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { Groups } from "@/app/settings/groups";
@@ -275,23 +274,6 @@ export default async function Settings({
       ],
     },
     {
-      id: "agent",
-      title: "Agent",
-      group: "Yours",
-      words: [
-        "models",
-        "spend",
-        "dollars",
-        "limit",
-        "cap",
-        "openrouter",
-        "sign in",
-        "auth",
-        "account",
-        "usage",
-      ],
-    },
-    {
       id: "apps",
       title: "Apps",
       group: "Yours",
@@ -444,11 +426,6 @@ export default async function Settings({
     computer: (
       <Section id="computer" title="Computer">
         <ComputerPane p={p} />
-      </Section>
-    ),
-    agent: (
-      <Section id="agent" title="Agent">
-        <AgentPane p={p} />
       </Section>
     ),
     look: (

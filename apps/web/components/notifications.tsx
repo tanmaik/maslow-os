@@ -340,7 +340,7 @@ function row(
 }
 
 // An ask that offers nothing to pick takes whatever the person types.
-export function Typed({ onSay }: { onSay: (answer: string) => void }) {
+function Typed({ onSay }: { onSay: (answer: string) => void }) {
   const [answer, setAnswer] = useState("");
   return (
     <form
