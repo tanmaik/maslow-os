@@ -14,6 +14,7 @@ const OPENS_A_DATABASE_URL = new Set([
   "scripts/stack.mjs",
   "scripts/smoke.mjs",
   "scripts/smoke-brain.mjs",
+  "scripts/smoke-trial.mjs",
   "scripts/preview-db.mjs",
   "scripts/check-secrets.mjs",
 ]);
