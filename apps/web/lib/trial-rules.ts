@@ -1,7 +1,7 @@
 // What a trial says about itself, in the words every refusal and every
 // notice uses, and where to get the real thing. Nothing here reads the
 // database, so the proxy and the browser may import it.
-export const REPO = "https://github.com/maslow-tech/maslow-os";
+export const REPO = "https://github.com/tanmaik/maslow-os";
 export const TRIAL_HOURS = 24;
 export const NO_FILES =
   "The trial keeps no files. Run your own Maslow OS to upload.";

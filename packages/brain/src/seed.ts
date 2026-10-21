@@ -332,7 +332,7 @@ export async function seedTrial(
           "On your own Maslow you get a computer. On it, you and Claude build apps; a port you publish becomes an app in your dock.",
           "Each app brings more of your data in, and files on the computer feed the brain too, so the brain gets a fuller picture of your life.",
           "In this trial the computer is pretend: its terminal plays a recording, its files are read-only, and its two apps, Reading list and Run log, wrote the books and runs you find here. Everything is made up and is deleted 24 hours after you start.",
-          "Run your own: https://github.com/maslow-tech/maslow-os",
+          "Run your own: https://github.com/tanmaik/maslow-os",
         ].join("\n\n"),
       },
       ...all.flatMap((s) => s.records),

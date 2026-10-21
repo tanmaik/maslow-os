@@ -214,7 +214,7 @@ and what the apps keep is written to your brain.
 - notes/ holds a few notes.
 - pictures/ holds two pictures.
 
-Run your own: https://github.com/maslow-tech/maslow-os
+Run your own: https://github.com/tanmaik/maslow-os
 `,
     },
     apps: {
