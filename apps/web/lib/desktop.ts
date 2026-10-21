@@ -19,6 +19,8 @@ import { boxOf } from "@/app/desktop/apps";
 import { clamp, fresh, MIN, share, type Port } from "@/app/desktop/tiles";
 
 import { publishedOf, sharedWithMe, sharingOf, statsOf } from "./computer.ts";
+import { deployment } from "./deployment.ts";
+import { appHref, DEMO_APPS } from "./trial-computer.ts";
 
 // The room as the person left it, one desktop at least, the wallpaper it
 // lies on, and the ports they could place: their own open ones and those
@@ -42,10 +44,10 @@ export async function desktopOf(p: Principal): Promise<{
         wallpaper,
       };
     }),
-    // A computer that does not answer never takes Home down: it opens
-    // with what colleagues shared, the Computer pane says the door is
-    // silent, and the next ask puts the person's own back.
-    portsOf(p).catch(async () => (await sharedWithMe(p)).map(sharedApp)),
+    // A computer that does not answer never takes the desktop down: the room
+    // opens without its ports, the Computer pane says the door is silent,
+    // and the next ask puts them back.
+    portsOf(p).catch(() => []),
   ]);
   return { desktops, ports, wallpaper };
 }
@@ -54,17 +56,19 @@ export async function desktopOf(p: Principal): Promise<{
 // published, each as they named it, only while it is listening this
 // moment; and the ports other people opened to them, wearing the name and
 // face their owner published them under, or saying whose they are. A port
-// never published is none of them: it opens in a browser tab, from Ports.
+// never published is none of them: it opens in a browser tab, from Applets.
 export async function portsOf(p: Principal): Promise<Port[]> {
+  // A trial's apps are the pretend computer's, published and listening.
+  if (deployment.trial)
+    return DEMO_APPS.map((a) => ({ title: a.title, href: appHref(a) }));
   const [mine, shared, published] = await Promise.all([
     sharingOf(p),
     sharedWithMe(p),
     publishedOf(p),
   ]);
   // A computer that does not answer is not one with no ports: the ask
-  // fails, and whoever asked keeps what it knew.
+  // fails, and the room keeps what it knew.
   const stats = mine ? await statsOf(p) : null;
-  if (mine && !stats) throw new Error("the computer did not answer");
   const live = new Map((stats?.ports ?? []).map((x) => [x.port, x]));
   return [
     ...(mine
@@ -77,17 +81,14 @@ export async function portsOf(p: Principal): Promise<Port[]> {
             ...(a.tab || live.get(a.port)?.tab ? { tab: true as const } : {}),
           }))
       : []),
-    ...shared.map(sharedApp),
+    ...shared.map((s) => ({
+      title: s.name ?? `Port ${s.port} · ${s.owner}'s`,
+      href: `/port/${s.machineId}/${s.port}`,
+      ...(s.icon ? { face: s.icon } : {}),
+      ...(s.tab ? { tab: true as const } : {}),
+    })),
   ];
 }
-
-// A port a colleague opened to the person, as something to open.
-const sharedApp = (s: SharedPort): Port => ({
-  title: s.name ?? `Port ${s.port} · ${s.owner}'s`,
-  href: `/port/${s.machineId}/${s.port}`,
-  ...(s.icon ? { face: s.icon } : {}),
-  ...(s.tab ? { tab: true as const } : {}),
-});
 
 // --- Keeping a desktop ----------------------------------------------------
 

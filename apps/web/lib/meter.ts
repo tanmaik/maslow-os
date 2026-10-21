@@ -3,7 +3,9 @@ import { picturesIn, type Resource, type Unit } from "@maslow/db/usage";
 
 import { reconcile, unclaimed } from "./computer.ts";
 import { reconcile as reconcileRelay } from "./relay.ts";
+import { deployment } from "./deployment.ts";
 import { settle } from "./orphans.ts";
+import { reap } from "./trial.ts";
 import { PRICES } from "./prices.ts";
 
 // The meter. One measuring function reads what a member's things held
@@ -140,6 +142,8 @@ export const sweepNow = (): Promise<number> => swept(false);
 // The hourly sweep: every org, every member, since their last row, after
 // what the org still owes the vendors is paid.
 async function sweep(now = new Date()): Promise<number> {
+  // A trial's day-old orgs go before anything of theirs is metered.
+  if (deployment.trial) await reap();
   const orgs = await asMeter(async (q) =>
     (await q.query<{ id: string }>("select id from orgs")).rows.map(
       (r) => r.id,

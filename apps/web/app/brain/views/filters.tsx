@@ -17,25 +17,22 @@ import {
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { DateField } from "@/components/date-field";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { CloseButton } from "@/components/ui/close-button";
+import { Chip } from "@/components/base/badges/chip";
+import { Button, buttonStyles } from "@/components/base/buttons/button";
+import { CloseButton } from "@/components/base/buttons/close-button";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+  Dropdown,
+  DropdownDivider,
+  DropdownGroup,
+  DropdownItem,
+  DropdownPopover,
+  DropdownTrigger,
+} from "@/components/base/dropdown/dropdown";
+import { Input } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import { Select, SelectItem } from "@/components/base/select/select";
+import { DateField } from "@/components/date-field";
 import {
   Popover,
   PopoverContent,
@@ -47,9 +44,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { cx } from "@/utils/cx";
 
-import { Choose } from "../choose";
-import { typeText } from "../format";
+import { FIELD, typeText } from "../format";
 import { saidOutright } from "./kept";
 import {
   COMPARISONS,
@@ -85,8 +82,14 @@ const PRESETS: [string, () => [Date, Date]][] = [
   ],
 ];
 
+const TRIGGER = cx(
+  buttonStyles.base,
+  buttonStyles.size.small,
+  buttonStyles.variant.secondary,
+);
+
 // One choice among a few, made from a menu that closes on the pick.
-function Pick({
+function Choose({
   name,
   said,
   options,
@@ -97,24 +100,28 @@ function Pick({
   options: { key: string; label: string }[];
   onPick: (key: string) => void;
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label={name}
-        render={<Button variant="outline" />}
-      >
-        {said}
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-auto min-w-40">
-        <DropdownMenuGroup>
+    <Dropdown isOpen={open} onOpenChange={setOpen}>
+      <DropdownTrigger aria-label={name} className={TRIGGER}>
+        <span className={buttonStyles.label.small}>{said}</span>
+      </DropdownTrigger>
+      <DropdownPopover aria-label={name} placement="bottom end">
+        <DropdownGroup>
           {options.map((o) => (
-            <DropdownMenuItem key={o.key} onClick={() => onPick(o.key)}>
+            <DropdownItem
+              key={o.key}
+              onSelect={() => {
+                setOpen(false);
+                onPick(o.key);
+              }}
+            >
               {o.label}
-            </DropdownMenuItem>
+            </DropdownItem>
           ))}
-        </DropdownMenuGroup>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownGroup>
+      </DropdownPopover>
+    </Dropdown>
   );
 }
 
@@ -126,7 +133,7 @@ type Grouping = {
 
 // What the list is ordered by, in one menu: the field, which way, and,
 // where the list is cut into runs, by what. The trigger says the field and
-// shows the way with an arrow.
+// shows the way with an arrow, as Linear's does.
 function SortMenu({
   sort,
   direction,
@@ -143,71 +150,71 @@ function SortMenu({
   onDirection: (direction: "asc" | "desc") => void;
 }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const Arrow = direction === "asc" ? RiArrowUpLine : RiArrowDownLine;
   const byTime = sort === WHEN;
+  const pick = (act: () => void) => {
+    setOpen(false);
+    act();
+  };
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger
-        aria-label="Sort"
-        render={<Button variant="outline" />}
-      >
-        {byTime ? "Modified" : sort}
-        <Arrow data-icon="inline-end" aria-hidden />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-auto min-w-44">
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-          <DropdownMenuRadioGroup value={sort} onValueChange={onSort}>
-            {[
-              { key: WHEN, label: "Modified" },
-              ...properties
-                .filter((p) => p.datatype !== "list")
-                .map((p) => ({ key: p.name, label: typeText(p.name) })),
-            ].map((o) => (
-              <DropdownMenuRadioItem key={o.key} value={o.key} closeOnClick>
-                {o.label}
-              </DropdownMenuRadioItem>
-            ))}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuLabel>Order</DropdownMenuLabel>
-          <DropdownMenuRadioGroup
-            value={direction}
-            onValueChange={(to) => onDirection(to as "asc" | "desc")}
+    <Dropdown isOpen={open} onOpenChange={setOpen}>
+      <DropdownTrigger aria-label="Sort" className={cx(TRIGGER, "gap-1")}>
+        <span className={buttonStyles.label.small}>
+          {byTime ? "Modified" : sort}
+        </span>
+        <Arrow aria-hidden className="size-3.5" />
+      </DropdownTrigger>
+      <DropdownPopover aria-label="Sort" placement="bottom end">
+        <DropdownGroup label="Sort by">
+          {[
+            { key: WHEN, label: "Modified" },
+            ...properties
+              .filter((p) => p.datatype !== "list")
+              .map((p) => ({ key: p.name, label: typeText(p.name) })),
+          ].map((o) => (
+            <DropdownItem
+              key={o.key}
+              selected={o.key === sort}
+              onSelect={() => pick(() => onSort(o.key))}
+            >
+              {o.label}
+            </DropdownItem>
+          ))}
+        </DropdownGroup>
+        <DropdownDivider />
+        <DropdownGroup label="Order">
+          <DropdownItem
+            selected={direction === "desc"}
+            onSelect={() => pick(() => onDirection("desc"))}
           >
-            <DropdownMenuRadioItem value="desc" closeOnClick>
-              {byTime ? "Newest first" : "Largest first"}
-            </DropdownMenuRadioItem>
-            <DropdownMenuRadioItem value="asc" closeOnClick>
-              {byTime ? "Oldest first" : "Smallest first"}
-            </DropdownMenuRadioItem>
-          </DropdownMenuRadioGroup>
-        </DropdownMenuGroup>
+            {byTime ? "Newest first" : "Largest first"}
+          </DropdownItem>
+          <DropdownItem
+            selected={direction === "asc"}
+            onSelect={() => pick(() => onDirection("asc"))}
+          >
+            {byTime ? "Oldest first" : "Smallest first"}
+          </DropdownItem>
+        </DropdownGroup>
         {grouping && (
           <>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuLabel>Group by</DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={grouping.current}
-                onValueChange={(key) => {
-                  const to = grouping.options.find((o) => o.key === key);
-                  if (to) router.push(to.href);
-                }}
-              >
-                {grouping.options.map((o) => (
-                  <DropdownMenuRadioItem key={o.key} value={o.key} closeOnClick>
-                    {o.label}
-                  </DropdownMenuRadioItem>
-                ))}
-              </DropdownMenuRadioGroup>
-            </DropdownMenuGroup>
+            <DropdownDivider />
+            <DropdownGroup label="Group by">
+              {grouping.options.map((o) => (
+                <DropdownItem
+                  key={o.key}
+                  selected={o.key === grouping.current}
+                  onSelect={() => pick(() => router.push(o.href))}
+                >
+                  {o.label}
+                </DropdownItem>
+              ))}
+            </DropdownGroup>
           </>
         )}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownPopover>
+    </Dropdown>
   );
 }
 
@@ -252,22 +259,23 @@ export function Filters(props: {
         </div>
       )}
       <Button
-        variant="outline"
+        variant="secondary"
+        size="small"
+        leadingIcon={RiFilter3Line}
         onClick={() => setSheet(true)}
         className="shrink-0 max-sm:order-2 sm:hidden"
       >
-        <RiFilter3Line data-icon="inline-start" />
         {many > 0 ? `Filter (${many})` : "Filter"}
       </Button>
       <Sheet open={sheet} onOpenChange={setSheet}>
         <SheetContent
           side="bottom"
           showCloseButton={false}
-          className="max-h-[75dvh] gap-3 overflow-y-auto rounded-t-lg p-4 pb-[calc(env(safe-area-inset-bottom)+16px)]"
+          className="max-h-[75dvh] gap-3 overflow-y-auto rounded-t-3xl p-4 pb-[calc(env(safe-area-inset-bottom)+16px)]"
         >
           <div
             aria-hidden
-            className="-mt-2 mx-auto h-1 w-9 shrink-0 rounded-full bg-muted-foreground/50"
+            className="-mt-2 mx-auto h-1 w-9 shrink-0 rounded-full bg-foreground-icon-quaternary"
           />
           <SheetHeader className="p-0">
             <SheetTitle>Filter</SheetTitle>
@@ -362,80 +370,97 @@ function Conditions({
             else setDraft(null);
           }}
         >
-          <PopoverTrigger render={<Button variant="outline" />}>
-            <RiFilter3Line data-icon="inline-start" />
-            Filter
-          </PopoverTrigger>
-          <PopoverContent align="start" className="w-80 gap-3 p-3">
-            <Field>
-              <FieldLabel>Field</FieldLabel>
-              <Choose
+          <PopoverTrigger
+            render={
+              <Button
+                variant="secondary"
+                size="small"
+                leadingIcon={RiFilter3Line}
+              >
+                Filter
+              </Button>
+            }
+          />
+          <PopoverContent align="start" className="w-80">
+            <div className="flex flex-col gap-1.5">
+              <Label>Field</Label>
+              <Select
+                size="sm"
                 aria-label="Field"
-                value={draft?.property ?? null}
-                onValueChange={start}
-                className="w-full"
-                options={fields.map(
-                  (name) =>
-                    [
-                      name,
-                      name === WHEN ? "Modified" : typeText(name),
-                    ] as const,
-                )}
-              />
-            </Field>
+                selectedKey={draft?.property ?? null}
+                onSelectionChange={(k) => start(String(k))}
+                triggerClassName={`w-full ${FIELD}`}
+                popoverClassName="w-[var(--trigger-width)] max-w-none"
+              >
+                {fields.map((name) => (
+                  <SelectItem key={name} id={name}>
+                    {name === WHEN ? "Modified" : typeText(name)}
+                  </SelectItem>
+                ))}
+              </Select>
+            </div>
             {draft && (
-              <Field>
-                <FieldLabel>Condition</FieldLabel>
-                <Choose
+              <div className="flex flex-col gap-1.5">
+                <Label>Condition</Label>
+                <Select
+                  size="sm"
                   aria-label="Condition"
-                  value={draft.op}
-                  onValueChange={(k) =>
+                  selectedKey={draft.op}
+                  onSelectionChange={(k) =>
                     setDraft({
                       ...draft,
-                      op: k as Filter["op"],
+                      op: String(k) as Filter["op"],
                       values: [],
                     })
                   }
-                  className="w-full"
-                  options={COMPARISONS[kind].map(
-                    (op) => [op, comparisonWord(kind, op)] as const,
-                  )}
-                />
-              </Field>
+                  triggerClassName={`w-full ${FIELD}`}
+                  popoverClassName="w-[var(--trigger-width)] max-w-none"
+                >
+                  {COMPARISONS[kind].map((op) => (
+                    <SelectItem key={op} id={op}>
+                      {comparisonWord(kind, op)}
+                    </SelectItem>
+                  ))}
+                </Select>
+              </div>
             )}
             {draft && draft.op !== "unset" && (
-              <Field>
-                <FieldLabel>Value</FieldLabel>
+              <div className="flex flex-col gap-1.5">
+                <Label>Value</Label>
                 {kind === "enum" ? (
                   <div className="flex flex-col gap-2">
                     {options.map((o) => (
-                      <Label key={o} className="font-normal">
-                        <Checkbox
-                          checked={draft.values.includes(o)}
-                          onCheckedChange={(on) =>
-                            setDraft({
-                              ...draft,
-                              values: on
-                                ? [...draft.values, o]
-                                : draft.values.filter((v) => v !== o),
-                            })
-                          }
-                        />
+                      <Checkbox
+                        size="sm"
+                        key={o}
+                        isSelected={draft.values.includes(o)}
+                        onChange={(on) =>
+                          setDraft({
+                            ...draft,
+                            values: on
+                              ? [...draft.values, o]
+                              : draft.values.filter((v) => v !== o),
+                          })
+                        }
+                      >
                         {o}
-                      </Label>
+                      </Checkbox>
                     ))}
                   </div>
                 ) : kind === "boolean" ? (
-                  <Choose
+                  <Select
+                    size="sm"
                     aria-label="Value"
-                    value={draft.values[0] ?? null}
-                    onValueChange={(k) => setDraft({ ...draft, values: [k] })}
-                    className="w-full"
-                    options={[
-                      ["true", "yes"],
-                      ["false", "no"],
-                    ]}
-                  />
+                    selectedKey={draft.values[0] ?? null}
+                    onSelectionChange={(k) =>
+                      setDraft({ ...draft, values: [String(k)] })
+                    }
+                    triggerClassName={`w-full ${FIELD}`}
+                    popoverClassName="w-[var(--trigger-width)] max-w-none"
+                  >
+                    <SelectItem id="true">yes</SelectItem>
+                    <SelectItem id="false">no</SelectItem>
+                  </Select>
                 ) : kind === "date" ||
                   kind === "datetime" ||
                   kind === "when" ? (
@@ -447,24 +472,23 @@ function Conditions({
                   />
                 ) : (
                   <Input
+                    size="small"
                     aria-label="Value"
                     type={kind === "number" ? "number" : "text"}
                     value={draft.values[0] ?? ""}
-                    onChange={(e) =>
-                      setDraft({ ...draft, values: [e.target.value] })
-                    }
+                    onChange={(v) => setDraft({ ...draft, values: [v] })}
                     placeholder={kind === "number" ? "0" : "a word or two"}
                   />
                 )}
-              </Field>
+              </div>
             )}
             {draft?.property === WHEN && (
               <div className="flex flex-wrap gap-2">
                 {PRESETS.map(([name, range]) => (
                   <Button
                     key={name}
-                    variant="outline"
-                    size="sm"
+                    variant="secondary"
+                    size="small"
                     onClick={() => {
                       const [from, to] = range();
                       shut();
@@ -477,7 +501,7 @@ function Conditions({
               </div>
             )}
             <Button
-              size="sm"
+              size="small"
               disabled={!ready}
               onClick={() => {
                 if (!draft) return;
@@ -493,15 +517,14 @@ function Conditions({
 
       {chips &&
         terms.map((t) => (
-          <Badge
+          <Chip
             key={`${t.property}:${t.op}`}
-            variant="secondary"
-            className="h-6 gap-0.5 pr-0.5 pl-2"
+            color="soft"
+            className="gap-1 pr-1"
           >
             {termText(t, properties)}
             <CloseButton
-              size="icon-xs"
-              className="size-5"
+              size="sm"
               aria-label={`Remove filter on ${t.property}`}
               title={`Remove filter on ${t.property}`}
               onClick={() =>
@@ -512,11 +535,11 @@ function Conditions({
                 )
               }
             />
-          </Badge>
+          </Chip>
         ))}
 
       {controls && offerWhose && (
-        <Pick
+        <Choose
           name="Whose records"
           said={
             WHOSE[whose as keyof typeof WHOSE] ??
@@ -558,8 +581,8 @@ function Conditions({
       )}
       {chips && terms.length > 0 && (
         <Button
-          variant="ghost"
-          size="xs"
+          variant="secondary"
+          size="small"
           onClick={() =>
             go((next) => {
               next.delete("f");

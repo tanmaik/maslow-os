@@ -1,6 +1,22 @@
+import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { NextConfig } from "next";
+
+// BoardUI's base stylesheet is licensed and never in the repo: a licensed
+// copy is put at this path before a build. Without one, the build and the
+// dev server go on with a plain stand-in that has none of its resets or
+// animations, and say so.
+const boardui = path.join(process.cwd(), "styles", "boardui.css");
+if (!existsSync(boardui)) {
+  writeFileSync(
+    boardui,
+    "/* A stand-in: no licensed BoardUI stylesheet was supplied at this path. */\n",
+  );
+  console.warn(
+    `next.config: no licensed BoardUI stylesheet at ${boardui}; building with a plain stand-in`,
+  );
+}
 
 const config: NextConfig = {
   transpilePackages: ["@maslow/brain", "@maslow/db"],
@@ -34,22 +50,38 @@ const config: NextConfig = {
   // blocks PostHog's hosts still reports. PostHog's paths end in a slash,
   // which Next would otherwise redirect away.
   skipTrailingSlashRedirect: true,
-  rewrites: async () => [
-    // A desktop open through a deploy still saves its arrangement and asks
-    // after ports at the addresses its bundle was built with. Renamed on
-    // 2026-09-16; these go once every open desktop has reloaded.
-    { source: "/room/desktop", destination: "/desktop/layout" },
-    { source: "/room/:path*", destination: "/desktop/:path*" },
-    { source: "/notices", destination: "/notifications" },
-    {
-      source: "/ingest/static/:path*",
-      destination: "https://us-assets.i.posthog.com/static/:path*",
-    },
-    {
-      source: "/ingest/:path*",
-      destination: "https://us.i.posthog.com/:path*",
-    },
-  ],
+  rewrites: async () => ({
+    // A trial's pretend computer (apps/web/lib/trial-rules.ts) answers in place of
+    // the real one's reads. Routed here, before the real routes, and never by a
+    // rewrite in the proxy: behind a proxy that speaks https, Next sends such a
+    // rewrite back out to https on its own port, which it cannot answer.
+    beforeFiles:
+      process.env.TRIAL === "1"
+        ? [
+            { source: "/computer/live", destination: "/trial/live" },
+            {
+              source: "/computer/files/:read(list|read|shared|share)",
+              destination: "/trial/files/:read",
+            },
+          ]
+        : [],
+    afterFiles: [
+      // A desktop open through a deploy still saves its arrangement and asks
+      // after ports at the addresses its bundle was built with. Renamed on
+      // 2026-09-16; these go once every open desktop has reloaded.
+      { source: "/room/desktop", destination: "/desktop/layout" },
+      { source: "/room/:path*", destination: "/desktop/:path*" },
+      { source: "/notices", destination: "/notifications" },
+      {
+        source: "/ingest/static/:path*",
+        destination: "https://us-assets.i.posthog.com/static/:path*",
+      },
+      {
+        source: "/ingest/:path*",
+        destination: "https://us.i.posthog.com/:path*",
+      },
+    ],
+  }),
   // Our own pages frame each other in the room, so a page of ours is framed
   // only by our own site and no other, and no address of ours is told to one.
   headers: async () => [

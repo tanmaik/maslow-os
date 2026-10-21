@@ -12,9 +12,9 @@ import { Numbers, useStats } from "@/app/computer/numbers";
 import { Updating } from "@/app/computer/updating";
 import { Where, type From } from "@/app/computer/region";
 import { Row, Rows } from "@/app/settings/row";
-import { Button } from "@/components/ui/button";
+import { StatusDot } from "@/components/base/badges/status-dot";
+import { Button } from "@/components/base/buttons/button";
 import { Progress } from "@/components/ui/progress";
-import { StatusDot } from "@/components/ui/status-dot";
 import type { Kept, MoveStep, State, Update } from "@/lib/computer";
 import type { Restore } from "@/lib/door";
 import type { SizeKey } from "@/lib/sizes";
@@ -50,9 +50,9 @@ export const MOVE_STEPS: Record<MoveStep, [number, string]> = {
   clearing: [95, "Clearing away the old one"],
 };
 
-// A heading over one part of the pane.
+// A heading over one part of the pane, on the inset its rows sit on.
 export const Head = ({ children }: { children: string }) => (
-  <p className="text-xs font-medium text-muted-foreground">{children}</p>
+  <p className="px-3 text-caption-1-medium text-text-secondary">{children}</p>
 );
 
 // A command to run elsewhere, with a button that copies it whole.
@@ -60,23 +60,19 @@ export function Command({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="flex items-start gap-2">
-      <pre className="min-w-0 flex-1 overflow-x-auto rounded-md bg-muted px-3 py-2.5 font-mono text-xs text-foreground">
+      <pre className="min-w-0 flex-1 overflow-x-auto rounded-2lg bg-background-tertiary-default px-3 py-2.5 font-mono text-caption-1-regular text-text-primary">
         {text}
       </pre>
       <Button
-        variant="outline"
-        size="sm"
+        variant="secondary"
+        size="small"
+        leadingIcon={copied ? RiCheckLine : RiFileCopyLine}
         onClick={() => {
           void navigator.clipboard.writeText(text);
           setCopied(true);
           setTimeout(() => setCopied(false), 2000);
         }}
       >
-        {copied ? (
-          <RiCheckLine data-icon="inline-start" />
-        ) : (
-          <RiFileCopyLine data-icon="inline-start" />
-        )}
         {copied ? "Copied" : "Copy"}
       </Button>
     </div>
@@ -150,7 +146,7 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
   return (
     <div className="flex flex-col gap-2">
       <Head>Backups</Head>
-      <p className="text-sm text-muted-foreground">
+      <p className="px-3 text-body-regular text-text-secondary">
         {backedUp === "off"
           ? "No backups here: this deployment has no bucket."
           : backedUp
@@ -158,7 +154,7 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
             : "Home not backed up yet; the first one comes within the hour."}
       </p>
       {restoring && (
-        <p className="text-sm text-muted-foreground">
+        <p className="px-3 text-body-regular text-text-secondary">
           {restoring.error
             ? `The backup from ${restoring.name.replace("restored-", "")} did not come back: ${restoring.error}`
             : restoring.finishedAt
@@ -168,7 +164,11 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
                 : `Unpacking ${size(restoring.bytes)} into ~/${restoring.name}…`}
         </p>
       )}
-      {failed && <p className="text-sm text-destructive">{failed}</p>}
+      {failed && (
+        <p className="px-3 text-body-regular text-text-error-primary">
+          {failed}
+        </p>
+      )}
       {kept && kept.length > 0 && (
         <Rows>
           {kept.map((b) => (
@@ -178,12 +178,12 @@ function Backups({ backedUp }: { backedUp: string | null | "off" }) {
               description={size(b.bytes) || "size unknown"}
             >
               <Button
-                variant="outline"
-                size="sm"
+                variant="secondary"
+                size="small"
+                leadingIcon={RiDownloadCloud2Line}
                 disabled={coming || asked === b.key}
                 onClick={() => void restore(b.key)}
               >
-                <RiDownloadCloud2Line data-icon="inline-start" />
                 Restore into a folder
               </Button>
             </Row>
@@ -223,12 +223,16 @@ function Ready({
   const { now, samples, failed } = useStats();
   return (
     <div className="flex flex-col gap-5">
-      <p className="flex items-center gap-2 text-sm text-foreground">
-        <StatusDot tone="success" />
+      <p className="flex items-center gap-2 px-3 text-body-regular text-text-primary">
+        <StatusDot color="green" />
         Ready in {where.regions[region ?? ""] ?? region}
         {since ? `, since ${since}` : ""}.
       </p>
-      {moveFailed && <p className="text-sm text-destructive">{moveFailed}</p>}
+      {moveFailed && (
+        <p className="px-3 text-body-regular text-text-error-primary">
+          {moveFailed}
+        </p>
+      )}
       {update && (
         <Updating
           update={update}
@@ -252,7 +256,9 @@ function Ready({
           description="Throws away everything outside your home and keeps your home."
         >
           <AlertDialog>
-            <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>
+            <AlertDialogTrigger
+              render={<Button variant="secondary" size="small" />}
+            >
               Reset
             </AlertDialogTrigger>
             <AlertDialogContent>
@@ -375,15 +381,15 @@ export function Making({
     return (
       <div className="flex flex-col gap-3">
         <Progress aria-label={step.replace("_", to)} value={value} />
-        <p className="text-sm font-medium text-foreground">
+        <p className="text-body-medium text-text-primary">
           Moving your computer to {to}
         </p>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body-regular text-text-secondary">
           {step.replace("_", to)}. This takes a few minutes; your files come
           with it, and nothing on the computer can be opened until it is there.
         </p>
         {failed && (
-          <p className="text-sm text-destructive">
+          <p className="text-body-regular text-text-error-primary">
             Could not ask after it: {failed}. Trying again.
           </p>
         )}
@@ -394,16 +400,20 @@ export function Making({
   return (
     <div className="flex flex-col gap-3">
       <Progress aria-label={label} value={value} />
-      <p className="text-sm text-muted-foreground">
+      <p className="text-body-regular text-text-secondary">
         {label}
         {state.region
           ? ` in ${where.regions[state.region] ?? state.region}`
           : ""}
         . This takes a minute the first time.
       </p>
-      {moveFailed && <p className="text-sm text-destructive">{moveFailed}</p>}
+      {moveFailed && (
+        <p className="text-body-regular text-text-error-primary">
+          {moveFailed}
+        </p>
+      )}
       {failed && (
-        <p className="text-sm text-destructive">
+        <p className="text-body-regular text-text-error-primary">
           Could not get on: {failed}. Trying again.
         </p>
       )}

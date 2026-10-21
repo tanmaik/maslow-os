@@ -14,17 +14,20 @@ import { principal } from "@/lib/session";
 export default async function TerminalPage() {
   const p = await principal();
   if (!p) redirect("/");
-  const off = deployment.computers.kind === "none";
-  const c = off ? null : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  // A trial's computer is pretend, and always ready.
+  const trial = deployment.trial;
+  const off = !trial && deployment.computers.kind === "none";
+  const c =
+    off || trial ? null : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   // Ready is the door answering, not a date on the row.
-  const ready = (await stateNow(c)).progress === "ready";
+  const ready = trial || (await stateNow(c)).progress === "ready";
   return (
     // The screen less the page's own 24 of gutter, top and bottom, and the
     // whole window when framed in the room, where it has none. The negative
     // margin gives back the 112 the layout keeps under every page for
     // chrome this one does not have; it goes when that padding does.
-    <main className="flex h-[calc(100dvh-3rem)] -mb-22 min-h-0 flex-col gap-4 [html[data-framed]_&]:mb-0 [html[data-framed]_&]:h-full">
-      <h1 className="page-title text-lg font-medium text-foreground">
+    <main className="flex h-[calc(100dvh-3rem)] -mb-22 min-h-0 flex-col gap-4 [html[data-framed]_&]:mb-0 [html[data-framed]_&]:h-dvh">
+      <h1 className="page-title text-title-3-medium text-text-primary">
         Terminal
       </h1>
       {off ? (

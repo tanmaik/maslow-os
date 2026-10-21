@@ -1,8 +1,12 @@
 // What this deployment can do, read from its environment once. The interface
 // reads this object and never the environment.
 
+// A trial signs nobody in by name: "Try it" makes a guest with an org of
+// their own, which the sweep deletes a day later.
 export type IdentityProvider =
-  { kind: "workos"; clientId: string; apiKey: string } | { kind: "dev" };
+  | { kind: "workos"; clientId: string; apiKey: string }
+  | { kind: "dev" }
+  | { kind: "trial" };
 
 export type Mail =
   { kind: "resend"; apiKey: string; from: string } | { kind: "none" };
@@ -114,9 +118,15 @@ const production = process.env.VERCEL
 // Every Vercel deployment is served over HTTPS; elsewhere only production is.
 const https = Boolean(process.env.VERCEL) || production;
 
+// A trial is a public copy anyone may try for a day, with no vendor at
+// all: no sign-in by name, no mail, no bucket, no computers, no keys of
+// ours anywhere. It runs as production does in every other way.
+const trial = process.env.TRIAL === "1";
+
 // A container image is built with no secret in reach: what production
 // requires is asked of the container as it starts, never of its build.
-const strict = production && process.env.IMAGE_BUILD !== "1";
+// A trial requires none of the vendors production does.
+const strict = production && !trial && process.env.IMAGE_BUILD !== "1";
 
 // The services this deployment goes without on purpose, named in
 // SERVICES_OFF: production starts without them and says so, where one
@@ -145,6 +155,7 @@ const asOrigin = (site: string) =>
   site.startsWith("http") ? site : `https://${site}`;
 
 function identityProvider(): IdentityProvider {
+  if (trial) return { kind: "trial" };
   const { WORKOS_API_KEY, WORKOS_CLIENT_ID } = process.env;
   if (WORKOS_API_KEY && WORKOS_CLIENT_ID)
     return {
@@ -161,13 +172,16 @@ function identityProvider(): IdentityProvider {
 }
 
 function mail(): Mail {
+  if (trial) return { kind: "none" };
   const { RESEND_API_KEY, MAIL_FROM } = process.env;
   if (RESEND_API_KEY && MAIL_FROM)
     return { kind: "resend", apiKey: RESEND_API_KEY, from: MAIL_FROM };
   return { kind: "none" };
 }
 
+// A trial keeps no file of a stranger's: every upload is refused.
 function storage(): Storage {
+  if (trial) return { kind: "none" };
   const {
     STORAGE_ENDPOINT: endpoint,
     STORAGE_REGION: region,
@@ -196,7 +210,7 @@ function storage(): Storage {
 
 function analytics(): Analytics {
   const key = process.env.POSTHOG_KEY;
-  if (off.has("analytics")) return { kind: "none" };
+  if (trial || off.has("analytics")) return { kind: "none" };
   if (key) return { kind: "posthog", key };
   if (strict)
     throw new Error(
@@ -208,6 +222,7 @@ function analytics(): Analytics {
 // A deployment without Voyage searches by words alone in production, and
 // has a stand-in anywhere else.
 function embeddings(): Embeddings {
+  if (trial) return { kind: "fake" };
   const { VOYAGE_API_KEY: apiKey } = process.env;
   if (apiKey)
     return {
@@ -221,6 +236,7 @@ function embeddings(): Embeddings {
 // A deployment without Composio has no connections in production, and
 // pretend ones anywhere else.
 function connections(): Connections {
+  if (trial) return { kind: "fake" };
   const { COMPOSIO_API_KEY: apiKey } = process.env;
   if (apiKey)
     return {
@@ -237,7 +253,7 @@ function computers(): Computers {
     FLY_COMPUTERS_APP: app,
     FLY_MACHINES_DOMAIN: domain,
   } = process.env;
-  if (off.has("computers")) return { kind: "none" };
+  if (trial || off.has("computers")) return { kind: "none" };
   // The address a machine reaches the app at: production's own, or the
   // preview branch's, which outlives any one push. Production without one
   // would make computers that cannot reach the brain, and says so instead.
@@ -308,6 +324,7 @@ function computers(): Computers {
 
 function push(): Push {
   const { APNS_TEAM_ID, APNS_KEY_ID, APNS_KEY } = process.env;
+  if (trial) return { kind: "none" };
   if (!APNS_TEAM_ID || !APNS_KEY_ID || !APNS_KEY) return { kind: "none" };
   return {
     kind: "apns",
@@ -348,11 +365,16 @@ function sync(): Sync {
       "No address for the relay to call back: set APP_URL, or VERCEL_PROJECT_PRODUCTION_URL on Vercel. Production has no fallback.",
     );
   if (!secret || !site) return { kind: "none" };
+  // A trial runs one process: live editing needs a relay named outright,
+  // and without one each page saves alone.
+  if (trial && !url) return { kind: "none" };
   return { kind: "relay", url: url ?? null, secret, origin: asOrigin(site) };
 }
 
 export const deployment = {
   production,
+  // A public trial: guests, a day each, nothing kept.
+  trial,
   // Which of the three environments this is, for the developer's pill.
   where: production
     ? ("production" as const)
@@ -361,7 +383,7 @@ export const deployment = {
       : ("local" as const),
   // Anywhere but production the seed exists and a seeded person can be
   // signed in as with one click.
-  seededSignIn: !production,
+  seededSignIn: !production && !trial,
   storage: storage(),
   computers: computers(),
   push: push(),

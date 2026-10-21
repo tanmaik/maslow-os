@@ -1,8 +1,8 @@
 "use client";
 
-import type { ComponentProps, ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/base/buttons/button";
 import {
   Dialog,
   DialogContent,
@@ -15,27 +15,33 @@ import {
 // A form behind a button: the page stays a page until it is asked for.
 export function FormDialog({
   trigger,
-  leadingIcon: Icon,
+  leadingIcon,
   title,
   description,
   children,
-  variant = "outline",
+  variant = "secondary",
   className,
 }: {
   trigger: ReactNode;
-  leadingIcon?: ComponentType<{ "data-icon"?: string }>;
+  leadingIcon?: ButtonProps["leadingIcon"];
   title: string;
   description?: string;
   children: ReactNode;
-  variant?: ComponentProps<typeof Button>["variant"];
+  variant?: ButtonProps["variant"];
   className?: string;
 }) {
   return (
     <Dialog>
       <DialogTrigger
-        render={<Button variant={variant} size="sm" className={className} />}
+        render={
+          <Button
+            variant={variant}
+            size="small"
+            leadingIcon={leadingIcon}
+            className={className}
+          />
+        }
       >
-        {Icon && <Icon data-icon="inline-start" />}
         {trigger}
       </DialogTrigger>
       <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">

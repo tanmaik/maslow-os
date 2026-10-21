@@ -58,12 +58,33 @@ its own. Without a secret nothing is live and the page saves as it does
 alone.
 
 Production refuses to start without WorkOS, mail, storage, analytics, the relay's secret, or the
-sweep's `CRON_SECRET`. A deployment may go without analytics, speech or computers only by
+sweep's `CRON_SECRET`. A deployment may go without analytics or computers only by
 naming them in `SERVICES_OFF`.
+
+BoardUI's base stylesheet is licensed and is not in the repo. A licensed copy
+goes at `apps/web/styles/boardui.css` (ignored by git) before `pnpm dev` or a
+build. Without one, `next.config.ts` writes a plain stand-in there and says
+so: the app builds and runs, without BoardUI's resets and animations. The
+build never fetches it from anywhere.
 
 Outside Vercel the app is one container image, built from the repo's root with
 `apps/web/Dockerfile`. It migrates as it starts, on `DATABASE_OWNER_URL`, and takes its
 address from `APP_URL`.
+
+## The trial
+
+`TRIAL=1` turns a production build into a public trial, as at
+https://tanmai.org/maslow. It needs only `DATABASE_URL`, `DATABASE_OWNER_URL`,
+`APP_URL`, `SYNC_SECRET` and `CRON_SECRET`; every vendor is off or faked.
+Try it makes a fresh org of 1 with a guest and made-up records (`POST /try`,
+5 per address in 10 minutes, 300 trials at once), and the sweep deletes a
+trial 24 hours after it began. The computer is pretend: the terminal, files,
+browser and apps come from `apps/web/lib/trial-computer.ts` through `/trial`,
+which answers 404 outside a trial. Uploads, the MCP, OAuth, invites, keys and
+anything that makes a computer are shut. `/try` logs `trial: started org=<id>`
+and the reap `trial: reaped n=<count>`, for whoever counts them. Build it with
+`TRIAL=1` set, since `next.config.ts` routes the pretend computer at build
+time. `pnpm smoke:trial` checks it.
 
 ## Dev secrets
 

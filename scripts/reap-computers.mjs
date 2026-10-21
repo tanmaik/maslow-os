@@ -8,7 +8,7 @@
 //   node scripts/reap-computers.mjs [--checkout NAME]   also destroy NAME's now
 import { cloudOf, wantedAt } from "./cloud.mjs";
 
-const cloud = await cloudOf();
+const cloud = cloudOf();
 const { destroy, destroyVolume, machines, stop, untouchable, volumes } = cloud;
 
 const HOUR = 60 * 60_000;

@@ -4,12 +4,8 @@ import { RiSearchLine } from "@remixicon/react";
 import Link from "next/link";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 
 import { Unlink } from "./unlink";
 
@@ -69,20 +65,18 @@ export function LinkGroups({
   return (
     <div className="flex flex-col gap-3">
       {total > SEARCHED && (
-        <InputGroup className="max-w-xs">
-          <InputGroupAddon>
-            <RiSearchLine />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={wanted}
-            onChange={(e) => setWanted(e.target.value)}
-            placeholder="Search links"
-            aria-label="Search links"
-          />
-        </InputGroup>
+        <Input
+          size="small"
+          value={wanted}
+          onChange={setWanted}
+          placeholder="Search links"
+          aria-label="Search links"
+          leadingIcon={RiSearchLine}
+          className="max-w-xs"
+        />
       )}
       {word && shown.length === 0 && (
-        <p className="text-xs text-muted-foreground">No results.</p>
+        <p className="text-caption-1-regular text-text-tertiary">No results.</p>
       )}
       {shown.map((g) => {
         const open = opened.has(g.key) || !!word;
@@ -90,7 +84,7 @@ export function LinkGroups({
         return (
           <div key={g.key} className="flex flex-col gap-1.5">
             {!flat && (
-              <p className="flex items-baseline gap-1.5 text-xs font-medium text-muted-foreground">
+              <p className="flex items-baseline gap-1.5 text-caption-1-medium text-text-tertiary">
                 <span>
                   {g.incoming && (
                     <span aria-label="from another record" className="mr-1">
@@ -106,16 +100,16 @@ export function LinkGroups({
               {chips.map((c) => (
                 <li
                   key={c.id}
-                  className="group flex h-7 items-center gap-1.5 rounded-md bg-muted pr-0.5 pl-2.5"
+                  className="group flex h-8 items-center gap-1.5 rounded-full bg-background-secondary-default pr-1.5 pl-3"
                 >
                   <Link
                     href={c.href}
-                    className="max-w-64 truncate text-sm font-medium text-foreground hover:underline"
+                    className="max-w-64 truncate text-body-medium text-text-primary hover:underline"
                   >
                     {c.title}
                   </Link>
                   {c.whose && (
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-caption-2-regular text-text-secondary">
                       {c.whose}
                     </span>
                   )}
@@ -128,14 +122,14 @@ export function LinkGroups({
                       verb={g.verb}
                     />
                   ) : (
-                    <span className="w-2" />
+                    <span className="w-1" />
                   )}
                 </li>
               ))}
               {g.chips.length > chips.length && (
                 <li>
                   <Button
-                    variant="outline"
+                    variant="secondary"
                     size="xs"
                     onClick={() => setOpened((was) => new Set(was).add(g.key))}
                   >

@@ -45,7 +45,7 @@ if (stack.computer)
 // lapsed. Silence can only stop a machine, never leak one.
 const renew = () =>
   cloudOf(stack.env)
-    .then((cloud) => cloud.renewLeases(checkout, stack.env))
+    .renewLeases(checkout, stack.env)
     .then(
       (n) =>
         n &&

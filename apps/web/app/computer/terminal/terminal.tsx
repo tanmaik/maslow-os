@@ -19,8 +19,9 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 
 import { BarButton, InBar, useFolded } from "@/app/desktop/panel";
-import { Button } from "@/components/ui/button";
-import { CloseButton } from "@/components/ui/close-button";
+import { Button } from "@/components/base/buttons/button";
+import { CloseButton } from "@/components/base/buttons/close-button";
+import { IconButton } from "@/components/base/buttons/icon-button";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -30,7 +31,7 @@ import {
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { liveSocket } from "@/lib/live";
 import { FAST, LEAVE } from "@/lib/motion";
-import { cn } from "@/lib/utils";
+import { cx } from "@/utils/cx";
 import { usePhone } from "@/hooks/use-phone";
 
 // The keys a phone's keyboard lacks, as the terminal would send them.
@@ -101,11 +102,11 @@ function theme() {
     return `#${[r, g, b].map((n) => n!.toString(16).padStart(2, "0")).join("")}`;
   };
   return {
-    background: v("--background"),
-    foreground: v("--foreground"),
-    cursor: v("--foreground"),
-    cursorAccent: v("--background"),
-    selectionBackground: v("--ring"),
+    background: v("--color-background-primary-default"),
+    foreground: v("--color-text-primary"),
+    cursor: v("--color-text-primary"),
+    cursorAccent: v("--color-background-primary-default"),
+    selectionBackground: v("--color-border-focus-ring"),
   };
 }
 
@@ -251,13 +252,13 @@ export function Terminal({
   // Whether the shells list is shown, as the person last left it. On a
   // phone the list has nowhere to sit beside the terminal, so it opens as
   // a sheet instead of a rail, and starts closed rather than remembered.
-  const [rail, setRail] = useState(false);
+  const [rail, setRail] = useState(true);
   const [sheet, setSheet] = useState(false);
   const wide = !usePhone();
   // The control a hand leaving the terminal lands on.
   const leave = useRef<HTMLButtonElement>(null);
   useEffect(() => {
-    setRail(localStorage.getItem(RAIL) === "shown");
+    setRail(localStorage.getItem(RAIL) !== "hidden");
   }, []);
   const toggleRail = () => {
     if (!wide) return setSheet((on) => !on);
@@ -584,8 +585,8 @@ export function Terminal({
     // a single frame on a page of its own, and flush to the edges in a
     // window, where the window is the frame.
     <div
-      className={cn(
-        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-background",
+      className={cx(
+        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border-button-default bg-background-primary-default",
         "[html[data-framed]_&]:rounded-none [html[data-framed]_&]:border-0",
       )}
     >
@@ -598,30 +599,28 @@ export function Terminal({
           across the terminal's rows cannot be picked up from them. */}
       {offered && (
         <>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-border bg-muted px-3 py-1.5">
-            <span className="shrink-0 text-xs text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-b border-separator-border bg-background-secondary-default px-2 py-1.5">
+            <span className="shrink-0 text-caption-1-regular text-text-tertiary">
               Your computer asked to open
             </span>
             <span className="flex min-w-0 flex-1 items-center gap-1">
-              <span className="min-w-0 truncate text-sm text-muted-foreground">
+              <span className="min-w-0 truncate text-body-regular text-text-secondary">
                 {offered}
               </span>
-              <Button
-                variant="ghost"
-                size="icon-sm"
+              <IconButton
+                size="small"
+                icon={copied ? RiCheckLine : RiFileCopyLine}
                 aria-label="Copy the address"
                 onClick={() => {
                   void navigator.clipboard.writeText(offered);
                   setCopied(true);
                   setTimeout(() => setCopied(false), 1500);
                 }}
-              >
-                {copied ? <RiCheckLine /> : <RiFileCopyLine />}
-              </Button>
+              />
             </span>
             <Button
-              size="sm"
-              variant="outline"
+              size="small"
+              variant="secondary"
               onClick={() => {
                 window.postMessage(
                   { maslow: "open", url: offered },
@@ -633,7 +632,7 @@ export function Terminal({
               Open in the computer's browser
             </Button>
             <Button
-              size="sm"
+              size="small"
               onClick={() => {
                 window.open(offered, "_blank", "noopener");
                 setOffered(null);
@@ -642,6 +641,7 @@ export function Terminal({
               Open on this device
             </Button>
             <CloseButton
+              size="sm"
               aria-label="Dismiss"
               onClick={() => setOffered(null)}
             />
@@ -649,7 +649,7 @@ export function Terminal({
           {/* A sign-in that answers to the machine ends on a page this device
             cannot load. Saying so beforehand turns a dead end into a step. */}
           {endsInACode(offered) && (
-            <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+            <p className="border-b border-separator-border px-2 py-2 text-caption-1-regular text-text-secondary">
               Sign in on this device. At the end it shows a code: copy it, come
               back here, and paste it at the{" "}
               <code>Paste code here if prompted &gt;</code> prompt.
@@ -659,21 +659,25 @@ export function Terminal({
       )}
       {/* Why something did not happen, in a sentence. */}
       {refused !== null && (
-        <p className="border-b border-border px-3 py-2 text-xs text-muted-foreground">
+        <p className="border-b border-separator-border px-2 py-2 text-caption-1-regular text-text-secondary">
           {refused}
         </p>
       )}
       {/* Words this device's browser would not take: shown so they can
           be picked up by hand instead. */}
       {kept !== null && (
-        <div className="flex items-center gap-2 border-b border-border bg-muted px-3 py-1.5">
-          <span className="shrink-0 text-xs text-muted-foreground">
+        <div className="flex items-center gap-2 border-b border-separator-border bg-background-secondary-default px-2 py-2">
+          <span className="shrink-0 text-caption-1-regular text-text-secondary">
             Your browser kept the clipboard:
           </span>
-          <code className="min-w-0 flex-1 truncate font-mono text-xs select-all">
+          <code className="min-w-0 flex-1 truncate font-mono text-caption-1-regular select-all">
             {kept}
           </code>
-          <CloseButton aria-label="Dismiss" onClick={() => setKept(null)} />
+          <CloseButton
+            size="sm"
+            aria-label="Dismiss"
+            onClick={() => setKept(null)}
+          />
         </div>
       )}
       {/* The terminal's controls, together at the far end of the bar, away
@@ -682,7 +686,7 @@ export function Terminal({
           Command-Shift-D do. */}
       <InBar
         as={(controls) => (
-          <div className="flex h-9 shrink-0 items-center justify-end border-b border-border px-2">
+          <div className="flex h-8 shrink-0 items-center justify-end border-b border-separator-border px-2">
             {controls}
           </div>
         )}
@@ -695,7 +699,7 @@ export function Terminal({
             pressed={shown}
             title={ESCAPE}
             onClick={toggleRail}
-            className={cn(!shown && "text-muted-foreground")}
+            className={cx(!shown && "text-foreground-icon-tertiary")}
           />
           <BarButton
             icon={RiLayoutColumnLine}
@@ -723,20 +727,20 @@ export function Terminal({
           const rows = (
             <>
               <div className="flex shrink-0 items-center justify-between gap-2 sm:pl-2">
-                <span className="hidden text-xs font-medium text-muted-foreground sm:block">
+                <span className="hidden text-caption-1-medium text-text-secondary sm:block">
                   Shells
                 </span>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
+                <button
+                  type="button"
                   aria-label="New shell"
                   onClick={() => {
                     say({ window: "new" });
                     if (!wide) setSheet(false);
                   }}
+                  className="flex size-7 cursor-pointer items-center justify-center rounded-full bg-background-tertiary-default text-foreground-icon-secondary transition-colors duration-fast ease-plain outline-none hover:bg-background-tertiary-hover focus-visible:ring-2 focus-visible:ring-border-focus-ring"
                 >
-                  <RiAddLine />
-                </Button>
+                  <RiAddLine className="size-4" aria-hidden />
+                </button>
               </div>
               <AnimatePresence initial={false}>
                 {windows.map((w) => {
@@ -755,9 +759,9 @@ export function Terminal({
                       {naming === w.index ? (
                         // The name in place of itself: one field, in the row
                         // it names, with the same mark and number beside it.
-                        <div className="flex h-7 w-full items-center gap-2 rounded-md bg-accent px-2">
+                        <div className="flex w-full items-center gap-2 rounded-2lg bg-background-secondary-default p-2">
                           <RiTerminalBoxLine
-                            className="size-4 shrink-0 text-muted-foreground"
+                            className="size-5 shrink-0 text-foreground-icon-secondary"
                             aria-hidden
                           />
                           <input
@@ -776,7 +780,7 @@ export function Terminal({
                               }
                               if (e.key === "Escape") setNaming(null);
                             }}
-                            className="min-w-0 flex-1 bg-transparent text-sm font-medium text-foreground outline-none"
+                            className="min-w-0 flex-1 bg-transparent text-body-medium text-text-primary outline-none"
                           />
                         </div>
                       ) : (
@@ -794,38 +798,38 @@ export function Terminal({
                                 }}
                                 title="Double-click to rename"
                                 onDoubleClick={() => name(w)}
-                                className={cn(
-                                  "flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md px-2 text-left outline-none",
-                                  "focus-visible:ring-2 focus-visible:ring-ring",
+                                className={cx(
+                                  "flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-lg px-2 text-left outline-none",
+                                  "focus-visible:ring-2 focus-visible:ring-border-focus-ring",
                                   wide ? "h-7" : "min-h-11",
                                   windows.length > 1 && "pr-8",
                                   // The mark is a choice, not a hover: it lands the
                                   // moment it is made. Hover alone takes its time.
                                   on
-                                    ? "bg-accent"
-                                    : "transition-colors duration-fast ease-plain hover:bg-accent",
+                                    ? "bg-background-tertiary-default"
+                                    : "transition-colors duration-fast ease-plain hover:bg-background-secondary-hover",
                                 )}
                               />
                             }
                           >
                             <RiTerminalBoxLine
-                              className="size-4 shrink-0 text-muted-foreground"
+                              className="size-4 shrink-0 text-accent-500"
                               aria-hidden
                             />
                             <span
-                              className={cn(
-                                "truncate text-sm",
+                              className={cx(
+                                "truncate text-body-regular",
                                 on
-                                  ? "text-foreground"
-                                  : "text-muted-foreground",
+                                  ? "text-text-primary"
+                                  : "text-text-secondary",
                               )}
                             >
                               {shellName(w.name)}
                             </span>
                             <span
-                              className={cn(
-                                "ml-auto shrink-0 text-xs font-medium tabular-nums",
-                                "text-muted-foreground",
+                              className={cx(
+                                "ml-auto shrink-0 text-caption-1-medium tabular-nums",
+                                "text-text-secondary",
                               )}
                             >
                               {w.index}
@@ -852,10 +856,16 @@ export function Terminal({
                         no close, since it would take the terminal with it. */}
                       {windows.length > 1 && naming !== w.index && (
                         <CloseButton
-                          size="icon-xs"
+                          size="xs"
                           aria-label={`Close shell ${w.index}`}
                           onClick={() => say({ close: w.index })}
-                          className="absolute top-1/2 right-0.5 -translate-y-1/2 opacity-0 transition-opacity duration-instant ease-plain group-hover/row:opacity-100 focus-visible:opacity-100"
+                          className={cx(
+                            // 20 of disc in a 24 target, as a finger needs.
+                            "absolute top-1/2 right-1.5 -translate-y-1/2 before:absolute before:-inset-0.5 before:content-['']",
+                            "opacity-0 transition-opacity duration-instant ease-plain group-hover/row:opacity-100 focus-visible:opacity-100",
+                            on &&
+                              "bg-accent-700 text-text-white hover:bg-accent-800 hover:text-text-white",
+                          )}
                         />
                       )}
                     </motion.div>
@@ -867,8 +877,8 @@ export function Terminal({
           return wide ? (
             <nav
               aria-label="Shells"
-              className={cn(
-                "flex w-48 shrink-0 flex-col gap-0.5 overflow-x-visible overflow-y-auto border-r border-border p-2",
+              className={cx(
+                "flex w-48 shrink-0 flex-col gap-1 overflow-x-visible overflow-y-auto border-r border-separator-border bg-background-secondary-default/55 p-2",
                 rail ? "flex" : "hidden",
               )}
             >
@@ -878,7 +888,7 @@ export function Terminal({
             <Sheet open={sheet} onOpenChange={setSheet}>
               <SheetContent
                 side="bottom"
-                className="max-h-[70dvh] gap-2 rounded-t-lg p-3"
+                className="max-h-[70dvh] gap-2 rounded-t-3xl p-3"
               >
                 <SheetTitle className="sr-only">Shells</SheetTitle>
                 <nav
@@ -898,7 +908,7 @@ export function Terminal({
             // The terminal's own stylesheet clears its scrolling box to
             // black, which the renderer never paints over; the paper is the
             // page's, in both looks.
-            className="absolute inset-0 bg-background p-2 [&_.xterm-viewport]:bg-background!"
+            className="absolute inset-0 bg-background-primary-default p-2 [&_.xterm-viewport]:bg-background-primary-default!"
             onClick={() => term.current?.focus()}
           />
           {/* Whether the machine is still on the other end, said where the
@@ -911,7 +921,7 @@ export function Terminal({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0, transition: LEAVE }}
                 transition={FAST}
-                className="pointer-events-none absolute top-2 right-3 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                className="pointer-events-none absolute top-2 right-3 rounded-full bg-background-tertiary-default px-2 py-0.5 text-caption-1-medium text-text-secondary"
               >
                 {away}
               </motion.p>
@@ -923,7 +933,7 @@ export function Terminal({
           strip along the bottom, over the keyboard, each key sent as the
           terminal would send it. */}
       {folded && (
-        <div className="flex shrink-0 items-stretch gap-1 overflow-x-auto border-t border-border bg-muted px-1.5 pt-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:h-9">
+        <div className="flex shrink-0 items-stretch gap-1 overflow-x-auto border-t border-separator-border bg-background-secondary-default px-1.5 pt-1 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden [&>button]:h-9">
           {KEYS.map((k) => (
             <button
               key={k.label}
@@ -946,11 +956,11 @@ export function Terminal({
                 } else socket.current?.send(encoder.encode(k.send));
                 term.current?.focus();
               }}
-              className={cn(
-                "min-w-11 shrink-0 rounded-md border border-border px-2.5 font-mono text-sm text-foreground transition-colors duration-fast ease-plain active:bg-accent",
+              className={cx(
+                "min-w-11 shrink-0 rounded-lg px-2.5 font-mono text-body-regular text-text-primary transition-colors duration-fast ease-plain active:bg-background-tertiary-default",
                 k.label === "Ctrl" && ctrl
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "bg-background",
+                  ? "bg-accent-500 text-white"
+                  : "bg-background-primary-default shadow-xs",
               )}
             >
               {k.label}

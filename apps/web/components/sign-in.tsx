@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { LockScreen, type Made } from "@/components/lock-screen";
 import { deployment } from "@/lib/deployment";
 import { pendingFlow } from "@/lib/session";
+import { REPO, TRIAL_HOURS } from "@/lib/trial-rules";
 
 // What the last leg of a sign-in left to say, by the query it redirected
 // with. `orgs` is not a notice: it says the person who just signed in has
@@ -11,6 +12,7 @@ import { pendingFlow } from "@/lib/session";
 export type Notice = {
   email?: "slow" | "rejected" | "closed";
   code?: "wrong" | "locked";
+  try?: "slow" | "full";
   orgs?: string;
 };
 
@@ -21,6 +23,8 @@ const NOTICES = {
     "Maslow is invite-only for now. Someone already in can invite you.",
   "code=wrong": "That code didn't work. Try again or start over.",
   "code=locked": "Too many wrong codes. Ask for a new one.",
+  "try=slow": "Too many trials from here. Wait ten minutes and try again.",
+  "try=full": "The trial is full right now. Come back in an hour.",
 } as const;
 
 // The one line the last leg left behind, if any.
@@ -76,6 +80,7 @@ export async function SignIn({
       noMail={deployment.mail.kind === "none"}
       made={deployment.seededSignIn ? made() : undefined}
       plain={deployment.production}
+      trial={deployment.trial ? { repo: REPO, hours: TRIAL_HOURS } : undefined}
     />
   );
 }
@@ -101,10 +106,10 @@ export function Door({
     // taller than that scrolls within the page, top first.
     <main className="h-[calc(100dvh-8.5rem)] overflow-y-auto">
       <div className="flex min-h-full items-center justify-center px-4 py-6">
-        <div className="flex w-full max-w-md flex-col gap-4 rounded-lg border border-border bg-card p-6">
+        <div className="flex w-full max-w-md flex-col gap-4 rounded-3xl border border-border-button-default bg-background-primary-default p-6 shadow-card">
           <div className="flex flex-col gap-1.5">
-            <h1 className="text-lg font-medium text-foreground">{title}</h1>
-            <p className="text-sm text-muted-foreground">
+            <h1 className="text-title-3-medium text-text-primary">{title}</h1>
+            <p className="text-body-regular text-text-secondary">
               {because ? <>{because} </> : null}
               {description}
             </p>

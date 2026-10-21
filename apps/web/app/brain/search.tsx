@@ -2,11 +2,7 @@
 
 import { RiSearchLine } from "@remixicon/react";
 
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { Input } from "@/components/base/input/input";
 
 // The field a list is searched from: a magnifier, and Return submits the
 // form it stands in.
@@ -20,16 +16,12 @@ export function Search({
   placeholder: string;
 }) {
   return (
-    <InputGroup>
-      <InputGroupAddon>
-        <RiSearchLine />
-      </InputGroupAddon>
-      <InputGroupInput
-        name={name}
-        defaultValue={defaultValue}
-        placeholder={placeholder}
-        aria-label={placeholder}
-      />
-    </InputGroup>
+    <Input
+      name={name}
+      size="small"
+      defaultValue={defaultValue}
+      placeholder={placeholder}
+      leadingIcon={RiSearchLine}
+    />
   );
 }

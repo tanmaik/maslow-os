@@ -1,18 +1,9 @@
 import { clsx, type ClassValue } from "clsx";
-import { extendTailwindMerge } from "tailwind-merge";
 
-// The curves and clocks named in app/globals.css, so the last one on an
-// element wins as any other Tailwind class does.
-const merge = extendTailwindMerge({
-  extend: {
-    classGroups: {
-      ease: [{ ease: ["out-quart", "in-out-soft", "in-quad", "plain"] }],
-      duration: [{ duration: ["instant", "fast", "base", "slow"] }],
-    },
-  },
-});
+import { cx } from "@/utils/cx";
 
-// Joins class names, the later of two that conflict winning.
+// shadcn's class merger, on BoardUI's: it knows the composite type styles,
+// so a title beside a colour keeps its size.
 export function cn(...inputs: ClassValue[]) {
-  return merge(clsx(inputs));
+  return cx(clsx(inputs));
 }

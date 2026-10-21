@@ -1,8 +1,5 @@
-import {
-  CalendarDate,
-  getLocalTimeZone,
-  startOfMonth,
-} from "@internationalized/date";
+import { CalendarDate } from "@internationalized/date";
+import { monthGrid } from "@/components/application/calendar/calendar-data";
 import { format } from "date-fns";
 
 // Which month a calendar is looking at and what it covers. Read by the page
@@ -17,17 +14,6 @@ export const monthOf = (given: string | undefined): CalendarDate => {
     ? new CalendarDate(Number(m[1]), Number(m[2]), 1)
     : new CalendarDate(now.getFullYear(), now.getMonth() + 1, 1);
 };
-
-// The days a month's grid draws: six whole weeks from the Sunday on or
-// before the first, so every month is the same height.
-export function monthGrid(month: CalendarDate): CalendarDate[] {
-  const zone = getLocalTimeZone();
-  const first = startOfMonth(month);
-  const start = first.subtract({ days: first.toDate(zone).getDay() });
-  const days: CalendarDate[] = [];
-  for (let d = start; days.length < 42; d = d.add({ days: 1 })) days.push(d);
-  return days;
-}
 
 // The six weeks a month's grid draws, as the instants they begin and end.
 export function monthWindow(month: CalendarDate): [Date, Date] {

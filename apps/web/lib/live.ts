@@ -12,6 +12,9 @@ export async function liveSocket(
     door: string;
     ticket: string;
   };
+  // A trial's computer is pretend, and its socket never leaves the page.
+  if (door === "/trial")
+    return (await import("./trial-socket.ts")).trialSocket(path);
   const q = new URLSearchParams({ ticket, ...query });
   const ws = new WebSocket(`${door}/maslow/${path}?${q}`);
   ws.binaryType = "arraybuffer";

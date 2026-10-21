@@ -9,20 +9,19 @@ import { motion, useReducedMotion } from "motion/react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { srcOf } from "@/app/desktop/wallpapers";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  InputOTP,
-  InputOTPGroup,
-  InputOTPSeparator,
-  InputOTPSlot,
-} from "@/components/ui/input-otp";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { AuthCard } from "@/components/application/auth/auth-card";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Chip } from "@/components/base/badges/chip";
+import { Divider } from "@/components/base/divider/divider";
+import { Button } from "@/components/base/buttons/button";
+import { LinkButton } from "@/components/base/buttons/link-button";
+import { Input } from "@/components/base/input/input";
+import { InputOtp } from "@/components/base/input-otp/input-otp";
+import { RadioGroup } from "@/components/base/radio/radio";
+import { RadioCard } from "@/components/base/radio/radio-card";
 import { initials } from "@/lib/initials";
 import { BASE } from "@/lib/motion";
-import { cn } from "@/lib/utils";
+import { cx } from "@/utils/cx";
 
 // Someone this device has signed in before: enough to greet them by, kept
 // on the device and nowhere else.
@@ -77,6 +76,12 @@ function forget(email: string): Known[] {
   return rest;
 }
 
+// The wallpaper this device last saw, so the lock screen wears it too.
+export function rememberPaper(choice: string | null): void {
+  if (choice) localStorage.setItem(PAPER, choice);
+  else localStorage.removeItem(PAPER);
+}
+
 // What the desktop lies on, under the lock screen: the picture this device
 // last saw, Dusk until it has seen one, and a darkening over it deep enough
 // that white words read over the lightest thing a desktop can wear.
@@ -92,7 +97,7 @@ function Paper() {
           alt=""
           aria-hidden
           onLoad={() => setLit(true)}
-          className={cn(
+          className={cx(
             "absolute inset-0 size-full object-cover transition-opacity duration-slow ease-out-quart motion-reduce:transition-none",
             lit ? "opacity-100" : "opacity-0",
           )}
@@ -120,16 +125,16 @@ function Clock() {
     return () => clearInterval(beat);
   }, []);
   return (
-    <div className="flex flex-col items-center gap-1 text-white">
+    <div className="flex flex-col items-center gap-1 text-text-white">
       {/* A width held from the first paint, so nothing moves when the
           clock arrives. */}
-      <span className="min-h-10 text-2xl font-medium tabular-nums">
+      <span className="min-h-10 text-display-3-medium tabular-nums">
         {now?.toLocaleTimeString(undefined, {
           hour: "numeric",
           minute: "2-digit",
         }) ?? " "}
       </span>
-      <span className="text-sm font-medium text-white/80">
+      <span className="text-body-medium text-text-white/80">
         {now
           ?.toLocaleDateString(undefined, {
             weekday: "long",
@@ -155,12 +160,14 @@ function Face({ who }: { who: Known | null }) {
       transition={BASE}
       className="inline-flex"
     >
-      <Avatar className="size-20">
-        {who?.picture && <AvatarImage src={who.picture} alt={who.name} />}
-        <AvatarFallback className="text-xl font-medium">
-          {who ? initials(who.name) : null}
-        </AvatarFallback>
-      </Avatar>
+      <Avatar
+        // The ladder's next step up: the lock screen is the whole page, and
+        // the face is what it is about.
+        className="size-24 text-title-1-medium"
+        src={who?.picture ?? undefined}
+        alt={who?.name}
+        initials={who ? initials(who.name) : undefined}
+      />
     </motion.span>
   );
 }
@@ -168,7 +175,10 @@ function Face({ who }: { who: Known | null }) {
 // What the last leg left to say, under what it is about.
 function Said({ children }: { children: ReactNode }) {
   return (
-    <p role="status" className="text-center text-sm text-destructive">
+    <p
+      role="status"
+      className="text-body-regular text-text-error-primary text-center"
+    >
       {children}
     </p>
   );
@@ -190,10 +200,10 @@ function Tile({
       <button
         type="button"
         onClick={onPick}
-        className="flex w-24 flex-col items-center gap-2 rounded-md p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="flex w-28 flex-col items-center gap-2 rounded-2lg p-1 outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
       >
         <Face who={who} />
-        <span className="w-full truncate text-sm font-medium text-foreground">
+        <span className="w-full truncate text-body-medium text-text-primary">
           {who.name.split(" ")[0]}
         </span>
       </button>
@@ -201,9 +211,9 @@ function Tile({
         type="button"
         onClick={onForget}
         aria-label={`Forget ${who.name}`}
-        className="absolute top-0 right-1 grid size-5 place-items-center rounded-full bg-muted text-muted-foreground opacity-0 transition-opacity duration-fast ease-plain group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none"
+        className="absolute top-0 right-2 grid size-6 place-items-center rounded-full bg-background-quaternary-default text-foreground-icon-secondary opacity-0 transition-opacity duration-fast ease-plain group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-border-focus-ring focus-visible:outline-none"
       >
-        <RiCloseLine className="size-3.5" aria-hidden />
+        <RiCloseLine className="size-4" aria-hidden />
       </button>
     </div>
   );
@@ -215,115 +225,47 @@ function Tile({
 function Made({ made, next }: { made: Made[]; next?: string }) {
   const first = made[0]?.people[0]?.id;
   return (
-    <div className="mt-8 flex flex-col gap-3 rounded-lg border border-border bg-background/80 p-3">
-      <form action="/auth/dev" method="post" className="flex flex-col gap-3">
+    <div className="mt-8 flex flex-col gap-4">
+      <Divider className="text-caption-1-medium">For development</Divider>
+      <form action="/auth/dev" method="post" className="flex flex-col gap-4">
         {next && <input type="hidden" name="next" value={next} />}
         <div className="flex items-start gap-2">
-          <Badge variant="outline">dev</Badge>
-          <p className="text-xs text-muted-foreground">
+          <Chip variant="caption" color="yellow" className="mt-px">
+            dev
+          </Chip>
+          <p className="text-caption-1-regular text-text-secondary">
             These people are made up, and this way in does not exist in
             production.
           </p>
         </div>
         {/* Capped, so the way in is on the screen however many people are
             seeded and however short the screen is. */}
-        <div className="max-h-[32dvh] overflow-x-hidden overflow-y-auto">
-          <RadioGroup
-            name="user"
-            aria-label="Seeded people"
-            defaultValue={first}
-            className="relative grid-cols-[minmax(0,1fr)] gap-3"
-          >
-            {made.map((org) => (
-              <div key={org.org} className="flex flex-col">
-                <p className="pb-1 text-xs font-medium text-muted-foreground">
-                  {org.org}
-                </p>
-                {org.people.map((p) => (
-                  <Choice
-                    key={p.id}
-                    value={p.id}
-                    title={p.name}
-                    description={p.email}
-                  />
-                ))}
-              </div>
-            ))}
-          </RadioGroup>
-        </div>
-        <Button type="submit" variant="outline" size="lg" className="w-full">
+        <RadioGroup
+          name="user"
+          aria-label="Seeded people"
+          defaultValue={first}
+          className="max-h-[32dvh] gap-4 overflow-y-auto"
+        >
+          {made.map((org) => (
+            <div key={org.org} className="flex flex-col gap-2">
+              <p className="text-caption-1-medium text-text-secondary">
+                {org.org}
+              </p>
+              {org.people.map((p) => (
+                <RadioCard
+                  key={p.id}
+                  value={p.id}
+                  title={p.name}
+                  description={p.email}
+                />
+              ))}
+            </div>
+          ))}
+        </RadioGroup>
+        <Button type="submit" variant="secondary" className="w-full">
           Sign in
         </Button>
       </form>
-    </div>
-  );
-}
-
-// One thing to pick among a few: what it is, a line about it, and the mark
-// that says it is the one.
-function Choice({
-  value,
-  title,
-  description,
-}: {
-  value: string;
-  title: ReactNode;
-  description: ReactNode;
-}) {
-  return (
-    <label className="relative flex min-h-9 cursor-pointer items-center justify-between gap-3 rounded-md px-2 py-1.5 transition-colors hover:bg-accent has-data-checked:bg-accent">
-      <span className="flex min-w-0 items-baseline gap-2">
-        <span className="shrink-0 text-sm font-medium text-foreground">
-          {title}
-        </span>
-        <span className="truncate text-xs text-muted-foreground">
-          {description}
-        </span>
-      </span>
-      <RadioGroupItem value={value} />
-    </label>
-  );
-}
-
-// One leg of the way in: whose it is, what it asks, the form that answers
-// it, and what else can be done instead.
-function Column({
-  mark,
-  title,
-  description,
-  action,
-  cta,
-  footer,
-  children,
-}: {
-  mark?: ReactNode;
-  title: ReactNode;
-  description: ReactNode;
-  action?: string;
-  cta: string | null;
-  footer?: ReactNode;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex w-full flex-col">
-      {mark && <div className="mb-4 flex justify-center">{mark}</div>}
-      <div className="flex flex-col gap-1 text-center">
-        <h1 className="text-lg font-medium text-foreground">{title}</h1>
-        <p className="text-sm text-muted-foreground">{description}</p>
-      </div>
-      <form
-        action={action}
-        method={action ? "post" : undefined}
-        className="mt-6 flex flex-col gap-3"
-      >
-        {children}
-        {cta && (
-          <Button type="submit" size="lg" className="w-full">
-            {cta}
-          </Button>
-        )}
-      </form>
-      {footer}
     </div>
   );
 }
@@ -344,7 +286,11 @@ export function LockScreen({
   landings = [],
   you,
   plain = false,
+  trial,
 }: {
+  // A public trial: no email, one button that makes a guest, and where to
+  // get the real thing.
+  trial?: { repo: string; hours: number };
   // Which leg of the way in this is: who you are, the code, or where to land.
   step: "who" | "code" | "choose";
   // The column alone on the bare ground, with no wallpaper and no clock:
@@ -396,181 +342,197 @@ export function LockScreen({
     input.form?.requestSubmit();
   };
 
-  const card =
-    step === "choose" ? (
-      <Column
-        mark={<Face who={who} />}
-        title="Where are you working?"
-        description="You're in more than one org. You can move between them from the Maslow menu."
-        action="/auth/switch"
-        cta="Continue"
-      >
-        {onward}
-        <RadioGroup
-          name="membership"
-          aria-label="Your orgs"
-          defaultValue={landings[0]?.userId}
-          className="gap-0 rounded-lg border border-border bg-background/80 p-1"
-        >
-          {landings.map((m) => (
-            <Choice
-              key={m.userId}
-              value={m.userId}
-              title={m.orgName}
-              description={ROLE[m.role]}
-            />
-          ))}
-        </RadioGroup>
-      </Column>
-    ) : step === "code" ? (
-      <Column
-        mark={<Face who={who} />}
-        title={who ? who.name : "Check your inbox"}
-        description={
-          noMail ? (
-            <>
-              No mail is configured: the code for{" "}
-              <span className="font-medium text-foreground">{email}</span> is in
-              the server&rsquo;s terminal.
-            </>
-          ) : (
-            <>
-              Enter the six-digit code sent to{" "}
-              <span className="font-medium text-foreground">{email}</span>.
-            </>
-          )
-        }
-        // Locked, the only thing left to do is start over, so the form is
-        // the one that does it.
-        action={locked ? "/auth/restart" : "/auth/code"}
-        cta={locked ? "Start over" : null}
-        footer={
-          locked ? null : (
-            <form
-              action="/auth/restart"
-              method="post"
-              className="mt-4 flex justify-center"
-            >
-              {onward}
-              <Button
-                type="submit"
-                variant="link"
-                size="sm"
-                className="text-muted-foreground"
-              >
-                Use a different email
-              </Button>
-            </form>
-          )
-        }
-      >
-        {onward}
-        {!locked && (
-          <>
-            <input
-              ref={carried}
-              type="hidden"
-              name="code"
-              value={code}
-              readOnly
-            />
-            <InputOTP
-              maxLength={6}
-              value={code}
-              onChange={setCode}
-              inputMode="numeric"
-              pattern="[0-9]*"
-              autoComplete="one-time-code"
-              autoFocus
-              aria-label="Code"
-              containerClassName="justify-center"
-            >
-              <InputOTPGroup>
-                <InputOTPSlot
-                  index={0}
-                  className="size-10 bg-background/60 text-base"
-                />
-                <InputOTPSlot
-                  index={1}
-                  className="size-10 bg-background/60 text-base"
-                />
-                <InputOTPSlot
-                  index={2}
-                  className="size-10 bg-background/60 text-base"
-                />
-              </InputOTPGroup>
-              <InputOTPSeparator className="text-muted-foreground" />
-              <InputOTPGroup>
-                <InputOTPSlot
-                  index={3}
-                  className="size-10 bg-background/60 text-base"
-                />
-                <InputOTPSlot
-                  index={4}
-                  className="size-10 bg-background/60 text-base"
-                />
-                <InputOTPSlot
-                  index={5}
-                  className="size-10 bg-background/60 text-base"
-                />
-              </InputOTPGroup>
-            </InputOTP>
-          </>
-        )}
-        {said && <Said>{said}</Said>}
-      </Column>
-    ) : (
-      <Column
-        title="Sign in"
-        description={
-          <>
-            {because ? <>{because} </> : null}
-            {emails
-              ? "We'll email you a six-digit code. No password, no account to make."
-              : "No identity provider is configured. Sign in as one of the seeded people."}
-          </>
-        }
-        action={emails ? "/auth/email" : undefined}
-        cta={emails ? "Continue" : null}
-      >
-        {onward}
-        {emails && people.length > 0 && (
-          <div className="flex flex-wrap justify-center gap-4 pb-2">
-            {people.map((p) => (
-              <Tile
-                key={p.email}
-                who={p}
-                onPick={() => pick(p)}
-                onForget={() => setPeople(forget(p.email))}
+  const card = trial ? (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      title="Try Maslow OS"
+      description={
+        <>
+          This is a trial. Everything you make is deleted {trial.hours} hours
+          after you start.
+          <br />
+          It has no computer: no terminal, no files, no browser.
+        </>
+      }
+      action="/try"
+      cta="Try it"
+      footer={
+        <p className="mt-6 text-center text-body-regular text-text-secondary">
+          <a
+            href={trial.repo}
+            className="text-text-primary underline underline-offset-2"
+          >
+            Get Maslow OS on GitHub
+          </a>
+        </p>
+      }
+      fields={said ? <Said>{said}</Said> : null}
+    />
+  ) : step === "choose" ? (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      logo={<Face who={who} />}
+      title="Where are you working?"
+      description="You're in more than one org. You can move between them from the Maslow menu."
+      action="/auth/switch"
+      cta="Continue"
+      footer={null}
+      fields={
+        <>
+          {onward}
+          <RadioGroup
+            name="membership"
+            aria-label="Your orgs"
+            defaultValue={landings[0]?.userId}
+            className="gap-2"
+          >
+            {landings.map((m) => (
+              <RadioCard
+                key={m.userId}
+                value={m.userId}
+                title={
+                  <span className="flex items-center gap-2">
+                    <Avatar size="sm" initials={initials(m.orgName)} />
+                    {m.orgName}
+                  </span>
+                }
+                description={ROLE[m.role]}
               />
             ))}
-          </div>
-        )}
-        {emails && (
-          <Input
-            ref={field}
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
-            aria-label="Email"
-            autoFocus
-            required
-            aria-invalid={said !== null || undefined}
-            className="h-9 bg-background/60 dark:bg-background/60"
-          />
-        )}
-        {said && <Said>{said}</Said>}
-      </Column>
-    );
+          </RadioGroup>
+        </>
+      }
+    />
+  ) : step === "code" ? (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      logo={<Face who={who} />}
+      title={who ? who.name : "Check your inbox"}
+      description={
+        noMail ? (
+          <>
+            No mail is configured: the code for{" "}
+            <span className="text-body-medium text-text-primary">{email}</span>{" "}
+            is in the server&rsquo;s terminal.
+          </>
+        ) : (
+          <>
+            Enter the six-digit code sent to{" "}
+            <span className="text-body-medium text-text-primary">{email}</span>.
+          </>
+        )
+      }
+      // Locked, the only thing left to do is start over, so the form is
+      // the one that does it.
+      action={locked ? "/auth/restart" : "/auth/code"}
+      cta={locked ? "Start over" : null}
+      footer={
+        locked ? null : (
+          <form
+            action="/auth/restart"
+            method="post"
+            className="mt-6 flex justify-center"
+          >
+            {onward}
+            <LinkButton type="submit" size="small">
+              Use a different email
+            </LinkButton>
+          </form>
+        )
+      }
+      fields={
+        <div className="flex flex-col gap-3">
+          {onward}
+          {!locked && (
+            <>
+              <input
+                ref={carried}
+                type="hidden"
+                name="code"
+                value={code}
+                readOnly
+              />
+              <InputOtp
+                value={code}
+                onChange={setCode}
+                groupEvery={3}
+                aria-label="Code"
+                className="justify-center"
+              />
+            </>
+          )}
+          {said && <Said>{said}</Said>}
+        </div>
+      }
+    />
+  ) : (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      title="Sign in"
+      description={
+        <>
+          {because ? <>{because} </> : null}
+          {emails
+            ? "We'll email you a six-digit code. No password, no account to make."
+            : "No identity provider is configured. Sign in as one of the seeded people."}
+        </>
+      }
+      action={emails ? "/auth/email" : undefined}
+      cta={emails ? "Continue" : null}
+      footer={null}
+      fields={
+        <div className="flex flex-col gap-3">
+          {onward}
+          {emails && people.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-4 pb-2">
+              {people.map((p) => (
+                <Tile
+                  key={p.email}
+                  who={p}
+                  onPick={() => pick(p)}
+                  onForget={() => setPeople(forget(p.email))}
+                />
+              ))}
+            </div>
+          )}
+          {emails && (
+            <>
+              <Input
+                ref={field}
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                aria-label="Email"
+                autoFocus
+                isRequired
+                isInvalid={said !== null}
+                fieldClassName="h-11"
+                inputClassName="placeholder:text-text-placeholder focus:placeholder:text-text-placeholder"
+              />
+            </>
+          )}
+          {said && <Said>{said}</Said>}
+        </div>
+      }
+    />
+  );
 
   return (
     // Chrome over a wallpaper is the dark look, whichever look the desktop
     // wears: the words are on a picture, not on paper. Plain, the column
     // lies on the bare ground in the desktop's own look.
     <div
-      className={cn(
-        "fixed inset-0 z-50 overflow-y-auto text-foreground",
+      className={cx(
+        "fixed inset-0 z-50 overflow-y-auto",
         plain ? "bg-canvas" : "dark",
       )}
     >
@@ -582,7 +544,7 @@ export function LockScreen({
           initial={still ? false : { opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           transition={BASE}
-          className="flex w-full max-w-[360px] flex-1 flex-col justify-center pb-12"
+          className="flex w-full max-w-[400px] flex-1 flex-col justify-center pb-12"
         >
           {card}
           {made && step === "who" && <Made made={made} next={next} />}

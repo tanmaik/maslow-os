@@ -14,7 +14,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import { FormDialog } from "@/components/form-dialog";
 
 import { ShareFields } from "../sharing";
@@ -47,18 +47,14 @@ export function Chosen({
     </>
   );
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/60 px-3 py-1.5">
-      <span className="text-sm font-medium text-foreground tabular-nums">
+    <div className="flex flex-wrap items-center gap-3 border-y border-separator-border bg-background-secondary-default px-3 py-2">
+      <span className="text-body-medium text-text-primary tabular-nums">
         {said} chosen
       </span>
       <span className="flex-1" />
       <FormDialog
-        trigger={
-          <>
-            <RiShareLine data-icon="inline-start" />
-            Share
-          </>
-        }
+        trigger="Share"
+        leadingIcon={RiShareLine}
         title={`Share ${said}`}
       >
         <form action="/brain/selected" method="post" className="grid gap-4">
@@ -66,15 +62,22 @@ export function Chosen({
           <input type="hidden" name="intent" value="share" />
           <ShareFields members={people} groups={groups} />
           <div>
-            <Button size="sm" type="submit">
+            <Button size="small" type="submit">
               Share {said}
             </Button>
           </div>
         </form>
       </FormDialog>
       <AlertDialog>
-        <AlertDialogTrigger render={<Button variant="outline" size="sm" />}>
-          <RiDeleteBinLine data-icon="inline-start" />
+        <AlertDialogTrigger
+          render={
+            <Button
+              variant="secondary"
+              size="small"
+              leadingIcon={RiDeleteBinLine}
+            />
+          }
+        >
           Remove
         </AlertDialogTrigger>
         <AlertDialogContent>
@@ -95,7 +98,7 @@ export function Chosen({
           </form>
         </AlertDialogContent>
       </AlertDialog>
-      <Button variant="outline" size="sm" onClick={onDone}>
+      <Button variant="secondary" size="small" onClick={onDone}>
         Done
       </Button>
     </div>

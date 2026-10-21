@@ -44,8 +44,10 @@ const applied = await migrate(
 console.log(
   applied.length ? `migrated ${applied.join(", ")}` : "migrations up to date",
 );
-// A preview is seeded so its people exist to be signed in as. Production never is.
-if (!production) {
+// A preview is seeded so its people exist to be signed in as. Production never
+// is, and neither is a trial: each guest is given the fictional records in an
+// org of their own when they press "Try it", and no seeded person exists.
+if (!production && process.env.TRIAL !== "1") {
   await seed(url);
   console.log("seeded");
 }

@@ -162,3 +162,9 @@ export function asThrottle<T>(
 ): Promise<T> {
   return scoped({ "app.throttle": key }, fn);
 }
+
+// Runs fn as a trial's sweep: the trial orgs' ids and their guests, nothing
+// else.
+export function asTrials<T>(fn: (q: Query) => Promise<T>): Promise<T> {
+  return scoped({ "app.trial": "reap" }, fn);
+}

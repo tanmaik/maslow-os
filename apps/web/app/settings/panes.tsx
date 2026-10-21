@@ -5,7 +5,7 @@
 // accent; and that pane on the right, its parts one under another. Typing
 // in the search leaves only the panes
 // that match in the rail, and Return opens the first. On a phone the rail
-// is a strip along the top.
+// is a strip along the top. Every part of it is BoardUI's.
 
 import {
   RiApps2Line,
@@ -27,14 +27,10 @@ import {
   type ReactNode,
 } from "react";
 
+import { InputBase } from "@/components/base/input/input";
 import { EagerLink } from "@/components/eager-link";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
 import type { Mark } from "@/app/desktop/apps";
-import { cn } from "@/lib/utils";
+import { cx } from "@/utils/cx";
 
 // One pane of settings: where it sits in the rail, what it is called, and
 // the words a person might search for it by that its title does not say.
@@ -103,20 +99,16 @@ export function Panes({
   const lit = going && going !== pane.id ? going : pane.id;
   const groups = [...new Set(shown.map((p) => p.group))];
   return (
-    <div className="flex h-full overflow-hidden bg-background text-foreground max-sm:flex-col">
-      <nav
-        className="no-scrollbar flex w-48 shrink-0 flex-col gap-2 overflow-y-auto border-r border-border bg-sidebar p-2 max-sm:w-auto max-sm:flex-row max-sm:items-center max-sm:gap-1.5 max-sm:overflow-x-auto max-sm:overflow-y-hidden max-sm:border-r-0 max-sm:border-b max-sm:px-3"
-        aria-label="Panes"
-      >
-        <InputGroup className="h-7 shrink-0 max-sm:hidden">
-          <InputGroupAddon>
-            <RiSearchLine aria-hidden />
-          </InputGroupAddon>
-          <InputGroupInput
+    <div className="prefs">
+      <nav className="prefs-side" aria-label="Panes">
+        <div className="contents max-sm:hidden">
+          <InputBase
             ref={field}
+            size="small"
             type="search"
             aria-label="Search"
             placeholder="Search"
+            leadingIcon={RiSearchLine}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -125,20 +117,17 @@ export function Panes({
                 open(shown[0].id);
               } else if (e.key === "Escape") setQuery("");
             }}
+            className="prefs-search"
           />
-        </InputGroup>
+        </div>
         {shown.length === 0 ? (
-          <p className="px-2 py-1 text-sm text-muted-foreground">
+          <p className="px-2 py-1 text-body-regular text-text-secondary">
             Nothing is called that.
           </p>
         ) : (
           groups.map((group) => (
-            <section
-              key={group}
-              className="flex flex-col gap-px max-sm:contents"
-              aria-label={group}
-            >
-              <h3 className="px-2 py-1 text-xs font-medium text-muted-foreground max-sm:hidden">
+            <section key={group} className="prefs-group" aria-label={group}>
+              <h3 className="prefs-group-name text-caption-1-medium text-text-tertiary">
                 {group}
               </h3>
               {shown
@@ -155,14 +144,17 @@ export function Panes({
                         e.preventDefault();
                         open(p.id);
                       }}
-                      className={cn(
-                        "flex h-7 shrink-0 items-center gap-2 rounded-md px-2 text-sm whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring/50 max-sm:h-8 max-sm:border max-sm:border-border max-sm:px-3",
+                      className={cx(
+                        "prefs-item text-body-medium",
+                        "text-text-primary",
                         on
-                          ? "bg-accent font-medium text-foreground"
-                          : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                          ? "bg-background-tertiary-default"
+                          : "hover:bg-background-secondary-hover",
                       )}
                     >
-                      <Icon className="size-4 shrink-0" aria-hidden />
+                      <span className="prefs-item-mark bg-background-secondary-default text-foreground-icon-primary">
+                        <Icon className="size-4" aria-hidden />
+                      </span>
                       <span className="truncate">{p.title}</span>
                     </EagerLink>
                   );
@@ -171,11 +163,9 @@ export function Panes({
           ))
         )}
       </nav>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto">
+      <div className="prefs-main">
         <h2 className="sr-only">{pane.title}</h2>
-        <div className="flex flex-[1_0_auto] flex-col px-6 pt-2 pb-8 max-sm:px-4 *:mx-auto *:w-full *:max-w-[640px]">
-          {children}
-        </div>
+        <div className="prefs-pane">{children}</div>
       </div>
     </div>
   );

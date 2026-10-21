@@ -18,15 +18,18 @@ export default async function BrowserPage({
   const p = await principal();
   if (!p) redirect("/");
   const { url } = await searchParams;
-  const off = deployment.computers.kind === "none";
-  const c = off ? null : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
+  // A trial's computer is pretend, and always ready.
+  const trial = deployment.trial;
+  const off = !trial && deployment.computers.kind === "none";
+  const c =
+    off || trial ? null : await asOrg(p.orgId, (q) => computerOf(q, p.userId));
   // Ready is the door answering, not a date on the row.
-  const ready = (await stateNow(c)).progress === "ready";
+  const ready = trial || (await stateNow(c)).progress === "ready";
   return (
     // The same shape the terminal takes: the screen less its gutters, and
     // the whole window when framed in the room.
-    <main className="flex h-[calc(100dvh-3rem)] -mb-22 min-h-0 flex-col gap-4 [html[data-framed]_&]:mb-0 [html[data-framed]_&]:h-full">
-      <h1 className="page-title text-lg font-medium text-foreground">
+    <main className="flex h-[calc(100dvh-3rem)] -mb-22 min-h-0 flex-col gap-4 [html[data-framed]_&]:mb-0 [html[data-framed]_&]:h-dvh">
+      <h1 className="page-title text-title-3-medium text-text-primary">
         Browser
       </h1>
       {off ? (
@@ -42,6 +45,7 @@ export default async function BrowserPage({
         />
       ) : (
         <LiveBrowser
+          trial={trial}
           href={url ? `/browser?url=${encodeURIComponent(url)}` : undefined}
         />
       )}

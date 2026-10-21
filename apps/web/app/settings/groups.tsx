@@ -11,9 +11,9 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Chip } from "@/components/base/badges/chip";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 
 import { AddMember } from "./groups/add-member";
 import { Row, Rows } from "./row";
@@ -72,21 +72,25 @@ export function Groups({
                       <button
                         type="submit"
                         aria-label={`Remove ${m.name} from ${g.name}`}
-                        className="cursor-pointer rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        className="cursor-pointer rounded-md outline-none focus-visible:ring-2 focus-visible:ring-border-focus-ring"
                       >
-                        <Badge variant="secondary">
+                        <Chip
+                          variant="caption"
+                          color="neutral"
+                          className="gap-1"
+                        >
                           {first(m.name)}
-                          <span aria-hidden className="text-muted-foreground">
+                          <span aria-hidden className="text-text-tertiary">
                             ×
                           </span>
-                        </Badge>
+                        </Chip>
                       </button>
                     </form>
                   ))}
                   {out.length > 0 && <AddMember group={g.id} members={out} />}
                   <AlertDialog>
                     <AlertDialogTrigger
-                      render={<Button variant="destructive" size="xs" />}
+                      render={<Button variant="danger" size="xs" />}
                     >
                       Delete group
                     </AlertDialogTrigger>
@@ -118,12 +122,14 @@ export function Groups({
               ) : (
                 <span className="flex flex-wrap justify-end gap-1">
                   {g.everyone ? (
-                    <Badge variant="outline">everyone</Badge>
+                    <Chip variant="caption" color="neutral">
+                      everyone
+                    </Chip>
                   ) : (
                     g.members.map((m) => (
-                      <Badge key={m.id} variant="secondary">
+                      <Chip key={m.id} variant="caption" color="neutral">
                         {first(m.name)}
-                      </Badge>
+                      </Chip>
                     ))
                   )}
                 </span>
@@ -142,20 +148,24 @@ export function Groups({
           <div className="flex flex-wrap items-start gap-2">
             <Input
               aria-label="New group's name"
+              size="small"
               name="name"
-              required
+              isRequired
               maxLength={80}
               placeholder="New group, e.g. Interns"
               className="w-48"
             />
             <Input
               aria-label="What the group is for"
+              size="small"
               name="description"
               maxLength={200}
               placeholder="What it is for"
               className="min-w-40 flex-1"
             />
-            <Button type="submit">New group</Button>
+            <Button type="submit" size="small">
+              New group
+            </Button>
           </div>
           <Said {...said} />
         </form>

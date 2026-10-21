@@ -5,8 +5,17 @@ import { RiAddLine } from "@remixicon/react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { CloseButton } from "@/components/ui/close-button";
+import { Button } from "@/components/base/buttons/button";
+import { CloseButton } from "@/components/base/buttons/close-button";
+import { Divider } from "@/components/base/divider/divider";
+import { Input } from "@/components/base/input/input";
+import { Label } from "@/components/base/input/label";
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+} from "@/components/base/segmented-control/segmented-control";
+import { Select, SelectItem } from "@/components/base/select/select";
+import { Textarea } from "@/components/base/textarea/textarea";
 import {
   Dialog,
   DialogContent,
@@ -15,15 +24,9 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
-import { Textarea } from "@/components/ui/textarea";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-import { Choose } from "./choose";
-import { FieldInputs, Required } from "./fields";
-import { typeText } from "./format";
+import { FieldInputs } from "./fields";
+import { FIELD, typeText } from "./format";
 import { TypeIcon } from "./type-icon";
 
 // What a field can hold, in the word a person picks it by.
@@ -115,12 +118,13 @@ export function NewRecord({
       <DialogTrigger
         render={
           <Button
+            size="small"
+            leadingIcon={RiAddLine}
             aria-label={type ? `New ${typeText(type.name)}` : "New record"}
             className="max-sm:px-2"
           />
         }
       >
-        <RiAddLine data-icon="inline-start" />
         <span className="max-sm:hidden">
           {type ? `New ${typeText(type.name)}` : "New record"}
         </span>
@@ -133,26 +137,29 @@ export function NewRecord({
         </DialogHeader>
         <form action="/brain/records" method="post" className="contents">
           <input type="hidden" name="back" value={back} />
-          <div className="-mx-4 grid gap-4 overflow-y-auto px-4 py-px">
+          <div className="-mx-5 grid gap-4 overflow-y-auto px-5">
             {type ? (
               <input type="hidden" name="type" value={type.name} />
             ) : (
-              <Field>
-                <FieldLabel>Type</FieldLabel>
+              <div className="flex flex-col gap-1.5">
+                <Label>Type</Label>
                 {fresh ? (
                   <div className="flex items-center gap-2">
                     <input type="hidden" name="new" value="1" />
                     <Input
+                      size="small"
                       name="type"
                       aria-label="Type name"
                       placeholder="Type name"
-                      required
+                      isRequired
                       autoFocus
                       autoComplete="off"
                       className="min-w-0 flex-1"
                     />
                     {types.length > 0 && (
                       <CloseButton
+                        type="button"
+                        size="sm"
                         aria-label="Choose an existing type"
                         onClick={() => setChosen(first)}
                       />
@@ -160,79 +167,66 @@ export function NewRecord({
                   </div>
                 ) : (
                   <>
-                    <Choose
+                    <Select
+                      size="sm"
                       aria-label="Type"
-                      value={chosen}
-                      onValueChange={(k) => setChosen(k === NEW ? "" : k)}
-                      className="w-full"
-                      options={[
-                        ...types.map(
-                          (t) =>
-                            [
-                              t.name,
-                              <span
-                                key={t.id}
-                                className="flex items-center gap-2"
-                              >
-                                <TypeIcon type={t.name} />
-                                {typeText(t.name)}
-                              </span>,
-                            ] as const,
-                        ),
-                        [
-                          NEW,
-                          <span key={NEW} className="flex items-center gap-2">
-                            <RiAddLine
-                              className="size-4 shrink-0 text-muted-foreground"
-                              aria-hidden
-                            />
-                            Something new…
-                          </span>,
-                        ] as const,
-                      ]}
-                    />
+                      selectedKey={chosen}
+                      onSelectionChange={(k) =>
+                        setChosen(k === NEW ? "" : String(k))
+                      }
+                      triggerClassName={`w-full ${FIELD}`}
+                      popoverClassName="w-[var(--trigger-width)] max-w-none"
+                    >
+                      {types.map((t) => (
+                        <SelectItem key={t.id} id={t.name}>
+                          <TypeIcon type={t.name} />
+                          {typeText(t.name)}
+                        </SelectItem>
+                      ))}
+                      <SelectItem id={NEW}>
+                        <RiAddLine
+                          className="size-4 shrink-0 text-foreground-icon-secondary"
+                          aria-hidden
+                        />
+                        Something new…
+                      </SelectItem>
+                    </Select>
                     <input type="hidden" name="type" value={chosen} />
                   </>
                 )}
-              </Field>
+              </div>
             )}
-            <Field>
-              <FieldLabel htmlFor="new-title">
-                Title
-                <Required />
-              </FieldLabel>
-              <Input id="new-title" name="title" required autoFocus={!fresh} />
-            </Field>
-            <Field>
-              <FieldLabel htmlFor="new-body">Body</FieldLabel>
-              <Textarea
-                id="new-body"
-                name="body"
-                className="max-h-60 min-h-32"
-              />
-            </Field>
+            <Input
+              size="small"
+              name="title"
+              label="Title"
+              isRequired
+              autoFocus={!fresh}
+            />
+            <Textarea
+              size="small"
+              name="body"
+              label="Body"
+              rows={6}
+              autoResize
+              maxRows={10}
+            />
             {!type && (
               <fieldset hidden={!fresh} disabled={!fresh} className="contents">
                 {fields.map((f, i) => (
                   <div key={f.key} className="flex flex-col gap-3">
-                    <Separator />
+                    <Divider />
                     <div className="flex items-end gap-2">
-                      <Field className="min-w-0 flex-1">
-                        <FieldLabel htmlFor={`f${f.key}-name`}>
-                          Field name
-                          <Required />
-                        </FieldLabel>
-                        <Input
-                          id={`f${f.key}-name`}
-                          value={f.label}
-                          onChange={(e) =>
-                            change(f.key, { label: e.target.value })
-                          }
-                          required
-                          pattern="[^A-Za-z]*[A-Za-z].*"
-                          autoComplete="off"
-                        />
-                      </Field>
+                      <Input
+                        size="small"
+                        value={f.label}
+                        onChange={(v) => change(f.key, { label: v })}
+                        label="Field name"
+                        isRequired
+                        pattern="[^A-Za-z]*[A-Za-z].*"
+                        autoComplete="off"
+                        className="min-w-0 flex-1"
+                      />
                       <input
                         type="hidden"
                         name={`f${i}.name`}
@@ -244,72 +238,60 @@ export function NewRecord({
                         value={f.datatype}
                       />
                       <CloseButton
-                        size="icon"
+                        type="button"
+                        size="sm"
                         aria-label={`Drop ${f.label.trim() || "this field"}`}
+                        className="mb-1.5"
                         onClick={() =>
                           setFields(fields.filter((g) => g.key !== f.key))
                         }
                       />
                     </div>
-                    <Field>
-                      <FieldLabel>Field type</FieldLabel>
-                      <ToggleGroup
+                    <div className="flex flex-col gap-1.5">
+                      <Label>Field type</Label>
+                      <SegmentedControl
                         aria-label="Field type"
-                        variant="outline"
-                        size="sm"
-                        value={[f.datatype]}
-                        onValueChange={([k]) => {
+                        selectedKeys={[f.datatype]}
+                        onSelectionChange={(keys) => {
+                          const k = [...keys][0];
                           if (k) change(f.key, { datatype: k as Datatype });
                         }}
-                        className="w-full flex-wrap"
+                        className="flex-wrap"
                       >
                         {KINDS.map(([d, said]) => (
-                          <ToggleGroupItem
-                            key={d}
-                            value={d}
-                            className="aria-pressed:bg-foreground/10"
-                          >
+                          <SegmentedControlItem key={d} id={d}>
                             {said}
-                          </ToggleGroupItem>
+                          </SegmentedControlItem>
                         ))}
-                      </ToggleGroup>
-                    </Field>
+                      </SegmentedControl>
+                    </div>
                     {f.datatype === "enum" && (
-                      <Field>
-                        <FieldLabel htmlFor={`f${f.key}-options`}>
-                          Options
-                          <Required />
-                        </FieldLabel>
-                        <Input
-                          id={`f${f.key}-options`}
-                          name={`f${i}.options`}
-                          value={f.options}
-                          onChange={(e) =>
-                            change(f.key, { options: e.target.value })
-                          }
-                          placeholder="Options, separated by commas"
-                          required
-                          pattern=".*\S.*"
-                          autoComplete="off"
-                        />
-                      </Field>
+                      <Input
+                        size="small"
+                        name={`f${i}.options`}
+                        value={f.options}
+                        onChange={(v) => change(f.key, { options: v })}
+                        label="Options"
+                        placeholder="Options, separated by commas"
+                        isRequired
+                        pattern=".*\S.*"
+                        autoComplete="off"
+                      />
                     )}
-                    <Field>
-                      <FieldLabel>
-                        {f.label.trim() || "What this record says"}
-                      </FieldLabel>
+                    <div className="flex flex-col gap-1.5">
+                      <Label>{f.label.trim() || "What this record says"}</Label>
                       <FieldInputs properties={[declared(f)]} labels={false} />
-                    </Field>
+                    </div>
                   </div>
                 ))}
                 <div>
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
+                    variant="secondary"
+                    size="small"
+                    leadingIcon={RiAddLine}
                     onClick={add}
                   >
-                    <RiAddLine data-icon="inline-start" />
                     Add something to write down
                   </Button>
                 </div>
@@ -318,7 +300,7 @@ export function NewRecord({
             {!fresh && <FieldInputs properties={picked?.properties ?? []} />}
           </div>
           <DialogFooter>
-            <Button size="sm" type="submit">
+            <Button size="small" type="submit">
               Save
             </Button>
           </DialogFooter>

@@ -11,7 +11,6 @@
     "./throttle": "./src/throttle.ts",
     "./settings": "./src/settings.ts",
     "./usage": "./src/usage.ts",
-    "./opens": "./src/opens.ts",
     "./computers": "./src/computers.ts",
     "./groups": "./src/groups.ts",
     "./desktops": "./src/desktops.ts",
@@ -20,7 +19,8 @@
     "./phones": "./src/phones.ts",
     "./wallpapers": "./src/wallpapers.ts",
     "./shared-files": "./src/shared-files.ts",
-    "./oauth": "./src/oauth.ts"
+    "./oauth": "./src/oauth.ts",
+    "./trials": "./src/trials.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

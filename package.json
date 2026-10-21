@@ -18,6 +18,7 @@
     "check:cloud": "node scripts/check-cloud.mjs",
     "check:infra": "node scripts/check-infra.mjs",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:trial": "node scripts/smoke-trial.mjs",
     "typecheck": "turbo run typecheck",
     "unused": "knip",
     "build": "turbo run build",

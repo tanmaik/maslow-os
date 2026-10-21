@@ -13,16 +13,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 
 // Deletes the org once its name has been typed exactly.
 export function DeleteOrg({ name }: { name: string }) {
   const [typed, setTyped] = useState("");
   return (
     <AlertDialog>
-      <AlertDialogTrigger render={<Button variant="destructive" size="sm" />}>
+      <AlertDialogTrigger render={<Button variant="danger" size="small" />}>
         Delete {name}
       </AlertDialogTrigger>
       <AlertDialogContent>
@@ -35,19 +34,15 @@ export function DeleteOrg({ name }: { name: string }) {
               org&apos;s name to confirm.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <Field>
-            <FieldLabel htmlFor="delete-org-name">
-              Type the org&apos;s name
-            </FieldLabel>
-            <Input
-              id="delete-org-name"
-              placeholder={name}
-              name="name"
-              autoComplete="off"
-              value={typed}
-              onChange={(e) => setTyped(e.target.value)}
-            />
-          </Field>
+          <Input
+            size="small"
+            label="Type the org's name"
+            placeholder={name}
+            name="name"
+            autoComplete="off"
+            value={typed}
+            onChange={setTyped}
+          />
           <AlertDialogFooter>
             <AlertDialogCancel>Keep</AlertDialogCancel>
             <AlertDialogAction

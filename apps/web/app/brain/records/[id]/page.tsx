@@ -36,11 +36,11 @@ export default async function Page({
   const found = await readRecord(p, id);
   if (!found) notFound();
   return (
-    <div className="page-sheet flex min-h-full flex-col bg-background p-4 sm:p-5">
+    <div className="page-sheet flex min-h-full flex-col rounded-3xl border border-border-button-default bg-background-primary-default p-4 sm:p-5">
       <RecordPane
         p={p}
         found={found}
-        back={{ href: from, label: "Your database" }}
+        back={{ href: from, label: "Your brain" }}
         here={recordPageHref(id, from)}
         hrefOf={(id) => recordPageHref(id, sameListOpenOn(from, id))}
       />

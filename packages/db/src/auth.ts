@@ -186,10 +186,11 @@ async function found(
   orgId: string,
   userId: string,
   name?: string,
+  trial = false,
 ): Promise<Principal> {
   await q.query(
-    "insert into orgs (id, slug, name, principal_id) values ($1, $2, $3, $4)",
-    [orgId, orgId, name?.trim() || fullName(person), userId],
+    "insert into orgs (id, slug, name, principal_id, trial_at) values ($1, $2, $3, $4, case when $5::boolean then now() end)",
+    [orgId, orgId, name?.trim() || fullName(person), userId, trial],
   );
   await q.query(
     "insert into users (id, org_id, person_id, email, first_name, last_name, avatar_key, role) values ($1, $2, $3, $4, $5, $6, $7, 'owner')",
@@ -242,6 +243,28 @@ export async function foundOrg(
     }
     return found(q, person, email, orgId, userId, wanted);
   });
+}
+
+// A guest of a trial: a new person named Guest under an address of their
+// own that no mail reaches, founding an org of one marked as a trial, so
+// the sweep deletes it a day after it was made.
+export async function foundTrial(email: string): Promise<Principal> {
+  const person = {
+    id: randomUUID(),
+    firstName: "Guest",
+    lastName: null,
+    avatar_key: null,
+  };
+  await asEmail(email, (q) =>
+    q.query(
+      "insert into people (id, email, first_name, last_name) values ($1, $2, $3, $4)",
+      [person.id, email, person.firstName, person.lastName],
+    ),
+  );
+  const orgId = randomUUID();
+  return asSignIn(email, orgId, (q) =>
+    found(q, person, email, orgId, randomUUID(), "Your computer", true),
+  );
 }
 
 // The person behind a membership, and the address they sign in with, for
