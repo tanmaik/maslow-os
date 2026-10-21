@@ -51,6 +51,7 @@ import { PhoneSheet } from "@/app/desktop/sheet";
 import { remember, rememberPaper, type Known } from "@/components/lock-screen";
 import { Kbd } from "@/components/base/kbd/kbd";
 import { Notification } from "@/components/base/notification/notification";
+import { NoComputer, Trial, useTrial } from "@/app/desktop/trial";
 import {
   cascade,
   clamp,
@@ -223,7 +224,10 @@ export function Desktop({
   you,
   computers,
   wallpaper,
+  trial = false,
 }: {
+  // A public trial's desktop: one person, no computer, a day long.
+  trial?: boolean;
   desktop: SavedDesktop;
   ports: Port[];
   // What this person's desktop lies on, as they left it.
@@ -1184,7 +1188,7 @@ export function Desktop({
   }, []);
 
   return (
-    <>
+    <Trial.Provider value={trial}>
       <Wallpaper choice={paper} />
       <MenuBar
         you={you}
@@ -1283,7 +1287,7 @@ export function Desktop({
       </div>
       {you && <Permissions computers={computers} />}
       {(down || lifting) && <Down back={!down} />}
-    </>
+    </Trial.Provider>
   );
 }
 
@@ -1825,6 +1829,7 @@ function Frame({
   onWhole?: () => void;
   onCollapse: () => void;
 }) {
+  const trial = useTrial();
   const free = !full;
   // On the desktop as a widget: a strip of its own to move it by instead of
   // a bar, and a menu there for making it a window or taking it off.
@@ -2311,7 +2316,9 @@ function Frame({
             className="flex h-[34px] shrink-0 items-center gap-2 overflow-x-auto border-b border-separator-border px-3 [scrollbar-width:none] empty:hidden [&::-webkit-scrollbar]:hidden"
           />
         )}
-        {Panel && !computers ? (
+        {Panel && !computers && trial ? (
+          <NoComputer />
+        ) : Panel && !computers ? (
           <div className="p-3">
             <Notification
               status="information"

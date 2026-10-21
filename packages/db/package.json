@@ -19,7 +19,8 @@
     "./phones": "./src/phones.ts",
     "./wallpapers": "./src/wallpapers.ts",
     "./shared-files": "./src/shared-files.ts",
-    "./oauth": "./src/oauth.ts"
+    "./oauth": "./src/oauth.ts",
+    "./trials": "./src/trials.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"

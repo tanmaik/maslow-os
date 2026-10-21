@@ -101,6 +101,18 @@ environment. A register in `docs/dependencies.md` lists every vendor, written
 when the vendor is added. Every vendor sits behind an interface of ours, so a
 second supplier is a second implementation, never a second code path.
 
+A trial is a deployment with `TRIAL=1`: a public copy anyone may try for a
+day, run as one Node process and a Postgres with no vendor at all. It signs
+nobody in by name: "Try it" (`POST /try`, at most five per network address
+per ten minutes and 300 standing) makes a guest, an org of one marked
+`trial_at`, and the made-up records of the seed in it. Mail, storage,
+analytics, computers, push and speech are none, embeddings and connections
+are the fakes, every upload is refused, and the brain's MCP, OAuth,
+invites, members, groups, keys and everything of a computer answer 404
+(`apps/web/lib/trial-rules.ts`). Trial orgs a day old are deleted with
+everything they own at the server's start, every hour, and in the sweep.
+The global seed never runs in a trial.
+
 The per-PR workflow and the hourly reap hold five credentials — Neon's
 key, Vercel's token, the second bucket's two keys and Fly's token — on a
 GitHub environment only `main` can use. They run main's code; a pull request's

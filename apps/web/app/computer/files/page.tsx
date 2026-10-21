@@ -2,6 +2,8 @@ import { redirect } from "next/navigation";
 
 import { FileExplorer } from "@/app/computer/files/file-explorer";
 import { principal } from "@/lib/session";
+import { NoComputer } from "@/app/desktop/trial";
+import { deployment } from "@/lib/deployment";
 
 // The person's files, as a window: a folder's contents, a look at any one
 // of them, a small edit, and somewhere to drop a file. Shaped to sit in a
@@ -11,6 +13,13 @@ export default async function FilesPage({
 }: {
   searchParams: Promise<{ path?: string; share?: string }>;
 }) {
+  // A trial has no computer, and says so in one line.
+  if (deployment.trial)
+    return (
+      <main className="flex min-h-0 flex-1 flex-col">
+        <NoComputer />
+      </main>
+    );
   const p = await principal();
   if (!p) redirect("/");
   const { path, share } = await searchParams;

@@ -305,3 +305,31 @@ export async function seedBrain(
     await client.end();
   }
 }
+
+// A trial guest's brain: the starter vocabulary and every seeded org's
+// records at once, written into the org the transaction is scoped to as
+// the member it names. The same fictional records the seed uses, so
+// nothing real ever reaches a stranger.
+export async function seedTrial(client: pg.ClientBase): Promise<void> {
+  await client.query("select set_config('app.author', 'seed', true)");
+  for (const t of vocabulary) await defineType(client, t);
+  const all = Object.values(seeds);
+  await write(client, {
+    records: [
+      {
+        type: "note",
+        source: "seed",
+        sourceRef: "note:trial",
+        title: "How Maslow works",
+        body: [
+          "On your own Maslow you get a computer. On it, you and Claude build apps; a port you publish becomes an app in your dock.",
+          "Each app brings more of your data in, and files on the computer feed the brain too, so the brain gets a fuller picture of your life.",
+          "This trial has no computer. The records here are made up, so you can look around the brain. Everything is deleted 24 hours after you start.",
+          "Run your own: https://github.com/maslow-tech/maslow-os",
+        ].join("\n\n"),
+      },
+      ...all.flatMap((s) => s.records),
+    ],
+    edges: all.flatMap((s) => s.edges),
+  });
+}

@@ -27,6 +27,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command";
+import { useTrial } from "@/app/desktop/trial";
 
 // The panes of Settings the bar can open straight to.
 const PANES: { id: string; title: string }[] = [
@@ -123,6 +124,7 @@ export function CommandBar({
   onRecord: (id: string, title: string) => void;
   onFile: (path: string, name: string) => void;
 }) {
+  const trial = useTrial();
   const [q, setQ] = useState(initial);
   const [lit, setLit] = useState("");
   const [records, setRecords] = useState<Found[]>([]);
@@ -332,7 +334,9 @@ export function CommandBar({
           )}
           {typed && (
             <CommandGroup heading="Settings">
-              {PANES.map((p) => (
+              {PANES.filter(
+                (p) => !trial || ["you", "look", "apps"].includes(p.id),
+              ).map((p) => (
                 <CommandItem
                   key={p.id}
                   value={`settings ${p.title}`}

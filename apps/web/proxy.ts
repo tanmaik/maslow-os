@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server";
 
 import { cookie, SESSION, SESSION_LIFETIME, SESSION_TOKEN } from "@/lib/cookie";
+import { deployment } from "@/lib/deployment";
+import { shutInTrial } from "@/lib/trial-rules";
 import { origin } from "@/lib/origin";
 
 // Which methods change something. A browser sends the site a request came
@@ -17,6 +19,8 @@ const READS = new Set(["GET", "HEAD", "OPTIONS"]);
 // the session cookie is attached to whatever it asks of us. What keeps a
 // page from acting as whoever is looking at it is this, not the cookie.
 export default function proxy(request: NextRequest) {
+  if (deployment.trial && shutInTrial(request.nextUrl.pathname))
+    return new NextResponse("Not in the trial.", { status: 404 });
   const from = request.headers.get("origin");
   if (!READS.has(request.method) && from && from !== origin(request)) {
     return new NextResponse("That came from somewhere else.", { status: 403 });

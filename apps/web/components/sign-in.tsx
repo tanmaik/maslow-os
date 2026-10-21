@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { LockScreen, type Made } from "@/components/lock-screen";
 import { deployment } from "@/lib/deployment";
 import { pendingFlow } from "@/lib/session";
+import { REPO, TRIAL_HOURS } from "@/lib/trial-rules";
 
 // What the last leg of a sign-in left to say, by the query it redirected
 // with. `orgs` is not a notice: it says the person who just signed in has
@@ -11,6 +12,7 @@ import { pendingFlow } from "@/lib/session";
 export type Notice = {
   email?: "slow" | "rejected" | "closed";
   code?: "wrong" | "locked";
+  try?: "slow" | "full";
   orgs?: string;
 };
 
@@ -21,6 +23,8 @@ const NOTICES = {
     "Maslow is invite-only for now. Someone already in can invite you.",
   "code=wrong": "That code didn't work. Try again or start over.",
   "code=locked": "Too many wrong codes. Ask for a new one.",
+  "try=slow": "Too many trials from here. Wait ten minutes and try again.",
+  "try=full": "The trial is full right now. Come back in an hour.",
 } as const;
 
 // The one line the last leg left behind, if any.
@@ -76,6 +80,7 @@ export async function SignIn({
       noMail={deployment.mail.kind === "none"}
       made={deployment.seededSignIn ? made() : undefined}
       plain={deployment.production}
+      trial={deployment.trial ? { repo: REPO, hours: TRIAL_HOURS } : undefined}
     />
   );
 }

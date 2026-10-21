@@ -7,6 +7,7 @@ import { ComputerWaiting } from "@/components/computer-waiting";
 import { stateNow } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
 import { principal } from "@/lib/session";
+import { NoComputer } from "@/app/desktop/trial";
 
 // The person's computer's browser, the one Claude Code drives, live and
 // in their hands.
@@ -15,6 +16,13 @@ export default async function BrowserPage({
 }: {
   searchParams: Promise<{ url?: string }>;
 }) {
+  // A trial has no computer, and says so in one line.
+  if (deployment.trial)
+    return (
+      <main className="flex min-h-0 flex-1 flex-col">
+        <NoComputer />
+      </main>
+    );
   const p = await principal();
   if (!p) redirect("/");
   const { url } = await searchParams;

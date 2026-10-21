@@ -14,6 +14,7 @@ import { anotherOf } from "@/app/desktop/apps";
 import { Kbd } from "@/components/base/kbd/kbd";
 import { AboutComputer } from "@/components/about-computer";
 import { useLocation } from "@/components/location";
+import { TrialLine, useTrial } from "@/app/desktop/trial";
 import { NewOrgDialog } from "@/components/new-org";
 import {
   NotificationsPanel,
@@ -258,6 +259,9 @@ export function MenuBar({
 }) {
   const [makingOrg, setMakingOrg] = useState(false);
   const [about, setAbout] = useState(false);
+  // A trial is one person's computer for a day: no other org to switch to
+  // or make, and a line that says what it is.
+  const trial = useTrial();
   const notifications = useNotifications();
   // The person's location to their own machine, once a minute they are here.
   useLocation(Boolean(you) && computers);
@@ -318,7 +322,7 @@ export function MenuBar({
                         You…
                       </MenubarItem>
                     </div>
-                    {you.others.length > 0 && (
+                    {!trial && you.others.length > 0 && (
                       <form action="/auth/switch" method="post">
                         {you.others.map((m) => (
                           <MenubarItem
@@ -338,12 +342,14 @@ export function MenuBar({
                         ))}
                       </form>
                     )}
-                    <MenubarItem
-                      className={item}
-                      onClick={() => setMakingOrg(true)}
-                    >
-                      New org…
-                    </MenubarItem>
+                    {!trial && (
+                      <MenubarItem
+                        className={item}
+                        onClick={() => setMakingOrg(true)}
+                      >
+                        New org…
+                      </MenubarItem>
+                    )}
                     <MenubarSeparator />
                     <form action="/auth/sign-out" method="post">
                       <MenubarItem
@@ -510,6 +516,7 @@ export function MenuBar({
           </Menubar>
         </MenuStrip>
         <div className="ml-auto flex h-full shrink-0 items-center gap-1.5">
+          {trial && <TrialLine />}
           {/* Who is at the desktop, and their own pane of Settings. Their other
             orgs and the way out are the Maslow menu's. */}
           {you && (
@@ -527,7 +534,7 @@ export function MenuBar({
                       {you.name}
                     </div>
                     <div className="text-caption-1-regular text-text-tertiary">
-                      {you.email}
+                      {trial ? "Guest on a trial" : you.email}
                     </div>
                   </div>
                   <MenubarSeparator />
@@ -585,7 +592,7 @@ export function MenuBar({
         />
         <NotificationToasts notifications={notifications} />
       </div>
-      <NewOrgDialog open={makingOrg} onOpenChange={setMakingOrg} />
+      {!trial && <NewOrgDialog open={makingOrg} onOpenChange={setMakingOrg} />}
       <AboutComputer
         open={about}
         onOpenChange={setAbout}

@@ -52,6 +52,7 @@ export default async function Page({
         ports={ports}
         wallpaper={wallpaper}
         computers={deployment.computers.kind !== "none"}
+        trial={deployment.trial}
         you={
           you && {
             ...you,

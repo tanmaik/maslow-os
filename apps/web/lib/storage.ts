@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { deployment } from "./deployment.ts";
 import { presign, remove, s3 } from "./s3.ts";
+import { NO_FILES } from "./trial-rules.ts";
 
 // Where uploaded images live. One contract; production uses an S3-compatible
 // store, development uses a directory.
@@ -71,7 +72,11 @@ export async function imageOrThrow(
   limit = MAX_BYTES,
 ): Promise<Picture> {
   if (deployment.storage.kind === "none") {
-    throw new Rejected("Images need object storage, which is not set up yet.");
+    throw new Rejected(
+      deployment.trial
+        ? NO_FILES
+        : "Images need object storage, which is not set up yet.",
+    );
   }
   if (!(file instanceof File) || file.size === 0)
     throw new Rejected("Choose an image file.");
@@ -101,7 +106,11 @@ const local = (dir: string): Storage => ({
 
 const none: Storage = {
   put: async () => {
-    throw new Rejected("Images need object storage, which is not set up yet.");
+    throw new Rejected(
+      deployment.trial
+        ? NO_FILES
+        : "Images need object storage, which is not set up yet.",
+    );
   },
   putUrl: () => null,
   delete: async () => {},

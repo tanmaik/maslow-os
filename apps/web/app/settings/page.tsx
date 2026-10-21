@@ -45,6 +45,7 @@ import { Section } from "@/app/settings/section";
 import type { Told } from "@/app/settings/told";
 import { on } from "@/app/settings/when";
 import { deployment } from "@/lib/deployment";
+import { NO_FILES } from "@/lib/trial-rules";
 import { initials } from "@/lib/initials";
 import { principal } from "@/lib/session";
 import { storage } from "@/lib/storage";
@@ -243,80 +244,85 @@ export default async function Settings({
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
   const uploads = deployment.storage.kind !== "none";
-  const panes: Pane[] = [
-    {
-      id: "you",
-      title: "You",
-      group: "Yours",
-      words: ["name", "avatar", "picture", "email", "leave"],
-    },
-    {
-      id: "look",
-      title: "Look",
-      group: "Yours",
-      words: ["theme", "dark", "light", "accent", "colour", "color", "dock"],
-    },
-    {
-      id: "computer",
-      title: "Computer",
-      group: "Yours",
-      words: [
-        "ssh",
-        "key",
-        "size",
-        "region",
-        "move",
-        "backup",
-        "port",
-        "reset",
-        "claude code",
-        "terminal",
-      ],
-    },
-    {
-      id: "apps",
-      title: "Apps",
-      group: "Yours",
-      words: ["connect", "connected", "account", "gmail", "calendar"],
-    },
-    {
-      id: "access",
-      title: "Access",
-      group: "Yours",
-      words: [
-        "ssh",
-        "key",
-        "port",
-        "share",
-        "mcp",
-        "session",
-        "brain",
-        "agents",
-      ],
-    },
-    ...(owner
-      ? [
-          {
-            id: "org",
-            title: "Org",
-            group: org.name,
-            words: ["logo", "name", "delete", "close"],
-          },
-        ]
-      : []),
-    {
-      id: "members",
-      title: "Members",
-      group: org.name,
-      words: ["invite", "owner", "people", "past"],
-    },
-    {
-      id: "groups",
-      title: "Groups",
-      group: org.name,
-      words: ["sharing", "everyone"],
-    },
-  ];
+  // A trial is one person's computer with no computer behind it: their
+  // own panes and nothing of an org, its members, keys or machine.
+  const TRIAL_PANES = new Set(["you", "look", "apps"]);
+  const panes: Pane[] = (
+    [
+      {
+        id: "you",
+        title: "You",
+        group: "Yours",
+        words: ["name", "avatar", "picture", "email", "leave"],
+      },
+      {
+        id: "look",
+        title: "Look",
+        group: "Yours",
+        words: ["theme", "dark", "light", "accent", "colour", "color", "dock"],
+      },
+      {
+        id: "computer",
+        title: "Computer",
+        group: "Yours",
+        words: [
+          "ssh",
+          "key",
+          "size",
+          "region",
+          "move",
+          "backup",
+          "port",
+          "reset",
+          "claude code",
+          "terminal",
+        ],
+      },
+      {
+        id: "apps",
+        title: "Apps",
+        group: "Yours",
+        words: ["connect", "connected", "account", "gmail", "calendar"],
+      },
+      {
+        id: "access",
+        title: "Access",
+        group: "Yours",
+        words: [
+          "ssh",
+          "key",
+          "port",
+          "share",
+          "mcp",
+          "session",
+          "brain",
+          "agents",
+        ],
+      },
+      ...(owner
+        ? [
+            {
+              id: "org",
+              title: "Org",
+              group: org.name,
+              words: ["logo", "name", "delete", "close"],
+            },
+          ]
+        : []),
+      {
+        id: "members",
+        title: "Members",
+        group: org.name,
+        words: ["invite", "owner", "people", "past"],
+      },
+      {
+        id: "groups",
+        title: "Groups",
+        group: org.name,
+        words: ["sharing", "everyone"],
+      },
+    ] as Pane[]
+  ).filter((x) => !deployment.trial || TRIAL_PANES.has(x.id));
   const pane = panes.find((x) => x.id === view) ?? panes[0]!;
   const role = (m: Member) =>
     m.id === org.principalId
@@ -351,7 +357,9 @@ export default async function Settings({
                 {me.name}
               </p>
               <p className="truncate text-caption-1-regular text-text-secondary">
-                {me.email} · {holder ? `principal of ${org.name}` : role(me)}
+                {deployment.trial
+                  ? "Guest on a trial"
+                  : `${me.email} · ${holder ? `principal of ${org.name}` : role(me)}`}
               </p>
             </div>
           </div>
@@ -379,7 +387,11 @@ export default async function Settings({
             </Row>
           </Rows>
           {!uploads && (
-            <Note>Avatars need object storage, which is not set up yet.</Note>
+            <Note>
+              {deployment.trial
+                ? NO_FILES
+                : "Avatars need object storage, which is not set up yet."}
+            </Note>
           )}
           <div className="flex items-center justify-between gap-3">
             <div className="min-w-0 flex-1">
@@ -390,7 +402,7 @@ export default async function Settings({
             </Button>
           </div>
         </form>
-        {holder ? (
+        {deployment.trial ? null : holder ? (
           <Note>
             {said("leave").text ??
               "You hold the org. Hand it to someone before you leave."}

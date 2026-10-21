@@ -286,7 +286,11 @@ export function LockScreen({
   landings = [],
   you,
   plain = false,
+  trial,
 }: {
+  // A public trial: no email, one button that makes a guest, and where to
+  // get the real thing.
+  trial?: { repo: string; hours: number };
   // Which leg of the way in this is: who you are, the code, or where to land.
   step: "who" | "code" | "choose";
   // The column alone on the bare ground, with no wallpaper and no clock:
@@ -338,167 +342,189 @@ export function LockScreen({
     input.form?.requestSubmit();
   };
 
-  const card =
-    step === "choose" ? (
-      <AuthCard
-        bare
-        centered
-        providers={[]}
-        logo={<Face who={who} />}
-        title="Where are you working?"
-        description="You're in more than one org. You can move between them from the Maslow menu."
-        action="/auth/switch"
-        cta="Continue"
-        footer={null}
-        fields={
+  const card = trial ? (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      title="Try Maslow OS"
+      description={
+        <>
+          This is a trial. Everything you make is deleted {trial.hours} hours
+          after you start.
+          <br />
+          It has no computer: no terminal, no files, no browser.
+        </>
+      }
+      action="/try"
+      cta="Try it"
+      footer={
+        <p className="mt-6 text-center text-body-regular text-text-secondary">
+          <a
+            href={trial.repo}
+            className="text-text-primary underline-offset-2 hover:underline"
+          >
+            Get Maslow OS on GitHub
+          </a>
+        </p>
+      }
+      fields={said ? <Said>{said}</Said> : null}
+    />
+  ) : step === "choose" ? (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      logo={<Face who={who} />}
+      title="Where are you working?"
+      description="You're in more than one org. You can move between them from the Maslow menu."
+      action="/auth/switch"
+      cta="Continue"
+      footer={null}
+      fields={
+        <>
+          {onward}
+          <RadioGroup
+            name="membership"
+            aria-label="Your orgs"
+            defaultValue={landings[0]?.userId}
+            className="gap-2"
+          >
+            {landings.map((m) => (
+              <RadioCard
+                key={m.userId}
+                value={m.userId}
+                title={
+                  <span className="flex items-center gap-2">
+                    <Avatar size="sm" initials={initials(m.orgName)} />
+                    {m.orgName}
+                  </span>
+                }
+                description={ROLE[m.role]}
+              />
+            ))}
+          </RadioGroup>
+        </>
+      }
+    />
+  ) : step === "code" ? (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      logo={<Face who={who} />}
+      title={who ? who.name : "Check your inbox"}
+      description={
+        noMail ? (
           <>
+            No mail is configured: the code for{" "}
+            <span className="text-body-medium text-text-primary">{email}</span>{" "}
+            is in the server&rsquo;s terminal.
+          </>
+        ) : (
+          <>
+            Enter the six-digit code sent to{" "}
+            <span className="text-body-medium text-text-primary">{email}</span>.
+          </>
+        )
+      }
+      // Locked, the only thing left to do is start over, so the form is
+      // the one that does it.
+      action={locked ? "/auth/restart" : "/auth/code"}
+      cta={locked ? "Start over" : null}
+      footer={
+        locked ? null : (
+          <form
+            action="/auth/restart"
+            method="post"
+            className="mt-6 flex justify-center"
+          >
             {onward}
-            <RadioGroup
-              name="membership"
-              aria-label="Your orgs"
-              defaultValue={landings[0]?.userId}
-              className="gap-2"
-            >
-              {landings.map((m) => (
-                <RadioCard
-                  key={m.userId}
-                  value={m.userId}
-                  title={
-                    <span className="flex items-center gap-2">
-                      <Avatar size="sm" initials={initials(m.orgName)} />
-                      {m.orgName}
-                    </span>
-                  }
-                  description={ROLE[m.role]}
+            <LinkButton type="submit" size="small">
+              Use a different email
+            </LinkButton>
+          </form>
+        )
+      }
+      fields={
+        <div className="flex flex-col gap-3">
+          {onward}
+          {!locked && (
+            <>
+              <input
+                ref={carried}
+                type="hidden"
+                name="code"
+                value={code}
+                readOnly
+              />
+              <InputOtp
+                value={code}
+                onChange={setCode}
+                groupEvery={3}
+                aria-label="Code"
+                className="justify-center"
+              />
+            </>
+          )}
+          {said && <Said>{said}</Said>}
+        </div>
+      }
+    />
+  ) : (
+    <AuthCard
+      bare
+      centered
+      providers={[]}
+      title="Sign in"
+      description={
+        <>
+          {because ? <>{because} </> : null}
+          {emails
+            ? "We'll email you a six-digit code. No password, no account to make."
+            : "No identity provider is configured. Sign in as one of the seeded people."}
+        </>
+      }
+      action={emails ? "/auth/email" : undefined}
+      cta={emails ? "Continue" : null}
+      footer={null}
+      fields={
+        <div className="flex flex-col gap-3">
+          {onward}
+          {emails && people.length > 0 && (
+            <div className="flex flex-wrap justify-center gap-4 pb-2">
+              {people.map((p) => (
+                <Tile
+                  key={p.email}
+                  who={p}
+                  onPick={() => pick(p)}
+                  onForget={() => setPeople(forget(p.email))}
                 />
               ))}
-            </RadioGroup>
-          </>
-        }
-      />
-    ) : step === "code" ? (
-      <AuthCard
-        bare
-        centered
-        providers={[]}
-        logo={<Face who={who} />}
-        title={who ? who.name : "Check your inbox"}
-        description={
-          noMail ? (
+            </div>
+          )}
+          {emails && (
             <>
-              No mail is configured: the code for{" "}
-              <span className="text-body-medium text-text-primary">
-                {email}
-              </span>{" "}
-              is in the server&rsquo;s terminal.
+              <Input
+                ref={field}
+                name="email"
+                type="email"
+                autoComplete="email"
+                placeholder="you@example.com"
+                aria-label="Email"
+                autoFocus
+                isRequired
+                isInvalid={said !== null}
+                fieldClassName="h-11"
+                inputClassName="placeholder:text-text-placeholder focus:placeholder:text-text-placeholder"
+              />
             </>
-          ) : (
-            <>
-              Enter the six-digit code sent to{" "}
-              <span className="text-body-medium text-text-primary">
-                {email}
-              </span>
-              .
-            </>
-          )
-        }
-        // Locked, the only thing left to do is start over, so the form is
-        // the one that does it.
-        action={locked ? "/auth/restart" : "/auth/code"}
-        cta={locked ? "Start over" : null}
-        footer={
-          locked ? null : (
-            <form
-              action="/auth/restart"
-              method="post"
-              className="mt-6 flex justify-center"
-            >
-              {onward}
-              <LinkButton type="submit" size="small">
-                Use a different email
-              </LinkButton>
-            </form>
-          )
-        }
-        fields={
-          <div className="flex flex-col gap-3">
-            {onward}
-            {!locked && (
-              <>
-                <input
-                  ref={carried}
-                  type="hidden"
-                  name="code"
-                  value={code}
-                  readOnly
-                />
-                <InputOtp
-                  value={code}
-                  onChange={setCode}
-                  groupEvery={3}
-                  aria-label="Code"
-                  className="justify-center"
-                />
-              </>
-            )}
-            {said && <Said>{said}</Said>}
-          </div>
-        }
-      />
-    ) : (
-      <AuthCard
-        bare
-        centered
-        providers={[]}
-        title="Sign in"
-        description={
-          <>
-            {because ? <>{because} </> : null}
-            {emails
-              ? "We'll email you a six-digit code. No password, no account to make."
-              : "No identity provider is configured. Sign in as one of the seeded people."}
-          </>
-        }
-        action={emails ? "/auth/email" : undefined}
-        cta={emails ? "Continue" : null}
-        footer={null}
-        fields={
-          <div className="flex flex-col gap-3">
-            {onward}
-            {emails && people.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-4 pb-2">
-                {people.map((p) => (
-                  <Tile
-                    key={p.email}
-                    who={p}
-                    onPick={() => pick(p)}
-                    onForget={() => setPeople(forget(p.email))}
-                  />
-                ))}
-              </div>
-            )}
-            {emails && (
-              <>
-                <Input
-                  ref={field}
-                  name="email"
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@example.com"
-                  aria-label="Email"
-                  autoFocus
-                  isRequired
-                  isInvalid={said !== null}
-                  fieldClassName="h-11"
-                  inputClassName="placeholder:text-text-placeholder focus:placeholder:text-text-placeholder"
-                />
-              </>
-            )}
-            {said && <Said>{said}</Said>}
-          </div>
-        }
-      />
-    );
+          )}
+          {said && <Said>{said}</Said>}
+        </div>
+      }
+    />
+  );
 
   return (
     // Chrome over a wallpaper is the dark look, whichever look the desktop
