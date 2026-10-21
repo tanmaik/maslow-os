@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 
-import { NO_COMPUTER, REPO, TRIAL_HOURS } from "@/lib/trial-rules";
+import { REPO, TRIAL_HOURS } from "@/lib/trial-rules";
 
 // Whether this desktop is a public trial's, for the few places that say so.
 export const Trial = createContext(false);
@@ -23,26 +23,5 @@ export function TrialLine({ className = "" }: { className?: string }) {
       </span>
       <span className="lg:hidden">Trial · Get Maslow OS</span>
     </a>
-  );
-}
-
-// What a window that needs a computer shows in a trial: one line, and
-// where to run your own.
-export function NoComputer() {
-  return (
-    <div className="flex min-h-0 flex-1 items-center justify-center p-6">
-      <p className="text-body-regular text-text-secondary text-center">
-        {NO_COMPUTER}{" "}
-        <a
-          href={REPO}
-          target="_blank"
-          rel="noreferrer"
-          className="text-text-primary underline underline-offset-2"
-        >
-          Run your own
-        </a>
-        .
-      </p>
-    </div>
   );
 }

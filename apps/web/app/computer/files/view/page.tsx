@@ -2,8 +2,6 @@ import { redirect } from "next/navigation";
 
 import { Look } from "@/app/computer/files/look";
 import { principal } from "@/lib/session";
-import { NoComputer } from "@/app/desktop/trial";
-import { deployment } from "@/lib/deployment";
 
 // One file of the person's, as a page of its own: what the Preview window
 // shows on the desktop, reachable by address.
@@ -12,13 +10,6 @@ export default async function ViewPage({
 }: {
   searchParams: Promise<{ path?: string; share?: string }>;
 }) {
-  // A trial has no computer, and says so in one line.
-  if (deployment.trial)
-    return (
-      <main className="flex min-h-0 flex-1 flex-col">
-        <NoComputer />
-      </main>
-    );
   const p = await principal();
   if (!p) redirect("/");
   const { path, share } = await searchParams;

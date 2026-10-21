@@ -152,6 +152,20 @@ try {
   const out = await page();
   check("signed out", out.includes(SIGNED_OUT), "sign-in page");
 
+  // The trial's pretend computer is not there outside a trial.
+  const pretend = await Promise.all([
+    fetch(`${stack.url}/trial/live`),
+    fetch(`${stack.url}/trial/app/3000`),
+    fetch(`${stack.url}/trial/files/list?path=.`),
+    fetch(`${stack.url}/trial/shell`, { method: "POST", body: "{}" }),
+    fetch(`${stack.url}/try`, { method: "POST", redirect: "manual" }),
+  ]);
+  check(
+    "no trial outside a trial",
+    pretend.every((r) => r.status === 404),
+    pretend.map((r) => r.status).join(" "),
+  );
+
   // The first org signs in again at the end: its second visit reuses a pooled
   // connection where an old org setting exists as '' rather than missing.
   for (const org of [...orgs, orgs[0]]) {

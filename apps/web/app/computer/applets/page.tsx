@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 
 import { LivePorts } from "@/app/computer/applets/live-ports";
 import { Shared } from "@/app/computer/applets/shared";
-import { NoComputer } from "@/app/desktop/trial";
+import { TrialApps } from "@/app/computer/applets/trial-apps";
+import { DEMO_APPS } from "@/lib/trial-computer";
 import { ComputerWaiting } from "@/components/computer-waiting";
 import { publishedOf, sharedWithMe, sharingOf } from "@/lib/computer";
 import { deployment } from "@/lib/deployment";
@@ -47,8 +48,10 @@ export default async function AppletsPage() {
       <h1 className="page-title text-title-3-medium text-text-primary">
         Applets
       </h1>
-      {off && deployment.trial ? (
-        <NoComputer />
+      {deployment.trial ? (
+        <div className="flex flex-col gap-5 [html[data-framed]_&]:p-3">
+          <TrialApps apps={DEMO_APPS} />
+        </div>
       ) : off ? (
         <ComputerWaiting
           title="Computers are off here"

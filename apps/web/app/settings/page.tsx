@@ -244,9 +244,9 @@ export default async function Settings({
   const owner = p.role === "owner";
   const holder = p.userId === org.principalId;
   const uploads = deployment.storage.kind !== "none";
-  // A trial is one person's computer with no computer behind it: their
-  // own panes and nothing of an org, its members, keys or machine.
-  const TRIAL_PANES = new Set(["you", "look", "apps"]);
+  // A trial is one person's pretend computer: their own panes, the
+  // computer as it would be, and nothing of an org, its members or keys.
+  const TRIAL_PANES = new Set(["you", "look", "computer", "apps"]);
   const panes: Pane[] = (
     [
       {

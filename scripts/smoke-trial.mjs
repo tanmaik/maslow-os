@@ -270,7 +270,8 @@ try {
     !wallpaper.ok &&
       said.includes("The trial keeps no files") &&
       shared.status === 404 &&
-      computerUpload.status === 404,
+      computerUpload.status === 403 &&
+      (await computerUpload.text()) === "Read-only in the trial",
     `wallpaper ${wallpaper.status}, shared ${shared.status}, computer ${computerUpload.status}`,
   );
 
@@ -284,6 +285,79 @@ try {
     "MCP and OAuth are not there",
     mcp.every((r) => r.status === 404),
     mcp.map((r) => r.status).join(" "),
+  );
+
+  // 5. The pretend computer: its shell, its home folder, its apps, and
+  // what they wrote to the brain.
+  const sh = async (line) =>
+    (
+      await fetch(`${url}/trial/shell`, {
+        method: "POST",
+        headers: { cookie, "content-type": "application/json" },
+        body: JSON.stringify({ line }),
+      })
+    ).json();
+  const [ls, nope, claude] = await Promise.all([
+    sh("ls"),
+    sh("rm -rf /"),
+    sh("claude"),
+  ]);
+  check(
+    "the terminal answers ls",
+    ls.out.includes("apps/") &&
+      ls.out.includes("notes/") &&
+      nope.out.startsWith("rm: not in the trial") &&
+      claude.replay === true,
+    ls.out,
+  );
+  const listed = await fetch(`${url}/computer/files/list?path=.`, {
+    headers: { cookie },
+  });
+  const folder = listed.ok ? (await listed.json()).map((e) => e.name) : [];
+  const todo = await (
+    await fetch(`${url}/computer/files/read?path=notes/todo.md`, {
+      headers: { cookie },
+    })
+  ).text();
+  const mkdir = await fetch(`${url}/computer/files/mkdir?path=x`, {
+    method: "POST",
+    headers: { cookie },
+  });
+  const found = await (
+    await fetch(`${url}/trial/maslow/find?q=todo&ticket=trial`, {
+      headers: { cookie },
+    })
+  ).json();
+  check(
+    "Files lists the home folder",
+    folder.includes("README.md") &&
+      folder.includes("apps") &&
+      todo.includes("Publish the reading list") &&
+      mkdir.status === 403 &&
+      found.includes("notes/todo.md"),
+    folder.join(" "),
+  );
+  const applets = (
+    await (
+      await fetch(`${url}/computer/applets`, { headers: { cookie } })
+    ).text()
+  ).replaceAll("<!-- -->", "");
+  const app = await (await fetch(`${url}/trial/app/3000`)).text();
+  const books = new pg.Client({ connectionString: cluster.url });
+  await books.connect();
+  const fromApps = (
+    await books.query(
+      "select count(*)::int as n from records r join orgs o on o.id = r.org_id where o.trial_at is not null and r.source in ('reading-list', 'run-log')",
+    )
+  ).rows[0].n;
+  await books.end();
+  check(
+    "Applets lists the demo apps",
+    applets.includes("Reading list") &&
+      applets.includes("Run log") &&
+      app.includes("Sourdough at Altitude") &&
+      fromApps >= 8,
+    `${fromApps} records from the apps`,
   );
 } catch (err) {
   check("ran", false, err.message);

@@ -8,7 +8,7 @@ import { TRIAL_HOURS } from "./trial-rules.ts";
 export async function reap(): Promise<number> {
   try {
     const gone = await reapTrials(TRIAL_HOURS);
-    if (gone) console.log(`trial: ${gone} org(s) a day old deleted`);
+    if (gone) console.log(`trial: reaped n=${gone}`);
     return gone;
   } catch (err) {
     console.error(`trial reap: ${(err as Error).message}`);

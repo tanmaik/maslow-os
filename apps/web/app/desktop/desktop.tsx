@@ -51,7 +51,7 @@ import { PhoneSheet } from "@/app/desktop/sheet";
 import { remember, rememberPaper, type Known } from "@/components/lock-screen";
 import { Kbd } from "@/components/base/kbd/kbd";
 import { Notification } from "@/components/base/notification/notification";
-import { NoComputer, Trial, useTrial } from "@/app/desktop/trial";
+import { Trial, useTrial } from "@/app/desktop/trial";
 import {
   cascade,
   clamp,
@@ -2317,9 +2317,8 @@ function Frame({
             className="flex h-[34px] shrink-0 items-center gap-2 overflow-x-auto border-b border-separator-border px-3 [scrollbar-width:none] empty:hidden [&::-webkit-scrollbar]:hidden"
           />
         )}
-        {Panel && !computers && trial ? (
-          <NoComputer />
-        ) : Panel && !computers ? (
+        {/* A trial's computer is pretend: its panels run against it. */}
+        {Panel && !computers && !trial ? (
           <div className="p-3">
             <Notification
               status="information"

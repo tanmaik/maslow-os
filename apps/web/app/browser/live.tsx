@@ -8,9 +8,11 @@ import {
   RiRefreshLine,
 } from "@remixicon/react";
 import { AnimatePresence, motion } from "motion/react";
+import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { BarButton, InBar } from "@/app/desktop/panel";
+import { useTrial } from "@/app/desktop/trial";
 import { Button } from "@/components/base/buttons/button";
 import { CloseButton } from "@/components/base/buttons/close-button";
 import { Divider } from "@/components/base/divider/divider";
@@ -82,7 +84,25 @@ const askedOf = (href?: string) => {
   return url && /^https?:\/\//.test(url) ? url : undefined;
 };
 
-export function LiveBrowser({ href }: { href?: string }) {
+// The trial's browser, its own chunk, loaded only in a trial.
+const TrialBrowser = dynamic(
+  () => import("@/app/browser/trial-browser").then((m) => m.TrialBrowser),
+  { ssr: false },
+);
+
+// The computer's browser, or in a trial the pretend one.
+export function LiveBrowser({
+  href,
+  trial,
+}: {
+  href?: string;
+  trial?: boolean;
+}) {
+  const inTrial = useTrial();
+  return (trial ?? inTrial) ? <TrialBrowser /> : <Browser href={href} />;
+}
+
+function Browser({ href }: { href?: string }) {
   // An address to turn to as soon as the browser is open, once; a window
   // already up and turned to a new one goes there at once.
   const asked = askedOf(href);

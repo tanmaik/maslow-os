@@ -336,7 +336,8 @@ export function CommandBar({
           {typed && (
             <CommandGroup heading="Settings">
               {PANES.filter(
-                (p) => !trial || ["you", "look", "apps"].includes(p.id),
+                (p) =>
+                  !trial || ["you", "look", "computer", "apps"].includes(p.id),
               ).map((p) => (
                 <CommandItem
                   key={p.id}

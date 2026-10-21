@@ -108,8 +108,14 @@ per ten minutes and 300 standing) makes a guest, an org of one marked
 `trial_at`, and the made-up records of the seed in it. Mail, storage,
 analytics, computers, push and speech are none, embeddings and connections
 are the fakes, every upload is refused, and the brain's MCP, OAuth,
-invites, members, groups, keys and everything of a computer answer 404
-(`apps/web/lib/trial-rules.ts`). Trial orgs a day old are deleted with
+invites, members, groups, keys and a computer's sharing and moving answer
+404 (`apps/web/lib/trial-rules.ts`). The computer is pretend, from one file,
+`apps/web/lib/trial-computer.ts`: a read-only home folder behind the same
+addresses Files reads, a shell in the page that runs nothing and replays a
+recorded `claude` session, two apps on ports whose pages are written out
+and whose books and runs are in the guest's brain, and a browser that shows
+only those apps. All of it is under `/trial`, which answers 404 anywhere
+but a trial. Trial orgs a day old are deleted with
 everything they own at the server's start, every hour, and in the sweep.
 The global seed never runs in a trial.
 

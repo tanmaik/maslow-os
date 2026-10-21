@@ -2,7 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 
 import { cookie, SESSION, SESSION_LIFETIME, SESSION_TOKEN } from "@/lib/cookie";
 import { deployment } from "@/lib/deployment";
-import { shutInTrial } from "@/lib/trial-rules";
+import { inTrial, shutInTrial, trialOnly } from "@/lib/trial-rules";
 import { origin } from "@/lib/origin";
 
 // Which methods change something. A browser sends the site a request came
@@ -19,13 +19,23 @@ const READS = new Set(["GET", "HEAD", "OPTIONS"]);
 // the session cookie is attached to whatever it asks of us. What keeps a
 // page from acting as whoever is looking at it is this, not the cookie.
 export default function proxy(request: NextRequest) {
-  if (deployment.trial && shutInTrial(request.nextUrl.pathname))
+  const { pathname } = request.nextUrl;
+  if (!deployment.trial && trialOnly(pathname))
+    return new NextResponse(null, { status: 404 });
+  if (deployment.trial && shutInTrial(pathname))
     return new NextResponse("Not in the trial.", { status: 404 });
+  const pretend = deployment.trial ? inTrial(pathname, request.method) : null;
+  if (pretend && "refuse" in pretend)
+    return new NextResponse(pretend.refuse, { status: pretend.status });
   const from = request.headers.get("origin");
   if (!READS.has(request.method) && from && from !== origin(request)) {
     return new NextResponse("That came from somewhere else.", { status: 403 });
   }
-  const response = NextResponse.next();
+  const response = pretend
+    ? NextResponse.rewrite(
+        new URL(`${pretend.to}${request.nextUrl.search}`, request.url),
+      )
+    : NextResponse.next();
   const token = request.cookies.get(SESSION)?.value;
   if (READS.has(request.method) && token && SESSION_TOKEN.test(token))
     response.cookies.set(SESSION, token, cookie(SESSION_LIFETIME));

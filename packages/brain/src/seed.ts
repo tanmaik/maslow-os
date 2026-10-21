@@ -310,9 +310,16 @@ export async function seedBrain(
 // records at once, written into the org the transaction is scoped to as
 // the member it names. The same fictional records the seed uses, so
 // nothing real ever reaches a stranger.
-export async function seedTrial(client: pg.ClientBase): Promise<void> {
+// The caller adds what the trial's pretend apps wrote, with their types.
+export async function seedTrial(
+  client: pg.ClientBase,
+  apps: { types: TypeDefinition[]; records: RecordInput[] } = {
+    types: [],
+    records: [],
+  },
+): Promise<void> {
   await client.query("select set_config('app.author', 'seed', true)");
-  for (const t of vocabulary) await defineType(client, t);
+  for (const t of [...vocabulary, ...apps.types]) await defineType(client, t);
   const all = Object.values(seeds);
   await write(client, {
     records: [
@@ -324,11 +331,12 @@ export async function seedTrial(client: pg.ClientBase): Promise<void> {
         body: [
           "On your own Maslow you get a computer. On it, you and Claude build apps; a port you publish becomes an app in your dock.",
           "Each app brings more of your data in, and files on the computer feed the brain too, so the brain gets a fuller picture of your life.",
-          "This trial has no computer. The records here are made up, so you can look around the brain. Everything is deleted 24 hours after you start.",
+          "In this trial the computer is pretend: its terminal plays a recording, its files are read-only, and its two apps, Reading list and Run log, wrote the books and runs you find here. Everything is made up and is deleted 24 hours after you start.",
           "Run your own: https://github.com/maslow-tech/maslow-os",
         ].join("\n\n"),
       },
       ...all.flatMap((s) => s.records),
+      ...apps.records,
     ],
     edges: all.flatMap((s) => s.edges),
   });

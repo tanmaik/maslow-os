@@ -19,6 +19,8 @@ import { boxOf } from "@/app/desktop/apps";
 import { clamp, fresh, MIN, share, type Port } from "@/app/desktop/tiles";
 
 import { publishedOf, sharedWithMe, sharingOf, statsOf } from "./computer.ts";
+import { deployment } from "./deployment.ts";
+import { appHref, DEMO_APPS } from "./trial-computer.ts";
 
 // The room as the person left it, one desktop at least, the wallpaper it
 // lies on, and the ports they could place: their own open ones and those
@@ -56,6 +58,9 @@ export async function desktopOf(p: Principal): Promise<{
 // face their owner published them under, or saying whose they are. A port
 // never published is none of them: it opens in a browser tab, from Applets.
 export async function portsOf(p: Principal): Promise<Port[]> {
+  // A trial's apps are the pretend computer's, published and listening.
+  if (deployment.trial)
+    return DEMO_APPS.map((a) => ({ title: a.title, href: appHref(a) }));
   const [mine, shared, published] = await Promise.all([
     sharingOf(p),
     sharedWithMe(p),

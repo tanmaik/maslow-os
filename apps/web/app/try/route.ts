@@ -7,6 +7,7 @@ import { randomBytes } from "node:crypto";
 
 import { deployment } from "@/lib/deployment";
 import { origin } from "@/lib/origin";
+import { appRecords } from "@/lib/trial-computer";
 import { abandoned, noticed, signedIn } from "@/lib/session";
 
 // Trials one network address may start per ten minutes, and how many may
@@ -30,6 +31,8 @@ export async function POST(request: Request) {
   if ((await trialCount()) >= MOST) return abandoned(noticed(home, "try=full"));
   const email = `guest-${randomBytes(12).toString("hex")}@trial.invalid`;
   const p = await foundTrial(email);
-  await asPerson(p, (q) => seedTrial(q));
+  await asPerson(p, (q) => seedTrial(q, appRecords()));
+  // One line per trial, counted from the logs; no address, no email.
+  console.log(`trial: started org=${p.orgId.slice(0, 8)}`);
   return signedIn(p, home, request);
 }
