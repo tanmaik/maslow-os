@@ -31,11 +31,8 @@ export default function proxy(request: NextRequest) {
   if (!READS.has(request.method) && from && from !== origin(request)) {
     return new NextResponse("That came from somewhere else.", { status: 403 });
   }
-  const response = pretend
-    ? NextResponse.rewrite(
-        new URL(`${pretend.to}${request.nextUrl.search}`, request.url),
-      )
-    : NextResponse.next();
+  // A trial's reads of its computer go to /trial by next.config.ts's rewrites.
+  const response = NextResponse.next();
   const token = request.cookies.get(SESSION)?.value;
   if (READS.has(request.method) && token && SESSION_TOKEN.test(token))
     response.cookies.set(SESSION, token, cookie(SESSION_LIFETIME));
