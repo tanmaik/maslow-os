@@ -47,6 +47,7 @@
         "APP_URL",
         "APP_VERSION",
         "SERVICES_OFF",
+        "TRIAL",
         "IMAGE_BUILD",
         "APNS_TEAM_ID",
         "APNS_KEY_ID",

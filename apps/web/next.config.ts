@@ -1,6 +1,22 @@
+import { existsSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 import type { NextConfig } from "next";
+
+// BoardUI's base stylesheet is licensed and never in the repo: a licensed
+// copy is put at this path before a build. Without one, the build and the
+// dev server go on with a plain stand-in that has none of its resets or
+// animations, and say so.
+const boardui = path.join(process.cwd(), "styles", "boardui.css");
+if (!existsSync(boardui)) {
+  writeFileSync(
+    boardui,
+    "/* A stand-in: no licensed BoardUI stylesheet was supplied at this path. */\n",
+  );
+  console.warn(
+    `next.config: no licensed BoardUI stylesheet at ${boardui}; building with a plain stand-in`,
+  );
+}
 
 const config: NextConfig = {
   transpilePackages: ["@maslow/brain", "@maslow/db"],

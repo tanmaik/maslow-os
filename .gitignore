@@ -19,6 +19,10 @@ next-env.d.ts
 # What a tool run in the checkout writes for itself: BoardUI's skill, and the like.
 .agents/
 
+# BoardUI's base stylesheet is licensed: a copy is supplied at build time,
+# and a plain stand-in is written here when none is.
+apps/web/styles/boardui.css
+
 # Xcode writes the project from apps/iphone/project.yml; what it writes stays out.
 apps/iphone/*.xcodeproj
 apps/iphone/DerivedData*/

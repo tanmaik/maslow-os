@@ -58,8 +58,14 @@ its own. Without a secret nothing is live and the page saves as it does
 alone.
 
 Production refuses to start without WorkOS, mail, storage, analytics, the relay's secret, or the
-sweep's `CRON_SECRET`. A deployment may go without analytics, speech or computers only by
+sweep's `CRON_SECRET`. A deployment may go without analytics or computers only by
 naming them in `SERVICES_OFF`.
+
+BoardUI's base stylesheet is licensed and is not in the repo. A licensed copy
+goes at `apps/web/styles/boardui.css` (ignored by git) before `pnpm dev` or a
+build. Without one, `next.config.ts` writes a plain stand-in there and says
+so: the app builds and runs, without BoardUI's resets and animations. The
+build never fetches it from anywhere.
 
 Outside Vercel the app is one container image, built from the repo's root with
 `apps/web/Dockerfile`. It migrates as it starts, on `DATABASE_OWNER_URL`, and takes its
