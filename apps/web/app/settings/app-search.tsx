@@ -4,13 +4,9 @@ import type { App } from "@/lib/composio";
 import { RiSearchLine } from "@remixicon/react";
 import { useEffect, useState } from "react";
 
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Button } from "@/components/ui/button";
-import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Button } from "@/components/base/buttons/button";
+import { InputBase } from "@/components/base/input/input";
 import { Spinner } from "@/components/ui/spinner";
 import { initials } from "@/lib/initials";
 
@@ -58,29 +54,26 @@ export function AppSearch({ mostUsed }: { mostUsed: App[] | null }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <InputGroup className="max-w-sm">
-        <InputGroupAddon>
-          <RiSearchLine aria-hidden />
-        </InputGroupAddon>
-        <InputGroupInput
+      <div className="relative max-w-sm">
+        <InputBase
+          size="small"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Find an app to connect"
           aria-label="Find an app to connect"
+          leadingIcon={RiSearchLine}
         />
         {busy && (
-          <InputGroupAddon align="inline-end">
-            <Spinner />
-          </InputGroupAddon>
+          <Spinner className="absolute top-1/2 right-3 -translate-y-1/2 text-foreground-icon-tertiary" />
         )}
-      </InputGroup>
+      </div>
       {found === null ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body-regular text-text-secondary">
           Composio didn&apos;t answer, so no apps can be found right now. Try
           again in a moment.
         </p>
       ) : found.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
+        <p className="text-body-regular text-text-secondary">
           No app matches &ldquo;{query.trim()}&rdquo;.
         </p>
       ) : (
@@ -97,11 +90,9 @@ export function AppSearch({ mostUsed }: { mostUsed: App[] | null }) {
                       className="size-5 shrink-0 object-contain"
                     />
                   ) : (
-                    <Avatar size="sm">
-                      <AvatarFallback>{initials(a.name)}</AvatarFallback>
-                    </Avatar>
+                    <Avatar size="sm" initials={initials(a.name)} />
                   )}
-                  <span className="min-w-0 truncate text-sm text-foreground">
+                  <span className="min-w-0 truncate text-body-regular text-text-primary">
                     {a.name}
                   </span>
                 </span>
@@ -110,7 +101,7 @@ export function AppSearch({ mostUsed }: { mostUsed: App[] | null }) {
               <form action="/settings/connections" method="post" target="_top">
                 <input type="hidden" name="intent" value="connect" />
                 <input type="hidden" name="app" value={a.slug} />
-                <Button size="sm" variant="outline" type="submit">
+                <Button size="small" variant="secondary" type="submit">
                   Connect
                 </Button>
               </form>

@@ -1,9 +1,9 @@
 import { asOrg } from "@maslow/db";
 import { fullName, membershipsOf } from "@maslow/db/auth";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
+import { LinkButton } from "@/components/base/buttons/link-button";
 import { Door, SignIn, notice, type Notice } from "@/components/sign-in";
 import { authorizationRequest } from "@/lib/oauth";
 import { principal } from "@/lib/session";
@@ -29,14 +29,9 @@ export default async function Page({
         title="Can't connect"
         description={`This request is not one an app of ours would make: ${asked.problem}.`}
       >
-        <Button
-          variant="outline"
-          size="sm"
-          nativeButton={false}
-          render={<Link href="/" />}
-        >
+        <LinkButton href="/" size="small" variant="secondary">
           Go home
-        </Button>
+        </LinkButton>
       </Door>
     );
   }
@@ -46,7 +41,7 @@ export default async function Page({
       <SignIn
         said={notice(given as Notice)}
         next={`/oauth/authorize?${params}`}
-        because={`Sign in to let ${asked.request.client.name} into your database.`}
+        because={`Sign in to let ${asked.request.client.name} into your brain.`}
       />
     );
 
@@ -68,24 +63,24 @@ export default async function Page({
       title={`Connect ${client.name}?`}
       description={
         <>
-          <span className="text-sm font-medium text-foreground">
+          <span className="text-body-medium text-text-primary">
             {client.name}
           </span>{" "}
           wants to read and write your brain as{" "}
-          <span className="text-sm font-medium text-foreground">
+          <span className="text-body-medium text-text-primary">
             {me && fullName(me)}
           </span>{" "}
           in{" "}
-          <span className="text-sm font-medium text-foreground">{orgName}</span>
-          . It keeps that access until you disconnect it in Settings.
+          <span className="text-body-medium text-text-primary">{orgName}</span>.
+          It keeps that access until you disconnect it in Settings.
         </>
       }
     >
       {/* An app names itself, and anything can call itself anything; where
           it sends the person back is the one thing it cannot invent. */}
-      <p className="text-xs text-muted-foreground">
+      <p className="text-caption-1-regular text-text-secondary">
         It will send you back to{" "}
-        <code className="font-mono text-foreground">
+        <code className="font-mono text-text-primary">
           {new URL(asked.request.redirectUri).host}
         </code>
       </p>
@@ -93,7 +88,7 @@ export default async function Page({
         {[...params].map(([k, v]) => (
           <input key={k} type="hidden" name={k} value={v} />
         ))}
-        <Button type="submit" name="decision" value="deny" variant="outline">
+        <Button type="submit" name="decision" value="deny" variant="secondary">
           Deny
         </Button>
         <Button type="submit" name="decision" value="allow">
@@ -102,7 +97,7 @@ export default async function Page({
       </form>
       {others.length > 0 && (
         <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium text-muted-foreground">
+          <p className="text-caption-1-medium text-text-secondary">
             Or connect it to another of your orgs
           </p>
           <div className="flex flex-wrap gap-2">
@@ -114,7 +109,7 @@ export default async function Page({
                   name="next"
                   value={`/oauth/authorize?${params}`}
                 />
-                <Button type="submit" variant="outline" size="sm">
+                <Button type="submit" variant="secondary" size="small">
                   {m.orgName}
                 </Button>
               </form>

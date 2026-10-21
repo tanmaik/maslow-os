@@ -3,15 +3,8 @@
 import { RiAddLine } from "@remixicon/react";
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Button } from "@/components/base/buttons/button";
+import { Select, SelectItem } from "@/components/base/select/select";
 
 // Puts one more person in a group: a pick among those not yet in it, and
 // Add.
@@ -33,25 +26,24 @@ export function AddMember({
       <input type="hidden" name="group" value={group} />
       <input type="hidden" name="member" value={picked} />
       <Select
-        items={members.map((m) => ({ value: m.id, label: m.name }))}
-        value={picked}
-        onValueChange={(id) => id !== null && setPicked(id)}
+        aria-label="Who to add"
+        size="sm"
+        selectedKey={picked}
+        onSelectionChange={(k) => k !== null && setPicked(String(k))}
+        triggerClassName="h-7"
       >
-        <SelectTrigger size="sm" aria-label="Who to add">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {members.map((m) => (
-              <SelectItem key={m.id} value={m.id}>
-                {m.name}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
+        {members.map((m) => (
+          <SelectItem key={m.id} id={m.id}>
+            {m.name}
+          </SelectItem>
+        ))}
       </Select>
-      <Button variant="outline" size="sm" type="submit">
-        <RiAddLine data-icon="inline-start" />
+      <Button
+        variant="secondary"
+        size="xs"
+        type="submit"
+        leadingIcon={RiAddLine}
+      >
         Add
       </Button>
     </form>

@@ -1,10 +1,11 @@
 import type { Agent } from "@maslow/db/auth";
 
-import { Button } from "@/components/ui/button";
-import { StatusDot } from "@/components/ui/status-dot";
+import { StatusDot } from "@/components/base/badges/status-dot";
+import { Button } from "@/components/base/buttons/button";
 
 import { Row, Rows } from "./row";
 import { Said } from "./said";
+import { Section } from "./section";
 import type { Told } from "./told";
 import { on } from "./when";
 
@@ -12,13 +13,20 @@ import { on } from "./when";
 // each one's access.
 export function Agents({ agents, said }: { agents: Agent[]; said: Told }) {
   return (
-    <div id="agents" className="flex flex-col gap-2">
-      <p className="text-sm text-muted-foreground">
-        Connect one by adding this site&apos;s <code>/mcp</code> as an MCP
-        server.
-      </p>
+    <Section
+      id="agents"
+      title="Agents"
+      description={
+        <>
+          Connect one by adding this site&apos;s <code>/mcp</code> as an MCP
+          server.
+        </>
+      }
+    >
       {agents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nothing connected.</p>
+        <p className="text-body-regular text-text-secondary">
+          Nothing connected.
+        </p>
       ) : (
         <Rows>
           {agents.map((a) => (
@@ -26,7 +34,7 @@ export function Agents({ agents, said }: { agents: Agent[]; said: Told }) {
               key={a.id}
               label={
                 <span className="flex items-center gap-2.5">
-                  <StatusDot tone="success" />
+                  <StatusDot color="green" />
                   {a.client}
                 </span>
               }
@@ -34,7 +42,7 @@ export function Agents({ agents, said }: { agents: Agent[]; said: Told }) {
             >
               <form action="/settings/agents" method="post">
                 <input type="hidden" name="session" value={a.id} />
-                <Button variant="outline" size="sm" type="submit">
+                <Button variant="secondary" size="small" type="submit">
                   Disconnect
                 </Button>
               </form>
@@ -43,6 +51,6 @@ export function Agents({ agents, said }: { agents: Agent[]; said: Told }) {
         </Rows>
       )}
       <Said {...said} />
-    </div>
+    </Section>
   );
 }

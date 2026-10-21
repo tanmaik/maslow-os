@@ -21,17 +21,20 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Avatar } from "@/components/base/avatar/avatar";
+import { Chip } from "@/components/base/badges/chip";
+import { Button } from "@/components/base/buttons/button";
+import { LinkButton } from "@/components/base/buttons/link-button";
+import { Input } from "@/components/base/input/input";
 import { ImageInput } from "@/components/image-input";
 import { AccentPicker } from "@/app/settings/accent";
 import { ComputerPane } from "@/app/settings/computer";
+import { DockRows } from "@/app/settings/dock";
 import { LookPicker } from "@/app/settings/look-picker";
 import { Wallpaper } from "@/app/settings/wallpaper";
 import { papersOf } from "@/lib/wallpapers";
 import { AccessPane } from "@/app/settings/access";
+import { AgentPane } from "@/app/settings/agent";
 import { AppsPane } from "@/app/settings/apps-pane";
 import { DeleteOrg } from "@/app/settings/delete-org";
 import { Groups } from "@/app/settings/groups";
@@ -178,28 +181,34 @@ const WRONG = new Set([
   "keys=unreached",
 ]);
 
-// A supporting line under a form.
+// A line under a form, in BoardUI's supporting voice.
 const Note = ({ children }: { children: ReactNode }) => (
-  <p className="text-xs text-muted-foreground">{children}</p>
+  <p className="text-caption-1-regular text-text-secondary">{children}</p>
 );
 
 // A person's picture, or their initials.
 function Picture({
   person,
-  size = "default",
-  className,
+  size = "md",
 }: {
   person: Pick<Member, "name" | "avatarKey">;
-  size?: "sm" | "default" | "lg";
-  className?: string;
+  size?: "sm" | "md" | "lg" | "xl";
 }) {
   return (
-    <Avatar size={size} className={className}>
-      {person.avatarKey && <AvatarImage src={storage.url(person.avatarKey)} />}
-      <AvatarFallback>{initials(person.name)}</AvatarFallback>
-    </Avatar>
+    <Avatar
+      size={size}
+      src={person.avatarKey ? storage.url(person.avatarKey) : undefined}
+      initials={initials(person.name)}
+    />
   );
 }
+
+// What a member's role is called on the list, and how it is coloured.
+const ROLE_CHIP = {
+  principal: "blue",
+  owner: "neutral",
+  member: "neutral",
+} as const;
 
 // The signed-in person's settings, then the org's: who they are, their
 // apps, agents and keys; the org, who is in it, its groups.
@@ -263,6 +272,23 @@ export default async function Settings({
         "reset",
         "claude code",
         "terminal",
+      ],
+    },
+    {
+      id: "agent",
+      title: "Agent",
+      group: "Yours",
+      words: [
+        "models",
+        "spend",
+        "dollars",
+        "limit",
+        "cap",
+        "openrouter",
+        "sign in",
+        "auth",
+        "account",
+        "usage",
       ],
     },
     {
@@ -336,13 +362,13 @@ export default async function Settings({
                 fallback={initials(me.name)}
               />
             ) : (
-              <Picture person={me} size="lg" className="size-16 *:text-lg" />
+              <Picture person={me} size="xl" />
             )}
             <div className="min-w-0 flex-1">
-              <p className="truncate text-lg font-medium text-foreground">
+              <p className="truncate text-title-3-medium text-text-primary">
                 {me.name}
               </p>
-              <p className="truncate text-xs text-muted-foreground">
+              <p className="truncate text-caption-1-regular text-text-secondary">
                 {me.email} · {holder ? `principal of ${org.name}` : role(me)}
               </p>
             </div>
@@ -351,20 +377,22 @@ export default async function Settings({
             <Row label="First name">
               <Input
                 aria-label="First name"
+                size="small"
                 name="first_name"
                 defaultValue={me.firstName}
-                required
+                isRequired
                 maxLength={80}
-                className="w-52"
+                className="w-[202px]"
               />
             </Row>
             <Row label="Last name">
               <Input
                 aria-label="Last name"
+                size="small"
                 name="last_name"
                 defaultValue={me.lastName ?? ""}
                 maxLength={80}
-                className="w-52"
+                className="w-[202px]"
               />
             </Row>
           </Rows>
@@ -375,23 +403,20 @@ export default async function Settings({
             <div className="min-w-0 flex-1">
               <Said {...said("profile")} />
             </div>
-            <Button type="submit" size="sm">
+            <Button type="submit" size="small">
               Save
             </Button>
           </div>
         </form>
         {holder ? (
-          said("leave").text && <Note>{said("leave").text}</Note>
+          <Note>
+            {said("leave").text ??
+              "You hold the org. Hand it to someone before you leave."}
+          </Note>
         ) : (
           <AlertDialog>
             <AlertDialogTrigger
-              render={
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="self-start px-0 text-muted-foreground"
-                />
-              }
+              render={<LinkButton variant="secondary" size="small" />}
             >
               Leave {org.name}
             </AlertDialogTrigger>
@@ -421,6 +446,11 @@ export default async function Settings({
         <ComputerPane p={p} />
       </Section>
     ),
+    agent: (
+      <Section id="agent" title="Agent">
+        <AgentPane p={p} />
+      </Section>
+    ),
     look: (
       <Section id="look" title="Look">
         <Rows>
@@ -430,6 +460,7 @@ export default async function Settings({
           <Row label="Accent">
             <AccentPicker />
           </Row>
+          <DockRows />
         </Rows>
         <Wallpaper papers={papers} />
       </Section>
@@ -461,25 +492,26 @@ export default async function Settings({
               name="logo"
               src={org.logoKey ? storage.url(org.logoKey) : null}
               fallback={initials(org.name)}
-              className="rounded-lg"
+              className="rounded-xl"
             />
           ) : (
-            <Avatar className="size-16 rounded-lg *:rounded-[inherit] after:rounded-[inherit]">
-              {org.logoKey && <AvatarImage src={storage.url(org.logoKey)} />}
-              <AvatarFallback className="text-lg">
-                {initials(org.name)}
-              </AvatarFallback>
-            </Avatar>
+            <Avatar
+              size="xl"
+              src={org.logoKey ? storage.url(org.logoKey) : undefined}
+              initials={initials(org.name)}
+              className="rounded-xl"
+            />
           )}
           <Rows>
             <Row label="Name">
               <Input
                 aria-label="Name"
+                size="small"
                 name="name"
                 defaultValue={org.name}
-                required
+                isRequired
                 maxLength={80}
-                className="w-52"
+                className="w-[202px]"
               />
             </Row>
           </Rows>
@@ -490,13 +522,13 @@ export default async function Settings({
             <div className="min-w-0 flex-1">
               <Said {...said("org")} />
             </div>
-            <Button type="submit" size="sm">
+            <Button type="submit" size="small">
               Save
             </Button>
           </div>
         </form>
         {holder && (
-          <div className="flex items-center gap-3 border-t border-border pt-4">
+          <div className="flex items-center gap-3 border-t border-separator-border pt-4">
             <DeleteOrg name={org.name} />
             <Said {...said("delete")} />
           </div>
@@ -512,13 +544,16 @@ export default async function Settings({
           <div className="flex items-start gap-2">
             <Input
               aria-label="Email address to invite"
+              size="small"
               name="email"
               type="email"
-              required
+              isRequired
               placeholder="colleague@example.com"
               className="max-w-xs"
             />
-            <Button type="submit">Invite</Button>
+            <Button type="submit" size="small">
+              Invite
+            </Button>
           </div>
           <Said {...(said("invite").text ? said("invite") : said("member"))} />
           {deployment.mail.kind === "none" && (
@@ -536,29 +571,27 @@ export default async function Settings({
                 <span className="flex items-center gap-2.5">
                   <Picture person={m} size="sm" />
                   <span className="flex min-w-0 flex-col">
-                    <span className="truncate text-sm font-medium text-foreground">
+                    <span className="truncate text-body-medium text-text-primary">
                       {m.name}
                       {m.id === p.userId && (
-                        <span className="text-muted-foreground"> · you</span>
+                        <span className="text-text-tertiary"> · you</span>
                       )}
                     </span>
-                    <span className="truncate text-xs text-muted-foreground">
+                    <span className="truncate text-caption-1-regular text-text-secondary">
                       {m.email}
                     </span>
                   </span>
                 </span>
               }
             >
-              <Badge
-                variant={role(m) === "principal" ? "secondary" : "outline"}
-              >
+              <Chip variant="caption" color={ROLE_CHIP[role(m)]}>
                 {role(m)}
-              </Badge>
+              </Chip>
               {owner && m.id !== p.userId && m.id !== org.principalId && (
                 <>
                   <span
                     aria-hidden
-                    className="hidden h-5 w-px shrink-0 bg-border sm:block"
+                    className="hidden h-5 w-px shrink-0 bg-separator-border sm:block"
                   />
                   <form
                     action="/settings/members"
@@ -567,7 +600,7 @@ export default async function Settings({
                   >
                     {holder && (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="xs"
                         type="submit"
                         name="handover"
@@ -577,7 +610,7 @@ export default async function Settings({
                       </Button>
                     )}
                     <Button
-                      variant="outline"
+                      variant="secondary"
                       size="xs"
                       type="submit"
                       name={m.role === "owner" ? "demote" : "promote"}
@@ -586,7 +619,7 @@ export default async function Settings({
                       {m.role === "owner" ? "Make member" : "Make owner"}
                     </Button>
                     <Button
-                      variant="destructive"
+                      variant="danger"
                       size="xs"
                       type="submit"
                       name="remove"
@@ -604,25 +637,25 @@ export default async function Settings({
               key={email}
               label={
                 <span className="flex items-center gap-2.5">
-                  <Avatar size="sm">
-                    <AvatarFallback>?</AvatarFallback>
-                  </Avatar>
-                  <span className="truncate text-sm text-muted-foreground">
+                  <Avatar size="sm" initials="?" />
+                  <span className="truncate text-body-regular text-text-secondary">
                     {email}
                   </span>
                 </span>
               }
             >
-              <Badge variant="outline">invited</Badge>
+              <Chip variant="caption" color="neutral">
+                invited
+              </Chip>
               {owner && (
                 <>
                   <span
                     aria-hidden
-                    className="hidden h-5 w-px shrink-0 bg-border sm:block"
+                    className="hidden h-5 w-px shrink-0 bg-separator-border sm:block"
                   />
                   <form action="/settings/members" method="post">
                     <input type="hidden" name="uninvite" value={email} />
-                    <Button variant="outline" size="xs" type="submit">
+                    <Button variant="secondary" size="xs" type="submit">
                       Withdraw
                     </Button>
                   </form>
@@ -635,10 +668,10 @@ export default async function Settings({
           <Collapsible className="flex flex-col gap-2">
             <CollapsibleTrigger
               render={
-                <Button
-                  variant="link"
-                  size="sm"
-                  className="group self-start px-0 text-muted-foreground"
+                <LinkButton
+                  variant="secondary"
+                  size="small"
+                  className="group"
                 />
               }
             >
@@ -659,10 +692,10 @@ export default async function Settings({
                       <span className="flex items-center gap-2.5 opacity-70">
                         <Picture person={m} size="sm" />
                         <span className="flex min-w-0 flex-col">
-                          <span className="truncate text-sm font-medium text-foreground">
+                          <span className="truncate text-body-medium text-text-primary">
                             {m.name}
                           </span>
-                          <span className="truncate text-xs text-muted-foreground">
+                          <span className="truncate text-caption-1-regular text-text-secondary">
                             {m.email} · left {on(m.removedAt)}
                           </span>
                         </span>
@@ -671,7 +704,7 @@ export default async function Settings({
                   >
                     <form action="/settings/members" method="post">
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         size="xs"
                         type="submit"
                         name="restore"
@@ -682,7 +715,7 @@ export default async function Settings({
                     </form>
                     <AlertDialog>
                       <AlertDialogTrigger
-                        render={<Button variant="destructive" size="xs" />}
+                        render={<Button variant="danger" size="xs" />}
                       >
                         Purge
                       </AlertDialogTrigger>

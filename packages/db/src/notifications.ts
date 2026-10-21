@@ -19,13 +19,16 @@ export type Notification = {
   answer: string | null;
   // The ask to share this notification carries, if it is one.
   request: string | null;
+  // The conversation on the person's computer the answer goes back to,
+  // where the ask named one.
+  replyTo: string | null;
   readAt: string | null;
   createdAt: string;
 };
 
 const columns = `id, kind, title, body,
   regexp_replace(author, '^model:', '') as "from",
-  records, options, answer, request_id as request,
+  records, options, answer, request_id as request, reply_to as "replyTo",
   read_at as "readAt", created_at as "createdAt"`;
 
 // Thrown when a notification cannot be answered as asked.
@@ -42,14 +45,15 @@ export async function leaveNotification(
     records?: string[];
     options?: string[];
     request?: string;
+    replyTo?: string;
   },
 ): Promise<Notification> {
   const title = n.title.trim();
   if (!title) throw new Unanswerable("a notification needs a title");
   const { rows } = await q.query<Notification>(
     `insert into notifications
-       (kind, title, body, records, options, request_id)
-     values ($1, $2, $3, $4, $5, $6) returning ${columns}`,
+       (kind, title, body, records, options, request_id, reply_to)
+     values ($1, $2, $3, $4, $5, $6, $7) returning ${columns}`,
     [
       n.kind,
       title,
@@ -57,6 +61,7 @@ export async function leaveNotification(
       n.records ?? [],
       n.kind === "ask" ? (n.options ?? []) : [],
       n.request ?? null,
+      n.kind === "ask" ? (n.replyTo ?? null) : null,
     ],
   );
   return rows[0]!;

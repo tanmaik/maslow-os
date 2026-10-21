@@ -1,10 +1,8 @@
 "use client";
 
-import { RiErrorWarningLine } from "@remixicon/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { Alert, AlertAction, AlertTitle } from "@/components/ui/alert";
-import { CloseButton } from "@/components/ui/close-button";
+import { Notification } from "@/components/base/notification/notification";
 
 import { SAID } from "./refuse";
 
@@ -22,21 +20,19 @@ export function Notice() {
   const query = rest.toString();
   return (
     <div className="brain-inset pb-3">
-      <Alert key={said} variant="destructive">
-        <RiErrorWarningLine />
-        <AlertTitle>{said}</AlertTitle>
-        <AlertAction>
-          <CloseButton
-            size="icon-xs"
-            aria-label="Close"
-            onClick={() =>
-              router.replace(`${pathname}${query ? `?${query}` : ""}`, {
-                scroll: false,
-              })
-            }
-          />
-        </AlertAction>
-      </Alert>
+      <Notification
+        key={said}
+        status="error"
+        title={said}
+        introDelay={0}
+        dismissible
+        closeLabel="Close"
+        onDismiss={() =>
+          router.replace(`${pathname}${query ? `?${query}` : ""}`, {
+            scroll: false,
+          })
+        }
+      />
     </div>
   );
 }

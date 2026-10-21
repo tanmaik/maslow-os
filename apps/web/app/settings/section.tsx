@@ -18,11 +18,11 @@ export function Section({
   return (
     <section
       id={id}
-      className="relative flex flex-col gap-4 py-5 [&+&]:border-t [&+&]:border-border"
+      className="prefs-well relative flex flex-col gap-4 py-5 [&+&]:border-t [&+&]:border-separator-border"
     >
       <h2 className="sr-only">{title}</h2>
       {description && (
-        <p className="text-sm text-muted-foreground text-pretty">
+        <p className="text-body-regular text-text-secondary text-pretty">
           {description}
         </p>
       )}

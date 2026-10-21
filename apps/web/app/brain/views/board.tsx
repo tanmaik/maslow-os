@@ -4,15 +4,27 @@ import { motion } from "motion/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
+import { Button, buttonStyles } from "@/components/base/buttons/button";
+import {
+  Dropdown,
+  DropdownGroup,
+  DropdownItem,
+  DropdownPopover,
+  DropdownTrigger,
+} from "@/components/base/dropdown/dropdown";
 import { LocalTime } from "@/components/local-time";
-import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { cx } from "@/utils/cx";
 
-import { Choose } from "../choose";
 import { recordHref, recordPageHref } from "../format";
 import { useHere } from "../here";
 import { SAID } from "../refuse";
 import type { Row } from "./query";
+
+const TRIGGER = cx(
+  buttonStyles.base,
+  buttonStyles.size.small,
+  buttonStyles.variant.secondary,
+);
 
 // One column of the board: a value the chosen field can hold, the records
 // that hold it, and how many there are in all. The last column is the
@@ -52,6 +64,7 @@ export function BoardView({
   >({});
   const [carrying, setCarrying] = useState<string | null>(null);
   // Whether the menu of what the columns are is open; a pick closes it.
+  const [choosing, setChoosing] = useState(false);
   // When the last drag ended, so the release that finished it never opens
   // the record whose title it started on.
   const dropped = useRef(0);
@@ -121,21 +134,35 @@ export function BoardView({
   };
 
   return (
-    <div className="flex flex-col gap-3 p-3">
+    <div className="flex flex-col gap-3 px-3 pb-3">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-medium text-muted-foreground">
+        <span className="text-caption-1-medium text-text-secondary">
           Group by
         </span>
         {choices.length > 1 ? (
-          <Choose
-            aria-label="Group by"
-            size="sm"
-            value={group}
-            onValueChange={(name) => go((p) => p.set("group", name))}
-            options={choices.map((name) => [name, name] as const)}
-          />
+          <Dropdown isOpen={choosing} onOpenChange={setChoosing}>
+            <DropdownTrigger aria-label="Group by" className={TRIGGER}>
+              <span className={buttonStyles.label.small}>{group}</span>
+            </DropdownTrigger>
+            <DropdownPopover aria-label="Group by">
+              <DropdownGroup>
+                {choices.map((name) => (
+                  <DropdownItem
+                    key={name}
+                    selected={name === group}
+                    onSelect={() => {
+                      setChoosing(false);
+                      go((p) => p.set("group", name));
+                    }}
+                  >
+                    {name}
+                  </DropdownItem>
+                ))}
+              </DropdownGroup>
+            </DropdownPopover>
+          </Dropdown>
         ) : (
-          <span className="text-xs font-medium text-muted-foreground">
+          <span className="text-caption-1-medium text-text-secondary">
             {group}
           </span>
         )}
@@ -147,21 +174,21 @@ export function BoardView({
             <div
               key={lane.value ?? ""}
               data-lane={lane.value ?? ""}
-              className={cn(
-                "flex w-72 shrink-0 flex-col gap-2 rounded-lg bg-muted/60 p-2 transition-colors duration-fast ease-plain",
-                carrying && "outline-1 outline-border",
+              className={cx(
+                "flex w-72 shrink-0 flex-col gap-2 rounded-2xl bg-background-secondary-default p-2 transition-colors duration-fast ease-plain",
+                carrying && "outline-1 outline-separator-border",
               )}
             >
               <div className="flex items-center justify-between gap-2 px-1 py-1">
-                <span className="truncate text-xs font-medium text-foreground">
+                <span className="truncate text-caption-1-medium text-text-primary">
                   {lane.label}
                 </span>
-                <span className="text-xs text-muted-foreground tabular-nums">
+                <span className="text-caption-1-regular text-text-secondary tabular-nums">
                   {lane.held}
                 </span>
               </div>
               {rows.length === 0 && (
-                <p className="px-1 py-6 text-center text-xs text-muted-foreground">
+                <p className="px-1 py-6 text-center text-caption-1-regular text-text-placeholder">
                   No records
                 </p>
               )}
@@ -189,9 +216,9 @@ export function BoardView({
                     if (!onto) return;
                     void move(r.id, onto.getAttribute("data-lane") || null);
                   }}
-                  className={cn(
-                    "flex cursor-grab flex-col gap-1 rounded-md border border-border bg-card px-3 py-2 active:cursor-grabbing",
-                    carrying === r.id && "z-10 shadow-md",
+                  className={cx(
+                    "flex cursor-grab flex-col gap-1 rounded-xl border border-border-button-default bg-background-primary-default p-3 active:cursor-grabbing",
+                    carrying === r.id && "z-10 shadow-dropdown",
                   )}
                 >
                   <a
@@ -201,24 +228,24 @@ export function BoardView({
                       if (Date.now() - dropped.current < 300)
                         e.preventDefault();
                     }}
-                    className="line-clamp-2 text-sm font-medium text-foreground outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                    className="line-clamp-2 text-body-medium text-text-primary outline-none hover:underline focus-visible:ring-2 focus-visible:ring-border-focus-ring"
                   >
                     {r.title || "(untitled)"}
                   </a>
                   {r.line && (
-                    <span className="line-clamp-2 text-xs text-muted-foreground">
+                    <span className="line-clamp-2 text-caption-1-regular text-text-secondary">
                       {r.line}
                     </span>
                   )}
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-caption-2-regular text-text-secondary">
                     {r.at && <LocalTime at={r.at} fallback="" />}
                   </span>
                 </motion.div>
               ))}
               {lane.held > rows.length && (
                 <Button
-                  variant="outline"
-                  size="sm"
+                  variant="secondary"
+                  size="small"
                   onClick={() =>
                     go((p) => {
                       p.set("view", "table");

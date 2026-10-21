@@ -3,8 +3,10 @@
 import { RiCheckLine, RiFileCopyLine } from "@remixicon/react";
 import { useEffect, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Button } from "@/components/base/buttons/button";
+import { Checkbox } from "@/components/base/checkbox/checkbox";
+import { Divider } from "@/components/base/divider/divider";
+import { Select, SelectItem } from "@/components/base/select/select";
 import {
   Dialog,
   DialogClose,
@@ -14,16 +16,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Separator } from "@/components/ui/separator";
 
 // Who one shared thing reaches, as the sheet sets it whole, and at what
 // level where the thing has one. Public is anyone on the internet with the
@@ -41,24 +33,6 @@ export type Parties = {
   members: { id: string; name: string }[];
   groups: { id: string; name: string }[];
 };
-
-// One party the thing can reach, ticked or not.
-function Tick({
-  on,
-  onChange,
-  children,
-}: {
-  on: boolean;
-  onChange: (on: boolean) => void;
-  children: string;
-}) {
-  return (
-    <Label className="font-normal">
-      <Checkbox checked={on} onCheckedChange={onChange} />
-      {children}
-    </Label>
-  );
-}
 
 // The one sheet every shared thing has: a port, a file or a folder.
 // Anyone on the internet where the thing can be public; everyone in the
@@ -121,22 +95,23 @@ export function ShareSheet({
   };
   return (
     <Dialog open={open} onOpenChange={(now) => !now && onClose()}>
-      <DialogContent className="grid-cols-[minmax(0,1fr)]">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
         <div className="flex items-center gap-2">
-          <p className="min-w-0 flex-1 truncate rounded-md bg-muted px-3 py-2 font-mono text-xs text-muted-foreground">
+          <p className="min-w-0 flex-1 truncate rounded-2lg bg-background-tertiary-default px-3 py-2 font-mono text-caption-1-regular text-text-secondary">
             {(to.public && publicLink) ||
               link ||
               "The link appears once it is shared."}
           </p>
           <Button
-            variant="outline"
-            size="sm"
+            variant="secondary"
+            size="small"
             type="button"
             disabled={!link}
+            leadingIcon={copied ? RiCheckLine : RiFileCopyLine}
             onClick={() => {
               void navigator.clipboard.writeText(
                 (to.public && publicLink) || link,
@@ -145,107 +120,107 @@ export function ShareSheet({
               setTimeout(() => setCopied(false), 2000);
             }}
           >
-            {copied ? (
-              <RiCheckLine data-icon="inline-start" />
-            ) : (
-              <RiFileCopyLine data-icon="inline-start" />
-            )}
             {copied ? "Copied" : "Copy"}
           </Button>
         </div>
         <div className="flex max-h-72 flex-col gap-3 overflow-y-auto py-2">
           {publicLink !== undefined && (
             <>
-              <Tick
-                on={to.public}
+              <Checkbox
+                size="sm"
+                isSelected={to.public}
                 onChange={(on) => setTo((was) => ({ ...was, public: on }))}
               >
                 Anyone on the internet with the address
-              </Tick>
+              </Checkbox>
               {to.public && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-caption-1-regular text-text-secondary">
                   No sign-in: whatever runs on this port must check who is
                   calling itself, and the address will be found.
                 </p>
               )}
-              <Separator />
+              <Divider />
             </>
           )}
-          <Tick
-            on={to.everyone}
+          <Checkbox
+            size="sm"
+            isSelected={to.everyone}
             onChange={(on) => setTo((was) => ({ ...was, everyone: on }))}
           >
             Everyone in the org
-          </Tick>
+          </Checkbox>
           {parties.groups.length > 0 && (
             <>
-              <Separator />
+              <Divider />
               {parties.groups.map((g) => (
-                <Tick
+                <Checkbox
+                  size="sm"
                   key={g.id}
-                  on={to.groupIds.includes(g.id)}
+                  isSelected={to.groupIds.includes(g.id)}
                   onChange={(on) => toggle("groupIds", g.id, on)}
                 >
                   {g.name}
-                </Tick>
+                </Checkbox>
               ))}
             </>
           )}
           {parties.members.length > 0 && (
             <>
-              <Separator />
+              <Divider />
               {parties.members.map((m) => (
-                <Tick
+                <Checkbox
+                  size="sm"
                   key={m.id}
-                  on={to.memberIds.includes(m.id)}
+                  isSelected={to.memberIds.includes(m.id)}
                   onChange={(on) => toggle("memberIds", m.id, on)}
                 >
                   {m.name}
-                </Tick>
+                </Checkbox>
               ))}
             </>
           )}
         </div>
         {levels && (
           <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-medium text-muted-foreground">
+            <span className="text-body-medium text-text-secondary">
               They may
             </span>
             <Select
-              value={to.level}
-              onValueChange={(level) =>
+              size="sm"
+              aria-label="They may"
+              selectedKey={to.level}
+              onSelectionChange={(key) =>
                 setTo((was) => ({
                   ...was,
-                  level: level === "edit" ? "edit" : "view",
+                  level: key === "edit" ? "edit" : "view",
                 }))
               }
+              triggerClassName="w-40"
+              popoverClassName="w-[var(--trigger-width)] max-w-none"
             >
-              <SelectTrigger size="sm" aria-label="They may" className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectItem value="view">view</SelectItem>
-                  <SelectItem value="edit">edit</SelectItem>
-                </SelectGroup>
-              </SelectContent>
+              <SelectItem id="view">view</SelectItem>
+              <SelectItem id="edit">edit</SelectItem>
             </Select>
           </div>
         )}
         {levels && to.everyone && to.level === "edit" && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-caption-1-regular text-text-secondary">
             Everyone in the org can only view; the groups and people ticked may
             edit.
           </p>
         )}
-        {refused && <p className="text-xs text-destructive">{refused}</p>}
+        {refused && (
+          <p className="text-caption-1-regular text-text-error-primary">
+            {refused}
+          </p>
+        )}
         <DialogFooter>
           <DialogClose
-            render={<Button variant="outline" size="sm" type="button" />}
+            render={<Button variant="secondary" size="small" type="button" />}
           >
             Cancel
           </DialogClose>
-          <Button size="sm" onClick={() => void save()} disabled={saving}>
+          <Button size="small" onClick={() => void save()} disabled={saving}>
             {saving ? "Saving…" : "Save"}
           </Button>
         </DialogFooter>

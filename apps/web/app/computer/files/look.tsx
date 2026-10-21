@@ -26,14 +26,10 @@ import {
 import { putShared } from "@/app/computer/files/shared-upload";
 import { InBar, useBeforeClose } from "@/app/desktop/panel";
 import {
-  Alert,
-  AlertAction,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
-import { CloseButton } from "@/components/ui/close-button";
+  ButtonGroup,
+  ButtonGroupItem,
+} from "@/components/base/buttons/button-group";
+import { Notification } from "@/components/base/notification/notification";
 import { BASE, LEAVE } from "@/lib/motion";
 import {
   AlertDialog,
@@ -254,7 +250,7 @@ export function Look({ href }: { href?: string }) {
 
   if (!path && !share)
     return (
-      <p className="grid h-full place-items-center p-3 text-sm font-medium text-muted-foreground">
+      <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
         Nothing to look at.
       </p>
     );
@@ -275,36 +271,35 @@ export function Look({ href }: { href?: string }) {
     <div className="flex min-h-0 flex-1 flex-col">
       <InBar
         as={(controls) => (
-          <div className="flex h-9 shrink-0 items-center justify-end gap-2 border-b border-border px-2">
+          <div className="flex h-8 shrink-0 items-center justify-end gap-2 border-b border-separator-border px-2">
             {controls}
           </div>
         )}
       >
         <span className="ml-auto flex items-center gap-2">
           {about && (
-            <span className="shrink-0 truncate text-xs font-medium text-muted-foreground">
+            <span className="shrink-0 truncate text-caption-1-medium text-text-secondary">
               {about.owner}&rsquo;s
               {about.level === "view" ? ", view only" : ""}
             </span>
           )}
           {dirty && (
             <span
-              className="size-1.5 shrink-0 rounded-full bg-primary"
+              className="size-1.5 shrink-0 rounded-full bg-accent-500"
               title="Not saved yet"
               aria-label="Not saved yet"
               role="img"
             />
           )}
           {entry && (
-            <span className="shrink-0 text-xs font-medium text-muted-foreground tabular-nums">
+            <span className="shrink-0 text-caption-1-medium text-text-secondary tabular-nums">
               {size(entry.size)}
             </span>
           )}
-          <ButtonGroup aria-label="What to do with it">
+          <ButtonGroup size="small" aria-label="What to do with it">
             {editable && (
-              <Button
-                variant="outline"
-                size="sm"
+              <ButtonGroupItem
+                size="small"
                 disabled={!dirty || saving}
                 onClick={() => void save()}
               >
@@ -320,27 +315,25 @@ export function Look({ href }: { href?: string }) {
                     {saving ? "Saving…" : "Save"}
                   </motion.span>
                 </AnimatePresence>
-              </Button>
+              </ButtonGroupItem>
             )}
             {share && mayEdit && entry && !editable && (
-              <Button
-                variant="outline"
-                size="sm"
+              <ButtonGroupItem
+                size="small"
+                leadingIcon={RiUploadLine}
                 disabled={replacing}
                 onClick={() => picker.current?.click()}
               >
-                <RiUploadLine data-icon="inline-start" />
                 {replacing ? "Replacing…" : "Replace"}
-              </Button>
+              </ButtonGroupItem>
             )}
-            <Button
-              variant="outline"
-              size="sm"
+            <ButtonGroupItem
+              size="small"
+              leadingIcon={RiExternalLinkLine}
               onClick={() => window.open(at("read"), "_blank", "noopener")}
             >
-              <RiExternalLinkLine data-icon="inline-start" />
               Open
-            </Button>
+            </ButtonGroupItem>
           </ButtonGroup>
           <input
             ref={picker}
@@ -355,18 +348,14 @@ export function Look({ href }: { href?: string }) {
         </span>
       </InBar>
       {refused && (
-        <div className="shrink-0 border-b border-border p-3">
-          <Alert variant="destructive">
-            <AlertTitle>That was not saved</AlertTitle>
-            <AlertDescription>{refused}</AlertDescription>
-            <AlertAction>
-              <CloseButton
-                size="icon-xs"
-                aria-label="Dismiss"
-                onClick={() => setRefused(null)}
-              />
-            </AlertAction>
-          </Alert>
+        <div className="shrink-0 border-b border-separator-border p-3">
+          <Notification
+            status="error"
+            title="That was not saved"
+            description={refused}
+            dismissible
+            onDismiss={() => setRefused(null)}
+          />
         </div>
       )}
       {/* A save that fell behind is said here, over the person's own
@@ -374,61 +363,51 @@ export function Look({ href }: { href?: string }) {
           they can keep what they need before saving over theirs or
           taking theirs. */}
       {behind !== null && (
-        <div className="shrink-0 border-b border-border p-3">
-          <Alert>
-            <AlertTitle>It changed since you opened it</AlertTitle>
-            <AlertDescription>
-              {`Someone saved ${name} while you had it open. What you typed is still here and not saved: save it over theirs, or take theirs and lose it.`}
-              <span className="mt-2 flex gap-2">
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => {
-                    setBehind(null);
-                    void save(true);
-                  }}
-                >
-                  Save anyway
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => {
-                    setBehind(null);
-                    setDirty(false);
-                    void look(() => false).catch((e) => setFailed(e.message));
-                  }}
-                >
-                  Take theirs
-                </Button>
-              </span>
-            </AlertDescription>
-            <AlertAction>
-              <CloseButton
-                size="icon-xs"
-                aria-label="Dismiss"
-                onClick={() => setBehind(null)}
-              />
-            </AlertAction>
-          </Alert>
+        <div className="shrink-0 border-b border-separator-border p-3">
+          <Notification
+            status="information"
+            title="It changed since you opened it"
+            description={`Someone saved ${name} while you had it open. What you typed is still here and not saved: save it over theirs, or take theirs and lose it.`}
+            dismissible
+            onDismiss={() => setBehind(null)}
+            actions={[
+              {
+                label: "Save anyway",
+                variant: "secondary",
+                onClick: () => {
+                  setBehind(null);
+                  void save(true);
+                },
+              },
+              {
+                label: "Take theirs",
+                variant: "secondary",
+                onClick: () => {
+                  setBehind(null);
+                  setDirty(false);
+                  void look(() => false).catch((e) => setFailed(e.message));
+                },
+              },
+            ]}
+          />
         </div>
       )}
       <div className="min-h-0 flex-1">
         {failed ? (
-          <p className="grid h-full place-items-center p-3 text-sm font-medium text-destructive">
+          <p className="grid h-full place-items-center p-3 text-body-medium text-text-error-primary">
             {failed}
           </p>
         ) : !entry ? (
-          <p className="grid h-full place-items-center p-3 text-sm font-medium text-muted-foreground">
+          <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
             Looking…
           </p>
         ) : isAudio(entry) ? (
-          <div className="grid h-full place-items-center bg-background p-6">
+          <div className="grid h-full place-items-center bg-background-full p-6">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <audio controls preload="metadata" src={at("read")} />
           </div>
         ) : isVideo(entry) ? (
-          <div className="grid h-full place-items-center bg-background">
+          <div className="grid h-full place-items-center bg-background-full">
             {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
             <video
               controls
@@ -443,20 +422,20 @@ export function Look({ href }: { href?: string }) {
           <iframe
             title={name}
             src={paper}
-            className="h-full w-full border-0 bg-muted"
+            className="h-full w-full border-0 bg-background-secondary-default"
           />
         ) : isImage(entry) ? (
-          <div className="grid h-full place-items-center overflow-auto bg-muted p-3">
+          <div className="grid h-full place-items-center overflow-auto bg-background-secondary-default p-3">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={picture}
               alt={name}
-              className="max-h-full max-w-full object-contain "
+              className="max-h-full max-w-full object-contain shadow-card"
             />
           </div>
         ) : readable ? (
           text === null ? (
-            <p className="grid h-full place-items-center p-3 text-sm font-medium text-muted-foreground">
+            <p className="grid h-full place-items-center p-3 text-body-medium text-text-secondary">
               Looking…
             </p>
           ) : (
@@ -473,10 +452,8 @@ export function Look({ href }: { href?: string }) {
           )
         ) : (
           <div className="flex h-full flex-col items-center justify-center gap-1 p-3 text-center">
-            <span className="text-sm font-medium text-muted-foreground">
-              {name}
-            </span>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-body-medium text-text-secondary">{name}</span>
+            <span className="text-body-regular text-text-tertiary">
               {size(entry.size)}.{" "}
               {heavy ? "Too big to open here." : "Nothing to show."} Open it to
               save it.

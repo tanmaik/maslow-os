@@ -4,7 +4,7 @@ import { RiRefreshLine } from "@remixicon/react";
 import { useEffect, useState } from "react";
 
 import { Row, Rows } from "@/app/settings/row";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -107,8 +107,12 @@ export function Updating({
         label="An update is ready"
         description={`Image ${update.image}, ready since ${on(update.readyAt)}. Your computer restarts to take it, which takes about a minute.`}
       >
-        <Button size="sm" onClick={() => setAsking(true)}>
-          <RiRefreshLine data-icon="inline-start" />
+        <Button
+          variant="primary"
+          size="small"
+          leadingIcon={RiRefreshLine}
+          onClick={() => setAsking(true)}
+        >
           Update
         </Button>
       </Row>

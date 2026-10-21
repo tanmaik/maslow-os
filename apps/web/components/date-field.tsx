@@ -1,17 +1,12 @@
 "use client";
 
-import { RiCalendarLine } from "@remixicon/react";
+import { CalendarDate, parseDate } from "@internationalized/date";
 import { format, isValid, parseISO, set } from "date-fns";
 import { useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
-import { Input } from "@/components/ui/input";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+import { Button } from "@/components/base/buttons/button";
+import { DatePicker } from "@/components/base/date-picker/date-picker";
+import { Input } from "@/components/base/input/input";
 
 const DAY = "yyyy-MM-dd";
 
@@ -23,6 +18,10 @@ function instant(day: Date, clock: string): Date | undefined {
   const d = set(day, { hours: h, minutes: m, seconds: 0, milliseconds: 0 });
   return d.getHours() === h && d.getMinutes() === m ? d : undefined;
 }
+
+// A day as the calendar holds it, and back as a date in the reader's zone.
+const toCalendar = (d: Date) => parseDate(format(d, DAY));
+const fromCalendar = (c: CalendarDate) => new Date(c.year, c.month - 1, c.day);
 
 // A day, or a day and a time, picked from a calendar and posted as one
 // input: 2026-09-04 for a day, an instant for a time. Left untouched, it
@@ -47,7 +46,6 @@ export function DateField({
   const initialClock = initial && time ? format(initial, "HH:mm") : "09:00";
   const [date, setDate] = useState<Date | undefined>(initial);
   const [clock, setClock] = useState(initialClock);
-  const [open, setOpen] = useState(false);
   const untouched =
     initial &&
     date &&
@@ -80,44 +78,29 @@ export function DateField({
         aria-hidden
         className="sr-only"
       />
-      <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger
-          render={<Button type="button" variant="outline" aria-label="Day" />}
-        >
-          <RiCalendarLine data-icon="inline-start" />
-          {date ? (
-            format(date, "d MMM yyyy")
-          ) : (
-            <span className="text-muted-foreground">Pick a day</span>
-          )}
-        </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <Calendar
-            mode="single"
-            selected={date}
-            defaultMonth={date}
-            onSelect={(d) => {
-              setDate(d);
-              setOpen(false);
-            }}
-          />
-        </PopoverContent>
-      </Popover>
+      <DatePicker
+        aria-label="Day"
+        className="h-9 py-0"
+        value={date ? toCalendar(date) : null}
+        onChange={(c) => setDate(c ? fromCalendar(c) : undefined)}
+      />
       {time && date && (
         <Input
+          size="small"
           type="time"
           value={clock}
-          onChange={(e) => setClock(e.target.value)}
-          required
-          aria-invalid={!picked}
+          onChange={setClock}
+          isRequired
+          isInvalid={!picked}
           aria-label="Time"
           className="w-28"
         />
       )}
       {date && (
         <Button
+          size="small"
           type="button"
-          variant="ghost"
+          variant="secondary"
           onClick={() => setDate(undefined)}
         >
           Clear

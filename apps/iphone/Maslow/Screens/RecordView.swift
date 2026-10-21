@@ -139,9 +139,12 @@ struct RecordView: View {
       }
       if editing {
         Section("Body") {
-          TextEditor(text: $draft)
-            .frame(minHeight: 240)
-            .focused($writing)
+          HStack(alignment: .top, spacing: 8) {
+            TextEditor(text: $draft)
+              .frame(minHeight: 240)
+              .focused($writing)
+            MicrophoneButton(text: $draft)
+          }
         }
       } else if !r.body.isEmpty {
         Section { MarkdownView(r.body).plainRow() }

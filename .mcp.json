@@ -1,5 +1,10 @@
 {
   "mcpServers": {
+    "boardui": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "boardui@latest", "mcp"]
+    },
     "agentation": {
       "type": "stdio",
       "command": "node",

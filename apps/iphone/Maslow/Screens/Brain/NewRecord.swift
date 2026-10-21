@@ -46,8 +46,11 @@ struct NewRecord: View {
             .submitLabel(.next)
         }
         Section("Body") {
-          TextEditor(text: $typed)
-            .frame(minHeight: 120)
+          HStack(alignment: .top, spacing: 8) {
+            TextEditor(text: $typed)
+              .frame(minHeight: 120)
+            MicrophoneButton(text: $typed)
+          }
         }
         if fresh {
           fields

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/base/buttons/button";
+import { Input } from "@/components/base/input/input";
 import {
   Dialog,
   DialogContent,
@@ -11,8 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 
 // An org of the person's own, beside the ones they already belong to. It
 // asks for a name, and lands them in it.
@@ -60,33 +59,29 @@ export function NewOrgDialog({
               in, and can switch between them from here.
             </DialogDescription>
           </DialogHeader>
-          <Field data-invalid={wrong || undefined}>
-            <FieldLabel htmlFor="new-org-name">Name</FieldLabel>
-            <Input
-              id="new-org-name"
-              name="name"
-              required
-              maxLength={80}
-              placeholder="Blue Whale Bakery"
-              aria-invalid={wrong || undefined}
-              onChange={() => setWrong(false)}
-            />
-            {wrong && (
-              <FieldError>
-                The org needs a name of up to 80 characters.
-              </FieldError>
-            )}
-          </Field>
+          <Input
+            size="small"
+            label="Name"
+            name="name"
+            isRequired
+            maxLength={80}
+            placeholder="Blue Whale Bakery"
+            isInvalid={wrong}
+            hint={
+              wrong ? "The org needs a name of up to 80 characters." : undefined
+            }
+            onChange={() => setWrong(false)}
+          />
           <DialogFooter>
             <Button
               type="button"
-              variant="outline"
-              size="sm"
+              variant="secondary"
+              size="small"
               onClick={() => show(false)}
             >
               Cancel
             </Button>
-            <Button type="submit" size="sm" disabled={making}>
+            <Button type="submit" size="small" disabled={making}>
               {making ? "Making it…" : "Make it"}
             </Button>
           </DialogFooter>
