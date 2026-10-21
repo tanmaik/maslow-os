@@ -1285,7 +1285,8 @@ export function Desktop({
           onClose={(w) => void close(w.card.id)}
         />
       </div>
-      {you && <Permissions computers={computers} />}
+      {/* the trial has no agent and no voice to ask the microphone or notifications for */}
+      {you && !trial && <Permissions computers={computers} />}
       {(down || lifting) && <Down back={!down} />}
     </Trial.Provider>
   );

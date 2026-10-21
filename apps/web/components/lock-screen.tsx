@@ -362,7 +362,7 @@ export function LockScreen({
         <p className="mt-6 text-center text-body-regular text-text-secondary">
           <a
             href={trial.repo}
-            className="text-text-primary underline-offset-2 hover:underline"
+            className="text-text-primary underline underline-offset-2"
           >
             Get Maslow OS on GitHub
           </a>
